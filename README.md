@@ -105,7 +105,7 @@ thand login --server http://localhost:8080
 
 Full documentation can be found at [docs](https://github.com/thand-io/agent/wiki).
 
-- [Quick Start](https://github.com/thand-io/agent/wiki/Getting-startedt)
+- [Quick Start](https://github.com/thand-io/agent/wiki/Getting-started)
 - [Self-Hosting](https://github.com/thand-io/agent/wiki/Self-Hosting)
 - [Roles](https://github.com/thand-io/agent/wiki/Roles)
 - [Providers](https://github.com/thand-io/agent/wiki/Providers)
