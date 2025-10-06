@@ -72,9 +72,9 @@ thand request "I need to debug customer data issue"
 
 Thand can be deployed quickly on your infrastructure. The server requires no persistent storage and can be run ephemerally. You can deploy via docker, kubernetes or even as a AWS lambda function. Or GCP Cloud Function.
 
-A full guide to self-hosting can be found in the [docs](https://docs.thand.io/self-hosting).
+A full guide to self-hosting can be found in the [docs](https://github.com/thand-io/agent/wiki/Self-Hosting).
 
-To get started quickly you can run the server locally via docker. This will start your server with the default configuration defined in the examples directory. For production usage you should provide your own configuration file. See the [docs](https://docs.thand.io/providers) for more details.
+To get started quickly you can run the server locally via docker. This will start your server with the default configuration defined in the examples directory. For production usage you should provide your own configuration file. See the [docs](https://github.com/thand-io/agent/wiki/Configuration) for more details.
 
 ```bash
 
@@ -105,11 +105,13 @@ thand login --server http://localhost:8080
 
 Full documentation can be found at [docs](https://github.com/thand-io/agent/wiki).
 
-- [Quick Start](https://github.com/thand-io/agent/wiki/Quick-Start)
+- [Quick Start](https://github.com/thand-io/agent/wiki/Getting-startedt)
 - [Self-Hosting](https://github.com/thand-io/agent/wiki/Self-Hosting)
+- [Roles](https://github.com/thand-io/agent/wiki/Roles)
 - [Providers](https://github.com/thand-io/agent/wiki/Providers)
-- [CLI Reference](https://github.com/thand-io/agent/wiki/CLI-Reference)
-- [API Reference](https://github.com/thand-io/agent/wiki/API-Reference)
+- [Workflows](https://github.com/thand-io/agent/wiki/Workflows)
+- [CLI Reference](https://github.com/thand-io/agent/wiki/CLI)
+- [API Reference](https://github.com/thand-io/agent/wiki/API)
 - [FAQ](https://github.com/thand-io/agent/wiki/FAQ)
 
 
