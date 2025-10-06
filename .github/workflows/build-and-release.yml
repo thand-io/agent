@@ -10,8 +10,6 @@ on:
 permissions:
   contents: write
   packages: write
-  id-token: write
-  actions: read
 
 env:
   GO_VERSION: '1.25'
@@ -156,7 +154,7 @@ jobs:
         context: .
         file: ./Dockerfile.cicd
         platforms: linux/amd64,linux/arm64
-        push: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
         build-args: |
