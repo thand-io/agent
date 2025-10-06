@@ -1,0 +1,213 @@
+{{template "header" .}}
+    <main>
+        <div class="container">
+            <div class="hero">
+                <h1>Authentication Complete</h1>
+                
+                <!-- Loading State -->
+                <div class="auth-result-card" id="loading-state">
+                    <div class="session-status">
+                        <div class="status-indicator">
+                            <div class="status-dot connecting" id="status-dot"></div>
+                            <span id="status-text">Registering your session...</span>
+                        </div>
+                        <div class="status-details">
+                            Creating secure session with local agent
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Success State -->
+                                <!-- Success State -->
+                <div class="auth-result-card" id="success-state" style="display: none;">
+                    <div class="session-status">
+                        <div class="status-indicator">
+                            <div class="status-dot success"></div>
+                            <span>Session registered successfully!</span>
+                        </div>
+                        <div class="status-details">
+                            Your authentication session is now active and ready to use.
+                        </div>
+                    </div>
+
+                    <div class="success-content">
+                        <h3>What's Next?</h3>
+                        <p>Your session is ready. You can now return to your application or test an elevation request.</p>
+                        
+                        <div class="action-buttons">
+                            <button class="button button-primary" onclick="makeElevationRequest()">
+                                Test Elevation Request
+                            </button>
+                            <button class="button button-secondary" onclick="window.close()">
+                                Close Window
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Error State -->
+                <div class="auth-result-card" id="error-state" style="display: none;">
+                    <div class="session-status">
+                        <div class="status-indicator">
+                            <div class="status-dot error"></div>
+                            <span>Unable to register session automatically</span>
+                        </div>
+                        <div class="status-details">
+                            Please use the command below to manually register your session.
+                        </div>
+                    </div>
+
+                    <div class="auth-code-section">
+                        <h3>Authorization Code</h3>
+                        <div class="code-display" id="auth-code">
+                            <span id="code-value">{{.Auth.Code}}</span>
+                            <button class="copy-button" id="copy-button" onclick="copyCode()">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2 2v1"></path>
+                                </svg>
+                                Copy
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="manual-instructions">
+                        <h4>Manual Session Registration</h4>
+                        <p>Run this command in your terminal to complete the authentication:</p>
+                        <div class="code-block">
+                            <code id="manual-command">agent session register --code={{.Auth.Code}}</code>
+                            <button class="copy-button" onclick="copyManualCommand()">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2 2v1"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let retryCount = 0;
+        const maxRetries = 2;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            registerSession();
+        });
+
+        async function registerSession() {
+            try {
+                const callback = '{{.Auth.Callback}}';
+                const provider = '{{.Auth.Provider}}';
+                const code = '{{.Auth.Code}}';
+                const session = '{{.Session.GetEncodedLocalSession}}';
+
+                // Get API base path from health endpoint
+                const healthResponse = await fetch(`${callback}/health`);
+                if (!healthResponse.ok) {
+                    throw new Error(`Health check failed: ${healthResponse.status} ${healthResponse.statusText}`);
+                }
+                const healthData = await healthResponse.json();
+
+                let apiBasePath = healthData.path || '/api/v1';
+                apiBasePath = apiBasePath.replace(/^\/+/, '').replace(/\/+$/, '');
+
+                // Register session
+                const response = await fetch(`${callback}/${apiBasePath}/sessions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        provider: provider,
+                        code: code,
+                        session: session,
+                    })
+                });
+
+                if (response.ok) {
+                    showSuccess();
+                } else {
+                    throw new Error(`Registration failed: ${response.status} ${response.statusText}`);
+                }
+            } catch (error) {
+                console.error('Registration error:', error);
+                handleRegistrationError();
+            }
+        }
+
+        function handleRegistrationError() {
+            retryCount++;
+            
+            if (retryCount <= maxRetries) {
+                updateLoadingMessage(`Registration failed. Retrying (${retryCount}/${maxRetries})...`);
+                setTimeout(() => {
+                    registerSession();
+                }, 2000);
+            } else {
+                showError();
+            }
+        }
+
+        function updateLoadingMessage(message) {
+            const statusText = document.getElementById('status-text');
+            if (statusText) {
+                statusText.textContent = message;
+            }
+        }
+
+        function showSuccess() {
+            document.getElementById('loading-state').style.display = 'none';
+            document.getElementById('success-state').style.display = 'block';
+        }
+
+        function showError() {
+            document.getElementById('loading-state').style.display = 'none';
+            document.getElementById('error-state').style.display = 'block';
+        }
+
+        function makeElevationRequest() {
+            window.location.href = '/elevate';
+        }
+
+        function copyCode() {
+            const codeValueElement = document.getElementById('code-value');
+            const button = document.getElementById('copy-button');
+            
+            if (!codeValueElement || !button) return;
+            
+            const codeValue = codeValueElement.textContent;
+            navigator.clipboard.writeText(codeValue).then(() => {
+                const originalText = button.innerHTML;
+                button.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20,6 9,17 4,12"></polyline></svg> Copied!';
+                setTimeout(() => {
+                    button.innerHTML = originalText;
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+            });
+        }
+
+        function copyManualCommand() {
+            const commandElement = document.getElementById('manual-command');
+            if (!commandElement) return;
+            
+            const command = commandElement.textContent;
+            navigator.clipboard.writeText(command).then(() => {
+                const button = event.target.closest('.copy-button');
+                if (button) {
+                    const originalHTML = button.innerHTML;
+                    button.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20,6 9,17 4,12"></polyline></svg>';
+                    setTimeout(() => {
+                        button.innerHTML = originalHTML;
+                    }, 2000);
+                }
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+            });
+        }
+    </script>
+{{template "footer" .}}

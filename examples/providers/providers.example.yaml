@@ -1,0 +1,93 @@
+version: "1.0"
+providers:
+  aws-prod:
+    name: AWS Production
+    description: Production AWS environment
+    provider: aws
+    config:
+      region: us-east-1
+      profile: aws_profile
+      account_id: aws_account_id
+      # If the account secret is not provided IAM will be used.
+      account_secret: aws_account_secret
+    enabled: true
+  aws-dev:
+    name: AWS Development
+    description: Development AWS environment
+    provider: aws
+    config:
+      region: us-west-2
+      profile: aws_profile
+      account_id: aws_account_id
+      # If the account secret is not provided IAM will be used.
+      account_secret: aws_account_secret
+    enabled: false
+  google_oauth2:
+    name: Google OAuth2
+    description: Google OAuth2 provider
+    provider: oauth2.google
+    config:
+      # client_id: google_client_id - gets it from environment variable, see .env.example
+      # client_secret: google_client_secret - gets it from environment variable, see .env.example
+      scopes:
+        - email
+        - profile
+    enabled: true
+  gcp-prod:
+    name: GCP Production
+    description: Production GCP environment
+    provider: gcp
+    config:
+      project_id: gcp_project_id
+      region: us-central1
+      service_account_key: gcp_service_account_key
+      # If the service account key is not provided, default credentials will be used
+    enabled: true
+  gcp-dev:
+    name: GCP Development
+    description: Development GCP environment
+    provider: gcp
+    config:
+      project_id: gcp_dev_project_id
+      region: us-east1
+      service_account_key: gcp_dev_service_account_key
+      # If the service account key is not provided, default credentials will be used
+    enabled: false
+  github:
+    name: GitHub
+    description: GitHub provider for repository management
+    provider: github
+    config:
+      token: github_token
+      api_url: https://api.github.com
+      # Organization name (optional)
+      organization: github_org
+      # Repository access scope
+      scopes:
+        - repo
+        - user
+        - read:org
+    enabled: true
+  oauth:
+    name: Oauth example
+    description: Oauth example provider
+    provider: oauth2
+    config:
+      authority: https://accounts.google.com/o/oauth2
+      endpoints:
+        token: /token
+        auth: /auth
+      grant: client_credentials
+      client:
+        id: google_client_id
+        secret: google_client_secret
+  salesforce:
+    name: Salesforce
+    description: Salesforce provider for CRM management
+    provider: salesforce
+    config:
+      domain: login.salesforce.com
+      username: salesforce_username
+      password: salesforce_password
+      security_token: salesforce_security_token
+    enabled: true

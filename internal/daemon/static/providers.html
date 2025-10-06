@@ -1,0 +1,65 @@
+{{template "header" .TemplateData}}
+    <main>
+        <div class="container" style="width: 100%;">
+            <div class="page-header">
+                <h1>Providers</h1>
+                <p>Infrastructure and service providers available for role-based access control and elevation.</p>
+            </div>
+
+            <div class="table-container">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Provider Type</th>
+                            <th>Description</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range $key, $provider := .Response.Providers}}
+                        <tr>
+                            <td>
+                                <strong>{{$provider.Name}}</strong>
+                            </td>
+                            <td>
+                                <span class="badge badge-secondary">{{$provider.Provider}}</span>
+                            </td>
+                            <td>
+                                {{if $provider.Description}}
+                                    {{$provider.Description}}
+                                {{else}}
+                                    <span class="text-muted">No description available</span>
+                                {{end}}
+                            </td>
+                            <td>
+                                {{if $provider.Enabled}}
+                                    <span class="badge badge-success">Enabled</span>
+                                {{else}}
+                                    <span class="badge badge-warning">Disabled</span>
+                                {{end}}
+                            </td>
+                            <td>
+                                <a href="{{$.TemplateData.Config.GetApiBasePath}}/provider/{{$key}}/roles" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">View Roles</a>
+                                <a href="{{$.TemplateData.Config.GetApiBasePath}}/provider/{{$key}}/permissions" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">View Permissions</a>
+                            </td>
+                        </tr>
+                        {{else}}
+                        <tr>
+                            <td colspan="5" class="text-muted" style="text-align: center; padding: 2rem;">
+                                No providers configured. Or you do not have access to view any providers.
+                            </td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="button-group" style="margin-top: 2rem;">
+                <a href="/" class="button button-secondary">← Back to Home</a>
+                <a href="/elevate" class="button button-primary">Request Elevation</a>
+            </div>
+        </div>
+    </main>
+{{template "footer" .TemplateData}}

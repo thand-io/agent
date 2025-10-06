@@ -1,0 +1,6 @@
+[submodule "third_party/iam-dataset"]
+	path = third_party/iam-dataset
+	url = git@github.com:iann0036/iam-dataset.git
+[submodule "iam-dataset"]
+	path = iam-dataset
+	url = git@github.com:iann0036/iam-dataset.git

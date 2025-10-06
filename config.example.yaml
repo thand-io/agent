@@ -1,0 +1,66 @@
+# Thand Backend Configuration
+
+# Server Configuration
+server:
+  host: "0.0.0.0"
+  port: 5225
+  
+  limit:
+    requests_per_minute: 100
+    burst: 10
+    read_timeout: 30s
+    write_timeout: 30s
+    idle_timeout: 120s
+  
+  cors:
+    allowed_origins:
+      - "https://thand.io"
+      - "https://*.thand.io"
+    allowed_methods:
+      - "GET"
+      - "POST"
+      - "PUT"
+      - "DELETE"
+      - "OPTIONS"
+    allowed_headers:
+      - "Authorization"
+      - "Content-Type"
+      - "X-Requested-With"
+    max_age: 86400
+
+    # Metrics Configuration
+    metrics:
+      enabled: true
+      path: "/metrics"
+      namespace: "thand"
+
+    # Health Check Configuration
+    health:
+      path: "/health"
+
+# OIDC Configuration
+oidc:
+  issuer_url: "https://accounts.google.com"
+  client_id: "your-google-client-id.apps.googleusercontent.com"
+  client_secret: "your-google-client-secret"
+  redirect_url: "http://localhost:5225/2025-01-01/oidc/callback"
+  scopes:
+    - "openid"
+    - "profile" 
+    - "email"
+  jwt_signing_key: "your-super-secret-jwt-signing-key-at-least-256-bits"
+
+# Logging Configuration
+logging:
+  level: "info" # debug, info, warn, error
+  format: "json" # json, text
+  output: "stdout" # stdout, stderr, file path
+
+providers:
+  # Define your providers here
+
+roles:
+  # Define your roles here
+
+workflows:
+  # Define your workflows here

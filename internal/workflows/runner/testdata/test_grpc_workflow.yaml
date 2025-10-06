@@ -1,0 +1,36 @@
+document:
+  dsl: 1.0.0
+  namespace: test
+  name: grpc-example
+  version: 1.0.0
+  summary: |
+    Example workflow demonstrating gRPC function calls using the serverless workflow specification.
+    This workflow shows how to call gRPC services with authentication and argument passing.
+
+use:
+  authentication:
+    - grpc_bearer_auth:
+        bearer:
+          token: ${ .auth_token }
+  functions:
+    - grpc_call:
+        grpc:
+          endpoint:
+            uri: "localhost:50051"
+          service:
+            name: "hello.Greeter"
+            port: 50051
+            host: "localhost"
+          method: "SayHello"
+          arguments:
+            name: ${ .user_name }
+            greeting: "Hello from serverless workflow"
+
+do:
+  - make_grpc_call:
+      call: grpc_call
+      with:
+        user_name: "World"
+        auth_token: "test-bearer-token-123"
+      output:
+        greeting_response: ${ .result }

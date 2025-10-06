@@ -1,0 +1,33 @@
+document:
+  dsl: '1.0.1'
+  namespace: test
+  name: switch-order-processing
+  version: '0.1.0'
+do:
+  - processOrder:
+      switch:
+        - electronic:
+            when: .orderType == "electronic"
+            then: processElectronicOrder
+        - physical:
+            when: .orderType == "physical"
+            then: processPhysicalOrder
+        - default:
+            then: handleUnknownOrderType
+  - processElectronicOrder:
+      set:
+        result: "electronic order processed"
+        orderType: ${ .orderType }
+      then: exit
+  - processPhysicalOrder:
+      set:
+        result: "physical order processed"
+        orderType: ${ .orderType }
+      then: exit
+  - handleUnknownOrderType:
+      set:
+        result: "unknown order type handled"
+        orderType: ${ .orderType }
+      then: exit
+output:
+  as: '${ . }'

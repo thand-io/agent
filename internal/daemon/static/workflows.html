@@ -1,0 +1,64 @@
+{{template "header" .TemplateData}}
+    <main>
+        <div class="container" style="width: 100%;">
+            <div class="page-header">
+                <h1>Workflows</h1>
+                <p>Manage and monitor workflow configurations for privilege elevation and access control.</p>
+            </div>
+
+            <div class="table-container">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Description</th>
+                            <th>Authentication</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range $name, $workflow := .Response.Workflows}}
+                        <tr>
+                            <td>
+                                <strong>{{$name}}</strong>
+                            </td>
+                            <td>
+                                {{if $workflow.Description}}
+                                    {{$workflow.Description}}
+                                {{else}}
+                                    <span class="text-muted">No description available</span>
+                                {{end}}
+                            </td>
+                            <td>
+                                <span class="badge badge-secondary">{{$workflow.Authentication}}</span>
+                            </td>
+                            <td>
+                                {{if $workflow.Enabled}}
+                                    <span class="badge badge-success">Enabled</span>
+                                {{else}}
+                                    <span class="badge badge-warning">Disabled</span>
+                                {{end}}
+                            </td>
+                            <td>
+                                <a href="{{$.TemplateData.Config.GetApiBasePath}}/workflow/{{$name}}" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">View</a>
+                            </td>
+                        </tr>
+                        {{else}}
+                        <tr>
+                            <td colspan="5" class="text-muted" style="text-align: center; padding: 2rem;">
+                                No workflows configured
+                            </td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="button-group" style="margin-top: 2rem;">
+                <a href="/" class="button button-secondary">← Back to Home</a>
+                <a href="/elevate" class="button button-primary">Request Elevation</a>
+            </div>
+        </div>
+    </main>
+{{template "footer" .TemplateData}}

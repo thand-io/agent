@@ -1,0 +1,39 @@
+# Git files (but keep .git and .gitmodules for submodule initialization)
+.gitignore
+
+# Documentation
+*.md
+docs/
+
+# Build artifacts
+bin/
+__debug_bin*
+
+# Development files
+.vscode/
+.idea/
+
+# Test files
+*_test.go
+*.test
+
+# Temporary files
+*.tmp
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Docker files
+Dockerfile*
+docker-compose*
+
+# CI/CD files
+.github/
+
+# Local configuration that shouldn't be in container
+config.yaml
+
+# Vendor directory (if using go mod, this isn't needed)
+vendor/

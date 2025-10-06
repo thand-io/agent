@@ -1,0 +1,38 @@
+{{define "header"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Service</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <header>
+        <nav class="container">
+            <div class="nav-left">
+                <div class="logo">
+                    <a href="/">
+                        {{.ServiceName}}
+                    </a>
+                </div>
+                <ul class="nav-links-left">
+                    <li class="nav-divider"></li>
+                    <li><a href="/roles">Roles</a></li>
+                    <li><a href="/workflows">Workflows</a></li>
+                    <li><a href="/providers">Providers</a></li>
+                    <li><a href="/executions">Executions</a></li>
+                    <li class="nav-divider"></li>
+                    <li><a href="/elevate" class="nav-button">Request Elevation</a></li>
+                </ul>
+            </div>
+            <div class="nav-right">
+                {{if .User}}
+                    <a href="/user" class="nav-button">{{.User.GetName}}</a>
+                {{else}}
+                    <a href="/auth" class="nav-button">Login</a>
+                {{end}}
+            </div>
+        </nav>
+    </header>
+{{end}}

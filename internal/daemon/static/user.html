@@ -1,0 +1,315 @@
+{{template "header" .}}
+    <main>
+        <div class="container" style="width: 100%;">
+            {{if .User}}
+            <div class="page-header">
+                <h1>User Profile</h1>
+                <p>Manage your account and view session history</p>
+            </div>
+
+            <div class="form-section">
+                <h3>Account Summary</h3>
+                <div class="user-info-grid">
+                    <div class="info-item">
+                        <span class="form-label">User ID</span>
+                        <span class="info-value">{{if .User}}{{.User.ID}}{{else}}Not logged in{{end}}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="form-label">Username</span>
+                        <span class="info-value">{{if .User}}{{.User.Username}}{{else}}N/A{{end}}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="form-label">Email</span>
+                        <span class="info-value">{{if .User}}{{.User.Email}}{{else}}N/A{{end}}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="form-label">Name</span>
+                        <span class="info-value">{{if .User}}{{.User.Name}}{{else}}N/A{{end}}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="form-label">Provider</span>
+                        <span class="info-value">{{if .User}}{{.User.Provider}}{{else}}N/A{{end}}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="form-label">Verified</span>
+                        <span class="info-value">{{if .User}}{{if .User.Verified}}{{if .User.Verified}}Yes{{else}}No{{end}}{{else}}N/A{{end}}{{else}}N/A{{end}}</span>
+                    </div>
+                </div>
+                {{if .User}}
+                <div class="button-group" style="justify-content: flex-end; margin-top: 1rem;">
+                    <button class="button button-secondary" onclick="logout()">Logout</button>
+                </div>
+                {{end}}
+            </div>
+
+            <div class="form-section">
+                <h3>Active Sessions</h3>
+                <div class="table-container">
+                    <table class="table" id="sessionsTable">
+                        <thead>
+                            <tr>
+                                <th>Provider</th>
+                                <th>Version</th>
+                                <th>Expiry</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sessionsTableBody">
+                            <tr>
+                                <td colspan="5" style="text-align: center; padding: 2rem; color: hsl(var(--muted-foreground));">
+                                    Loading sessions...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {{else}}
+            <div class="page-header">
+                <h1>User Profile</h1>
+                <p>You need to be logged in to view your profile</p>
+            </div>
+
+            <div class="form-section">
+                <div style="text-align: center; padding: 2rem;">
+                    <p style="margin-bottom: 1.5rem; color: hsl(var(--muted-foreground));">
+                        Please log in to view your user profile and session history.
+                    </p>
+                    <a href="/auth" class="button button-primary">Login</a>
+                </div>
+            </div>
+            {{end}}
+        </div>
+    </main>
+
+    <style>
+        .user-info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .info-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .info-value {
+            font-size: 1rem;
+            color: hsl(var(--foreground));
+            padding: 0.5rem 0;
+            font-weight: 500;
+        }
+
+        .user-agent-truncate {
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+        }
+
+        .action-button {
+            padding: 0.25rem 0.75rem;
+            font-size: 0.875rem;
+            border: 1px solid;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s;
+            min-width: 60px;
+            text-align: center;
+        }
+
+        .action-button.renew {
+            background-color: hsl(var(--primary));
+            color: hsl(var(--primary-foreground));
+            border-color: hsl(var(--primary));
+        }
+
+        .action-button.renew:hover {
+            background-color: hsl(var(--primary) / 0.9);
+        }
+
+        .action-button.delete {
+            background-color: transparent;
+            color: hsl(var(--destructive));
+            border-color: hsl(var(--destructive));
+        }
+
+        .action-button.delete:hover {
+            background-color: hsl(var(--destructive));
+            color: hsl(var(--destructive-foreground));
+        }
+
+        .status-badge {
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.375rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+
+        .status-active {
+            background-color: hsl(142, 76%, 36% / 0.2);
+            color: hsl(142, 76%, 36%);
+        }
+
+        .status-expired {
+            background-color: hsl(0, 84%, 60% / 0.2);
+            color: hsl(0, 84%, 60%);
+        }
+
+        @media (max-width: 768px) {
+            .user-info-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .button-group {
+                justify-content: center !important;
+            }
+        }
+    </style>
+
+    <script>
+        // Load sessions on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSessions();
+        });
+
+        async function loadSessions() {
+            try {
+                const response = await fetch('{{.Config.GetApiBasePath}}/sessions', {
+                    credentials: 'include'
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to fetch sessions');
+                }
+                
+                const sessionData = await response.json();
+                renderSessions(sessionData);
+                
+            } catch (error) {
+                console.error('Error loading sessions:', error);
+                document.getElementById('sessionsTableBody').innerHTML = `
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 2rem; color: hsl(var(--muted-foreground));">
+                            Error loading sessions
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        function renderSessions(sessionData) {
+            const tbody = document.getElementById('sessionsTableBody');
+            
+            if (!sessionData || !sessionData.sessions || Object.keys(sessionData.sessions).length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 2rem; color: hsl(var(--muted-foreground));">
+                            No sessions found
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            const currentTime = new Date();
+            const sessions = sessionData.sessions;
+
+            tbody.innerHTML = Object.entries(sessions).map(([provider, session]) => {
+                const expiryDate = new Date(session.expiry);
+                const isExpired = expiryDate < currentTime;
+                
+                const statusClass = isExpired ? 'status-expired' : 'status-active';
+                const statusText = isExpired ? 'Expired' : 'Active';
+                
+                return `
+                    <tr>
+                        <td><strong>${provider}</strong></td>
+                        <td>${session.version}</td>
+                        <td>${expiryDate.toLocaleString()}</td>
+                        <td>
+                            <span class="status-badge ${statusClass}">
+                                ${statusText}
+                            </span>
+                        </td>
+                        <td>
+                            <div class="action-buttons">
+                                <button class="action-button renew" onclick="renewSession('${provider}')" title="Renew session">
+                                    Renew
+                                </button>
+                                <button class="action-button delete" onclick="deleteSession('${provider}')" title="Delete session">
+                                    Delete
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function renewSession(provider) {
+            if (confirm(`Are you sure you want to renew the session for ${provider}?`)) {
+                try {
+                    window.location.href = `{{$.Config.GetApiBasePath}}/auth/request/${provider}?callback={{$.Callback}}`;
+                } catch (error) {
+                    console.error('Error renewing session:', error);
+                    alert('Error renewing session. Please try again.');
+                }
+            }
+        }
+
+        async function deleteSession(provider) {
+            if (confirm(`Are you sure you want to delete the session for ${provider}? This will log you out of ${provider}.`)) {
+                try {
+                    const response = await fetch(`{{.Config.GetApiBasePath}}/session/${provider}`, {
+                        method: 'DELETE',
+                        credentials: 'include'
+                    });
+                    
+                    if (response.ok) {
+                        // Reload sessions to update the display
+                        loadSessions();
+                        alert(`Session for ${provider} has been deleted successfully.`);
+                    } else {
+                        throw new Error('Failed to delete session');
+                    }
+                } catch (error) {
+                    console.error('Error deleting session:', error);
+                    alert('Error deleting session. Please try again.');
+                }
+            }
+        }
+
+        async function logout() {
+            if (confirm('Are you sure you want to logout?')) {
+                try {
+                    const response = await fetch('/api/v1/auth/logout', {
+                        method: 'POST',
+                        credentials: 'include'
+                    });
+                    
+                    if (response.ok) {
+                        window.location.href = '/auth';
+                    } else {
+                        alert('Error logging out. Please try again.');
+                    }
+                } catch (error) {
+                    console.error('Logout error:', error);
+                    alert('Error logging out. Please try again.');
+                }
+            }
+        }
+    </script>
+{{template "footer" .}}

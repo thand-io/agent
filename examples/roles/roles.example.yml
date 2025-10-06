@@ -1,0 +1,38 @@
+version: "1.0"
+roles:
+  admin:
+    name: Admin
+    description: Full access to all resources and capabilities.
+    workflow: slack_approval
+    inherits: # allow for inclusion of IAM admin capabilities - URNS
+      - user
+      - iam:admin
+    permissions:  # Allow all permissions
+      allow:
+        - ec2:*
+        - s3:*
+        - rds:*
+    resources:  # Allow all resources
+      allow:
+        - "aws:*"
+    scopes:  # Only allow these scopes for role elevation
+      groups:
+        - oidc:user
+        - oidc:eng
+      users:
+        - hugh@thand.io
+    providers:  # Only allow these providers for role elevation
+      - aws-prod
+      - aws-dev
+    enabled: true
+  user:
+    name: User
+    description: Basic access to user resources.
+    workflow: slack_approval
+    permissions:
+      allow:
+        - ec2:describeInstances
+        - s3:listBuckets
+    providers:
+      - aws
+    enabled: true

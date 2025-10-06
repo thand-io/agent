@@ -1,0 +1,42 @@
+version: "1.0"
+roles:
+  gcp-admin:
+    name: GCP Admin bundle for production
+    description: Full access to all resources and capabilities.
+    workflow: slack_approval
+    inherits: # allow for inclusion of IAM admin capabilities - URNS
+      - user
+      - aws:AdministratorReadOnly
+    permissions:  # Allow all permissions
+      allow:
+        - compute:*
+        - storage:*
+        - sql:*
+        - iam:*
+        - cloudfunctions:*
+        - container:*
+    resources:  # Allow all resources
+      allow:
+        - "gcp:*"
+    scopes:  # Only allow these scopes for role elevation
+      groups: # Where is oidc defined?
+        - oidc:user
+        - oidc:eng
+      users:
+        - hugh@thand.io
+    providers:  # Only allow these providers for role elevation
+      - gcp-prod
+      - gcp-dev
+    enabled: true
+  gcp-user:
+    name: GCP user bundle for engineering
+    description: Basic access to user resources.
+    workflow: slack_approval
+    permissions:
+      allow:
+        - compute.instances.list
+        - storage.buckets.list
+        - cloudfunctions.functions.list
+    providers:
+      - gcp
+    enabled: true

@@ -1,0 +1,43 @@
+# Dockerfile.cicd - Optimized for CI/CD with pre-built binaries
+FROM alpine:latest
+
+# Set up build arguments
+ARG TARGETARCH
+ARG VERSION=dev
+ARG COMMIT=unknown
+
+# Install ca-certificates for HTTPS calls
+RUN apk --no-cache add ca-certificates gcompat
+
+# Create a non-root user
+RUN addgroup -S agent && adduser -S agent -G agent
+
+# Set working directory
+WORKDIR /app
+
+# Copy pre-built binary based on target architecture
+COPY dist/agent-linux-${TARGETARCH} ./agent
+
+# Make binary executable
+RUN chmod +x ./agent
+
+# Copy configuration example file if it exists
+COPY config.example.yaml ./
+
+# Change ownership to non-root user
+RUN chown -R agent:agent /app
+
+# Switch to non-root user
+USER agent
+
+# Expose the default port (adjust if your server uses a different port)
+EXPOSE 8080
+
+# Health check (adjust the endpoint as needed)
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+
+ENV THAND_SERVER_PORT=8080
+
+# Default command is to run the server
+CMD ["./agent", "server"]

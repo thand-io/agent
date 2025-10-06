@@ -1,0 +1,41 @@
+version: "1.0"
+policies:
+  basic:
+    description: Simple elevation flow
+    # Set which authentication is used to auth the users request
+    # before the workflow is run
+    authentication: default
+    enabled: true
+    workflow:
+      document:
+        dsl: "1.0.0-alpha5"
+        namespace: "thand"
+        name: "simple-elevation"
+        version: "1.0.0"
+      # The input is the elevate request object.
+      do:
+        - validate:
+            # Firstly, check that the following is valid:
+            # If with not provided then just staticlly validate it
+            # if LLM specified then we can use AI to validate the request
+            call: thand.validate
+            with:
+              validator: static # static (default) or llm to populate role / provider from the reason
+            then: notify
+        - authorize:
+            # Authorize the user for the requested role
+            call: thand.authorize
+            then: finished
+        - finished:
+            call: slack
+            with:
+              message: "Access revoked for user due to expiration or policy violation"
+              group: "admins"
+              blocks:
+                - type: section
+                  text: "User access has been revoked"
+                - type: context
+                  elements:
+                    - type: mrkdwn
+                      text: "User: ${ .user }\nReason: ${ .reason }"
+            then: end # finishes the workflow

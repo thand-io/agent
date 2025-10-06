@@ -1,0 +1,37 @@
+document:
+  dsl: '1.0.1'
+  namespace: test
+  name: switch-numeric-conditions
+  version: '0.1.0'
+do:
+  - categorizeAmount:
+      switch:
+        - small:
+            when: .amount < 100
+            then: processSmallAmount
+        - medium:
+            when: .amount >= 100 and .amount < 1000
+            then: processMediumAmount
+        - large:
+            when: .amount >= 1000
+            then: processLargeAmount
+  - processSmallAmount:
+      set:
+        category: "small"
+        discountRate: 0.05
+        amount: ${ .amount }
+      then: exit
+  - processMediumAmount:
+      set:
+        category: "medium"
+        discountRate: 0.10
+        amount: ${ .amount }
+      then: exit
+  - processLargeAmount:
+      set:
+        category: "large"
+        discountRate: 0.15
+        amount: ${ .amount }
+      then: exit
+output:
+  as: '${ . }'

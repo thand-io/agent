@@ -1,0 +1,273 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  GO_VERSION: '1.25'
+  GOEXPERIMENT: 'jsonv2'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      commit: ${{ steps.version.outputs.commit }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch full history for proper versioning
+
+    - name: Generate version
+      id: version
+      run: |
+        if [[ $GITHUB_REF == refs/tags/* ]]; then
+          VERSION=${GITHUB_REF#refs/tags/}
+        else
+          VERSION="v0.0.0-$(date +%Y%m%d%H%M%S)-$(git rev-parse --short HEAD)"
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "commit=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+        echo "Generated version: $VERSION"
+
+  build:
+    needs: version
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1  # Only fetch the latest commit
+        submodules: recursive
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Build for multiple platforms
+      run: |
+        VERSION=${{ needs.version.outputs.version }}
+        COMMIT=${{ needs.version.outputs.commit }}
+        
+        # Create dist directory
+        mkdir -p dist
+        
+        # Build for different platforms and create archives
+        platforms=(
+          "linux/amd64"
+          "linux/arm64" 
+          "darwin/amd64"
+          "darwin/arm64"
+          "windows/amd64"
+        )
+        
+        for platform in "${platforms[@]}"; do
+          IFS='/' read -r os arch <<< "$platform"
+          output_name="agent"
+          if [ "$os" = "windows" ]; then
+            output_name="agent.exe"
+          fi
+          
+          echo "Building for $os/$arch..."
+          GOOS=$os GOARCH=$arch go build \
+            -ldflags "-X github.com/thand-io/agent/internal/common.Version=$VERSION -X github.com/thand-io/agent/internal/common.GitCommit=$COMMIT" \
+            -o "dist/$output_name" .
+          
+          # Create archive
+          if [ "$os" = "windows" ]; then
+            cd dist && zip "agent-${os}-${arch}.zip" "$output_name" && cd ..
+          else
+            cd dist && tar -czf "agent-${os}-${arch}.tar.gz" "$output_name" && cd ..
+          fi
+          
+          # Also keep the binary for direct download
+          mv "dist/$output_name" "dist/agent-${os}-${arch}$([ "$os" = "windows" ] && echo ".exe" || echo "")"
+        done
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: binaries-${{ needs.version.outputs.version }}
+        path: dist/
+
+  docker:
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    outputs:
+      image-digest: ${{ steps.docker-build.outputs.digest }}
+      image-tags: ${{ steps.meta.outputs.tags }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1  # Only fetch the latest commit
+
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: binaries-${{ needs.version.outputs.version }}
+        path: dist/
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=raw,value=dev,enable={{is_default_branch}}
+          type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+          type=raw,value=${{ needs.version.outputs.version }},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+
+    - name: Build and push Docker image
+      id: docker-build
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile.cicd
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        build-args: |
+          VERSION=${{ needs.version.outputs.version }}
+          COMMIT=${{ needs.version.outputs.commit }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  release:
+    needs: [version, build, docker]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: binaries-${{ needs.version.outputs.version }}
+        path: dist/
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ needs.version.outputs.version }}
+        name: Release ${{ needs.version.outputs.version }}
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+        body: |
+          ## Docker Image
+          
+          ```bash
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}
+          ```
+        files: |
+          dist/agent-linux-amd64
+          dist/agent-linux-arm64
+          dist/agent-darwin-amd64
+          dist/agent-darwin-arm64
+          dist/agent-windows-amd64.exe
+          dist/agent-linux-amd64.tar.gz
+          dist/agent-linux-arm64.tar.gz
+          dist/agent-darwin-amd64.tar.gz
+          dist/agent-darwin-arm64.tar.gz
+          dist/agent-windows-amd64.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  auto-tag:
+    needs: version
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0 # Fetch full history for proper versioning
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Get latest tag
+      id: latest-tag
+      run: |
+        LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+        echo "latest-tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+
+    - name: Bump version
+      id: bump
+      run: |
+        LATEST_TAG=${{ steps.latest-tag.outputs.latest-tag }}
+        
+        # Remove 'v' prefix and split version
+        VERSION=${LATEST_TAG#v}
+        IFS='.' read -ra VERSION_PARTS <<< "$VERSION"
+        
+        MAJOR=${VERSION_PARTS[0]:-0}
+        MINOR=${VERSION_PARTS[1]:-0}
+        PATCH=${VERSION_PARTS[2]:-0}
+        
+        # Check commit messages for version bump indicators
+        if git log --format=%B -n 1 | grep -qi "BREAKING CHANGE\|major:"; then
+          NEW_VERSION="v$((MAJOR + 1)).0.0"
+        elif git log --format=%B -n 1 | grep -qi "feat:\|feature:\|minor:"; then
+          NEW_VERSION="v$MAJOR.$((MINOR + 1)).0"
+        else
+          NEW_VERSION="v$MAJOR.$MINOR.$((PATCH + 1))"
+        fi
+        
+        echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
+        echo "Bumping from $LATEST_TAG to $NEW_VERSION"
+
+    - name: Create and push tag
+      run: |
+        NEW_VERSION=${{ steps.bump.outputs.new-version }}
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git tag -a $NEW_VERSION -m "Auto-release $NEW_VERSION"
+        git push origin $NEW_VERSION
+
+  homebrew:
+    needs: [version, release]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - name: Trigger Homebrew Tap Update
+      uses: peter-evans/repository-dispatch@v3
+      with:
+        token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        repository: thand-io/homebrew-tap
+        event-type: update-formula
+        client-payload: |
+          {
+            "version": "${{ needs.version.outputs.version }}",
+            "repository": "${{ github.repository }}",
+            "release_url": "https://github.com/${{ github.repository }}/releases/tag/${{ needs.version.outputs.version }}"
+          }

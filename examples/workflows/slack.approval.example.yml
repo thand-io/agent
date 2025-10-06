@@ -1,0 +1,152 @@
+version: "1.0"
+workflows:
+  slack_approval:
+    description: Access to AWS resources
+    # Set which authentication is used to auth the users request
+    # before the workflow is run
+    authentication: google_oauth2
+    enabled: true
+    workflow:
+      # schedule:
+      #   after: ${ .duration }
+      #  
+      document:
+        dsl: "1.0.0-alpha5"
+        namespace: "thand"
+        name: "slack-approval-workflow"
+        version: "1.0.0"
+      use:
+        secrets:
+          - google_oauth2
+        authentications:
+          google_auth:
+            oauth2:
+              authority: https://accounts.google.com/o/oauth2
+              endpoints:
+                token: /token
+                auth: /auth
+              grant: client_credentials
+              client:
+                id: ${ $google_oauth2.client_id }
+                secret: ${ $google_oauth2.client_secret }
+          api_key_auth:
+            basic: # Use basic auth instead of custom thand auth
+              username: thand_user
+              password: thand_password
+          oauth_auth:
+            oauth2:
+              authority: https://auth.example.com
+              grant: client_credentials
+              client:
+                id: client_id
+                secret: client_secret
+      # The input is the elevate request object.
+      do:
+        - validate:
+            # Firstly, check that the following is valid:
+            # If with not provided then just staticlly validate it
+            # if LLM specified then we can use AI to validate the request
+            call: thand.validate
+            with:
+              validator: static
+            then: notify
+        - notify:
+            # 1. The thand notifier simplifies multiple workflow steps down
+            #    to a single call.
+            #    Slack - Sends request to channel
+            #    Email - Sends request via email
+            # 2. The user can request callbacks to validate the notify request
+            #    If the admin really wants to here they can do n-of-m
+            #    or more advanced notifications.
+            # 3. If a user really wants they can implement the slack or mailer
+            #    directly. The user can also just re-quest the notify step to
+            #    notify several providers
+            call: thand.notify
+            with:
+              provider: slack # or slack, email
+              to: C0123456789 # Channel ID for #access-requests
+              message: >
+                ${ "The user \($context.user.name) is requesting access." }
+
+              approvals: true # request approval link is provided. Emits approval events
+            then: approvals
+        - approvals:
+            listen:
+              to:
+                one:
+                  with:
+                    type: com.thand.approval
+            output:
+              # Simply convert the output to a list of approvals
+              as: '${ { "approvals": [{"approved": .data.approved}] } }'
+            export:
+              # Next we need to map the existing approvals to the new
+              # list of approvals in the context as export handles
+              # context access
+              as: '${ $context + { "approvals": ($context.approvals // []) + .approvals } }'
+            then: check_approval
+        - check_approval:
+            switch:
+              # If anyone rejects then reject the entire request
+              # otherwise if there is more than one approval then
+              # authorize
+              - case1:
+                  when: any($context.approvals[]; .approved == false)
+                  then: denied
+              - case2:
+                  when: '[$context.approvals[] | select(.approved == true)] | length > 1'
+                  then: authorize
+              # Return to await more approvals
+              - default:
+                  then: approvals
+        - authorize:
+            # Authorize the user for the requested role
+            call: thand.authorize
+            # with:
+            #   revocation: revoke # which step to call to revoke access
+            then: monitor
+        - monitor:
+            call: thand.monitor
+            with:
+              monitor: llm
+              threshold: 10
+            then: alert
+        - alert: # Listen for alerts
+            listen:
+              to:
+                any:
+                  - with:
+                      type: com.thand.monitor.event
+                      data: ${ .threshold > 5 }
+                  - with:
+                      type: com.thand.alert.event
+                      data: ${ .role == "admin" }
+        - revoke:
+            call: thand.revoke
+            with:
+              reason: "Access no longer needed"
+            then: finished
+        - denied:
+            call: slack.postMessage
+            with:
+              provider: slack
+              to: C0123456789
+              message:
+                text: "Access request denied"
+        - finished:
+            call: slack.postMessage
+            with:
+              provider: slack
+              to: C0123456789
+              message:
+                text: "Access revoked for user due to inactivity or workflow violation"
+                blocks:
+                  - type: section
+                    text: "User access has been revoked"
+                  - type: context
+                    elements:
+                      - type: mrkdwn
+                        text: >
+                          User: ${ .user } Reason: ${ .reason }
+
+            then: end # finishes the workflow

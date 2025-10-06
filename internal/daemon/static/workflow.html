@@ -1,0 +1,591 @@
+{{template "header" .TemplateData}}
+    <main style="height: calc(100vh - 120px); overflow: hidden;">
+        <div class="container" style="height: 100%; width: 100%;">
+            <div class="page-header" style="margin-bottom: 1rem;">
+                <h1>{{.Name}}</h1>
+            </div>
+
+            <div style="display: flex; height: calc(100% - 80px); gap: 1rem;">
+                <!-- Workflow Diagram - Left Side (70%) -->
+                <div style="flex: 0 0 70%; height: 100%; border: 1px solid hsl(var(--border)); border-radius: 8px; overflow: hidden;">
+                    <div id="reactflow-container" style="width: 100%; height: 100%;"></div>
+                </div>
+
+                <!-- Workflow Details - Right Side (30%) -->
+                <div style="flex: 0 0 30%; height: 100%; overflow-y: auto; padding: 1rem; background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 8px;">
+                    <h2 style="margin-top: 0; margin-bottom: 1rem; font-size: 1.25rem;">Workflow Details</h2>
+                    
+                    <div style="margin-bottom: 1.5rem;">
+                        <h3 style="font-size: 1rem; margin-bottom: 0.5rem; color: hsl(var(--muted-foreground));">Description</h3>
+                        <p style="margin: 0; line-height: 1.5;">
+                            {{if .Description}}{{.Description}}{{else}}<span style="color: hsl(var(--muted-foreground));">No description available</span>{{end}}
+                        </p>
+                    </div>
+
+                    <div style="margin-bottom: 1.5rem;">
+                        <h3 style="font-size: 1rem; margin-bottom: 0.5rem; color: hsl(var(--muted-foreground));">Authentication</h3>
+                        <span class="badge badge-secondary">{{.Authentication}}</span>
+                    </div>
+
+                    <div style="margin-bottom: 1.5rem;">
+                        <h3 style="font-size: 1rem; margin-bottom: 0.5rem; color: hsl(var(--muted-foreground));">Status</h3>
+                        {{if .Enabled}}
+                            <span class="badge badge-success">Enabled</span>
+                        {{else}}
+                            <span class="badge badge-warning">Disabled</span>
+                        {{end}}
+                    </div>
+
+                    {{if .Workflow.Workflow}}{{if .Workflow.Workflow.Document}}
+                    <div style="margin-bottom: 1.5rem;">
+                        <h3 style="font-size: 1rem; margin-bottom: 0.5rem; color: hsl(var(--muted-foreground));">Version</h3>
+                        <span style="color: hsl(var(--muted-foreground));">{{.Workflow.Workflow.Document.Version}}</span>
+                    </div>
+                    <div style="margin-bottom: 1.5rem;">
+                        <h3 style="font-size: 1rem; margin-bottom: 0.5rem; color: hsl(var(--muted-foreground));">DSL Version</h3>
+                        <span style="color: hsl(var(--muted-foreground));">{{.Workflow.Workflow.Document.Dsl}}</span>
+                    </div>
+                    {{end}}{{end}}
+
+                    <div style="margin-bottom: 1.5rem;">
+                        <h3 style="font-size: 1rem; margin-bottom: 0.5rem; color: hsl(var(--muted-foreground));">Actions</h3>
+                        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <a href="/workflows" class="button button-secondary" style="width: 100%; text-align: center;">← Back to Workflows</a>
+                            <a href="/elevate" class="button button-primary" style="width: 100%; text-align: center;">Request Elevation</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- React Flow Dependencies -->
+    <link rel="stylesheet" href="https://unpkg.com/reactflow@11/dist/style.css">
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/reactflow@11/dist/umd/index.js"></script>
+
+    <style>
+        .workflow-details {
+            margin: 2rem 0;
+        }
+
+        .workflow-info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .info-card {
+            background: hsl(var(--card));
+            border: 1px solid hsl(var(--border));
+            border-radius: 0.5rem;
+            padding: 1rem;
+        }
+
+        .info-card h3 {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: hsl(var(--muted-foreground));
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .workflow-visualization {
+            margin: 2rem 0;
+        }
+
+        .workflow-visualization h2 {
+            margin-bottom: 1rem;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        #reactflow-container {
+            width: 100%;
+            height: 100%;
+            border-radius: 0.5rem;
+            background: hsl(var(--background));
+        }
+
+        /* React Flow specific styles */
+        .react-flow__node {
+            background: hsl(var(--card));
+            border: 1px solid hsl(var(--border));
+            border-radius: 0.375rem;
+            padding: 0.5rem;
+            font-size: 0.875rem;
+            color: hsl(var(--foreground));
+        }
+
+        .react-flow__node-default {
+            background: hsl(var(--primary));
+            color: hsl(var(--primary-foreground));
+        }
+
+        .react-flow__node-input {
+            background: hsl(var(--secondary));
+            color: hsl(var(--secondary-foreground));
+        }
+
+        .react-flow__node-output {
+            background: hsl(var(--muted));
+            color: hsl(var(--muted-foreground));
+        }
+
+        .react-flow__edge-path {
+            stroke: hsl(var(--border));
+        }
+
+        .react-flow__minimap {
+            background: hsl(var(--muted));
+        }
+
+        .react-flow__controls {
+            background: hsl(var(--card));
+            border: 1px solid hsl(var(--border));
+        }
+
+        .react-flow__controls button {
+            background: hsl(var(--background));
+            border: 1px solid hsl(var(--border));
+            color: hsl(var(--foreground));
+        }
+
+        .react-flow__controls button:hover {
+            background: hsl(var(--muted));
+        }
+    </style>
+
+    <!-- Hidden div to store workflow data -->
+    <div id="workflow-data" style="display: none;">
+        <!-- Debug info -->
+        <div class="debug-info" data-workflow-exists="{{if .Workflow}}true{{else}}false{{end}}" data-workflow-do-exists="{{if .Workflow}}{{if .Workflow.Do}}true{{else}}false{{end}}{{else}}false{{end}}"></div>
+        
+        <!-- JSON dump of the entire .Workflow object -->
+        {{if .Workflow}}
+        <script type="application/json" id="workflow-raw">{{.Workflow}}</script>
+        {{end}}
+        
+        {{if .Workflow}}
+            {{if .Workflow.Do}}
+                {{range $key, $task := .Workflow.Do}}
+                <div class="task-data" data-id="{{$key}}" data-label="{{$key}}" data-type="{{if $task.Call}}call{{else if $task.Listen}}listen{{else if $task.Fork}}fork{{else if $task.Do}}sequential{{else if $task.Run}}run{{else if $task.Set}}set{{else if $task.Emit}}emit{{else if $task.Raise}}raise{{else if $task.For}}loop{{else if $task.If}}conditional{{else if $task.Try}}try{{else if $task.Switch}}switch{{else}}task{{end}}"></div>
+                {{end}}
+            {{else}}
+                <!-- No tasks found in .Workflow.Do -->
+                <div class="debug-no-tasks">No tasks in .Workflow.Do</div>
+            {{end}}
+        {{else}}
+            <!-- .Workflow is nil -->
+            <div class="debug-no-workflow">No .Workflow object</div>
+        {{end}}
+    </div>
+
+    <script>
+        const { useState, useCallback, useMemo } = React;
+        const { createRoot } = ReactDOM;
+
+        // Initialize React Flow components from the global ReactFlow object
+        const {
+            ReactFlow,
+            Background,
+            Controls,
+            MiniMap,
+            useNodesState,
+            useEdgesState,
+            addEdge,
+        } = window.ReactFlow || {};
+
+        // Generate workflow nodes and edges from actual workflow data
+        function generateWorkflowData() {
+            // Read workflow data from hidden div
+            const workflowDataDiv = document.getElementById('workflow-data');
+            if (!workflowDataDiv) {
+                console.log('No workflow-data div found');
+                return { nodes: [], edges: [] };
+            }
+            
+            // Parse the workflow JSON data
+            const workflowRawElement = document.getElementById('workflow-raw');
+            let allTasks = [];
+            let currentY = 150;
+            const baseX = 250;
+            const branchSpacing = 200;
+            
+            if (workflowRawElement) {
+                try {
+                    const workflowData = JSON.parse(workflowRawElement.textContent);
+                    console.log('Parsed workflow object:', workflowData);
+                    
+                    // The workflow has a "do" property with an array of task objects
+                    if (workflowData.do && Array.isArray(workflowData.do)) {
+                        console.log('Found workflow.do:', workflowData.do);
+                        
+                        // Recursively parse tasks
+                        allTasks = parseTasksRecursively(workflowData.do, '', 0, 0);
+                        console.log('All extracted tasks:', allTasks);
+                    } else {
+                        console.log('No workflow.do array found');
+                    }
+                    
+                } catch (e) {
+                    console.log('Failed to parse workflow JSON:', e);
+                }
+            }
+
+            // Recursive function to parse tasks and their nested structures
+            function parseTasksRecursively(taskArray, parentId, depth, branchIndex) {
+                const tasks = [];
+                
+                taskArray.forEach((taskObj, index) => {
+                    const taskName = Object.keys(taskObj)[0];
+                    const taskDefinition = taskObj[taskName];
+                    
+                    // Create unique ID based on parent context
+                    const taskId = parentId ? `${parentId}-${taskName}` : taskName;
+                    
+                    // Determine task type
+                    const taskType = getTaskType(taskDefinition);
+                    
+                    const task = {
+                        id: taskId,
+                        label: taskName,
+                        type: taskType,
+                        definition: taskDefinition,
+                        depth: depth,
+                        branchIndex: branchIndex,
+                        parentId: parentId,
+                        sequenceIndex: index
+                    };
+                    
+                    tasks.push(task);
+                    
+                    // Handle nested structures recursively
+                    if (taskType === 'fork' && taskDefinition.fork && taskDefinition.fork.branches) {
+                        // Process each branch of the fork
+                        taskDefinition.fork.branches.forEach((branch, bIndex) => {
+                            // Convert branch object to array format for recursive parsing
+                            const branchTasks = Object.keys(branch).map(key => ({ [key]: branch[key] }));
+                            const nestedTasks = parseTasksRecursively(branchTasks, taskId, depth + 1, bIndex);
+                            tasks.push(...nestedTasks);
+                        });
+                    } else if (taskType === 'sequential' && taskDefinition.do && Array.isArray(taskDefinition.do)) {
+                        // Handle sequential nested tasks
+                        const nestedTasks = parseTasksRecursively(taskDefinition.do, taskId, depth + 1, branchIndex);
+                        tasks.push(...nestedTasks);
+                    } else if (taskType === 'conditional' && taskDefinition.if) {
+                        // Handle conditional branches
+                        if (taskDefinition.if.then) {
+                            const thenTasks = Array.isArray(taskDefinition.if.then) ? taskDefinition.if.then : [taskDefinition.if.then];
+                            const nestedTasks = parseTasksRecursively(thenTasks, `${taskId}-then`, depth + 1, 0);
+                            tasks.push(...nestedTasks);
+                        }
+                        if (taskDefinition.if.else) {
+                            const elseTasks = Array.isArray(taskDefinition.if.else) ? taskDefinition.if.else : [taskDefinition.if.else];
+                            const nestedTasks = parseTasksRecursively(elseTasks, `${taskId}-else`, depth + 1, 1);
+                            tasks.push(...nestedTasks);
+                        }
+                    } else if (taskType === 'loop' && taskDefinition.for && taskDefinition.for.do) {
+                        // Handle loop body
+                        const loopTasks = Array.isArray(taskDefinition.for.do) ? taskDefinition.for.do : [taskDefinition.for.do];
+                        const nestedTasks = parseTasksRecursively(loopTasks, `${taskId}-loop`, depth + 1, branchIndex);
+                        tasks.push(...nestedTasks);
+                    } else if (taskType === 'try' && taskDefinition.try) {
+                        // Handle try-catch blocks
+                        if (taskDefinition.try.do) {
+                            const tryTasks = Array.isArray(taskDefinition.try.do) ? taskDefinition.try.do : [taskDefinition.try.do];
+                            const nestedTasks = parseTasksRecursively(tryTasks, `${taskId}-try`, depth + 1, 0);
+                            tasks.push(...nestedTasks);
+                        }
+                        if (taskDefinition.try.catch) {
+                            const catchTasks = Array.isArray(taskDefinition.try.catch) ? taskDefinition.try.catch : [taskDefinition.try.catch];
+                            const nestedTasks = parseTasksRecursively(catchTasks, `${taskId}-catch`, depth + 1, 1);
+                            tasks.push(...nestedTasks);
+                        }
+                    }
+                });
+                
+                return tasks;
+            }
+
+            // Helper function to determine task type
+            function getTaskType(taskDefinition) {
+                if (taskDefinition.call) return 'call';
+                if (taskDefinition.listen) return 'listen';
+                if (taskDefinition.fork) return 'fork';
+                if (taskDefinition.do) return 'sequential';
+                if (taskDefinition.run) return 'run';
+                if (taskDefinition.set) return 'set';
+                if (taskDefinition.emit) return 'emit';
+                if (taskDefinition.raise) return 'raise';
+                if (taskDefinition.for) return 'loop';
+                if (taskDefinition.if) return 'conditional';
+                if (taskDefinition.try) return 'try';
+                if (taskDefinition.switch) return 'switch';
+                if (taskDefinition.wait) return 'wait';
+                return 'task';
+            }
+
+            const nodes = [];
+            const edges = [];
+            
+            // Add start node
+            nodes.push({
+                id: 'start',
+                type: 'input',
+                data: { label: 'Start' },
+                position: { x: baseX, y: 50 }
+            });
+
+            // Position nodes based on depth and branch index
+            const positionedTasks = [];
+            let currentYByDepth = { 0: currentY };
+            
+            allTasks.forEach((task) => {
+                const depth = task.depth;
+                const branchIndex = task.branchIndex;
+                
+                // Initialize Y position for this depth if not exists
+                if (!currentYByDepth[depth]) {
+                    currentYByDepth[depth] = currentY;
+                }
+                
+                // Calculate X position based on depth and branch
+                const x = baseX + (depth * branchSpacing) + (branchIndex * (branchSpacing / 2));
+                
+                // Calculate Y position
+                const y = currentYByDepth[depth];
+                currentYByDepth[depth] += 100; // Increment for next task at this depth
+                
+                // Determine node styling based on type
+                let nodeStyle = {};
+                let nodeColor = '#ffffff';
+                
+                switch (task.type) {
+                    case 'fork':
+                        nodeColor = '#fff3e0'; // Orange
+                        break;
+                    case 'conditional':
+                        nodeColor = '#f3e5f5'; // Purple
+                        break;
+                    case 'loop':
+                        nodeColor = '#e8f5e8'; // Green
+                        break;
+                    case 'try':
+                        nodeColor = '#ffebee'; // Red
+                        break;
+                    case 'call':
+                        nodeColor = '#e3f2fd'; // Blue
+                        break;
+                    default:
+                        if (task.depth > 0) {
+                            nodeColor = '#f5f5f5'; // Light gray for nested tasks
+                        }
+                }
+                
+                const node = {
+                    id: task.id,
+                    data: { 
+                        label: `${task.label} (${task.type})`,
+                        style: { backgroundColor: nodeColor }
+                    },
+                    position: { x, y }
+                };
+                
+                nodes.push(node);
+                positionedTasks.push({ ...task, position: { x, y } });
+            });
+
+            // Add end node
+            const maxY = Math.max(...Object.values(currentYByDepth));
+            nodes.push({
+                id: 'end',
+                type: 'output',
+                data: { label: 'End' },
+                position: { x: baseX, y: maxY + 50 }
+            });
+
+            // Generate edges based on task hierarchy and flow
+            generateEdges(allTasks, edges);
+
+            function generateEdges(tasks, edges) {
+                // Group tasks by parent and depth
+                const tasksByParent = {};
+                const rootTasks = [];
+                
+                tasks.forEach(task => {
+                    if (!task.parentId) {
+                        rootTasks.push(task);
+                    } else {
+                        if (!tasksByParent[task.parentId]) {
+                            tasksByParent[task.parentId] = [];
+                        }
+                        tasksByParent[task.parentId].push(task);
+                    }
+                });
+                
+                // Connect start to first root task
+                if (rootTasks.length > 0) {
+                    edges.push({
+                        id: `e-start-${rootTasks[0].id}`,
+                        source: 'start',
+                        target: rootTasks[0].id
+                    });
+                }
+                
+                // Connect root tasks sequentially
+                for (let i = 0; i < rootTasks.length - 1; i++) {
+                    const currentTask = rootTasks[i];
+                    const nextTask = rootTasks[i + 1];
+                    
+                    // If current task has children, connect from children to next
+                    const children = tasksByParent[currentTask.id];
+                    if (children && children.length > 0) {
+                        // Connect all child branches to next task
+                        children.forEach(child => {
+                            if (!tasksByParent[child.id]) { // Only leaf children
+                                edges.push({
+                                    id: `e-${child.id}-${nextTask.id}`,
+                                    source: child.id,
+                                    target: nextTask.id,
+                                    style: { stroke: '#666', strokeDasharray: '5,5' }
+                                });
+                            }
+                        });
+                    } else {
+                        // Direct connection
+                        edges.push({
+                            id: `e-${currentTask.id}-${nextTask.id}`,
+                            source: currentTask.id,
+                            target: nextTask.id
+                        });
+                    }
+                }
+                
+                // Connect parent tasks to their children
+                Object.keys(tasksByParent).forEach(parentId => {
+                    const children = tasksByParent[parentId];
+                    const parent = tasks.find(t => t.id === parentId);
+                    
+                    children.forEach(child => {
+                        const edgeStyle = parent?.type === 'fork' 
+                            ? { stroke: '#ff9800', strokeWidth: 2 } 
+                            : { stroke: '#2196f3', strokeWidth: 1.5 };
+                            
+                        edges.push({
+                            id: `e-${parentId}-${child.id}`,
+                            source: parentId,
+                            target: child.id,
+                            style: edgeStyle
+                        });
+                    });
+                });
+                
+                // Connect last root task to end
+                if (rootTasks.length > 0) {
+                    const lastTask = rootTasks[rootTasks.length - 1];
+                    const lastChildren = tasksByParent[lastTask.id];
+                    
+                    if (lastChildren && lastChildren.length > 0) {
+                        // Connect leaf children to end
+                        lastChildren.forEach(child => {
+                            if (!tasksByParent[child.id]) {
+                                edges.push({
+                                    id: `e-${child.id}-end`,
+                                    source: child.id,
+                                    target: 'end'
+                                });
+                            }
+                        });
+                    } else {
+                        edges.push({
+                            id: `e-${lastTask.id}-end`,
+                            source: lastTask.id,
+                            target: 'end'
+                        });
+                    }
+                } else {
+                    // No tasks, connect start to end
+                    edges.push({
+                        id: 'e-start-end',
+                        source: 'start',
+                        target: 'end'
+                    });
+                }
+            }
+
+            console.log('Generated nodes:', nodes);
+            console.log('Generated edges:', edges);
+            return { nodes, edges };
+        }
+
+        function Flow() {
+            // Check if ReactFlow is available
+            if (!ReactFlow) {
+                return React.createElement('div', {
+                    style: { 
+                        width: '100%', 
+                        height: '400px', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        border: '1px solid #ccc',
+                        borderRadius: '0.5rem',
+                        backgroundColor: '#f5f5f5'
+                    }
+                }, 'React Flow is loading...');
+            }
+
+            const { nodes: initialNodes, edges: initialEdges } = generateWorkflowData();
+            const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+            const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+
+            const onConnect = useCallback(
+                (params) => setEdges((eds) => addEdge(params, eds)),
+                [setEdges]
+            );
+
+            const children = [];
+            
+            // Only add components if they exist
+            if (Controls) {
+                children.push(React.createElement(Controls, { key: 'controls' }));
+            }
+            if (MiniMap) {
+                children.push(React.createElement(MiniMap, { key: 'minimap' }));
+            }
+            if (Background) {
+                children.push(React.createElement(Background, { 
+                    key: 'background',
+                    variant: 'dots' 
+                }));
+            }
+
+            return React.createElement(
+                'div',
+                { style: { width: '100%', height: '400px' } },
+                React.createElement(ReactFlow, {
+                    nodes: nodes,
+                    edges: edges,
+                    onNodesChange: onNodesChange,
+                    onEdgesChange: onEdgesChange,
+                    onConnect: onConnect,
+                    fitView: true,
+                    children: children
+                })
+            );
+        }
+
+        // Initialize React Flow when the page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            const container = document.getElementById('reactflow-container');
+            if (container) {
+                const root = createRoot(container);
+                root.render(React.createElement(Flow));
+            }
+        });
+    </script>
+{{template "footer" .TemplateData}}

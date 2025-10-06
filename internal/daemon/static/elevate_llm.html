@@ -1,0 +1,261 @@
+{{template "header" .}}
+<!-- Choices.js CSS and JS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/styles/choices.min.css">
+<script src="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/scripts/choices.min.js"></script>
+
+<main>
+    <div class="container">
+        <div class="hero">
+            <h1>AI Elevation Request</h1>
+            <p>Request temporary elevated privileges. Describe the access, activity and duration you require elevation for.</p>
+        </div>
+        
+        <div class="two-column-layout">
+            <div class="request-section">
+                <h2 class="section-title">Request Details</h2>
+                <form id="elevationForm">
+                    <div class="form-group">
+                        <label for="exampleSelect" class="form-label">Common Request Examples:</label>
+                        <select id="exampleSelect" class="form-select">
+                            <option value="">Select an example or write your own...</option>
+                            <option value="I need admin access to AWS production environment for 2 hours to troubleshoot a critical database connection issue">AWS Production Admin - Database Troubleshooting</option>
+                            <option value="Need read-only access to GCP BigQuery datasets in the analytics project for 4 hours to generate quarterly reports">GCP BigQuery Read Access - Analytics</option>
+                            <option value="Require write permissions to Azure Storage account prod-backups for 1 hour to restore accidentally deleted files">Azure Storage Write - File Restoration</option>
+                            <option value="Need Kubernetes cluster admin privileges on production namespace for 30 minutes to fix failing pod deployments">Kubernetes Admin - Pod Deployment Fix</option>
+                            <option value="Request IAM user management permissions in AWS for 1 hour to onboard new team members">AWS IAM Management - User Onboarding</option>
+                            <option value="Need access to GCP Compute Engine instances in staging environment for 3 hours to deploy and test new application version">GCP Compute Access - Application Deployment</option>
+                            <option value="Require Azure Active Directory admin rights for 45 minutes to configure single sign-on for new application">Azure AD Admin - SSO Configuration</option>
+                            <option value="Need read access to AWS CloudWatch logs and metrics for production services for 2 hours to investigate performance issues">AWS CloudWatch Read - Performance Investigation</option>
+                            <option value="Request write permissions to Terraform state bucket in GCP for 1 hour to update infrastructure configurations">GCP Terraform State - Infrastructure Update</option>
+                            <option value="Need emergency admin access to all production systems for 4 hours to respond to security incident">Emergency Admin Access - Security Incident Response</option>
+                        </select>
+                        <div class="choice-help">
+                            Choose from common elevation request examples above or describe your specific needs below.
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="reason" class="form-label">Reason for elevation:</label>
+                        <textarea 
+                            id="reason" 
+                            name="reason" 
+                            placeholder="Describe the access, activity and duration you require elevation for..."
+                            class="form-textarea"
+                            required
+                        >hey can I get access to admin on aws prod for an hour</textarea>
+                        <div id="reasonError" class="field-error" style="display: none;"></div>
+                    </div>
+                    
+                    <div class="button-group">
+                        <button type="submit" class="button button-primary" id="createRoleBtn">
+                            Create Role
+                        </button>
+                        <button type="button" class="button button-secondary" id="requestElevationBtn" disabled>
+                            Request Elevation
+                        </button>
+                    </div>
+                </form>
+                
+                <!-- Hidden form for submitting elevation request -->
+                <form id="elevationSubmitForm" method="POST" action="{{.Config.GetApiBasePath}}/elevate" style="display: none;">
+                    <input type="hidden" name="workflow" id="hiddenWorkflow">
+                    <input type="hidden" name="reason" id="hiddenReason">
+                    <input type="hidden" name="duration" id="hiddenDuration" value="PT1H">
+                    <div id="hiddenProviders"></div>
+                    <div id="hiddenInherits"></div>
+                    <div id="hiddenPermissions"></div>
+                    <div id="hiddenGroups"></div>
+                    <div id="hiddenUsers"></div>
+                </form>
+            </div>
+            
+            <div class="role-section">
+                <h2 class="section-title">AI Generated Role</h2>
+                <div id="roleOutput" class="role-output">No role generated yet. Fill out the request form and click "Create Role" to generate an AI-powered role definition.</div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script>
+    let generatedRole = null;
+
+    document.getElementById('elevationForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const reason = document.getElementById('reason').value.trim();
+        if (!reason) {
+            alert('Please provide a reason for elevation');
+            return;
+        }
+
+        const createRoleBtn = document.getElementById('createRoleBtn');
+        const requestElevationBtn = document.getElementById('requestElevationBtn');
+        const roleOutput = document.getElementById('roleOutput');
+        const reasonError = document.getElementById('reasonError');
+
+        // Reset state
+        createRoleBtn.disabled = true;
+        requestElevationBtn.disabled = true;
+        createRoleBtn.textContent = 'Creating Role...';
+        roleOutput.innerHTML = '<div class="loading">Generating AI role...</div>';
+        reasonError.style.display = 'none';
+
+        try {
+            const response = await fetch(`{{.Config.GetApiBasePath}}/elevate/llm?reason=${encodeURIComponent(reason)}`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.role) {
+                generatedRole = data.role;
+                roleOutput.textContent = JSON.stringify(data, null, 2);
+                requestElevationBtn.disabled = false;
+                createRoleBtn.textContent = 'Create Role';
+            } else {
+                // Handle API error response
+                const errorTitle = data.title || 'Failed to generate role';
+                const errorMessage = data.message || data.error || 'Unknown error occurred';
+                
+                // Display full JSON response in role output
+                roleOutput.innerHTML = `<div class="error">
+                    <strong>Error Response: ${errorTitle}</strong><br/>
+                    <pre>${errorMessage}</pre>
+                </div>`;
+                
+                // Display parsed error message under text field
+                reasonError.innerHTML = `<strong>${errorTitle}:</strong> ${errorMessage}`;
+                reasonError.style.display = 'block';
+                
+                throw new Error(`${errorTitle}: ${errorMessage}`);
+            }
+        } catch (error) {
+            // If it's not already handled above, show generic error
+            if (!reasonError.style.display || reasonError.style.display === 'none') {
+                roleOutput.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+                reasonError.innerHTML = `<strong>Error:</strong> ${error.message}`;
+                reasonError.style.display = 'block';
+            }
+            createRoleBtn.textContent = 'Create Role';
+        } finally {
+            createRoleBtn.disabled = false;
+        }
+    });
+
+    document.getElementById('requestElevationBtn').addEventListener('click', function() {
+        if (generatedRole) {
+            // Populate the hidden form with the current data
+            const reason = document.getElementById('reason').value;
+            document.getElementById('hiddenReason').value = reason;
+            
+            // Extract data from the generated role
+            const role = generatedRole;
+            
+            // Set workflow (use first workflow from generated role if available, otherwise default)
+            document.getElementById('hiddenWorkflow').value = role.workflow || 'default-workflow';
+            
+            // Set providers from the generated role
+            const providersContainer = document.getElementById('hiddenProviders');
+            providersContainer.innerHTML = '';
+            if (role.providers && role.providers.length > 0) {
+                role.providers.forEach(provider => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = 'providers';
+                    input.value = provider;
+                    providersContainer.appendChild(input);
+                });
+            }
+            
+            // Set inherits from the generated role
+            const inheritsContainer = document.getElementById('hiddenInherits');
+            inheritsContainer.innerHTML = '';
+            if (role.inherits && role.inherits.length > 0) {
+                role.inherits.forEach(inherit => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = 'inherits';
+                    input.value = inherit;
+                    inheritsContainer.appendChild(input);
+                });
+            }
+            
+            // Set permissions from the generated role
+            const permissionsContainer = document.getElementById('hiddenPermissions');
+            permissionsContainer.innerHTML = '';
+            if (role.permissions && role.permissions.allow && role.permissions.allow.length > 0) {
+                role.permissions.allow.forEach(permission => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = 'permissions';
+                    input.value = permission;
+                    permissionsContainer.appendChild(input);
+                });
+            }
+            
+            // Set groups and users (likely empty for LLM generated roles, but include for completeness)
+            const groupsContainer = document.getElementById('hiddenGroups');
+            groupsContainer.innerHTML = '';
+            if (role.applies && role.applies.groups && role.applies.groups.length > 0) {
+                role.applies.groups.forEach(group => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = 'groups';
+                    input.value = group;
+                    groupsContainer.appendChild(input);
+                });
+            }
+            
+            const usersContainer = document.getElementById('hiddenUsers');
+            usersContainer.innerHTML = '';
+            if (role.applies && role.applies.users && role.applies.users.length > 0) {
+                role.applies.users.forEach(user => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = 'users';
+                    input.value = user;
+                    usersContainer.appendChild(input);
+                });
+            }
+            
+            // Submit the hidden form
+            document.getElementById('elevationSubmitForm').submit();
+        }
+    });
+
+    // Initialize Choices.js for the example dropdown
+    const exampleSelect = new Choices('#exampleSelect', {
+        searchEnabled: true,
+        placeholderValue: 'Select an example or write your own...',
+        searchPlaceholderValue: 'Search examples...',
+        itemSelectText: '',
+        removeItemButton: false,
+        shouldSort: false
+    });
+
+    // Handle example selection
+    document.getElementById('exampleSelect').addEventListener('change', function(e) {
+        const selectedValue = e.target.value;
+        if (selectedValue) {
+            document.getElementById('reason').value = selectedValue;
+            // Clear any existing error when example is selected
+            const reasonError = document.getElementById('reasonError');
+            reasonError.style.display = 'none';
+            // Clear the selection to allow selecting the same example again
+            exampleSelect.setChoiceByValue('');
+        }
+    });
+
+    // Clear error when user starts typing
+    document.getElementById('reason').addEventListener('input', function() {
+        const reasonError = document.getElementById('reasonError');
+        if (reasonError.style.display !== 'none') {
+            reasonError.style.display = 'none';
+        }
+    });
+</script>
+
+{{template "footer" .}}

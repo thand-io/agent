@@ -1,0 +1,40 @@
+document:
+  dsl: '1.0.1'
+  namespace: test
+  name: switch-boolean-conditions
+  version: '0.1.0'
+do:
+  - processUser:
+      switch:
+        - vipVerified:
+            when: .user.isVip == true and .user.verified == true
+            then: processVipUser
+        - regularVerified:
+            when: .user.isVip == false and .user.verified == true
+            then: processRegularUser
+        - unverified:
+            when: .user.verified == false
+            then: processUnverifiedUser
+  - processVipUser:
+      set:
+        userType: "vip"
+        priority: "high"
+        discountEligible: true
+        verification: ${ .user.verified }
+      then: exit
+  - processRegularUser:
+      set:
+        userType: "regular"
+        priority: "normal"
+        discountEligible: false
+        verification: ${ .user.verified }
+      then: exit
+  - processUnverifiedUser:
+      set:
+        userType: "unverified"
+        priority: "low"
+        discountEligible: false
+        verification: ${ .user.verified }
+      then: exit
+output:
+  as: '${ . }'

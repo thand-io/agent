@@ -1,0 +1,865 @@
+{{template "header" .}}
+<!-- Choices.js CSS and JS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/styles/choices.min.css">
+<script src="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/scripts/choices.min.js"></script>
+
+<main>
+    <div class="container">
+        <div class="page-header">
+            <h1>Create Custom Role</h1>
+            <p>Create a custom role by selecting providers, permissions, and scopes. Either role inheritance or specific permissions must be selected to proceed to scopes, but both are not required to create a role.</p>
+        </div>
+            
+        <form action="{{.Config.GetApiBasePath}}/elevate" method="POST" enctype="application/x-www-form-urlencoded" class="mt-2 text-left" id="customRoleForm">
+                
+                <!-- Stage 1: Provider Selection -->
+                <div class="form-section">
+                    <h3>1. Select Providers (Max 3)</h3>
+                    <div class="choice-wrapper">
+                        <label class="form-label" for="providerSelect">Select Providers</label>
+                        <select id="providerSelect" name="providers" multiple required>
+                            <!-- Options will be populated dynamically -->
+                        </select>
+                        <div class="choice-help">
+                            Choose up to 3 providers that support RBAC.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stage 2: Role Inheritance -->
+                <div class="form-section hidden" id="inheritanceSection">
+                    <h3>2. Select Role Inheritance (Optional)</h3>
+                    <div class="choice-wrapper">
+                        <label class="form-label" for="inheritanceSelect">Select Roles to Inherit</label>
+                        <select id="inheritanceSelect" name="inherits" multiple>
+                            <!-- Options will be populated dynamically -->
+                        </select>
+                        <div class="choice-help">
+                            Optionally inherit permissions from existing roles. Either role inheritance or specific permissions below must be selected to access scopes.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stage 3: Permission Selection -->
+                <div class="form-section hidden" id="permissionsSection">
+                    <h3>3. Configure Permissions</h3>
+                    <div class="choice-help mb-1 text-sm text-muted">
+                        Select specific permissions for this role. Either role inheritance above or specific permissions must be selected to proceed to scopes.
+                    </div>
+                    <div class="permission-selection">
+                        <label class="form-label" for="permissionSearch">Search and Select Permissions</label>
+                        <input type="text" id="permissionSearch" placeholder="Type to search permissions..." class="permission-search-input">
+                        <div id="permissionResults" class="permission-results">
+                            <div class="search-instruction">Start typing to search permissions...</div>
+                        </div>
+                        <div class="selected-permissions-container">
+                            <h4>Selected Permissions (<span id="selectedCount">0</span>)</h4>
+                            <div id="selectedPermissionsList" class="selected-permissions-list"></div>
+                            <!-- Hidden inputs for selected permissions -->
+                            <div id="permissionInputs"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Permission Description Display -->
+                    <div class="permission-description-area">
+                        <div id="permissionDescription" class="permission-description">
+                            <span class="description-placeholder">Hover over a permission to see its description</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stage 4: Scopes -->
+                <div class="form-section hidden" id="scopesSection">
+                    <h3>4. Define Scopes</h3>
+                    <div class="scopes-container">
+                        <div class="scope-field">
+                            <label class="form-label" for="groupsSelect">Groups</label>
+                            <select id="groupsSelect" name="groups" multiple>
+                                <!-- Options will be populated dynamically -->
+                            </select>
+                        </div>
+                        
+                        <div class="scope-field">
+                            <label class="form-label" for="usersSelect">Users</label>
+                            <select id="usersSelect" name="users" multiple>
+                                <!-- Options will be populated dynamically -->
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Reason and Duration Fields -->
+                <div class="form-section hidden" id="reasonSection">
+                    <h3>5. Provide Details</h3>
+                    <div class="scopes-container">
+                        <div class="scope-field">
+                            <label class="form-label" for="reason">Reason</label>
+                            <textarea name="reason" id="reason" placeholder="Reason for this custom role..." required class="form-textarea"></textarea>
+                        </div>
+                        
+                        <div class="scope-field">
+                            <div class="flex-column" style="gap: 1rem;">
+                                <div class="form-group">
+                                    <label class="form-label" for="duration">Duration</label>
+                                    <select name="duration" id="duration" required class="form-textarea" style="height: auto; min-height: auto;">
+                                        <option value="PT5M">5 Minutes</option>
+                                        <option value="PT15M">15 Minutes</option>
+                                        <option value="PT30M">30 Minutes</option>
+                                        <option value="PT1H" selected>1 Hour</option>
+                                        <option value="PT4H">4 Hours</option>
+                                        <option value="PT8H">8 Hours</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="workflowSelect">Workflow</label>
+                                    <select name="workflow" id="workflowSelect" required class="form-textarea" style="height: auto; min-height: auto;">
+                                        <option value="" disabled selected>Select a workflow...</option>
+                                        <!-- Options will be populated dynamically -->
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Submit Button -->
+                <div class="form-section hidden" id="submitSection">
+                    <div class="button-group">
+                        <button type="submit" class="button button-primary">Create Custom Role</button>
+                        <button type="button" class="button button-secondary" id="exportRoleBtn">Export as YAML</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <style>
+        /* Custom utility classes */
+        .flex-column {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Custom Choices.js styling to match theme */
+        .choices {
+            margin-bottom: 0;
+        }
+
+        .choices__inner {
+            background-color: hsl(var(--input));
+            border: 1px solid hsl(var(--border));
+            border-radius: 0.375rem;
+            color: hsl(var(--foreground));
+            min-height: 75px;
+            padding: 0.5rem;
+        }
+
+        .choices__list--multiple .choices__item {
+            background-color: hsl(var(--primary));
+            color: hsl(var(--primary-foreground));
+            border: 1px solid hsl(var(--primary));
+            border-radius: 0.25rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .choices__list--dropdown {
+            background-color: hsl(var(--card));
+            border: 1px solid hsl(var(--border));
+            border-radius: 0.375rem;
+            max-height: 300px;
+        }
+
+        .choices__item--choice {
+            color: hsl(var(--foreground));
+            padding: 0.5rem;
+            color: black !important;
+        }
+
+        .choices__item--choice:hover {
+            background-color: hsl(var(--secondary));
+        }
+
+        .choices__item--choice.is-highlighted {
+            background-color: hsl(var(--primary));
+            color: hsl(var(--primary-foreground));
+        }
+
+        .choices__input {
+            background-color: transparent;
+            color: hsl(var(--foreground));
+        }
+
+        .choices__input::placeholder {
+            color: hsl(var(--muted-foreground));
+        }
+
+        /* Form-specific overrides for this page */
+        .scope-field {
+            display: flex;
+            flex-direction: column;
+        }
+    </style>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            let selectedProviders = [];
+            let availablePermissions = [];
+            let selectedPermissions = []; // Global variable to track selected permissions
+
+            // Choices.js instances
+            let providerChoices = null;
+            let inheritanceChoices = null;
+            let permissionChoices = null;
+            let groupsChoices = null;
+            let usersChoices = null;
+
+            // Sample data for groups and users (in a real app, these would come from APIs)
+            const sampleGroups = [
+                { value: 'admin', label: 'Administrators' },
+                { value: 'developers', label: 'Developers' },
+                { value: 'qa', label: 'QA Team' },
+                { value: 'devops', label: 'DevOps Team' },
+                { value: 'security', label: 'Security Team' },
+                { value: 'management', label: 'Management' }
+            ];
+            
+            const sampleUsers = [
+                { value: 'john@example.com', label: 'John Doe (john@example.com)' },
+                { value: 'jane@example.com', label: 'Jane Smith (jane@example.com)' },
+                { value: 'mike@example.com', label: 'Mike Johnson (mike@example.com)' },
+                { value: 'sarah@example.com', label: 'Sarah Wilson (sarah@example.com)' }
+            ];
+
+            // Initialize all Choices.js components
+            initializeAllChoices();
+            loadProviders();
+            loadWorkflows();
+
+            function initializeAllChoices() {
+                // Initialize Provider selector
+                providerChoices = new Choices('#providerSelect', {
+                    removeItemButton: true,
+                    searchEnabled: true,
+                    placeholder: true,
+                    placeholderValue: 'Search providers...',
+                    noResultsText: 'No providers found',
+                    maxItemCount: 3,
+                    shouldSort: false,
+                    searchResultLimit: 50,
+                    searchFields: ['label', 'value']
+                });
+
+                // Initialize Inheritance selector
+                inheritanceChoices = new Choices('#inheritanceSelect', {
+                    removeItemButton: true,
+                    searchEnabled: true,
+                    placeholder: true,
+                    placeholderValue: 'Search roles...',
+                    noResultsText: 'No roles found',
+                    shouldSort: false,
+                    searchResultLimit: 50,
+                    searchFields: ['label', 'value']
+                });
+
+                // Initialize Groups selector
+                groupsChoices = new Choices('#groupsSelect', {
+                    removeItemButton: true,
+                    searchEnabled: true,
+                    placeholder: true,
+                    placeholderValue: 'Search groups...',
+                    noResultsText: 'No groups found',
+                    shouldSort: false,
+                    choices: sampleGroups,
+                    searchResultLimit: 50,
+                    searchFields: ['label', 'value']
+                });
+
+                // Initialize Users selector
+                usersChoices = new Choices('#usersSelect', {
+                    removeItemButton: true,
+                    searchEnabled: true,
+                    placeholder: true,
+                    placeholderValue: 'Search users...',
+                    noResultsText: 'No users found',
+                    shouldSort: false,
+                    choices: sampleUsers,
+                    searchResultLimit: 50,
+                    searchFields: ['label', 'value']
+                });
+
+                // Add event listeners
+                document.getElementById('providerSelect').addEventListener('change', function() {
+                    selectedProviders = providerChoices.getValue();
+                    selectedPermissions = []; // Reset permissions when providers change
+                    if (selectedProviders.length > 0) {
+                        // Always show inheritance section first, then let loadInheritanceOptions decide if it should be hidden
+                        showNextSection('inheritanceSection');
+                        loadInheritanceOptions();
+                        loadPermissions();
+                    } else {
+                        hideSection('inheritanceSection');
+                        hideSection('permissionsSection');
+                        hideSection('scopesSection');
+                        hideSection('reasonSection');
+                        hideSection('submitSection');
+                    }
+                });
+
+                // Add validation when inheritance changes
+                document.getElementById('inheritanceSelect').addEventListener('change', function() {
+                    checkRolePermissionValidation();
+                });
+            }
+
+            // Function to check if either roles or permissions are selected
+            function checkRolePermissionValidation() {
+                const selectedInheritance = inheritanceChoices ? inheritanceChoices.getValue() : [];
+                const inheritanceSectionVisible = !document.getElementById('inheritanceSection').classList.contains('hidden');
+                const permissionsSectionVisible = !document.getElementById('permissionsSection').classList.contains('hidden');
+                
+                // Show scopes section if either roles (inheritance) OR permissions are selected
+                // But only if at least one of the sections is visible and has data
+                const hasValidSelections = (inheritanceSectionVisible && selectedInheritance.length > 0) || 
+                                         (permissionsSectionVisible && selectedPermissions.length > 0);
+                
+                // Also check if both sections are hidden (no data available), then we should still allow progression
+                const bothSectionsHidden = !inheritanceSectionVisible && !permissionsSectionVisible;
+                
+                if (hasValidSelections || bothSectionsHidden) {
+                    showNextSection('scopesSection');
+                } else {
+                    hideSection('scopesSection');
+                    hideSection('reasonSection');
+                    hideSection('submitSection');
+                }
+            }
+
+            function loadProviders() {
+                fetch('{{.Config.GetApiBasePath}}/providers?capability=rbac')
+                    .then(response => response.json())
+                    .then(data => {
+                        const providers = Object.keys(data.providers).map(key => ({
+                            value: key,
+                            label: data.providers[key].name || key,
+                            customProperties: {
+                                description: data.providers[key].description || ''
+                            }
+                        }));
+                        providerChoices.setChoices(providers, 'value', 'label', true);
+                    })
+                    .catch(error => console.error('Error loading providers:', error));
+            }
+
+            function loadWorkflows() {
+                fetch('{{.Config.GetApiBasePath}}/workflows')
+                    .then(response => response.json())
+                    .then(data => {
+                        const workflowSelect = document.getElementById('workflowSelect');
+                        // Clear existing options except the placeholder
+                        workflowSelect.innerHTML = '<option value="" disabled selected>Select a workflow...</option>';
+                        
+                        if (data.workflows && typeof data.workflows === 'object') {
+                            // Handle the nested object structure where workflows is an object with workflow IDs as keys
+                            Object.keys(data.workflows).forEach(workflowId => {
+                                const workflow = data.workflows[workflowId];
+                                const option = document.createElement('option');
+                                option.value = workflow.name || workflowId;
+                                option.textContent = workflow.description || workflow.name || workflowId;
+                                if (workflow.description) {
+                                    option.title = workflow.description;
+                                }
+                                workflowSelect.appendChild(option);
+                            });
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error loading workflows:', error);
+                        const workflowSelect = document.getElementById('workflowSelect');
+                        workflowSelect.innerHTML = '<option value="" disabled selected>Error loading workflows</option>';
+                    });
+            }
+
+            function loadInheritanceOptions() {
+                if (selectedProviders.length === 0) return;
+
+                let allRoles = [];
+                let loadedCount = 0;
+
+                selectedProviders.forEach(provider => {
+                    fetch(`{{.Config.GetApiBasePath}}/provider/${provider.value}/roles?limit=1000`)
+                        .then(response => response.json())
+                        .then(data => {
+                            // Check if data.roles exists and is an array before calling slice
+                            if (data && data.roles && Array.isArray(data.roles)) {
+                                const roles = data.roles.slice(0, 1000).map(role => ({
+                                    value: `${provider.value}:${role.name}`,
+                                    label: `${role.name} (${provider.label || provider.value})`,
+                                    customProperties: {
+                                        description: role.description || '',
+                                        provider: provider.value
+                                    }
+                                }));
+                                allRoles = allRoles.concat(roles);
+                            } else {
+                                console.warn(`No roles found for provider ${provider.value}:`, data);
+                            }
+                        })
+                        .catch(error => console.error(`Error loading roles for ${provider.value}:`, error))
+                        .finally(() => {
+                            loadedCount++;
+                            if (loadedCount === selectedProviders.length) {
+                                inheritanceChoices.setChoices(allRoles, 'value', 'label', true);
+                                
+                                // Hide inheritance section if no roles are available
+                                if (allRoles.length === 0) {
+                                    hideSection('inheritanceSection');
+                                } else {
+                                    showNextSection('inheritanceSection');
+                                }
+                                
+                                // Check validation after loading roles
+                                checkRolePermissionValidation();
+                            }
+                        });
+                });
+            }
+
+            function loadPermissions() {
+                if (selectedProviders.length === 0) return;
+
+                availablePermissions = [];
+                let loadedCount = 0;
+
+                selectedProviders.forEach(provider => {
+                    fetch(`{{.Config.GetApiBasePath}}/provider/${provider.value}/permissions?limit=5000`)
+                        .then(response => response.json())
+                        .then(data => {
+                            // Check if data.permissions exists and is an array before calling slice
+                            if (data && data.permissions && Array.isArray(data.permissions)) {
+                                // Optimize permission data structure for better performance
+                                const permissions = data.permissions.slice(0, 5000).map(perm => ({
+                                    value: `${provider.value}:${perm.name}`,
+                                    label: `${perm.name}`,
+                                    customProperties: {
+                                        description: perm.description || 'No description available',
+                                        provider: provider.value,
+                                        originalName: perm.name
+                                    }
+                                }));
+                                availablePermissions = availablePermissions.concat(permissions);
+                            } else {
+                                console.warn(`No permissions found for provider ${provider.value}:`, data);
+                            }
+                        })
+                        .catch(error => console.error(`Error loading permissions for ${provider.value}:`, error))
+                        .finally(() => {
+                            loadedCount++;
+                            if (loadedCount === selectedProviders.length) {
+                                // Sort permissions by name for better user experience
+                                availablePermissions.sort((a, b) => a.label.localeCompare(b.label));
+                                
+                                // Hide permissions section if no permissions are available
+                                if (availablePermissions.length === 0) {
+                                    hideSection('permissionsSection');
+                                } else {
+                                    initializePermissionSelector();
+                                    showNextSection('permissionsSection');
+                                }
+                                
+                                // Check validation after loading permissions
+                                checkRolePermissionValidation();
+                            }
+                        });
+                });
+            }
+
+            function initializePermissionSelector() {
+                const searchInput = document.getElementById('permissionSearch');
+                const resultsContainer = document.getElementById('permissionResults');
+                const selectedContainer = document.getElementById('selectedPermissionsList');
+                const selectedCountSpan = document.getElementById('selectedCount');
+                
+                // Use the global selectedPermissions array
+                let searchTimeout;
+                const SEARCH_DELAY = 150; // Reduced delay for better responsiveness
+
+                // Debounced search function
+                searchInput.addEventListener('input', function() {
+                    const query = this.value.trim().toLowerCase();
+                    
+                    clearTimeout(searchTimeout);
+                    searchTimeout = setTimeout(() => {
+                        performSearch(query);
+                    }, SEARCH_DELAY);
+                });
+
+                function performSearch(query) {
+                    if (query.length < 2) {
+                        resultsContainer.innerHTML = '<div class="search-instruction">Type at least 2 characters to search...</div>';
+                        return;
+                    }
+
+                    // High-performance filtering with early exit
+                    const results = [];
+                    const maxResults = 30; // Limit results for better performance
+                    
+                    for (let i = 0; i < availablePermissions.length && results.length < maxResults; i++) {
+                        const perm = availablePermissions[i];
+                        
+                        // Skip if already selected
+                        if (selectedPermissions.includes(perm.value)) continue;
+                        
+                        // Simple string matching (faster than fuzzy search)
+                        if (perm.label.toLowerCase().includes(query) || 
+                            perm.customProperties.description.toLowerCase().includes(query)) {
+                            results.push(perm);
+                        }
+                    }
+
+                    renderResults(results, query);
+                }
+
+                function renderResults(results, query) {
+                    if (results.length === 0) {
+                        resultsContainer.innerHTML = '<div class="search-instruction">No permissions found</div>';
+                        return;
+                    }
+
+                    const fragment = document.createDocumentFragment();
+                    
+                    results.forEach(perm => {
+                        const option = document.createElement('div');
+                        option.className = 'permission-option';
+                        option.innerHTML = `
+                            <div>
+                                <div class="permission-name">${highlightMatch(perm.label, query)}</div>
+                                <div class="permission-provider">${perm.customProperties.provider}</div>
+                            </div>
+                        `;
+                        
+                        // Add click event
+                        option.addEventListener('click', () => selectPermission(perm));
+                        
+                        // Add hover events for description
+                        option.addEventListener('mouseenter', () => {
+                            showPermissionDescription({
+                                name: perm.customProperties.originalName,
+                                description: perm.customProperties.description,
+                                provider: perm.customProperties.provider
+                            });
+                        });
+                        
+                        option.addEventListener('mouseleave', () => {
+                            hidePermissionDescription();
+                        });
+                        
+                        fragment.appendChild(option);
+                    });
+
+                    resultsContainer.innerHTML = '';
+                    resultsContainer.appendChild(fragment);
+                }
+
+                function highlightMatch(text, query) {
+                    if (!query) return text;
+                    const regex = new RegExp(`(${query})`, 'gi');
+                    return text.replace(regex, '<strong>$1</strong>');
+                }
+
+                function selectPermission(perm) {
+                    if (selectedPermissions.includes(perm.value)) return;
+                    
+                    selectedPermissions.push(perm.value);
+                    updateSelectedDisplay();
+                    
+                    // Re-run search to remove selected item from results
+                    const currentQuery = searchInput.value.trim().toLowerCase();
+                    if (currentQuery.length >= 2) {
+                        performSearch(currentQuery);
+                    }
+                    
+                    // Show next section if permissions are selected
+                    checkRolePermissionValidation();
+                }
+
+                function removePermission(permValue) {
+                    selectedPermissions = selectedPermissions.filter(p => p !== permValue);
+                    updateSelectedDisplay();
+                    
+                    // Re-run search to show newly available item
+                    const currentQuery = searchInput.value.trim().toLowerCase();
+                    if (currentQuery.length >= 2) {
+                        performSearch(currentQuery);
+                    }
+                    
+                    // Check validation after removing permission
+                    checkRolePermissionValidation();
+                }
+
+                function updateSelectedDisplay() {
+                    selectedCountSpan.textContent = selectedPermissions.length;
+                    
+                    if (selectedPermissions.length === 0) {
+                        selectedContainer.innerHTML = '<div style="color: hsl(var(--muted-foreground)); font-style: italic;">No permissions selected</div>';
+                        return;
+                    }
+
+                    const fragment = document.createDocumentFragment();
+                    
+                    selectedPermissions.forEach(permValue => {
+                        const perm = availablePermissions.find(p => p.value === permValue);
+                        if (perm) {
+                            const tag = document.createElement('div');
+                            tag.className = 'selected-permission-tag';
+                            tag.innerHTML = `
+                                ${perm.label}
+                                <span class="remove-btn">&times;</span>
+                            `;
+                            
+                            tag.querySelector('.remove-btn').addEventListener('click', () => {
+                                removePermission(permValue);
+                            });
+                            
+                            // Add hover for description
+                            tag.addEventListener('mouseenter', () => {
+                                showPermissionDescription({
+                                    name: perm.customProperties.originalName,
+                                    description: perm.customProperties.description,
+                                    provider: perm.customProperties.provider
+                                });
+                            });
+                            
+                            tag.addEventListener('mouseleave', () => {
+                                hidePermissionDescription();
+                            });
+                            
+                            fragment.appendChild(tag);
+                        }
+                    });
+
+                    selectedContainer.innerHTML = '';
+                    selectedContainer.appendChild(fragment);
+                }
+
+                // Initialize display
+                updateSelectedDisplay();
+            }
+
+            // Function to update hidden permission inputs for form submission
+            function updatePermissionInputs() {
+                const permissionInputsContainer = document.getElementById('permissionInputs');
+                permissionInputsContainer.innerHTML = '';
+                
+                selectedPermissions.forEach(permission => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = 'permissions';
+                    input.value = permission;
+                    permissionInputsContainer.appendChild(input);
+                });
+            }
+
+            // Form submission handler - add validation before form submit
+            document.getElementById('customRoleForm').addEventListener('submit', function(e) {
+                // Remove any search_terms inputs that Choices.js might have created
+                const searchTermsInputs = document.querySelectorAll('input[name="search_terms"]');
+                searchTermsInputs.forEach(input => {
+                    input.remove();
+                });
+                
+                // Validate required fields before allowing form submission
+                const providers = Array.from(document.getElementById('providerSelect').selectedOptions);
+                const inherits = Array.from(document.getElementById('inheritanceSelect').selectedOptions);
+                const reason = document.getElementById('reason').value.trim();
+                const workflow = document.getElementById('workflowSelect').value;
+                
+                if (providers.length === 0) {
+                    e.preventDefault();
+                    alert('Please select at least one provider');
+                    return false;
+                }
+                
+                if (!reason) {
+                    e.preventDefault();
+                    alert('Please provide a reason for elevation');
+                    return false;
+                }
+                
+                if (!workflow) {
+                    e.preventDefault();
+                    alert('Please select a workflow');
+                    return false;
+                }
+                
+                if (selectedPermissions.length === 0 && inherits.length === 0) {
+                    // Check if both sections are hidden (no data available)
+                    const inheritanceSectionVisible = !document.getElementById('inheritanceSection').classList.contains('hidden');
+                    const permissionsSectionVisible = !document.getElementById('permissionsSection').classList.contains('hidden');
+                    
+                    // Only show error if at least one section is visible (meaning data is available but user didn't select anything)
+                    if (inheritanceSectionVisible || permissionsSectionVisible) {
+                        e.preventDefault();
+                        alert('Please select either permissions or role inheritance');
+                        return false;
+                    }
+                }
+                
+                // Update hidden permission inputs before submitting
+                updatePermissionInputs();
+                
+                // Show loading state
+                const submitButton = document.querySelector('button[type="submit"]');
+                submitButton.disabled = true;
+                submitButton.textContent = 'Creating Role...';
+                
+                return true; // Allow form submission
+            });
+
+            function showPermissionDescription(permission) {
+                const descriptionElement = document.getElementById('permissionDescription');
+                if (descriptionElement) {
+                    descriptionElement.innerHTML = `
+                        <span class="permission-name">${permission.name}</span>
+                        <div class="permission-text">${permission.description}</div>
+                        <div class="permission-provider">Provider: ${permission.provider}</div>
+                    `;
+                }
+            }
+
+            function hidePermissionDescription() {
+                const descriptionElement = document.getElementById('permissionDescription');
+                if (descriptionElement) {
+                    descriptionElement.innerHTML = `
+                        <span class="description-placeholder">Hover over a permission to see its description</span>
+                    `;
+                }
+            }
+
+            function showNextSection(sectionId) {
+                document.getElementById(sectionId).classList.remove('hidden');
+                
+                // Special handling for scopes section - show reason after scopes
+                if (sectionId === 'scopesSection') {
+                    // Add event listeners to scopes if not already added
+                    if (!document.getElementById('groupsSelect').hasScopes) {
+                        document.getElementById('groupsSelect').addEventListener('change', showReasonSection);
+                        document.getElementById('usersSelect').addEventListener('change', showReasonSection);
+                        document.getElementById('groupsSelect').hasScopes = true;
+                    }
+                    showReasonSection(); // Show reason section immediately when scopes section is shown
+                }
+            }
+
+            function showReasonSection() {
+                // Always show reason section when scopes are shown (scopes are optional)
+                showNextSection('reasonSection');
+                showNextSection('submitSection');
+            }
+
+            function hideSection(sectionId) {
+                document.getElementById(sectionId).classList.add('hidden');
+            }
+
+            // Export functionality
+            document.getElementById('exportRoleBtn').addEventListener('click', function() {
+                const roleData = collectFormData();
+                if (!roleData) {
+                    alert('Please fill out the form before exporting');
+                    return;
+                }
+                
+                const yamlContent = generateYAML(roleData);
+                downloadYAML(yamlContent, roleData.name);
+            });
+
+            function collectFormData() {
+                const providers = Array.from(document.getElementById('providerSelect').selectedOptions).map(opt => opt.value);
+                const inherits = Array.from(document.getElementById('inheritanceSelect').selectedOptions).map(opt => opt.value);
+                const reason = document.getElementById('reason').value.trim();
+                const duration = document.getElementById('duration').value;
+                const workflow = document.getElementById('workflowSelect').value;
+
+                // Check required fields
+                if (providers.length === 0 || !reason || !workflow) {
+                    return null;
+                }
+
+                // Check that either permissions or inherits is provided, unless both sections are hidden
+                const inheritanceSectionVisible = !document.getElementById('inheritanceSection').classList.contains('hidden');
+                const permissionsSectionVisible = !document.getElementById('permissionsSection').classList.contains('hidden');
+                
+                if (selectedPermissions.length === 0 && inherits.length === 0) {
+                    // Only require selection if at least one section is visible (data is available)
+                    if (inheritanceSectionVisible || permissionsSectionVisible) {
+                        return null;
+                    }
+                }
+
+                // Generate role name from form data
+                const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+                const roleName = `custom-role-${timestamp}`;
+
+                return {
+                    name: roleName,
+                    description: `Custom role: ${reason}`,
+                    workflow: workflow,
+                    inherits: inherits,
+                    permissions: selectedPermissions,
+                    providers: providers,
+                    enabled: true
+                };
+            }
+
+            function generateYAML(roleData) {
+                let yaml = 'version: "1.0"\n';
+                yaml += 'roles:\n';
+                yaml += `  ${roleData.name}:\n`;
+                yaml += `    name: ${roleData.name.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}\n`;
+                yaml += `    description: ${roleData.description}\n`;
+                yaml += `    workflow: ${roleData.workflow}\n`;
+                
+                if (roleData.inherits && roleData.inherits.length > 0) {
+                    yaml += '    inherits:\n';
+                    roleData.inherits.forEach(inherit => {
+                        yaml += `      - "${inherit}"\n`;
+                    });
+                }
+                
+                if (roleData.permissions && roleData.permissions.length > 0) {
+                    yaml += '    permissions:  # Custom permissions\n';
+                    yaml += '      allow:\n';
+                    roleData.permissions.forEach(permission => {
+                        yaml += `        - "${permission}"\n`;
+                    });
+                }
+                /*
+                yaml += '    resources:  # Allow all resources\n';
+                yaml += '      allow:\n';
+                // Generate resource patterns based on selected providers
+                roleData.providers.forEach(provider => {
+                    yaml += `        - "${provider}:*"\n`;
+                });
+                */
+                yaml += '    providers:  # Only allow these providers for role elevation\n';
+                roleData.providers.forEach(provider => {
+                    yaml += `      - ${provider}\n`;
+                });
+                
+                yaml += `    enabled: ${roleData.enabled}\n`;
+                
+                return yaml;
+            }
+
+            function downloadYAML(yamlContent, filename) {
+                const blob = new Blob([yamlContent], { type: 'text/yaml;charset=utf-8' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = `${filename}.yaml`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        });
+    </script>
+</main>
+{{template "footer" .}}

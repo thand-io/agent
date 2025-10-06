@@ -1,0 +1,88 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+/agent
+
+# Test binary, built with `go test -c`
+*.test
+
+# Go binaries
+__debug_bin*
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Dependency directories (remove the comment below to include it)
+/vendor/
+
+# Go workspace file
+go.work
+
+# Build output
+/bin/
+/dist/
+/build/
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE and editor files
+.idea/
+*.iml
+*.sublime-project
+*.sublime-workspace
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.cover
+*.coverprofile
+
+# Configuration files that might contain secrets
+config.yml
+config.yaml
+workflows.yml
+roles.yml
+
+# Keep example files
+!*.example.yml
+!*.example.yaml
+
+# Ignore local configuration files
+config/providers/*.yaml
+config/providers/*.json
+config/roles/*.yaml
+config/roles/*.json
+config/workflows/*.yaml
+config/workflows/*.json
+config/README.md

@@ -1,0 +1,94 @@
+{{template "header" .TemplateData}}
+    <main>
+        <div class="container" style="width: 100%;">
+            <div class="page-header">
+                <h1>Roles</h1>
+                <p>Available roles for privilege elevation and access control across configured providers.</p>
+            </div>
+
+            <div class="table-container">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Description</th>
+                            <th>Providers</th>
+                            <th>Workflow</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range $name, $roleResponse := .Response.Roles}}
+                        {{$role := $roleResponse.Role}}
+                        <tr>
+                            <td>
+                                <strong>{{$role.Name}}</strong>
+                            </td>
+                            <td>
+                                {{if $role.Description}}
+                                    {{$role.Description}}
+                                {{else}}
+                                    <span class="text-muted">No description available</span>
+                                {{end}}
+                            </td>
+                            <td>
+                                {{if $role.Providers}}
+                                    {{range $i, $provider := $role.Providers}}
+                                        {{if $i}}, {{end}}<span class="badge badge-secondary">{{$provider}}</span>
+                                    {{end}}
+                                {{else}}
+                                    <span class="text-muted">No providers</span>
+                                {{end}}
+                            </td>
+                            <td>
+                                {{if $role.Workflow}}
+                                    <span class="badge badge-secondary">{{$role.Workflow}}</span>
+                                {{else}}
+                                    <span class="text-muted">Default</span>
+                                {{end}}
+                            </td>
+                            <td>
+                                {{if $role.Enabled}}
+                                    <span class="badge badge-success">Enabled</span>
+                                {{else}}
+                                    <span class="badge badge-warning">Disabled</span>
+                                {{end}}
+                            </td>
+                            <td>
+                                {{if $role.Enabled}}
+                                    <a href="/elevate?role={{$name}}" class="button button-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Request Elevation</a>
+                                {{else}}
+                                    <span class="text-muted" style="font-size: 0.75rem;">Unavailable</span>
+                                {{end}}
+                            </td>
+                        </tr>
+                        {{else}}
+                        <tr>
+                            <td colspan="6" class="text-muted" style="text-align: center; padding: 2rem;">
+                                No roles configured
+                            </td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+
+            {{if .Response.Roles}}
+            <div style="margin-top: 1.5rem; padding: 1rem; background-color: hsl(var(--muted) / 0.5); border-radius: 0.5rem;">
+                <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem;">Role Information</h3>
+                <p style="font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin: 0;">
+                    <strong>Providers:</strong> The cloud providers or services this role can access.<br>
+                    <strong>Workflow:</strong> The approval workflow required for this role elevation.<br>
+                    <strong>Status:</strong> Whether this role is currently available for elevation requests.
+                </p>
+            </div>
+            {{end}}
+
+            <div class="button-group" style="margin-top: 2rem;">
+                <a href="/" class="button button-secondary">← Back to Home</a>
+                <a href="/elevate" class="button button-primary">Request Elevation</a>
+            </div>
+        </div>
+    </main>
+{{template "footer" .TemplateData}}

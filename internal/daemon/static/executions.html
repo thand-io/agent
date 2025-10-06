@@ -1,0 +1,141 @@
+{{template "header" .TemplateData}}
+    <main>
+        <div class="container" style="width: 100%;">
+            <div class="page-header">
+                <h1>Executions</h1>
+                <p>Running workflow executions and their current status.</p>
+            </div>
+
+            <div class="table-container">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Workflow ID</th>
+                            <th>Role / Approval</th>
+                            <th>Initiator</th>
+                            <th>Status</th>
+                            <th>Started</th>
+                            <th>Duration</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range .Response.Workflows}}
+                        <tr>
+                            <td>
+                                <strong>{{.WorkflowID}}</strong>
+                                {{if .RunID}}
+                                    <div style="font-size: 0.75rem; color: hsl(var(--muted-foreground));">
+                                        Run: {{.RunID}}
+                                    </div>
+                                {{end}}
+                            </td>
+                            <td>
+                                {{if .Role}}
+                                    <span class="badge badge-secondary">{{.Role}}</span>
+                                {{else}}
+                                    <span class="text-muted">-</span>
+                                {{end}}
+                                {{if .Approved}}
+                                    <span class="badge badge-success" title="This execution has been approved">Approved</span>
+                                {{else if eq .Approved false}}
+                                    <span class="badge badge-error" title="This execution has been denied">Denied</span>
+                                {{end}}
+                            </td>
+                            <td>
+                                {{if .User}}
+                                    {{.User}}
+                                {{else}}
+                                    <span class="text-muted">-</span>
+                                {{end}}
+                            </td>
+                            <td>
+                                {{if eq .Status "RUNNING"}}
+                                    <span class="badge badge-success">
+                                        <div class="status-dot" style="margin-right: 0.25rem;"></div>
+                                        Running
+                                    </span>
+                                {{else if eq .Status "COMPLETED"}}
+                                    <span class="badge badge-success">Completed</span>
+                                {{else if eq .Status "FAILED"}}
+                                    <span class="badge badge-error">Failed</span>
+                                {{else if eq .Status "CANCELED"}}
+                                    <span class="badge badge-warning">Canceled</span>
+                                {{else if eq .Status "TERMINATED"}}
+                                    <span class="badge badge-error">Terminated</span>
+                                {{else if eq .Status "CONTINUED_AS_NEW"}}
+                                    <span class="badge badge-secondary">Continued</span>
+                                {{else if eq .Status "PENDING"}}
+                                    <span class="badge badge-secondary">Pending</span>
+                                {{else if eq .Status "TIMED_OUT"}}
+                                    <span class="badge badge-warning">Timed Out</span>
+                                {{else}}
+                                    <span class="badge badge-secondary">{{.Status}}</span>
+                                {{end}}
+                            </td>
+                            <td>
+                                {{if not .StartTime.IsZero}}
+                                    <span title="{{.StartTime.Format "2006-01-02 15:04:05 UTC"}}">
+                                        {{.StartTime.Format "Jan 2, 15:04"}}
+                                    </span>
+                                {{else}}
+                                    <span class="text-muted">-</span>
+                                {{end}}
+                            </td>
+                            <td>
+                                {{if not .StartTime.IsZero}}
+                                    {{if .CloseTime}}
+                                        {{$duration := .CloseTime.Sub .StartTime}}
+                                        {{$minutes := $duration.Minutes}}
+                                        {{$hours := $duration.Hours}}
+                                        {{if lt $minutes 60.0}}
+                                            {{printf "%.0fm" $minutes}}
+                                        {{else}}
+                                            {{printf "%.1fh" $hours}}
+                                        {{end}}
+                                    {{else}}
+                                        <!-- Running workflow duration -->
+                                        <span class="text-muted">Running...</span>
+                                    {{end}}
+                                {{else}}
+                                    <span class="text-muted">-</span>
+                                {{end}}
+                            </td>
+                            <td>
+                                <a href="/execution/{{.WorkflowID}}" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">View</a>
+                                <!-- Only show for running, waiting or pending workflows-->
+                                {{ if or (eq .Status "RUNNING") (eq .Status "PENDING") (eq .Status "WAITING") }}
+                                    <a href="/execution/{{.WorkflowID}}/terminate" class="button button-warning" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Cancel</a>
+                                {{end}}
+                            </td>
+                        </tr>
+                        {{else}}
+                        <tr>
+                            <td colspan="7" class="text-muted" style="text-align: center; padding: 2rem;">
+                                No running workflow executions found
+                            </td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+
+            {{if .Response.Workflows}}
+            <div style="margin-top: 1.5rem; padding: 1rem; background-color: hsl(var(--muted) / 0.5); border-radius: 0.5rem;">
+                <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem;">Execution Information</h3>
+                <p style="font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin: 0;">
+                    <strong>Status:</strong> Current state of the workflow execution.<br>
+                    <strong>Duration:</strong> Time elapsed since the workflow started (or total runtime if completed).<br>
+                    <strong>Actions:</strong> View detailed workflow information or manage running executions.
+                </p>
+            </div>
+            {{end}}
+
+            <div class="button-group" style="margin-top: 2rem;">
+                <a href="/" class="button button-secondary">← Back to Home</a>
+                <a href="/elevate" class="button button-primary">Request Elevation</a>
+            </div>
+        </div>
+    </main>
+
+{{template "footer" .TemplateData}}

@@ -1,0 +1,35 @@
+# Example SAML Provider Configuration
+# This configuration shows how to set up a SAML authentication provider
+
+providers:
+  - name: company-saml
+    description: Company SAML Identity Provider
+    provider: saml
+    enabled: true
+    config:
+      # Required: URL to fetch IdP metadata
+      idp_metadata_url: "https://your-idp.example.com/saml/metadata"
+      
+      # Required: Entity ID for this service provider
+      entity_id: "https://your-app.example.com/saml/metadata"
+      
+      # Required: Root URL of your application
+      root_url: "https://your-app.example.com"
+      
+      # Required: Path to SAML certificate file
+      cert_file: "/path/to/saml.cert"
+      
+      # Required: Path to SAML private key file
+      key_file: "/path/to/saml.key"
+      
+      # Optional: Whether to sign SAML requests (default: false)
+      sign_requests: true
+
+# Example role that can use this SAML provider
+roles:
+  - name: saml-users
+    description: Users authenticated via SAML
+    provider: company-saml
+    permissions:
+      - name: "saml:authenticate"
+        description: "Can authenticate via SAML"

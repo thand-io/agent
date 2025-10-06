@@ -1,0 +1,15 @@
+document:
+  dsl: '1.0.1'
+  namespace: examples
+  name: simple-set-demo
+  version: '1.0.0'
+do:
+  - simpleSet:
+      set:
+        staticValue: "hello"
+        dynamicValue: ${ .inputValue }
+      export:
+        as: '${ $context + { "result": . } }'
+
+output:
+  as: '${ $context }'
