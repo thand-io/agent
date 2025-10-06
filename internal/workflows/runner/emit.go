@@ -24,6 +24,10 @@ func (r *ResumableWorkflowRunner) executeEmitTask(
 
 	workflowTask := r.GetWorkflowTask()
 
+	if workflowTask == nil {
+		return nil, fmt.Errorf("workflow task is not set")
+	}
+
 	if workflowTask.HasTemporalContext() {
 
 		// Create the cloud event based on the emit task specification
@@ -139,12 +143,7 @@ func (r *ResumableWorkflowRunner) setEventSource(
 
 		event.SetSource(sourceStr)
 	} else {
-		// Use a default source if not provided
-		if r.workflowTask.Workflow != nil && r.workflowTask.Workflow.Document.Name != "" {
-			event.SetSource(fmt.Sprintf("workflow/%s", r.workflowTask.Workflow.Document.Name))
-		} else {
-			event.SetSource("workflow/unknown")
-		}
+		return fmt.Errorf("source is required")
 	}
 	return nil
 }

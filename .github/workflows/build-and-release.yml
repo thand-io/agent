@@ -147,6 +147,7 @@ jobs:
 
     - name: Build and push Docker image
       id: docker-build
+      if: startsWith(github.ref, 'refs/tags/v')
       uses: docker/build-push-action@v5
       with:
         context: .
@@ -262,7 +263,7 @@ jobs:
     - name: Trigger Homebrew Tap Update
       uses: peter-evans/repository-dispatch@v3
       with:
-        token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        token: ${{ secrets.GITHUB_TOKEN }}
         repository: thand-io/homebrew-tap
         event-type: update-formula
         client-payload: |

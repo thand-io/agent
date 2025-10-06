@@ -21,7 +21,7 @@ Thand eliminates standing access to critical infrastructure and SaaS apps. Inste
 - **Just-in-time permissions**: Get access when you need it, lose it when you don't
 - **Complete audit trail**: Every access request and action logged for compliance. Access is automatically reviewed during usage and revoked if the user moves off-task.
 
-Thand is licensed under the BSL 1.1 license. See [LICENSE](LICENSE) for more details.
+Thand is licensed under the BSL 1.1 license. See [LICENSE.md](LICENSE.md) for more details.
 
 ## Thand Architecture
 
@@ -72,9 +72,9 @@ thand request "I need to debug customer data issue"
 
 Thand can be deployed quickly on your infrastructure. The server requires no persistent storage and can be run ephemerally. You can deploy via docker, kubernetes or even as a AWS lambda function. Or GCP Cloud Function.
 
-A full guide to self-hosting can be found in the [docs](https://docs.thand.io/self-hosting).
+A full guide to self-hosting can be found in the [docs](https://github.com/thand-io/agent/wiki/Self-Hosting).
 
-To get started quickly you can run the server locally via docker. This will start your server with the default configuration defined in the examples directory. For production usage you should provide your own configuration file. See the [docs](https://docs.thand.io/providers) for more details.
+To get started quickly you can run the server locally via docker. This will start your server with the default configuration defined in the examples directory. For production usage you should provide your own configuration file. See the [docs](https://github.com/thand-io/agent/wiki/Configuration) for more details.
 
 ```bash
 
@@ -103,14 +103,16 @@ thand login --server http://localhost:8080
 
 ## Documentation
 
-Full documentation can be found at [docs.thand.io](https://docs.thand.io).
+Full documentation can be found at [docs](https://github.com/thand-io/agent/wiki).
 
-- [Quick Start](https://docs.thand.io/quick-start)
-- [Self-Hosting](https://docs.thand.io/self-hosting)
-- [Providers](https://docs.thand.io/providers)
-- [CLI Reference](https://docs.thand.io/cli)
-- [API Reference](https://docs.thand.io/api)
-- [FAQ](https://docs.thand.io/faq)
+- [Quick Start](https://github.com/thand-io/agent/wiki/Getting-started)
+- [Self-Hosting](https://github.com/thand-io/agent/wiki/Self-Hosting)
+- [Roles](https://github.com/thand-io/agent/wiki/Roles)
+- [Providers](https://github.com/thand-io/agent/wiki/Providers)
+- [Workflows](https://github.com/thand-io/agent/wiki/Workflows)
+- [CLI Reference](https://github.com/thand-io/agent/wiki/CLI)
+- [API Reference](https://github.com/thand-io/agent/wiki/API)
+- [FAQ](https://github.com/thand-io/agent/wiki/FAQ)
 
 
 ## Status

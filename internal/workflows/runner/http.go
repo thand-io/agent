@@ -28,8 +28,11 @@ func (r *ResumableWorkflowRunner) executeHttpFunction(
 	// Execute the function call
 	workflowTask := r.GetWorkflowTask()
 
-	httpCall := call.With
+	if workflowTask == nil {
+		return nil, fmt.Errorf("workflow task is not set")
+	}
 
+	httpCall := call.With
 	uri := httpCall.Endpoint
 
 	// Get the final URL to use for the request
