@@ -1,6 +1,6 @@
-# Thand Agent [![Go Report Card](https://goreportcard.com/badge/github.com/thand.io/agent)](https://goreportcard.com/report/github.com/thand.io/agent)
+# Thand Agent [![Go Report Card](https://goreportcard.com/badge/github.com/thand.io/agent)](https://goreportcard.com/report/github.com/thand.io/agent) [![Build and Release](https://github.com/thand-io/agent/actions/workflows/build-and-release.yml/badge.svg)](https://github.com/thand-io/agent/actions/workflows/build-and-release.yml)
 
-Open-source agent for AI-ready privilege access management (PAM) and just-in-time access (JIT) to cloud infrastructure, SaaS applications and local systems. Thand uses temporal.io to gurantee robust deterministc workflow executionm and gurantess execution and revokation of permissions. Run it locally or on-prem. Connect to Thand Cloud for enterprise features.
+Open-source agent for AI-ready privilege access management (PAM) and just-in-time access (JIT) to cloud infrastructure, SaaS applications and local systems. Thand uses temporal.io to guarantee robust deterministic workflow execution and guarantees execution and revocation of permissions. Run it locally or on-prem. Connect to Thand Cloud for enterprise features.
 
 ## 🎯 What is Thand?
 
@@ -12,7 +12,7 @@ Thand eliminates standing access to critical infrastructure and SaaS apps. Inste
 - **Over-privileged users**: 90% of permissions are unused, but remain active attack vectors. Broad workflows and roles lead to excessive permissions.
 - **Automatic grants**: Users are often granted access without understanding the implications, leading to accidental misuse.
 - **Lack of visibility**: No clear audit trail of who accessed what, when, and why.
-- **Persistent threats**: Users with admin can maintain access indefinitely, even after leaving the company.
+- **Persistent threats**: Users with admin access can maintain access indefinitely, even after leaving the company.
 
 **The Thand Solution**:
 
@@ -27,13 +27,13 @@ Thand is licensed under the BSL 1.1 license. See [LICENSE.md](LICENSE.md) for mo
 
 The Thand architecture breaks down into three components. Both the agent and server
 are contained within this repository. All access keys are stored on your infrastructure.
-The Thand server can be deployed ephemerally without any persistent storage. Providing a
+The Thand server can be deployed ephemerally without any persistent storage, providing a
 low maintenance, high security solution. Temporal.io is used to orchestrate all workflows
-and ensure just-in-time access is granted and revoked correctly and guarantee and maintain state.
+and ensure just-in-time access is granted and revoked correctly and guarantees state maintenance.
 
-- **Agent**: Runs on the users local machine provides session management and local callback endpoints to attest to the users authenticity.
+- **Agent**: Runs on the user's local machine, provides session management and local callback endpoints to attest to the user's authenticity.
 - **Server**: This can run anywhere you need to provide access. This forms a "login server" to allow CLIs and other clients to request and be granted elevations.
-- **Cloud**: This is Thand's proprietry cloud service that orchustrates all your servers, agents and centralises management and remote revokations. The cloud also provides additional features such as AI-driven insights and analytics. See thand.io for all the capabilities.
+- **Cloud**: This is Thand's proprietary cloud service that orchestrates all your servers, agents and centralizes management and remote revocations. The cloud also provides additional features such as AI-driven insights and analytics. See thand.io for all the capabilities.
 
 ```
 Your Machine             Your Infrastructure             Thand Cloud (Optional)
@@ -70,15 +70,15 @@ thand request "I need to debug customer data issue"
 
 ### Option 2: Self-Host Everything (Open Source)
 
-Thand can be deployed quickly on your infrastructure. The server requires no persistent storage and can be run ephemerally. You can deploy via docker, kubernetes or even as a AWS lambda function. Or GCP Cloud Function.
+Thand can be deployed quickly on your infrastructure. The server requires no persistent storage and can be run ephemerally. You can deploy via Docker, Kubernetes or even as an AWS Lambda function or GCP Cloud Function.
 
 A full guide to self-hosting can be found in the [docs](https://github.com/thand-io/agent/wiki/Self-Hosting).
 
-To get started quickly you can run the server locally via docker. This will start your server with the default configuration defined in the examples directory. For production usage you should provide your own configuration file. See the [docs](https://github.com/thand-io/agent/wiki/Configuration) for more details.
+To get started quickly you can run the server locally via Docker. This will start your server with the default configuration defined in the examples directory. For production usage you should provide your own configuration file. See the [docs](https://github.com/thand-io/agent/wiki/Configuration) for more details.
 
 ```bash
 
-# Run the server locally via docker
+# Run the server locally via Docker
 docker run -p 8080:8080 ghcr.io/thand-io/agent:latest server
 
 # Or build and run locally

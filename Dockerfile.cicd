@@ -1,6 +1,10 @@
 # Dockerfile.cicd - Optimized for CI/CD with pre-built binaries
 FROM alpine:latest
 
+LABEL org.opencontainers.image.source=https://github.com/thand-io/agent
+LABEL org.opencontainers.image.description="Thand Agent - Open-source agent for AI-ready privilege access management (PAM) and just-in-time access (JIT) to cloud infrastructure, SaaS applications and local systems."
+LABEL org.opencontainers.image.licenses=BSL-1.1
+
 # Set up build arguments
 ARG TARGETARCH
 ARG VERSION=dev

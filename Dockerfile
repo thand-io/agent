@@ -43,6 +43,10 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo \
 # Final stage
 FROM alpine:latest
 
+LABEL org.opencontainers.image.source=https://github.com/thand-io/agent
+LABEL org.opencontainers.image.description="Thand Agent - Open-source agent for AI-ready privilege access management (PAM) and just-in-time access (JIT) to cloud infrastructure, SaaS applications and local systems."
+LABEL org.opencontainers.image.licenses=BSL-1.1
+
 # Install ca-certificates for HTTPS calls
 RUN apk --no-cache add ca-certificates gcompat
 
