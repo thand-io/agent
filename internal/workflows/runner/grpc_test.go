@@ -8,6 +8,7 @@ import (
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/stretchr/testify/assert"
+	"github.com/thand-io/agent/internal/models"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -93,7 +94,9 @@ func setupMockGRPCServer(t *testing.T) (string, func()) {
 
 func TestExecuteGRPCFunction_ConnectionFailure(t *testing.T) {
 	// Create a workflow runner
-	runner := &ResumableWorkflowRunner{}
+	runner := &ResumableWorkflowRunner{
+		workflowTask: &models.WorkflowTask{},
+	}
 
 	// Create a gRPC call with invalid host
 	grpcCall := &model.CallGRPC{

@@ -137,6 +137,7 @@ func configureOutputFormat(restBuilder *resty.Request, req *model.HTTPArguments)
 		restBuilder.SetDoNotParseResponse(true)
 	case "content":
 		// Default behavior - deserialize response
+		fallthrough
 	case "response":
 		// object to hold response, headers, url etc
 		var resultOut any

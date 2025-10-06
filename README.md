@@ -21,7 +21,7 @@ Thand eliminates standing access to critical infrastructure and SaaS apps. Inste
 - **Just-in-time permissions**: Get access when you need it, lose it when you don't
 - **Complete audit trail**: Every access request and action logged for compliance. Access is automatically reviewed during usage and revoked if the user moves off-task.
 
-Thand is licensed under the BSL 1.1 license. See [LICENSE](LICENSE) for more details.
+Thand is licensed under the BSL 1.1 license. See [LICENSE.md](LICENSE.md) for more details.
 
 ## Thand Architecture
 
@@ -103,14 +103,14 @@ thand login --server http://localhost:8080
 
 ## Documentation
 
-Full documentation can be found at [docs.thand.io](https://docs.thand.io).
+Full documentation can be found at [docs](https://github.com/thand-io/agent/wiki).
 
-- [Quick Start](https://docs.thand.io/quick-start)
-- [Self-Hosting](https://docs.thand.io/self-hosting)
-- [Providers](https://docs.thand.io/providers)
-- [CLI Reference](https://docs.thand.io/cli)
-- [API Reference](https://docs.thand.io/api)
-- [FAQ](https://docs.thand.io/faq)
+- [Quick Start](https://github.com/thand-io/agent/wiki/Quick-Start)
+- [Self-Hosting](https://github.com/thand-io/agent/wiki/Self-Hosting)
+- [Providers](https://github.com/thand-io/agent/wiki/Providers)
+- [CLI Reference](https://github.com/thand-io/agent/wiki/CLI-Reference)
+- [API Reference](https://github.com/thand-io/agent/wiki/API-Reference)
+- [FAQ](https://github.com/thand-io/agent/wiki/FAQ)
 
 
 ## Status

@@ -35,8 +35,11 @@ func (r *ResumableWorkflowRunner) executeGRPCFunction(
 
 	workflowTask := r.GetWorkflowTask()
 
-	returnedInput, err := workflowTask.TraverseAndEvaluate(grpcCall.Arguments, input)
+	if workflowTask == nil {
+		return nil, fmt.Errorf("workflow task is not set")
+	}
 
+	returnedInput, err := workflowTask.TraverseAndEvaluate(grpcCall.Arguments, input)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
 			"task":  taskName,
