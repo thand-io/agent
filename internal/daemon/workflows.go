@@ -13,7 +13,7 @@ import (
 
 type ExecutionStatePageData struct {
 	config.TemplateData
-	Workflow *models.WorkflowTask
+	Execution *models.WorkflowTask
 }
 
 type WorkflowPageData struct {

@@ -1,65 +1,361 @@
 {{template "header" .}}
     <main>
         <div class="container" style="width: 100%;">
-            <div class="hero">
-                {{if eq .Workflow.GetStatus "completed"}}
-                    <!-- Success State -->
-                    <h1>Workflow Complete</h1>
-                    <p>Your workflow has been successfully completed. All tasks have been executed and the process is finished.</p>
+            <!-- Status Header -->
+            <div style="margin-bottom: 2rem; padding: 1.5rem; background-color: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 0.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h2 style="margin: 0;">Workflow Execution</h2>
+                    <button onclick="cancelWorkflow()" class="button button-secondary" id="cancel-btn" 
+                            {{if or (eq .Execution.GetStatus "completed") (eq .Execution.GetStatus "COMPLETED") (eq .Execution.GetStatus "FAILED")}}style="display:none"{{end}}>
+                        Cancel Workflow
+                    </button>
+                </div>
+                
+                <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                    <!-- Status Pills -->
+                    <div class="badge {{if or (eq .Execution.GetStatus "completed") (eq .Execution.GetStatus "COMPLETED")}}badge-success{{else if eq .Execution.GetStatus "FAILED"}}badge-error{{else}}badge-warning{{end}}">
+                        Status: {{.Execution.GetStatus}}
+                    </div>
                     
-                    <div class="button-group">
-                        <a href="/" class="button button-primary">Back to Home</a>
-                        <a href="/elevate" class="button button-secondary">New Request</a>
+                    <!-- Approval Status Pill -->
+                    <div class="badge {{if .Execution.IsApproved}}badge-success{{else}}badge-secondary{{end}}" id="approval-status">
+                        {{if .Execution.IsApproved}}Approved{{else}}Pending Approval{{end}}
                     </div>
-
-                    <div class="status-card">
-                        <div class="status-indicator">
-                            <div class="status-dot"></div>
-                            <span>Status: <strong>{{.Workflow.GetStatus}}</strong></span>
-                        </div>
-                        <div style="margin-top: 0.5rem; font-size: 0.875rem; color: hsl(var(--muted-foreground));">
-                            Workflow ID: {{.Workflow.WorkflowID}} | Completed: {{.Workflow.StartedAt}}
-                        </div>
-                        {{if .Workflow.GetOutput}}
-                        <div style="margin-top: 0.75rem; padding: 0.75rem; background-color: hsl(var(--secondary)); border-radius: 0.375rem; font-size: 0.875rem;">
-                            <strong>Result:</strong> {{.Workflow.GetOutput}}
-                        </div>
-                        {{end}}
-                    </div>
-                {{else}}
-                    <!-- In Progress State -->
-                    <h1>Workflow in Progress</h1>
-                    <p>Your workflow is currently being processed. Please wait while we execute the required tasks.</p>
                     
-                    <div class="button-group">
-                        <button onclick="refreshPage()" class="button button-primary" id="refresh-btn" {{if not .Config.GetServices.HasTemporal}}style="display:none"{{end}}>Refresh Status</button>
-                        <a href="/" class="button button-secondary">Back to Home</a>
-                    </div>
+                    <!-- Workflow ID -->
+                    <span style="font-size: 0.875rem; color: hsl(var(--muted-foreground));">
+                        ID: {{.Execution.WorkflowID}}
+                    </span>
+                </div>
+            </div>
 
-                    <div class="workflow-details">
-                        <div class="status-card" style="max-width: 600px;">
-                            <div class="status-indicator">
-                                <div class="status-dot {{if eq .Workflow.GetStatus "FAILED"}}offline{{end}}" id="workflow-status-dot"></div>
-                                <span>Status: <strong id="workflow-status">{{.Workflow.GetStatus}}</strong></span>
-                            </div>
-                            <div style="margin-top: 0.5rem; font-size: 0.875rem; color: hsl(var(--muted-foreground));">
-                                Workflow ID: <span id="workflow-id">{{.Workflow.WorkflowID}}</span> | Started: <span id="workflow-started">{{.Workflow.StartedAt}}</span>
+            <!-- Workflow Progress Section -->
+            <div style="margin-bottom: 2rem;">
+                <!-- Progress Steps -->
+                <div style="margin-bottom: 1.5rem;">
+                    <h3 style="margin-bottom: 1rem; font-size: 1.125rem; font-weight: 600; text-align: center;">Workflow Progress</h3>
+                    
+                    <!-- Task Type Legend -->
+                    <div style="display: flex; justify-content: center; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+                        <div style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; color: hsl(var(--muted-foreground));">
+                            <div style="width: 12px; height: 12px; border-radius: 50%; background-color: #3b82f6;"></div>
+                            <span>Call</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; color: hsl(var(--muted-foreground));">
+                            <div style="width: 12px; height: 12px; border-radius: 50%; background-color: #8b5cf6;"></div>
+                            <span>Fork</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; color: hsl(var(--muted-foreground));">
+                            <div style="width: 12px; height: 12px; border-radius: 50%; background-color: #10b981;"></div>
+                            <span>Emit</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; color: hsl(var(--muted-foreground));">
+                            <div style="width: 12px; height: 12px; border-radius: 50%; background-color: #f59e0b;"></div>
+                            <span>Run</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; color: hsl(var(--muted-foreground));">
+                            <div style="width: 12px; height: 12px; border-radius: 50%; background-color: #ef4444;"></div>
+                            <span>Switch</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; color: hsl(var(--muted-foreground));">
+                            <div style="width: 12px; height: 12px; border-radius: 50%; background-color: #6b7280;"></div>
+                            <span>Other</span>
+                        </div>
+                    </div>
+                    
+                    {{if .Execution.GetTaskList}}
+                        <div style="position: relative; overflow: hidden; padding: 1rem 0;">
+                            <!-- Fade gradients for overflow indication -->
+                            <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 2rem; background: linear-gradient(to right, hsl(var(--background)), transparent); z-index: 1; pointer-events: none;"></div>
+                            <div style="position: absolute; right: 0; top: 0; bottom: 0; width: 2rem; background: linear-gradient(to left, hsl(var(--background)), transparent); z-index: 1; pointer-events: none;"></div>
+                            
+                            <!-- Scrollable steps container -->
+                            <div style="display: flex; align-items: center; gap: 1.5rem; justify-content: center; overflow-x: auto; padding: 0 2rem; min-height: 4rem; scrollbar-width: none; -ms-overflow-style: none;">
+                                {{$currentTask := .Execution.GetEntrypoint}}
+                                {{$taskNumber := 1}}
+                                {{range $taskIndex, $task := .Execution.GetTaskList}}
+                                    <!-- Get execution status for this task -->
+                                    {{$statusLogs := index $.Execution.TasksStatusPhase $task.Key}}
+                                    {{$latestStatus := "pending"}}
+                                    {{$hasExecuted := false}}
+                                    {{if $statusLogs}}
+                                        {{$hasExecuted = true}}
+                                        {{range $statusLogs}}
+                                            {{$latestStatus = .Status}}
+                                        {{end}}
+                                    {{end}}
+                                    
+                                    <!-- Determine if this is the current task -->
+                                    {{$isCurrent := eq $task.Key $currentTask}}
+                                    
+                                    <!-- Determine task type and color -->
+                                    {{$taskType := "task"}}
+                                    {{$taskColor := "#6b7280"}}
+                                    {{if $task.AsCallFunctionTask}}
+                                        {{$taskType = "call"}}
+                                        {{$taskColor = "#3b82f6"}}
+                                    {{else if $task.AsForkTask}}
+                                        {{$taskType = "fork"}}
+                                        {{$taskColor = "#8b5cf6"}}
+                                    {{else if $task.AsEmitTask}}
+                                        {{$taskType = "emit"}}
+                                        {{$taskColor = "#10b981"}}
+                                    {{else if $task.AsRunTask}}
+                                        {{$taskType = "run"}}
+                                        {{$taskColor = "#f59e0b"}}
+                                    {{else if $task.AsSwitchTask}}
+                                        {{$taskType = "switch"}}
+                                        {{$taskColor = "#ef4444"}}
+                                    {{else if $task.AsListenTask}}
+                                        {{$taskType = "listen"}}
+                                        {{$taskColor = "#06b6d4"}}
+                                    {{else if $task.AsWaitTask}}
+                                        {{$taskType = "wait"}}
+                                        {{$taskColor = "#84cc16"}}
+                                    {{else if $task.AsSetTask}}
+                                        {{$taskType = "set"}}
+                                        {{$taskColor = "#f97316"}}
+                                    {{else if $task.AsRaiseTask}}
+                                        {{$taskType = "raise"}}
+                                        {{$taskColor = "#dc2626"}}
+                                    {{else if $task.AsTryTask}}
+                                        {{$taskType = "try"}}
+                                        {{$taskColor = "#7c2d12"}}
+                                    {{else if $task.AsForTask}}
+                                        {{$taskType = "for"}}
+                                        {{$taskColor = "#be185d"}}
+                                    {{else if $task.AsDoTask}}
+                                        {{$taskType = "do"}}
+                                        {{$taskColor = "#6366f1"}}
+                                    {{else if $task.AsCallHTTPTask}}
+                                        {{$taskType = "call-http"}}
+                                        {{$taskColor = "#3b82f6"}}
+                                    {{else if $task.AsCallAsyncAPITask}}
+                                        {{$taskType = "call-async"}}
+                                        {{$taskColor = "#3b82f6"}}
+                                    {{else if $task.AsCallOpenAPITask}}
+                                        {{$taskType = "call-openapi"}}
+                                        {{$taskColor = "#3b82f6"}}
+                                    {{else if $task.AsCallGRPCTask}}
+                                        {{$taskType = "call-grpc"}}
+                                        {{$taskColor = "#3b82f6"}}
+                                    {{end}}
+                                    
+                                    <!-- Step Card with different styles for current/executed/unrun -->
+                                    {{if $isCurrent}}
+                                        <div class="workflow-task-current" data-color="{{$taskColor}}" style="display: flex; flex-direction: column; align-items: center; min-width: 140px; padding: 1rem; border-radius: 0.5rem; transition: all 0.3s ease; flex-shrink: 0; position: relative; transform: scale(1.05);">
+                                    {{else if $hasExecuted}}
+                                        <div style="display: flex; flex-direction: column; align-items: center; min-width: 140px; padding: 1rem; background-color: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 0.5rem; transition: all 0.3s ease; flex-shrink: 0; position: relative;">
+                                    {{else}}
+                                        <div style="display: flex; flex-direction: column; align-items: center; min-width: 140px; padding: 1rem; background-color: hsl(var(--muted)); border: 1px solid hsl(var(--border)); border-radius: 0.5rem; transition: all 0.3s ease; flex-shrink: 0; position: relative; opacity: 0.6;">
+                                    {{end}}
+                                        
+                                        <!-- Task Number Badge -->
+                                        {{if $isCurrent}}
+                                            <div class="task-number-current" data-color="{{$taskColor}}" style="position: absolute; top: -12px; left: -12px; width: 28px; height: 28px; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.875rem; font-weight: 700; z-index: 2;">
+                                        {{else if $hasExecuted}}
+                                            <div style="position: absolute; top: -12px; left: -12px; width: 28px; height: 28px; background-color: #10b981; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.875rem; font-weight: 700; z-index: 2;">
+                                        {{else}}
+                                            <div style="position: absolute; top: -12px; left: -12px; width: 28px; height: 28px; background-color: #6b7280; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.875rem; font-weight: 700; z-index: 2;">
+                                        {{end}}
+                                            {{$taskNumber}}
+                                        </div>
+                                        
+                                        <!-- Task Type Indicator -->
+                                        {{if $isCurrent}}
+                                            <div class="task-type-current" data-color="{{$taskColor}}" style="position: absolute; top: -8px; right: -8px; width: 20px; height: 20px; border-radius: 50%; z-index: 2; border: 2px solid white;"></div>
+                                        {{else}}
+                                            <div style="position: absolute; top: -8px; right: -8px; width: 20px; height: 20px; border-radius: 50%; z-index: 2; background-color: {{$taskColor}}; border: 2px solid white;"></div>
+                                        {{end}}
+                                        
+                                        <!-- Status Indicator -->
+                                        {{if $isCurrent}}
+                                            <div style="margin-bottom: 0.5rem; margin-top: 0.5rem;">
+                                                <div class="status-dot connecting" style="width: 1.25rem; height: 1.25rem;"></div>
+                                            </div>
+                                        {{else if $hasExecuted}}
+                                            <div style="margin-bottom: 0.5rem;">
+                                                <div class="status-dot {{if eq $latestStatus "completed"}}success{{else if eq $latestStatus "running"}}connecting{{else if eq $latestStatus "failed"}}error{{else}}{{end}}" style="width: 1rem; height: 1rem;"></div>
+                                            </div>
+                                        {{else}}
+                                            <div style="margin-bottom: 0.5rem;">
+                                                <div style="width: 1rem; height: 1rem; border-radius: 50%; background-color: hsl(var(--muted-foreground)); opacity: 0.3;"></div>
+                                            </div>
+                                        {{end}}
+                                        
+                                        <!-- Task Name -->
+                                        {{if $isCurrent}}
+                                            <div class="task-name-current" data-color="{{$taskColor}}" style="font-weight: 700; font-size: 0.95rem; text-align: center; margin-bottom: 0.5rem; word-break: break-word;">
+                                        {{else if $hasExecuted}}
+                                            <div style="font-weight: 600; font-size: 0.875rem; text-align: center; margin-bottom: 0.5rem; color: hsl(var(--foreground)); word-break: break-word;">
+                                        {{else}}
+                                            <div style="font-weight: 600; font-size: 0.875rem; text-align: center; margin-bottom: 0.5rem; color: hsl(var(--muted-foreground)); word-break: break-word;">
+                                        {{end}}
+                                            {{$task.Key}}
+                                        </div>
+                                        
+                                        <!-- Status/Type Badge -->
+                                        {{if $isCurrent}}
+                                            <div class="badge" style="background-color: {{$taskColor}}; color: white; font-size: 0.75rem; padding: 0.25rem 0.5rem; font-weight: 600;">
+                                                CURRENT
+                                            </div>
+                                        {{else if $hasExecuted}}
+                                            <div class="badge {{if eq $latestStatus "completed"}}badge-success{{else if eq $latestStatus "running"}}badge-warning{{else if eq $latestStatus "failed"}}badge-error{{else}}badge-secondary{{end}}" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">
+                                                {{$latestStatus}}
+                                            </div>
+                                        {{else}}
+                                            <div class="badge badge-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; opacity: 0.6;">
+                                                {{$taskType}}
+                                            </div>
+                                        {{end}}
+                                    </div>
+                                    {{$taskNumber = 2}} <!-- Simplified counter increment -->
+                                {{end}}
                             </div>
                             
-                            <div id="current-task-container" {{if not .Workflow.GetTaskName}}style="display:none"{{end}}>
-                                <div style="margin-top: 0.75rem; padding: 0.75rem; background-color: hsl(var(--secondary)); border-radius: 0.375rem;">
-                                    <div style="font-size: 0.875rem; font-weight: 500; margin-bottom: 0.25rem;">Current Task:</div>
-                                    <div style="font-size: 0.875rem;" id="current-task">{{.Workflow.GetTaskName}}</div>
-                                </div>
-                            </div>
-
-                            <div id="workflow-output-container" {{if not .Workflow.GetOutput}}style="display:none"{{end}}>
-                                <div style="margin-top: 0.75rem; padding: 0.75rem; background-color: hsl(var(--secondary)); border-radius: 0.375rem; font-size: 0.875rem;">
-                                    <strong>Result:</strong> <span id="workflow-output">{{.Workflow.GetOutput}}</span>
-                                </div>
-                            </div>
-
+                            <!-- Dynamic styling for current task highlighting -->
+                            <style>
+                                .workflow-task-current {
+                                    background: linear-gradient(135deg, var(--task-color-light), var(--task-color-lighter)) !important;
+                                    border: 2px solid var(--task-color) !important;
+                                    box-shadow: 0 0 0 3px var(--task-color-shadow) !important;
+                                    animation: pulse 2s infinite;
+                                }
+                                .task-number-current {
+                                    background-color: var(--task-color) !important;
+                                    animation: pulse 2s infinite;
+                                }
+                                .task-type-current {
+                                    background-color: var(--task-color) !important;
+                                    box-shadow: 0 0 8px var(--task-color-shadow);
+                                }
+                                .task-name-current {
+                                    color: var(--task-color) !important;
+                                }
+                                @keyframes pulse {
+                                    0%, 100% { 
+                                        transform: scale(1.05);
+                                        opacity: 1;
+                                    }
+                                    50% { 
+                                        transform: scale(1.1);
+                                        opacity: 0.8;
+                                    }
+                                }
+                                ::-webkit-scrollbar {
+                                    display: none;
+                                }
+                            </style>
+                            
+                            <!-- Set CSS custom properties dynamically -->
+                            <script>
+                                document.addEventListener('DOMContentLoaded', function() {
+                                    const currentElements = document.querySelectorAll('[data-color]');
+                                    currentElements.forEach(el => {
+                                        const color = el.getAttribute('data-color');
+                                        const style = document.documentElement.style;
+                                        style.setProperty('--task-color', color);
+                                        style.setProperty('--task-color-light', color + '15');
+                                        style.setProperty('--task-color-lighter', color + '25');
+                                        style.setProperty('--task-color-shadow', color + '50');
+                                    });
+                                });
+                            </script>
                         </div>
+                    {{else if .Execution.TasksStatusPhase}}
+                        <!-- Fallback to executed tasks only if no workflow definition -->
+                        <div style="position: relative; overflow: hidden; padding: 1rem 0;">
+                            <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 2rem; background: linear-gradient(to right, hsl(var(--background)), transparent); z-index: 1; pointer-events: none;"></div>
+                            <div style="position: absolute; right: 0; top: 0; bottom: 0; width: 2rem; background: linear-gradient(to left, hsl(var(--background)), transparent); z-index: 1; pointer-events: none;"></div>
+                            
+                            <div style="display: flex; align-items: center; gap: 1.5rem; justify-content: center; overflow-x: auto; padding: 0 2rem; min-height: 4rem; scrollbar-width: none; -ms-overflow-style: none;">
+                                {{range $taskName, $statusLogs := .Execution.TasksStatusPhase}}
+                                    {{$latestStatus := "pending"}}
+                                    {{if $statusLogs}}
+                                        {{range $statusLogs}}
+                                            {{$latestStatus = .Status}}
+                                        {{end}}
+                                    {{end}}
+                                    
+                                    <div style="display: flex; flex-direction: column; align-items: center; min-width: 140px; padding: 1rem; background-color: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 0.5rem; transition: all 0.2s ease; flex-shrink: 0; position: relative;">
+                                        <div style="position: absolute; top: -8px; right: -8px; width: 16px; height: 16px; border-radius: 50%; z-index: 2; background-color: #6b7280;"></div>
+                                        <div style="margin-bottom: 0.5rem;">
+                                            <div class="status-dot {{if eq $latestStatus "completed"}}success{{else if eq $latestStatus "running"}}connecting{{else if eq $latestStatus "failed"}}error{{else}}{{end}}" style="width: 1rem; height: 1rem;"></div>
+                                        </div>
+                                        <div style="font-weight: 600; font-size: 0.875rem; text-align: center; margin-bottom: 0.5rem; color: hsl(var(--foreground)); word-break: break-word;">
+                                            {{$taskName}}
+                                        </div>
+                                        <div class="badge {{if eq $latestStatus "completed"}}badge-success{{else if eq $latestStatus "running"}}badge-warning{{else if eq $latestStatus "failed"}}badge-error{{else}}badge-secondary{{end}}" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">
+                                            {{$latestStatus}}
+                                        </div>
+                                    </div>
+                                {{end}}
+                            </div>
+                        </div>
+                    {{else}}
+                        <div style="padding: 2rem; background-color: hsl(var(--secondary)); border-radius: 0.5rem; text-align: center; color: hsl(var(--muted-foreground)); font-size: 0.875rem;">
+                            No task progress available
+                        </div>
+                    {{end}}
+                </div>
+
+                <!-- Current Step Details -->
+                {{if .Execution.GetTaskName}}
+                    <div style="padding: 1.5rem; background-color: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 0.5rem;">
+                        <h4 style="margin-bottom: 1rem; font-size: 1rem; font-weight: 600;">Current Step: {{.Execution.GetTaskName}}</h4>
+                        
+                        <div style="display: grid; gap: 1rem;">
+                            <!-- Step Status -->
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <span style="font-size: 0.875rem; color: hsl(var(--muted-foreground));">Status:</span>
+                                <div class="badge {{if eq .Execution.GetStatus "completed"}}badge-success{{else if eq .Execution.GetStatus "FAILED"}}badge-error{{else}}badge-warning{{end}}">
+                                    {{.Execution.GetStatus}}
+                                </div>
+                            </div>
+                            
+                            <!-- Step Input/Output -->
+                            {{if .Execution.GetStateAsMap}}
+                                <div>
+                                    <div style="font-size: 0.875rem; font-weight: 500; margin-bottom: 0.5rem; color: hsl(var(--muted-foreground));">Step State:</div>
+                                    <div style="padding: 0.75rem; background-color: hsl(var(--secondary)); border-radius: 0.375rem; font-size: 0.875rem; font-family: monospace; white-space: pre-wrap; overflow-x: auto;">{{.Execution.GetStateAsMap}}</div>
+                                </div>
+                            {{end}}
+                            
+                            {{if .Execution.GetContextAsMap}}
+                                <div>
+                                    <div style="font-size: 0.875rem; font-weight: 500; margin-bottom: 0.5rem; color: hsl(var(--muted-foreground));">Workflow Context:</div>
+                                    <div style="padding: 0.75rem; background-color: hsl(var(--secondary)); border-radius: 0.375rem; font-size: 0.875rem; font-family: monospace; white-space: pre-wrap; overflow-x: auto;">{{.Execution.GetContextAsMap}}</div>
+                                </div>
+                            {{end}}
+                        </div>
+                    </div>
+                {{else}}
+                    <div style="padding: 1.5rem; background-color: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 0.5rem; text-align: center;">
+                        {{if eq .Execution.GetStatus "completed"}}
+                            <h4 style="color: hsl(var(--success)); margin-bottom: 0.5rem;">✓ Workflow Complete</h4>
+                            <p style="color: hsl(var(--muted-foreground)); font-size: 0.875rem;">All tasks have been executed successfully.</p>
+                            
+                            <div style="margin-top: 1rem;">
+                                <a href="/" class="button button-primary" style="margin-right: 0.5rem;">Back to Home</a>
+                                <a href="/elevate" class="button button-secondary">New Request</a>
+                            </div>
+                        {{else if eq .Execution.GetStatus "FAILED"}}
+                            <h4 style="color: hsl(var(--destructive)); margin-bottom: 0.5rem;">✗ Workflow Failed</h4>
+                            <p style="color: hsl(var(--muted-foreground)); font-size: 0.875rem;">The workflow encountered an error and could not complete.</p>
+                            
+                            <div style="margin-top: 1rem;">
+                                <a href="/" class="button button-primary" style="margin-right: 0.5rem;">Back to Home</a>
+                                <a href="/elevate" class="button button-secondary">Try Again</a>
+                            </div>
+                        {{else}}
+                            <h4 style="margin-bottom: 0.5rem;">Workflow Initializing</h4>
+                            <p style="color: hsl(var(--muted-foreground)); font-size: 0.875rem;">Please wait while the workflow starts...</p>
+                            
+                            <div style="margin-top: 1rem;">
+                                <button onclick="refreshPage()" class="button button-primary" id="refresh-btn" {{if not .Config.GetServices.HasTemporal}}style="display:none"{{end}}>Refresh Status</button>
+                                <a href="/" class="button button-secondary">Back to Home</a>
+                            </div>
+                        {{end}}
                     </div>
                 {{end}}
             </div>
@@ -68,11 +364,34 @@
 
     <script>
         let refreshInterval;
-        const workflowId = '{{.Workflow.WorkflowID}}';
+        const workflowId = '{{.Execution.WorkflowID}}';
         const temporalAvailable = {{.Config.GetServices.HasTemporal}}
 
         function refreshPage() {
             window.location.reload();
+        }
+
+        function cancelWorkflow() {
+            if (confirm('Are you sure you want to cancel this workflow?')) {
+                fetch(`{{.Config.GetApiBasePath}}/execution/${workflowId}/cancel`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                })
+                .then(response => {
+                    if (response.ok) {
+                        alert('Workflow cancellation requested');
+                        window.location.reload();
+                    } else {
+                        alert('Failed to cancel workflow');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error cancelling workflow:', error);
+                    alert('Error cancelling workflow');
+                });
+            }
         }
 
         function updateWorkflowStatus(data) {
@@ -92,6 +411,23 @@
             const startedElement = document.getElementById('workflow-started');
             if (startedElement && data.workflow && data.workflow.started_at) {
                 startedElement.textContent = new Date(data.workflow.started_at).toLocaleString();
+            }
+
+            // Update approval status
+            const approvalElement = document.getElementById('approval-status');
+            if (approvalElement && data.workflow && data.workflow.is_approved !== undefined) {
+                approvalElement.textContent = data.workflow.is_approved ? 'Approved' : 'Pending Approval';
+                approvalElement.className = `badge ${data.workflow.is_approved ? 'badge-success' : 'badge-secondary'}`;
+            }
+
+            // Hide cancel button if workflow is completed or failed
+            const cancelBtn = document.getElementById('cancel-btn');
+            if (cancelBtn && data.workflow && (
+                data.workflow.status === 'COMPLETED' || 
+                data.workflow.status === 'FAILED' ||
+                data.workflow.status === 'completed'
+            )) {
+                cancelBtn.style.display = 'none';
             }
 
             // If workflow is completed or failed, redirect to refresh the page to show the correct state
@@ -126,8 +462,8 @@
 
         // Only start auto-refresh if temporal is available and workflow is not completed
         if (temporalAvailable && 
-            '{{.Workflow.GetStatus}}' !== 'COMPLETED' &&
-            '{{.Workflow.GetStatus}}' !== 'FAILED') {
+            '{{.Execution.GetStatus}}' !== 'COMPLETED' &&
+            '{{.Execution.GetStatus}}' !== 'FAILED') {
             
             // Start auto-refresh every 5 seconds
             refreshInterval = setInterval(fetchWorkflowStatus, 5000);

@@ -329,7 +329,11 @@ func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.WorkflowTask) {
 		// If this is an API call return the JSON handler
 		// otherwise return the html page
 
-		s.getWorkflowStatePage(c, workflowTask)
+		data := ExecutionStatePageData{
+			TemplateData: s.GetTemplateData(c),
+			Execution:    workflowTask,
+		}
+		s.renderHtml(c, "execution.html", data)
 
 	} else {
 

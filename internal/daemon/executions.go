@@ -2,27 +2,24 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
-	swctx "github.com/serverlessworkflow/sdk-go/v3/impl/ctx"
+	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
+
+	swctx "github.com/serverlessworkflow/sdk-go/v3/impl/ctx"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
 )
-
-func (s *Server) getWorkflowStatePage(c *gin.Context, workflowTask *models.WorkflowTask) {
-	data := ExecutionStatePageData{
-		TemplateData: s.GetTemplateData(c),
-		Workflow:     workflowTask,
-	}
-	s.renderHtml(c, "execution.html", data)
-}
 
 func (s *Server) listRunningWorkflows(c *gin.Context) {
 
@@ -120,31 +117,85 @@ func (s *Server) getRunningWorkflow(c *gin.Context) {
 
 	temporalClient := temporal.GetClient()
 
-	wkflw, err := temporalClient.DescribeWorkflowExecution(ctx, workflowID, "")
+	// Create a timeout context for the query
+	// to avoid hanging requests
+	timeoutCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
 
-	if err != nil {
-		s.getErrorPage(c, http.StatusNotFound, "Workflow not found", err)
+	queryResponse, err := temporalClient.QueryWorkflowWithOptions(timeoutCtx, &client.QueryWorkflowWithOptionsRequest{
+		WorkflowID: workflowID,
+		RunID:      models.TemporalEmptyRunId,
+		QueryType:  models.TemporalGetWorkflowTaskQueryName,
+		Args:       nil,
+	})
+
+	var workflowInfo models.WorkflowTask
+
+	if err == nil {
+
+		err = queryResponse.QueryResult.Get(&workflowInfo)
+
+		if err != nil {
+			s.getErrorPage(c, http.StatusInternalServerError, "Failed to get workflow state", err)
+			return
+		}
+
+		workflowName := workflowInfo.WorkflowName
+
+		if len(workflowName) == 0 {
+
+			elevationReq, err := workflowInfo.GetContextAsElevationRequest()
+
+			if err == nil && elevationReq != nil {
+				workflowName = elevationReq.Role.Workflow
+			}
+
+		}
+
+		// Get the workflow template name if available
+		foundWorkflow, err := s.GetConfig().GetWorkflowByName(workflowName)
+
+		if err != nil {
+			logrus.Debug("Unable to find workflow template for execution", "WorkflowName", workflowInfo.WorkflowName, "Error", err)
+		} else {
+			workflowInfo.Workflow = foundWorkflow.GetWorkflow()
+		}
+
+	} else if errors.Is(err, context.DeadlineExceeded) {
+
+		// If it timesout then get the workflow information without the task details
+		wkflw, err := temporalClient.DescribeWorkflowExecution(ctx, workflowID, models.TemporalEmptyRunId)
+
+		if err != nil {
+			s.getErrorPage(c, http.StatusInternalServerError, "Failed to get workflow state", err)
+			return
+		}
+
+		workflowExecInfo := workflowExecutionInfo(wkflw.GetWorkflowExecutionInfo())
+
+		workflowInfo = models.WorkflowTask{
+			WorkflowID: workflowExecInfo.WorkflowID,
+			Status:     swctx.StatusPhase(strings.ToLower(workflowExecInfo.Status)),
+			StartedAt:  workflowExecInfo.StartTime,
+		}
+
+	} else {
+		s.getErrorPage(c, http.StatusInternalServerError, "Failed to get workflow state", err)
 		return
 	}
-
-	workflowInfo := workflowExecutionInfo(wkflw.GetWorkflowExecutionInfo())
 
 	if s.canAcceptHtml(c) {
 
 		data := ExecutionStatePageData{
 			TemplateData: s.GetTemplateData(c),
-			Workflow: &models.WorkflowTask{
-				WorkflowID: workflowInfo.WorkflowID,
-				Status:     swctx.StatusPhase(strings.ToLower(workflowInfo.Status)),
-				StartedAt:  workflowInfo.StartTime,
-			},
+			Execution:    &workflowInfo,
 		}
 		s.renderHtml(c, "execution.html", data)
 
 	} else {
 
 		c.JSON(http.StatusOK, gin.H{
-			"workflow": workflowInfo,
+			"workflow": &workflowInfo,
 		})
 	}
 }
@@ -174,14 +225,14 @@ func workflowExecutionInfo(workflowInfo *workflow.WorkflowExecutionInfo) *models
 	// Safely extract search attributes with proper type conversion
 	dataConverter := converter.GetDefaultDataConverter()
 
-	if userAttr, exists := searchAttributes["user"]; exists && userAttr != nil {
+	if userAttr, exists := searchAttributes[models.VarsContextUser]; exists && userAttr != nil {
 		var userValue string
 		if err := dataConverter.FromPayload(userAttr, &userValue); err == nil {
 			response.User = userValue
 		}
 	}
 
-	if roleAttr, exists := searchAttributes["role"]; exists && roleAttr != nil {
+	if roleAttr, exists := searchAttributes[models.VarsContextRole]; exists && roleAttr != nil {
 		var roleValue string
 		if err := dataConverter.FromPayload(roleAttr, &roleValue); err == nil {
 			response.Role = roleValue

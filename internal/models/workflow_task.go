@@ -28,11 +28,16 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-var VarsContextUser = "user"
-
 type ctxKey string
 
 const (
+	VarsContextUser     = "user"
+	VarsContextRequest  = "request"
+	VarsContextProvider = "provider"
+	VarsContextWorkflow = "workflow"
+	VarsContextRole     = "role"
+	VarsContextApproved = "approved"
+
 	runnerCtxKey   ctxKey = "wfRunnerContext"
 	temporalCtxKey ctxKey = "wfTemporalContext"
 
@@ -56,11 +61,13 @@ type WorkflowTask struct {
 	localExprVars   map[string]any     `json:"-"` // local variables for expressions
 
 	// Core workfork/task fields
-	WorkflowID             string `json:"workflow_id"`
+	WorkflowID             string `json:"id"`
+	WorkflowName           string `json:"name"`
 	AuthenticationProvider string `json:"authentication"` // The authorisor used for this task
 	Signature              string `json:"signature"`      // The signature of the task, used for validation
 
 	// TaskSupport implementation fields
+	// Entrypoint is the current task name to start from
 	Entrypoint string          `json:"entrypoint,omitempty"` // The entrypoint of the workflow - allows for resumption
 	Status     ctx.StatusPhase `json:"status,omitempty"`
 	StartedAt  time.Time       `json:"started_at,omitempty"`
@@ -75,8 +82,8 @@ type WorkflowTask struct {
 	Output  any `json:"output,omitempty"`
 
 	// Important?
-	StatusPhase      []ctx.StatusPhaseLog
-	TasksStatusPhase map[string][]ctx.StatusPhaseLog
+	StatusPhase      []ctx.StatusPhaseLog            `json:"-"`
+	TasksStatusPhase map[string][]ctx.StatusPhaseLog `json:"tasks,omitempty"`
 }
 
 type WorkflowTaskState struct {
@@ -175,23 +182,18 @@ func (wr *WorkflowTask) SetTaskReferenceFromName(taskName string) error {
 func (r *WorkflowTask) GetTaskName() string {
 
 	if r.state == nil {
-		return "unknown"
+		if len(r.GetEntrypoint()) > 0 {
+			return r.GetEntrypoint()
+		} else {
+			return "unknown"
+		}
 	}
 
 	return r.state.Name
 }
 
 func (r *WorkflowTask) SetUser(user *User) {
-
-	if r.Context == nil {
-		r.Context = map[string]any{}
-	} else if _, ok := r.Context.(map[string]any); !ok {
-		// Not a map[string]any so can't set user
-		logrus.Warnf("workflow task context is not a map, cannot set user")
-		return
-	}
-
-	r.Context.(map[string]any)[VarsContextUser] = user.AsMap()
+	r.SetContextKeyValue(VarsContextUser, user.AsMap())
 }
 
 // Helper methods for TaskSupport
@@ -201,6 +203,20 @@ func (r *WorkflowTask) SetWorkflowDsl(workflow *model.Workflow) {
 
 func (r *WorkflowTask) SetContext(ctx any) {
 	r.Context = ctx
+}
+
+func (r *WorkflowTask) SetContextKeyValue(key string, value any) {
+	if r.Context == nil {
+		r.Context = map[string]any{}
+	}
+	if ctxMap, ok := r.Context.(map[string]any); ok {
+		ctxMap[key] = value
+	} else {
+		// Not a map[string]any so can't set user
+		logrus.Warnf("workflow task context is not a map, cannot set user")
+		return
+	}
+
 }
 
 func (r *WorkflowTask) GetAuthenticationProvider() string {
@@ -322,23 +338,20 @@ func (ctx *WorkflowTask) GetEntrypointIndex() (int, error) {
 
 func (ctx *WorkflowTask) IsApproved() bool {
 
-	ctx.mu.Lock()
-	defer ctx.mu.Unlock()
-
 	if context := ctx.GetContextAsMap(); len(context) > 0 {
-		if approved, ok := context["approved"].(bool); ok {
+		if approved, ok := context[VarsContextApproved].(bool); ok {
 			return approved
 		}
 	}
 
 	if input := ctx.GetInputAsMap(); len(input) > 0 {
-		if approved, ok := input["approved"].(bool); ok {
+		if approved, ok := input[VarsContextApproved].(bool); ok {
 			return approved
 		}
 	}
 
 	if output := ctx.GetOutputAsMap(); len(output) > 0 {
-		if approved, ok := output["approved"].(bool); ok {
+		if approved, ok := output[VarsContextApproved].(bool); ok {
 			return approved
 		}
 	}
