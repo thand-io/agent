@@ -1,15 +1,15 @@
 # Thand Agent [![Go Report Card](https://goreportcard.com/badge/github.com/thand.io/agent)](https://goreportcard.com/report/github.com/thand.io/agent) [![Build and Release](https://github.com/thand-io/agent/actions/workflows/build-and-release.yml/badge.svg)](https://github.com/thand-io/agent/actions/workflows/build-and-release.yml)
 
-Open-source agent for AI-ready privilege access management (PAM) and just-in-time access (JIT) to cloud infrastructure, SaaS applications and local systems. Thand uses temporal.io to guarantee robust deterministic workflow execution and guarantees execution and revocation of permissions. Run it locally or on-prem. Connect to Thand Cloud for enterprise features.
+Open-source agent for privilege access management (PAM) and just-in-time access (JIT) to cloud infrastructure, SaaS applications and local systems. Thand uses [temporal.io](https://temporal.io/) to guarantee robust deterministic workflow execution and guarantees execution and revocation of permissions. Run it locally or on-prem to grant short-lived access to any programmatically accessible system or resource. Connect to Thand Cloud for enterprise features.
 
 ## 🎯 What is Thand?
 
-Thand eliminates standing access to critical infrastructure and SaaS apps. Instead of permanent admin rights, users request access when needed, for only as long as needed.
+Thand eliminates standing access to critical infrastructure and SaaS apps. Instead of permanent admin rights, users request access when needed, for only as long as needed. The Thand server is extensible, customisable and easy to deploy as a standalone service.
 
 **The Security Crisis**:
 
 - **Static credentials get leaked**: API keys in repos, AWS keys in logs, service account keys shared in Slack
-- **Over-privileged users**: 90% of permissions are unused, but remain active attack vectors. Broad workflows and roles lead to excessive permissions.
+- **Over-privileged users**: 90% of permissions are unused, but remain active attack vectors. Broad workflows and roles lead to excessive permissions. Review and revocation is often a time consuming, manual process.
 - **Automatic grants**: Users are often granted access without understanding the implications, leading to accidental misuse.
 - **Lack of visibility**: No clear audit trail of who accessed what, when, and why.
 - **Persistent threats**: Users with admin access can maintain access indefinitely, even after leaving the company.
@@ -18,7 +18,7 @@ Thand eliminates standing access to critical infrastructure and SaaS apps. Inste
 
 - **Zero standing privileges**: No permanent admin access anywhere
 - **No static credentials**: All access is temporary and tied to your identity
-- **Just-in-time permissions**: Get access when you need it, lose it when you don't
+- **Just-in-time permissions**: Request the access you need, when you need it - and lose it once you're done
 - **Complete audit trail**: Every access request and action logged for compliance. Access is automatically reviewed during usage and revoked if the user moves off-task.
 
 Thand is licensed under the BSL 1.1 license. See [LICENSE.md](LICENSE.md) for more details.
