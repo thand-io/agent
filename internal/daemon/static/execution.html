@@ -542,7 +542,7 @@
                     
                     try {
                         const response = await fetch(`${this.apiBasePath}/execution/${this.workflowId}/cancel`, {
-                            method: 'POST',
+                            method: 'GET',
                             headers: {
                                 'Content-Type': 'application/json',
                             }

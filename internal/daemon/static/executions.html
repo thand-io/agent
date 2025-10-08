@@ -105,7 +105,7 @@
                                 <a href="/execution/{{.WorkflowID}}" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">View</a>
                                 <!-- Only show for running, waiting or pending workflows-->
                                 {{ if or (eq .Status "RUNNING") (eq .Status "PENDING") (eq .Status "WAITING") }}
-                                    <a href="/execution/{{.WorkflowID}}/terminate" class="button button-warning" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Cancel</a>
+                                    <a href="/execution/{{.WorkflowID}}/cancel" class="button button-warning" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Cancel</a>
                                 {{end}}
                             </td>
                         </tr>

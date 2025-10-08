@@ -145,11 +145,16 @@ func (s *Server) getWorkflowsPage(c *gin.Context) {
 }
 
 func (s *Server) terminateRunningWorkflow(c *gin.Context) {
+	// TODO: Implement forceful termination logic
+	s.cancelRunningWorkflow(c)
+}
+
+func (s *Server) cancelRunningWorkflow(c *gin.Context) {
 
 	workflowId := c.Param("id")
 
 	if !s.Config.IsServer() {
-		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to terminate workflow", nil)
+		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to cancel workflow", nil)
 	}
 
 	authenticatedUser, err := s.getUser(c)
@@ -204,7 +209,7 @@ func (s *Server) terminateRunningWorkflow(c *gin.Context) {
 	if s.canAcceptHtml(c) {
 
 		// TODO: Maybe add a page for this later
-		c.Redirect(http.StatusSeeOther, fmt.Sprintf("/execution/%s?terminated=true", workflowId))
+		c.Redirect(http.StatusSeeOther, fmt.Sprintf("/execution/%s?canceled=true", workflowId))
 
 	} else {
 

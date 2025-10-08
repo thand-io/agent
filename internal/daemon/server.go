@@ -282,7 +282,8 @@ func (s *Server) setupRoutes(router *gin.Engine) {
 
 		router.GET("/executions", s.getExecutionsPage)
 		router.GET("/execution/:id", s.getRunningWorkflow)
-		router.GET("/execution/:id/terminate", s.terminateRunningWorkflow)
+		router.GET("/execution/:id/cancel", s.cancelRunningWorkflow)       // Graceful cancellation
+		router.GET("/execution/:id/terminate", s.terminateRunningWorkflow) // Forceful termination
 
 		router.GET("/workflow/:name", s.getWorkflowByName)
 
@@ -369,6 +370,7 @@ func (s *Server) setupRoutes(router *gin.Engine) {
 			api.POST("/execution", s.createWorkflow)
 
 			api.GET("/execution/:id", s.getRunningWorkflow)
+			api.GET("/execution/:id/cancel", s.cancelRunningWorkflow)
 			api.GET("/execution/:id/terminate", s.terminateRunningWorkflow)
 
 		}
