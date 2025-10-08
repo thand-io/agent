@@ -184,19 +184,19 @@ func (s *Server) getRunningWorkflow(c *gin.Context) {
 		return
 	}
 
+	data := ExecutionStatePageData{
+		TemplateData: s.GetTemplateData(c),
+		Execution:    &workflowInfo,
+		Workflow:     workflowInfo.Workflow,
+	}
+
 	if s.canAcceptHtml(c) {
 
-		data := ExecutionStatePageData{
-			TemplateData: s.GetTemplateData(c),
-			Execution:    &workflowInfo,
-		}
 		s.renderHtml(c, "execution.html", data)
 
 	} else {
 
-		c.JSON(http.StatusOK, gin.H{
-			"workflow": &workflowInfo,
-		})
+		c.JSON(http.StatusOK, data)
 	}
 }
 

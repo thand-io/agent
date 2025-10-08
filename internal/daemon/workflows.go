@@ -7,13 +7,15 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 )
 
 type ExecutionStatePageData struct {
-	config.TemplateData
-	Execution *models.WorkflowTask
+	config.TemplateData `json:"-"`
+	Execution           *models.WorkflowTask `json:"execution"`
+	Workflow            *model.Workflow      `json:"workflow"`
 }
 
 type WorkflowPageData struct {

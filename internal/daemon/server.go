@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
@@ -30,8 +31,19 @@ func NewServer(cfg *config.Config) *Server {
 
 	workflows := manager.NewWorkflowManager(cfg)
 
-	// Parse the templates
-	tmpl, err := template.ParseFS(staticFiles, "static/*.html")
+	// Create template functions
+	funcMap := template.FuncMap{
+		"toJSON": func(v any) string {
+			jsonBytes, err := json.MarshalIndent(v, "", "  ")
+			if err != nil {
+				return fmt.Sprintf("Error: %v", err)
+			}
+			return string(jsonBytes)
+		},
+	}
+
+	// Parse the templates with custom functions
+	tmpl, err := template.New("").Funcs(funcMap).ParseFS(staticFiles, "static/*.html")
 	if err != nil {
 		logrus.WithError(err).Fatal("Failed to parse templates")
 	}
