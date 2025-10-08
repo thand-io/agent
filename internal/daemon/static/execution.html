@@ -24,6 +24,59 @@
                     <h1 x-text="getWorkflowName()"></h1>
                 </div>
                 
+                <!-- Workflow Status Section -->
+                <div style="margin-bottom: 2rem; padding: 1.5rem; background-color: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 0.5rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
+                        <!-- Status Bubbles -->
+                        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                            <!-- Current State -->
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background-color: hsl(var(--secondary)); border-radius: 1.5rem; border: 1px solid hsl(var(--border));">
+                                    <div style="width: 8px; height: 8px; border-radius: 50%;" 
+                                         :style="{ 'background-color': hasCurrentTask() ? '#10b981' : (isWorkflowCompleted() ? '#3b82f6' : '#f59e0b') }"></div>
+                                    <span style="font-size: 0.875rem; font-weight: 500;" x-text="hasCurrentTask() ? `Running: ${execution.entrypoint}` : (isWorkflowCompleted() ? 'Completed' : (isWorkflowFailed() ? 'Failed' : 'Initializing'))"></span>
+                                </div>
+                            </div>
+                            
+                            <!-- Approval Status -->
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: 1.5rem; border: 1px solid hsl(var(--border));"
+                                     :style="{ 'background-color': getApprovalStatus() === 'approved' ? '#10b98115' : (getApprovalStatus() === 'rejected' ? '#ef444415' : 'hsl(var(--secondary))') }">
+                                    <div style="width: 8px; height: 8px; border-radius: 50%;" 
+                                         :style="{ 'background-color': getApprovalStatus() === 'approved' ? '#10b981' : (getApprovalStatus() === 'rejected' ? '#ef4444' : '#f59e0b') }"></div>
+                                    <span style="font-size: 0.875rem; font-weight: 500;" 
+                                          :style="{ 'color': getApprovalStatus() === 'approved' ? '#10b981' : (getApprovalStatus() === 'rejected' ? '#ef4444' : 'hsl(var(--foreground))') }"
+                                          x-text="getApprovalStatusText()"></span>
+                                </div>
+                            </div>
+                            
+                            <!-- Overall Status -->
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <div :class="getWorkflowStatusBadgeClass()" style="padding: 0.5rem 1rem; border-radius: 1.5rem; font-size: 0.875rem; font-weight: 500;">
+                                    <span x-text="(execution?.status || 'pending').toUpperCase()"></span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Cancel Button -->
+                        <div>
+                            <button @click="cancelWorkflow()" 
+                                    :disabled="isWorkflowComplete()"
+                                    style="padding: 0.5rem 1rem; border-radius: 0.375rem; font-size: 0.875rem; font-weight: 500; border: 1px solid; transition: all 0.2s ease;"
+                                    :style="{ 
+                                        'background-color': isWorkflowComplete() ? 'hsl(var(--muted))' : '#ef444415',
+                                        'border-color': isWorkflowComplete() ? 'hsl(var(--border))' : '#ef4444',
+                                        'color': isWorkflowComplete() ? 'hsl(var(--muted-foreground))' : '#ef4444',
+                                        'cursor': isWorkflowComplete() ? 'not-allowed' : 'pointer',
+                                        'opacity': isWorkflowComplete() ? '0.5' : '1'
+                                    }"
+                                    :title="isWorkflowComplete() ? 'Cannot cancel completed workflow' : 'Cancel workflow execution'">
+                                Cancel Workflow
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
                 <div style="margin-bottom: 2rem;">
                     <!-- Workflow Progress -->
                     <div style="margin-bottom: 1.5rem;">
@@ -244,10 +297,10 @@
                 // Initialize the app
                 init() {
                     // Load initial data
-                    this.execution = {{.Execution | toJSON}};
-                    this.workflow = {{.Workflow | toJSON}}; // Will be populated by fetchWorkflowStatus or from execution data
+                    this.execution = JSON.parse({{.Execution | toJSON}});
+                    this.workflow = JSON.parse({{.Workflow | toJSON}}); // Will be populated by fetchWorkflowStatus or from execution data
                     this.loading = false;
-                    
+
                     // Start auto-refresh if needed
                     if (this.temporalAvailable && !this.isWorkflowComplete()) {
                         this.startAutoRefresh();
@@ -444,6 +497,68 @@
                 
                 getWorkflowName() {
                     return this.workflow?.document?.name || this.workflow?.name || this.execution?.workflow_id || 'Unknown Workflow';
+                },
+                
+                // Approval status methods
+                getApprovalStatus() {
+                    // Check if workflow has approval-related data
+                    const context = this.execution?.context;
+                    if (context?.approval_status) {
+                        return context.approval_status.toLowerCase();
+                    }
+                    
+                    // Check execution tasks for approval steps
+                    const tasks = this.execution?.tasks || {};
+                    for (const taskName in tasks) {
+                        const taskLogs = tasks[taskName] || [];
+                        for (const log of taskLogs) {
+                            if (log.phase === 'approved') return 'approved';
+                            if (log.phase === 'rejected') return 'rejected';
+                        }
+                    }
+                    
+                    // Default to pending if no approval info found
+                    return 'pending';
+                },
+                
+                getApprovalStatusText() {
+                    const status = this.getApprovalStatus();
+                    switch (status) {
+                        case 'approved': return 'Approved';
+                        case 'rejected': return 'Rejected';
+                        default: return 'Approval Pending';
+                    }
+                },
+                
+                // Cancel workflow method
+                async cancelWorkflow() {
+                    if (this.isWorkflowComplete()) {
+                        return; // Cannot cancel completed workflows
+                    }
+                    
+                    if (!confirm('Are you sure you want to cancel this workflow? This action cannot be undone.')) {
+                        return;
+                    }
+                    
+                    try {
+                        const response = await fetch(`${this.apiBasePath}/execution/${this.workflowId}/cancel`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            }
+                        });
+                        
+                        if (!response.ok) {
+                            throw new Error(`Failed to cancel workflow: ${response.status} ${response.statusText}`);
+                        }
+                        
+                        // Refresh the workflow status immediately
+                        await this.fetchWorkflowStatus();
+                        
+                    } catch (err) {
+                        console.error('Error canceling workflow:', err);
+                        alert(`Failed to cancel workflow: ${err.message}`);
+                    }
                 },
                 
                 // Cleanup
