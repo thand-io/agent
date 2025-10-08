@@ -22,6 +22,9 @@ var TemporalResumeSignalName = "resume"
 var TemporalEventSignalName = "event"
 var TemporalTerminateSignalName = "terminate"
 
+var TemporalIsApprovedQueryName = "isApproved"
+var TemporalGetWorkflowTaskQueryName = "getWorkflowTask"
+
 var TypedSearchAttributeStatus = temporal.NewSearchAttributeKeyKeyword("status")
 
 var TypedSearchAttributeTask = temporal.NewSearchAttributeKeyString("task")

@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
@@ -30,8 +31,19 @@ func NewServer(cfg *config.Config) *Server {
 
 	workflows := manager.NewWorkflowManager(cfg)
 
-	// Parse the templates
-	tmpl, err := template.ParseFS(staticFiles, "static/*.html")
+	// Create template functions
+	funcMap := template.FuncMap{
+		"toJSON": func(v any) string {
+			jsonBytes, err := json.MarshalIndent(v, "", "  ")
+			if err != nil {
+				return fmt.Sprintf("Error: %v", err)
+			}
+			return string(jsonBytes)
+		},
+	}
+
+	// Parse the templates with custom functions
+	tmpl, err := template.New("").Funcs(funcMap).ParseFS(staticFiles, "static/*.html")
 	if err != nil {
 		logrus.WithError(err).Fatal("Failed to parse templates")
 	}
@@ -270,7 +282,8 @@ func (s *Server) setupRoutes(router *gin.Engine) {
 
 		router.GET("/executions", s.getExecutionsPage)
 		router.GET("/execution/:id", s.getRunningWorkflow)
-		router.GET("/execution/:id/terminate", s.terminateRunningWorkflow)
+		router.GET("/execution/:id/cancel", s.cancelRunningWorkflow)       // Graceful cancellation
+		router.GET("/execution/:id/terminate", s.terminateRunningWorkflow) // Forceful termination
 
 		router.GET("/workflow/:name", s.getWorkflowByName)
 
@@ -357,6 +370,7 @@ func (s *Server) setupRoutes(router *gin.Engine) {
 			api.POST("/execution", s.createWorkflow)
 
 			api.GET("/execution/:id", s.getRunningWorkflow)
+			api.GET("/execution/:id/cancel", s.cancelRunningWorkflow)
 			api.GET("/execution/:id/terminate", s.terminateRunningWorkflow)
 
 		}

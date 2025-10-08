@@ -20,6 +20,7 @@ func NewWorkflowContext(workflow *Workflow) (*WorkflowTask, error) {
 		Status:                 swctx.PendingStatus,
 		AuthenticationProvider: workflow.GetAuthentication(),
 		WorkflowID:             workflowID,
+		WorkflowName:           workflow.GetName(),
 		Workflow:               workflow.Workflow,
 		Context:                map[string]any{},
 		internalContext:        context.Background(),
@@ -307,6 +308,7 @@ func (ctx *WorkflowTask) SetTaskName(name string) {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 	ctx.state.Name = name
+	ctx.Entrypoint = name
 }
 
 func (ctx *WorkflowTask) SetTaskReference(ref string) {

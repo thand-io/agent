@@ -191,6 +191,10 @@ func (t *authorizeFunction) executeAuthorization(
 
 	maps.Copy(modelOutput, authOut)
 
+	// Set the workflow as approved
+	workflowTask.SetContextKeyValue(models.VarsContextApproved, true)
+
+	// Update temporal search attributes if applicable
 	t.updateTemporalSearchAttributes(workflowTask)
 
 	logrus.WithFields(logrus.Fields{
@@ -231,7 +235,7 @@ func (t *authorizeFunction) updateTemporalSearchAttributes(workflowTask *models.
 	}
 
 	err := workflow.UpsertTypedSearchAttributes(workflowTask.GetTemporalContext(),
-		models.TypedSearchAttributeApproved.ValueSet(true),
+		models.TypedSearchAttributeApproved.ValueSet(workflowTask.IsApproved()),
 	)
 
 	if err != nil {

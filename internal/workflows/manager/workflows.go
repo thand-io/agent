@@ -15,10 +15,10 @@ import (
 
 // workflowLogger defines the interface for workflow logging
 type workflowLogger interface {
-	Debug(msg string, keyvals ...interface{})
-	Info(msg string, keyvals ...interface{})
-	Warn(msg string, keyvals ...interface{})
-	Error(msg string, keyvals ...interface{})
+	Debug(msg string, keyvals ...any)
+	Info(msg string, keyvals ...any)
+	Warn(msg string, keyvals ...any)
+	Error(msg string, keyvals ...any)
 }
 
 func (m *WorkflowManager) registerWorkflows() error {
@@ -60,8 +60,14 @@ func (m *WorkflowManager) createPrimaryWorkflowHandler(temporalService interface
 		cancelCtx, cancelHandler := workflow.WithCancel(rootCtx)
 
 		// Setup query handler
-		if err := m.setupQueryHandler(cancelCtx, workflowTask); err != nil {
+		if err := m.setupIsApprovedQueryHandler(cancelCtx, workflowTask); err != nil {
 			log.Error("Failed to set query handler", "Error", err)
+			return nil, err
+		}
+
+		// Setup get workflow task query handler
+		if err := m.setupGetWorkflowTaskQueryHandler(cancelCtx, workflowTask); err != nil {
+			log.Error("Failed to set get workflow task query handler", "Error", err)
 			return nil, err
 		}
 
@@ -119,9 +125,21 @@ func (m *WorkflowManager) setupCleanupHandler(rootCtx workflow.Context, workflow
 }
 
 // setupQueryHandler sets up the query handler for the workflow
-func (m *WorkflowManager) setupQueryHandler(ctx workflow.Context, workflowTask *models.WorkflowTask) error {
-	return workflow.SetQueryHandler(ctx, "isApproved", func() (bool, error) {
+func (m *WorkflowManager) setupIsApprovedQueryHandler(ctx workflow.Context, workflowTask *models.WorkflowTask) error {
+	return workflow.SetQueryHandler(ctx, models.TemporalIsApprovedQueryName, func() (bool, error) {
+
+		logrus.Info("IsApproved query received")
+
 		return workflowTask.IsApproved(), nil
+	})
+}
+
+func (m *WorkflowManager) setupGetWorkflowTaskQueryHandler(ctx workflow.Context, workflowTask *models.WorkflowTask) error {
+	return workflow.SetQueryHandler(ctx, models.TemporalGetWorkflowTaskQueryName, func() (*models.WorkflowTask, error) {
+
+		logrus.Info("GetWorkflowTask query received")
+
+		return workflowTask, nil
 	})
 }
 

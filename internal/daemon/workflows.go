@@ -7,13 +7,15 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 )
 
 type ExecutionStatePageData struct {
-	config.TemplateData
-	Workflow *models.WorkflowTask
+	config.TemplateData `json:"-"`
+	Execution           *models.WorkflowTask `json:"execution"`
+	Workflow            *model.Workflow      `json:"workflow"`
 }
 
 type WorkflowPageData struct {
@@ -143,11 +145,16 @@ func (s *Server) getWorkflowsPage(c *gin.Context) {
 }
 
 func (s *Server) terminateRunningWorkflow(c *gin.Context) {
+	// TODO: Implement forceful termination logic
+	s.cancelRunningWorkflow(c)
+}
+
+func (s *Server) cancelRunningWorkflow(c *gin.Context) {
 
 	workflowId := c.Param("id")
 
 	if !s.Config.IsServer() {
-		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to terminate workflow", nil)
+		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to cancel workflow", nil)
 	}
 
 	authenticatedUser, err := s.getUser(c)
@@ -202,7 +209,7 @@ func (s *Server) terminateRunningWorkflow(c *gin.Context) {
 	if s.canAcceptHtml(c) {
 
 		// TODO: Maybe add a page for this later
-		c.Redirect(http.StatusSeeOther, fmt.Sprintf("/execution/%s?terminated=true", workflowId))
+		c.Redirect(http.StatusSeeOther, fmt.Sprintf("/execution/%s?canceled=true", workflowId))
 
 	} else {
 
