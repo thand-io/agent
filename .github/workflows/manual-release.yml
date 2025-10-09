@@ -1,0 +1,157 @@
+name: Manual Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_version:
+        description: 'Existing tag version to release (e.g., v1.2.3)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  validate-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      tag-exists: ${{ steps.check.outputs.exists }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Check if tag exists
+      id: check
+      run: |
+        if git tag -l | grep -q "^${{ github.event.inputs.tag_version }}$"; then
+          echo "exists=true" >> $GITHUB_OUTPUT
+          echo "✅ Tag ${{ github.event.inputs.tag_version }} exists"
+        else
+          echo "exists=false" >> $GITHUB_OUTPUT
+          echo "❌ Tag ${{ github.event.inputs.tag_version }} does not exist"
+          exit 1
+        fi
+
+  release:
+    needs: validate-tag
+    if: needs.validate-tag.outputs.tag-exists == 'true'
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.tag_version }}
+        fetch-depth: 0
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Tag Docker image as latest
+      run: |
+        # Pull the existing versioned image and retag as latest
+        docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.tag_version }}
+        docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.tag_version }} ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+        docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+    - name: Find workflow run for tag
+      id: find-run
+      run: |
+        # Find the workflow run that created this tag
+        TAG_COMMIT=$(git rev-list -n 1 ${{ github.event.inputs.tag_version }})
+        echo "Tag commit: $TAG_COMMIT"
+        
+        # Get the workflow run ID that built this commit
+        RUN_ID=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+          "https://api.github.com/repos/${{ github.repository }}/actions/runs?head_sha=$TAG_COMMIT&status=completed" \
+          | jq -r '.workflow_runs[] | select(.name == "Test and Build") | .id' | head -1)
+        
+        if [ "$RUN_ID" = "null" ] || [ -z "$RUN_ID" ]; then
+          echo "❌ Could not find workflow run for tag ${{ github.event.inputs.tag_version }}"
+          exit 1
+        fi
+        
+        echo "Found workflow run: $RUN_ID"
+        echo "run-id=$RUN_ID" >> $GITHUB_OUTPUT
+
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: binaries-${{ github.event.inputs.tag_version }}
+        path: dist/
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        repository: ${{ github.repository }}
+        run-id: ${{ steps.find-run.outputs.run-id }}
+
+    - name: Generate changelog
+      id: changelog
+      run: |
+        # Get the previous tag for changelog generation
+        PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${{ github.event.inputs.tag_version }}^)
+        echo "Generating changelog from $PREVIOUS_TAG to ${{ github.event.inputs.tag_version }}"
+        
+        # Generate changelog
+        CHANGELOG=$(git log --pretty=format:"- %s (%h)" $PREVIOUS_TAG..${{ github.event.inputs.tag_version }})
+        
+        # Save changelog to output
+        echo "changelog<<EOF" >> $GITHUB_OUTPUT
+        echo "$CHANGELOG" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.event.inputs.tag_version }}
+        name: Release ${{ github.event.inputs.tag_version }}
+        body: |
+          ## What's Changed
+          
+          ${{ steps.changelog.outputs.changelog }}
+          
+          ## Docker Images
+          
+          ```bash
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.tag_version }}
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          ```
+          
+          ## Installation
+          
+          ### Homebrew
+          ```bash
+          brew install thand-io/tap/agent
+          ```
+          
+          ### Manual Download
+          Download the appropriate binary for your platform from the assets below.
+        files: |
+          dist/*
+        draft: false
+        prerelease: false
+
+  homebrew:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+    - name: Trigger Homebrew Tap Update
+      uses: peter-evans/repository-dispatch@v3
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        repository: thand-io/homebrew-tap
+        event-type: update-formula
+        client-payload: |
+          {
+            "version": "${{ github.event.inputs.tag_version }}",
+            "repository": "${{ github.repository }}",
+            "release_url": "https://github.com/${{ github.repository }}/releases/tag/${{ github.event.inputs.tag_version }}"
+          }
