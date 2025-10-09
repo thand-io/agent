@@ -74,7 +74,7 @@ jobs:
         # Get the workflow run ID that built this commit
         RUN_ID=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
           "https://api.github.com/repos/${{ github.repository }}/actions/runs?head_sha=$TAG_COMMIT&status=completed" \
-          | jq -r '.workflow_runs[] | select(.name == "Test and Build") | .id' | head -1)
+          | jq -r '.workflow_runs[] | select(.name == "Build and Release") | .id' | head -1)
         
         if [ "$RUN_ID" = "null" ] || [ -z "$RUN_ID" ]; then
           echo "❌ Could not find workflow run for tag ${{ github.event.inputs.tag_version }}"
