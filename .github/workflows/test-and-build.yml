@@ -209,7 +209,7 @@ jobs:
           type=raw,value=dev
           type=raw,value=${{ steps.version.outputs.version }}
 
-    - name: Build and push Docker image (dev + latest + version tags)
+    - name: Build and push Docker image (dev + version tags)
       uses: docker/build-push-action@v5
       with:
         context: .
