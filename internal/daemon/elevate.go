@@ -287,9 +287,7 @@ func (s *Server) getElevateAuthOAuth2(c *gin.Context) {
 	// Get the users identity information and role info.
 	fmt.Println("Resuming workflow with state:", state)
 
-	input := workflowTask.GetContextAsMap()
-	input[models.VarsContextUser] = session.User
-	workflowTask.SetContext(input)
+	workflowTask.SetUser(session.User)
 
 	s.resumeWorkflow(c, workflowTask)
 
