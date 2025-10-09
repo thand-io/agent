@@ -295,7 +295,7 @@ main() {
     install_binary "$download_url" "$version" "$platform"
 }
 
-# Check if running as script (not sourced)
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+# Check if running as script (not sourced) or piped from curl
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]] || [[ -z "${BASH_SOURCE[0]}" ]]; then
     main "$@"
 fi
