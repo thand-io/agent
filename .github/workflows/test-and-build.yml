@@ -99,6 +99,7 @@ jobs:
   build-multi-platform:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: auto-tag
     
     steps:
     - name: Checkout code
@@ -112,10 +113,10 @@ jobs:
       with:
         go-version: ${{ env.GO_VERSION }}
 
-    - name: Get version from tag
+    - name: Get version from auto-tag
       id: version
       run: |
-        VERSION=${GITHUB_REF#refs/tags/}
+        VERSION="${{ needs.auto-tag.outputs.new-tag }}"
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "commit=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
@@ -168,7 +169,7 @@ jobs:
   docker-release:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    needs: build-multi-platform
+    needs: [auto-tag, build-multi-platform]
     
     steps:
     - name: Checkout code
@@ -176,10 +177,10 @@ jobs:
       with:
         fetch-depth: 1
 
-    - name: Get version from tag
+    - name: Get version from auto-tag
       id: version
       run: |
-        VERSION=${GITHUB_REF#refs/tags/}
+        VERSION="${{ needs.auto-tag.outputs.new-tag }}"
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "commit=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
@@ -207,7 +208,6 @@ jobs:
         tags: |
           type=raw,value=dev
           type=raw,value=${{ steps.version.outputs.version }}
-          type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
 
     - name: Build and push Docker image (dev + latest + version tags)
       uses: docker/build-push-action@v5
@@ -223,21 +223,3 @@ jobs:
           COMMIT=${{ steps.version.outputs.commit }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
-
-  release:
-    needs: [build-multi-platform, docker-release]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    
-    steps:
-    - name: Get version from tag
-      id: version
-      run: |
-        VERSION=${GITHUB_REF#refs/tags/}
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-    - name: Download artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: binaries-${{ steps.version.outputs.version }}
-        path: dist/
