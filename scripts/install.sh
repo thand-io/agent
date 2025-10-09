@@ -197,6 +197,52 @@ install_binary() {
     fi
 }
 
+# Function to install via Homebrew
+install_via_brew() {
+    print_status "Installing via Homebrew..."
+    
+    # Add the tap
+    if ! brew tap thand-io/tap >/dev/null 2>&1; then
+        print_error "Failed to add Homebrew tap thand-io/tap"
+        return 1
+    fi
+    
+    # Install the thand agent
+    if brew install thand >/dev/null 2>&1; then
+        print_status "Successfully installed thand via Homebrew"
+        
+        # Verify installation
+        if command -v thand >/dev/null 2>&1; then
+            print_status "Verification: $(which thand)"
+            print_status "Version: $(thand version 2>/dev/null || echo "Version command not available")"
+        fi
+        return 0
+    else
+        print_error "Failed to install thand via Homebrew"
+        return 1
+    fi
+}
+
+# Function to check if Homebrew is available and use it for installation
+try_brew_install() {
+    local platform="$1"
+    
+    # Only try brew on macOS and Linux
+    if [[ "$platform" == "darwin-"* ]] || [[ "$platform" == "linux-"* ]]; then
+        if command -v brew >/dev/null 2>&1; then
+            print_status "Homebrew detected, attempting installation via brew..."
+            if install_via_brew; then
+                return 0
+            else
+                print_warning "Homebrew installation failed, falling back to direct download..."
+                return 1
+            fi
+        fi
+    fi
+    
+    return 1
+}
+
 # Main installation function
 main() {
     print_status "Starting thand installation..."
@@ -204,6 +250,15 @@ main() {
     # Detect platform
     local platform=$(detect_platform)
     print_status "Detected platform: $platform"
+    
+    # Try Homebrew installation first on macOS/Linux
+    if try_brew_install "$platform"; then
+        print_status "Installation completed successfully via Homebrew!"
+        exit 0
+    fi
+    
+    # Fall back to direct download method
+    print_status "Proceeding with direct download installation..."
     
     # Get latest release information
     local release_json=$(get_latest_release)
