@@ -101,7 +101,7 @@ get_download_url() {
     
     # Extract download URL using grep and sed (more portable than jq)
     # Look for assets that match: agent-{platform}{extension}
-    echo "$release_json" | grep -o "\"browser_download_url\"[[:space:]]*:[[:space:]]*\"[^\"]*agent-${asset_platform}[^\"]*${extension}\"" | sed 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' | head -1
+    echo "$release_json" | grep -o "\"browser_download_url\"[[:space:]]*:[[:space:]]*\"[^\"]*agent-${platform}[^\"]*${extension}\"" | sed 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' | head -1
 }
 
 # Function to get version from release
