@@ -2,7 +2,7 @@ name: Build and Release
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
     tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
@@ -18,39 +18,15 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  version:
+  test-and-build:
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      commit: ${{ steps.version.outputs.commit }}
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0  # Fetch full history for proper versioning
-
-    - name: Generate version
-      id: version
-      run: |
-        if [[ $GITHUB_REF == refs/tags/* ]]; then
-          VERSION=${GITHUB_REF#refs/tags/}
-        else
-          VERSION="v0.0.0-$(date +%Y%m%d%H%M%S)-$(git rev-parse --short HEAD)"
-        fi
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
-        echo "commit=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
-        echo "Generated version: $VERSION"
-
-  build:
-    needs: version
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 1  # Only fetch the latest commit
+        fetch-depth: 1
         submodules: recursive
 
     - name: Set up Go
@@ -58,161 +34,27 @@ jobs:
       with:
         go-version: ${{ env.GO_VERSION }}
 
-    - name: Build for multiple platforms
+    - name: Run tests
       run: |
-        VERSION=${{ needs.version.outputs.version }}
-        COMMIT=${{ needs.version.outputs.commit }}
-        
-        # Create dist directory
-        mkdir -p dist
-        
-        # Build for different platforms and create archives
-        platforms=(
-          "linux/amd64"
-          "linux/arm64" 
-          "darwin/amd64"
-          "darwin/arm64"
-          "windows/amd64"
-        )
-        
-        for platform in "${platforms[@]}"; do
-          IFS='/' read -r os arch <<< "$platform"
-          output_name="agent"
-          if [ "$os" = "windows" ]; then
-            output_name="agent.exe"
-          fi
-          
-          echo "Building for $os/$arch..."
-          GOEXPERIMENT=jsonv2 CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -a -installsuffix cgo \
-            -ldflags "-X github.com/thand-io/agent/internal/common.Version=$VERSION -X github.com/thand-io/agent/internal/common.GitCommit=$COMMIT" \
-            -o "dist/$output_name" .
-          
-          # Create archive
-          if [ "$os" = "windows" ]; then
-            cd dist && zip "agent-${os}-${arch}.zip" "$output_name" && cd ..
-          else
-            cd dist && tar -czf "agent-${os}-${arch}.tar.gz" "$output_name" && cd ..
-          fi
-          
-          # Also keep the binary for direct download
-          mv "dist/$output_name" "dist/agent-${os}-${arch}$([ "$os" = "windows" ] && echo ".exe" || echo "")"
-        done
+        go test -v ./...
 
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: binaries-${{ needs.version.outputs.version }}
-        path: dist/
+    - name: Build for validation
+      run: |
+        GOEXPERIMENT=jsonv2 CGO_ENABLED=0 go build -a -installsuffix cgo \
+          -ldflags "-X github.com/thand-io/agent/internal/common.Version=dev -X github.com/thand-io/agent/internal/common.GitCommit=$(git rev-parse HEAD)" \
+          -o agent .
 
-  docker:
-    needs: [version, build]
-    runs-on: ubuntu-latest
-    outputs:
-      image-digest: ${{ steps.docker-build.outputs.digest }}
-      image-tags: ${{ steps.meta.outputs.tags }}
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 1  # Only fetch the latest commit
-
-    - name: Download build artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: binaries-${{ needs.version.outputs.version }}
-        path: dist/
-
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-
-    - name: Log in to Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Extract metadata
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-        tags: |
-          type=ref,event=branch
-          type=ref,event=pr
-          type=raw,value=dev,enable={{is_default_branch}}
-          type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-          type=semver,pattern={{version}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-          type=raw,value=${{ needs.version.outputs.version }},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-
-    - name: Build and push Docker image
-      id: docker-build
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./Dockerfile.cicd
-        platforms: linux/amd64,linux/arm64
-        push: ${{ startsWith(github.ref, 'refs/tags/v') }}
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
-        build-args: |
-          VERSION=${{ needs.version.outputs.version }}
-          COMMIT=${{ needs.version.outputs.commit }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-
-  release:
-    needs: [version, build, docker]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    
-    steps:
-
-    - name: Download artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: binaries-${{ needs.version.outputs.version }}
-        path: dist/
-
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: ${{ needs.version.outputs.version }}
-        name: Release ${{ needs.version.outputs.version }}
-        draft: false
-        prerelease: false
-        generate_release_notes: true
-        body: |
-          ## Docker Image
-          
-          ```bash
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}
-          ```
-        files: |
-          dist/agent-linux-amd64
-          dist/agent-linux-arm64
-          dist/agent-darwin-amd64
-          dist/agent-darwin-arm64
-          dist/agent-windows-amd64.exe
-          dist/agent-linux-amd64.tar.gz
-          dist/agent-linux-arm64.tar.gz
-          dist/agent-darwin-amd64.tar.gz
-          dist/agent-darwin-arm64.tar.gz
-          dist/agent-windows-amd64.zip
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  auto-tag:
-    needs: version
+  auto-tag-and-docker:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    outputs:
+      new-tag: ${{ steps.bump.outputs.new-version }}
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0 # Fetch full history for proper versioning
+        fetch-depth: 0
         token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Get latest tag
@@ -254,12 +96,235 @@ jobs:
         git tag -a $NEW_VERSION -m "Auto-release $NEW_VERSION"
         git push origin $NEW_VERSION
 
-  homebrew:
-    needs: [version, release]
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Build Linux binary for Docker
+      run: |
+        NEW_VERSION=${{ steps.bump.outputs.new-version }}
+        COMMIT=$(git rev-parse HEAD)
+        
+        mkdir -p dist
+        GOEXPERIMENT=jsonv2 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo \
+          -ldflags "-X github.com/thand-io/agent/internal/common.Version=$NEW_VERSION -X github.com/thand-io/agent/internal/common.GitCommit=$COMMIT" \
+          -o dist/agent-linux-amd64 .
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata for dev image
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=raw,value=dev
+          type=raw,value=${{ steps.bump.outputs.new-version }}
+
+    - name: Build and push Docker image (dev tag)
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile.cicd
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        build-args: |
+          VERSION=${{ steps.bump.outputs.new-version }}
+          COMMIT=${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  build-multi-platform:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     
     steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+        submodules: recursive
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Get version from tag
+      id: version
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/}
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "commit=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+    - name: Build for multiple platforms
+      run: |
+        VERSION=${{ steps.version.outputs.version }}
+        COMMIT=${{ steps.version.outputs.commit }}
+        
+        # Create dist directory
+        mkdir -p dist
+        
+        # Build for different platforms and create archives
+        platforms=(
+          "linux/amd64"
+          "linux/arm64" 
+          "darwin/amd64"
+          "darwin/arm64"
+          "windows/amd64"
+        )
+        
+        for platform in "${platforms[@]}"; do
+          IFS='/' read -r os arch <<< "$platform"
+          output_name="agent"
+          if [ "$os" = "windows" ]; then
+            output_name="agent.exe"
+          fi
+          
+          echo "Building for $os/$arch..."
+          GOEXPERIMENT=jsonv2 CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -a -installsuffix cgo \
+            -ldflags "-X github.com/thand-io/agent/internal/common.Version=$VERSION -X github.com/thand-io/agent/internal/common.GitCommit=$COMMIT" \
+            -o "dist/$output_name" .
+          
+          # Create archive
+          if [ "$os" = "windows" ]; then
+            cd dist && zip "agent-${os}-${arch}.zip" "$output_name" && cd ..
+          else
+            cd dist && tar -czf "agent-${os}-${arch}.tar.gz" "$output_name" && cd ..
+          fi
+          
+          # Also keep the binary for direct download
+          mv "dist/$output_name" "dist/agent-${os}-${arch}$([ "$os" = "windows" ] && echo ".exe" || echo "")"
+        done
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: binaries-${{ steps.version.outputs.version }}
+        path: dist/
+
+  docker-release:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-multi-platform
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    - name: Get version from tag
+      id: version
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/}
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "commit=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata for release
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=raw,value=latest
+          type=raw,value=${{ steps.version.outputs.version }}
+
+    - name: Build and push Docker image (latest tag)
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile.cicd
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        build-args: |
+          VERSION=${{ steps.version.outputs.version }}
+          COMMIT=${{ steps.version.outputs.commit }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  release:
+    needs: [build-multi-platform, docker-release]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - name: Get version from tag
+      id: version
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/}
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: binaries-${{ steps.version.outputs.version }}
+        path: dist/
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.version.outputs.version }}
+        name: Release ${{ steps.version.outputs.version }}
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+        body: |
+          ## Docker Image
+          
+          ```bash
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          ```
+        files: |
+          dist/agent-linux-amd64
+          dist/agent-linux-arm64
+          dist/agent-darwin-amd64
+          dist/agent-darwin-arm64
+          dist/agent-windows-amd64.exe
+          dist/agent-linux-amd64.tar.gz
+          dist/agent-linux-arm64.tar.gz
+          dist/agent-darwin-amd64.tar.gz
+          dist/agent-darwin-arm64.tar.gz
+          dist/agent-windows-amd64.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  homebrew:
+    needs: release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - name: Get version from tag
+      id: version
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/}
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+
     - name: Trigger Homebrew Tap Update
       uses: peter-evans/repository-dispatch@v3
       with:
@@ -268,7 +333,7 @@ jobs:
         event-type: update-formula
         client-payload: |
           {
-            "version": "${{ needs.version.outputs.version }}",
+            "version": "${{ steps.version.outputs.version }}",
             "repository": "${{ github.repository }}",
-            "release_url": "https://github.com/${{ github.repository }}/releases/tag/${{ needs.version.outputs.version }}"
+            "release_url": "https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.version }}"
           }
