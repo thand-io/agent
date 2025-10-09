@@ -200,7 +200,7 @@ func (t *authorizeFunction) executeAuthorization(
 		"revocation_at": revocationDate.Format(time.RFC3339),
 	}).Info("Scheduled revocation")
 
-	return &modelOutput, nil
+	return modelOutput, nil
 }
 
 // validateRoleAndBuildOutput validates the role and builds the initial model output

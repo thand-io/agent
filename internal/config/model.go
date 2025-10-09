@@ -291,6 +291,10 @@ func (p *WorkflowConfig) GetWorkflowByName(name string) (*models.Workflow, error
 	return nil, fmt.Errorf("workflow not found: %s", name)
 }
 
+func (p *WorkflowConfig) GetDefinitions() map[string]models.Workflow {
+	return p.Definitions
+}
+
 type WorkflowPluginConfig struct {
 	Path string `mapstructure:"path"`
 	URL  string `mapstructure:"url"`

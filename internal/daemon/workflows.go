@@ -166,7 +166,7 @@ func (s *Server) cancelRunningWorkflow(c *gin.Context) {
 	services := s.GetConfig().GetServices()
 
 	if !services.HasTemporal() {
-		s.getErrorPage(c, http.StatusInternalServerError, "Temporal service is not configured", nil)
+		s.getErrorPage(c, http.StatusInternalServerError, "Temporal service is not configured")
 		return
 	}
 

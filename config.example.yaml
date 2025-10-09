@@ -1,5 +1,26 @@
 # Thand Backend Configuration
 
+# Environment Configuration
+environment:
+  # Supported platforms: gcp, aws, azure, local
+  platform: "local"
+  # Platform-specific config
+  config:
+    # Local environment does not require additional configuration
+    # Add any local-specific settings here if needed
+    salt: "changeme"
+    password: "changeme"
+
+# Services Configuration
+# The services configuration inherits from environment configuration
+services:
+  temporal:
+    # host: "us-central1.gcp.api.temporal.io"
+    # port: 7233
+    # namespace: "default"
+    # mtls_pem: "" # Path to mTLS PEM file if required
+    # api_key: "" # Temporal API Key
+
 # Server Configuration
 server:
   host: "0.0.0.0"
@@ -38,18 +59,6 @@ server:
     health:
       path: "/health"
 
-# OIDC Configuration
-oidc:
-  issuer_url: "https://accounts.google.com"
-  client_id: "your-google-client-id.apps.googleusercontent.com"
-  client_secret: "your-google-client-secret"
-  redirect_url: "http://localhost:5225/2025-01-01/oidc/callback"
-  scopes:
-    - "openid"
-    - "profile" 
-    - "email"
-  jwt_signing_key: "your-super-secret-jwt-signing-key-at-least-256-bits"
-
 # Logging Configuration
 logging:
   level: "info" # debug, info, warn, error
@@ -58,6 +67,13 @@ logging:
 
 providers:
   # Define your providers here
+  # url: "https://api.example.com/providers.yaml"
+  # path: ./path/to/providers
+  
+  # Or define inline providers
+  # provider1:
+  #   type: "type1"
+  #   enabled: true
 
 roles:
   # Define your roles here

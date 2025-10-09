@@ -30,9 +30,12 @@ func (s *Server) listRunningWorkflows(c *gin.Context) {
 		s.getErrorPage(c, http.StatusBadRequest, "Temporal service is not configured")
 		return
 	}
+
 	if !s.Config.IsServer() {
 		// In non-server mode we can assume a default user
 		// TODO: Proxy request to server
+		s.getErrorPage(c, http.StatusBadRequest, "Workflow listing is only available in server mode")
+		return
 	}
 
 	foundUser, err := s.getUser(c)
