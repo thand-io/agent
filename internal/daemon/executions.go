@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -117,71 +116,86 @@ func (s *Server) getRunningWorkflow(c *gin.Context) {
 
 	temporalClient := temporal.GetClient()
 
-	// Create a timeout context for the query
-	// to avoid hanging requests
-	timeoutCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
+	// If it timesout then get the workflow information without the task details
+	wkflw, err := temporalClient.DescribeWorkflowExecution(ctx, workflowID, models.TemporalEmptyRunId)
 
-	queryResponse, err := temporalClient.QueryWorkflowWithOptions(timeoutCtx, &client.QueryWorkflowWithOptionsRequest{
-		WorkflowID: workflowID,
-		RunID:      models.TemporalEmptyRunId,
-		QueryType:  models.TemporalGetWorkflowTaskQueryName,
-		Args:       nil,
-	})
+	if err != nil {
+		s.getErrorPage(c, http.StatusInternalServerError, "Failed to get workflow state", err)
+		return
+	}
 
-	var workflowInfo models.WorkflowTask
+	workflowExecInfo := workflowExecutionInfo(wkflw.GetWorkflowExecutionInfo())
 
-	if err == nil {
+	workflowInfo := models.WorkflowTask{
+		WorkflowID:   workflowExecInfo.WorkflowID,
+		WorkflowName: workflowExecInfo.WorkflowName,
+		Status:       swctx.StatusPhase(strings.ToLower(workflowExecInfo.Status)),
+		StartedAt:    workflowExecInfo.StartTime,
+		Entrypoint:   workflowExecInfo.Task,
+	}
 
-		err = queryResponse.QueryResult.Get(&workflowInfo)
+	// If workflow hasn't completed the query for the current state
+	if workflowExecInfo.CloseTime == nil {
 
-		if err != nil {
-			s.getErrorPage(c, http.StatusInternalServerError, "Failed to get workflow state", err)
-			return
-		}
+		// Create a timeout context for the query
+		// to avoid hanging requests
+		timeoutCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
 
-		workflowName := workflowInfo.WorkflowName
+		queryResponse, err := temporalClient.QueryWorkflowWithOptions(timeoutCtx, &client.QueryWorkflowWithOptionsRequest{
+			WorkflowID: workflowID,
+			RunID:      models.TemporalEmptyRunId,
+			QueryType:  models.TemporalGetWorkflowTaskQueryName,
+			Args:       nil,
+		})
 
-		if len(workflowName) == 0 {
+		if err == nil {
 
-			elevationReq, err := workflowInfo.GetContextAsElevationRequest()
+			err = queryResponse.QueryResult.Get(&workflowInfo)
 
-			if err == nil && elevationReq != nil {
-				workflowName = elevationReq.Role.Workflow
+			if err != nil {
+				s.getErrorPage(c, http.StatusInternalServerError, "Failed to get workflow state", err)
+				return
+			}
+
+			workflowName := workflowInfo.WorkflowName
+
+			if len(workflowName) == 0 {
+
+				elevationReq, err := workflowInfo.GetContextAsElevationRequest()
+
+				if err == nil && elevationReq != nil {
+					workflowName = elevationReq.Role.Workflow
+				}
+
+			}
+
+			// Get the workflow template name if available
+			foundWorkflow, err := s.GetConfig().GetWorkflowByName(workflowName)
+
+			if err != nil {
+				logrus.Debug("Unable to find workflow template for execution", "WorkflowName", workflowInfo.WorkflowName, "Error", err)
+			} else {
+				workflowInfo.Workflow = foundWorkflow.GetWorkflow()
 			}
 
 		}
-
-		// Get the workflow template name if available
-		foundWorkflow, err := s.GetConfig().GetWorkflowByName(workflowName)
-
-		if err != nil {
-			logrus.Debug("Unable to find workflow template for execution", "WorkflowName", workflowInfo.WorkflowName, "Error", err)
-		} else {
-			workflowInfo.Workflow = foundWorkflow.GetWorkflow()
-		}
-
-	} else if errors.Is(err, context.DeadlineExceeded) {
-
-		// If it timesout then get the workflow information without the task details
-		wkflw, err := temporalClient.DescribeWorkflowExecution(ctx, workflowID, models.TemporalEmptyRunId)
-
-		if err != nil {
-			s.getErrorPage(c, http.StatusInternalServerError, "Failed to get workflow state", err)
-			return
-		}
-
-		workflowExecInfo := workflowExecutionInfo(wkflw.GetWorkflowExecutionInfo())
-
-		workflowInfo = models.WorkflowTask{
-			WorkflowID: workflowExecInfo.WorkflowID,
-			Status:     swctx.StatusPhase(strings.ToLower(workflowExecInfo.Status)),
-			StartedAt:  workflowExecInfo.StartTime,
-		}
-
 	} else {
-		s.getErrorPage(c, http.StatusInternalServerError, "Failed to get workflow state", err)
-		return
+
+		// Otherwise if the workflow has completed then get the last output
+
+		fut := temporalClient.GetWorkflow(
+			ctx, workflowID, models.TemporalEmptyRunId)
+
+		err := fut.Get(ctx, &workflowInfo)
+
+		if err != nil {
+			logrus.WithError(err).Error("Failed to get workflow output")
+			workflowInfo.Output = err.Error()
+		}
+
+		workflowInfo.Status = swctx.StatusPhase(strings.ToLower(workflowExecInfo.Status))
+
 	}
 
 	data := ExecutionStatePageData{
@@ -248,10 +262,24 @@ func workflowExecutionInfo(workflowInfo *workflow.WorkflowExecutionInfo) *models
 		}
 	}
 
-	if approvedAttr, exists := searchAttributes["approved"]; exists && approvedAttr != nil {
+	if approvedAttr, exists := searchAttributes[models.VarsContextApproved]; exists && approvedAttr != nil {
 		var approvedValue bool
 		if err := dataConverter.FromPayload(approvedAttr, &approvedValue); err == nil {
 			response.Approved = approvedValue
+		}
+	}
+
+	if workflowNameAttr, exists := searchAttributes["name"]; exists && workflowNameAttr != nil {
+		var workflowNameValue string
+		if err := dataConverter.FromPayload(workflowNameAttr, &workflowNameValue); err == nil {
+			response.WorkflowName = workflowNameValue
+		}
+	}
+
+	if taskAttr, exists := searchAttributes["task"]; exists && taskAttr != nil {
+		var taskValue string
+		if err := dataConverter.FromPayload(taskAttr, &taskValue); err == nil {
+			response.Task = taskValue
 		}
 	}
 

@@ -54,10 +54,24 @@ func (m *WorkflowManager) createPrimaryWorkflowHandler(temporalService interface
 		log := workflow.GetLogger(rootCtx)
 		log.Info("Primary workflow started.", "StartTime", workflow.Now(rootCtx))
 
-		// Setup cleanup handler
-		defer m.setupCleanupHandler(rootCtx, workflowTask, temporalService, &outputError, log)
-
 		cancelCtx, cancelHandler := workflow.WithCancel(rootCtx)
+
+		// Setup cleanup handler
+		defer func() {
+			cleanupErr := m.runCleanup(rootCtx, workflowTask, temporalService, log)
+
+			outputTask = workflowTask
+
+			if cleanupErr != nil {
+				logrus.WithError(cleanupErr).Error("Cleanup activity failed")
+				outputError = cleanupErr
+			} else if cancelCtx.Err() != nil && errors.Is(cancelCtx.Err(), context.Canceled) {
+				// Suppress cancellation errors - workflow completed normally
+				outputError = nil
+			}
+			logrus.Info("Workflow cleanup completed.")
+
+		}()
 
 		// Setup query handler
 		if err := m.setupIsApprovedQueryHandler(cancelCtx, workflowTask); err != nil {
@@ -86,17 +100,18 @@ func (m *WorkflowManager) createPrimaryWorkflowHandler(temporalService interface
 	}
 }
 
-// setupCleanupHandler sets up the deferred cleanup handler
-func (m *WorkflowManager) setupCleanupHandler(rootCtx workflow.Context, workflowTask *models.WorkflowTask, temporalService interface{ GetTaskQueue() string }, outputError *error, log workflowLogger) {
+// runCleanup executes the cleanup activity and returns any cleanup-specific errors
+func (m *WorkflowManager) runCleanup(rootCtx workflow.Context, workflowTask *models.WorkflowTask, temporalService interface{ GetTaskQueue() string }, log workflowLogger) error {
 	// Check if a user or role is associated with the workflow
 	elevationRequest, err := workflowTask.GetContextAsElevationRequest()
 	if err != nil || !elevationRequest.IsValid() {
-		return
+		log.Info("No valid elevation context found, skipping cleanup activity.")
+		return nil
 	}
 
+	// Use a disconnected context for cleanup to ensure it runs even if workflow is cancelled
 	newCtx, _ := workflow.NewDisconnectedContext(rootCtx)
 
-	// Use a disconnected context for cleanup to ensure it runs even if workflow is cancelled
 	ao := workflow.ActivityOptions{
 		TaskQueue:              temporalService.GetTaskQueue(),
 		ScheduleToCloseTimeout: time.Minute * 5,
@@ -116,20 +131,17 @@ func (m *WorkflowManager) setupCleanupHandler(rootCtx workflow.Context, workflow
 
 	if err != nil {
 		log.Error("Cleanup activity failed", "error", err)
+		return fmt.Errorf("cleanup failed: %w", err)
 	}
 
-	if errors.Is(rootCtx.Err(), workflow.ErrCanceled) {
-		log.Info("Workflow cancelled.")
-		*outputError = nil
-	}
+	log.Info("Cleanup completed successfully")
+	return nil
 }
 
 // setupQueryHandler sets up the query handler for the workflow
 func (m *WorkflowManager) setupIsApprovedQueryHandler(ctx workflow.Context, workflowTask *models.WorkflowTask) error {
 	return workflow.SetQueryHandler(ctx, models.TemporalIsApprovedQueryName, func() (bool, error) {
-
 		logrus.Info("IsApproved query received")
-
 		return workflowTask.IsApproved(), nil
 	})
 }
@@ -241,9 +253,21 @@ func (m *WorkflowManager) executeWorkflowLoop(cancelCtx workflow.Context, workfl
 
 		// Execute workflow step
 		result, err := m.executeWorkflowStep(cancelCtx, workflowTask, log)
-		if result != nil || err != nil {
-			return result, err
+
+		// Check if the context was cancelled during execution
+		if cancelCtx.Err() != nil {
+			if errors.Is(cancelCtx.Err(), context.Canceled) {
+				if result != nil {
+					result.SetStatus(swctx.CancelledStatus)
+				}
+				logrus.Info("Workflow context cancelled during execution, exiting main loop")
+				return result, nil
+			}
+			logrus.Error("Error while executing workflow step", "Error", cancelCtx.Err())
+			return result, cancelCtx.Err()
 		}
+
+		return result, err
 	}
 
 	return workflowTask, fmt.Errorf("workflow terminated")
@@ -275,6 +299,7 @@ func (m *WorkflowManager) updateSearchAttributes(ctx workflow.Context, workflowT
 
 	updates := []temporal.SearchAttributeUpdate{
 		models.TypedSearchAttributeStatus.ValueSet(string(workflowTask.GetStatus())),
+		models.TypedSearchAttributeApproved.ValueSet(workflowTask.IsApproved()),
 	}
 
 	if elevationRequest.User != nil && len(elevationRequest.User.Email) > 0 {
@@ -286,6 +311,18 @@ func (m *WorkflowManager) updateSearchAttributes(ctx workflow.Context, workflowT
 	if len(elevationRequest.Role.Name) > 0 {
 		updates = append(updates,
 			models.TypedSearchAttributeRole.ValueSet(elevationRequest.Role.Name),
+		)
+	}
+
+	if len(elevationRequest.Role.Workflow) > 0 {
+		updates = append(updates,
+			models.TypedSearchAttributeWorkflow.ValueSet(elevationRequest.Role.Workflow),
+		)
+	}
+
+	if len(elevationRequest.Provider) > 0 {
+		updates = append(updates,
+			models.TypedSearchAttributeProvider.ValueSet(elevationRequest.Provider),
 		)
 	}
 

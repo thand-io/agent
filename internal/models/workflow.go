@@ -66,11 +66,13 @@ func (r *WorkflowRequest) GetRedirectURL() string {
 
 type WorkflowExecutionInfo struct {
 	WorkflowID   string     `json:"id"`
+	WorkflowName string     `json:"name"`
 	RunID        string     `json:"run"`
 	WorkflowType string     `json:"type"`
 	StartTime    time.Time  `json:"started_at"`
 	CloseTime    *time.Time `json:"finished_at"`
 	Status       string     `json:"status"`
+	Task         string     `json:"task,omitempty"`
 
 	// SearchAttributes are the custom search attributes associated with the workflow
 	Role     string `json:"role"`

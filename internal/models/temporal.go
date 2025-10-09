@@ -30,6 +30,8 @@ var TypedSearchAttributeStatus = temporal.NewSearchAttributeKeyKeyword("status")
 var TypedSearchAttributeTask = temporal.NewSearchAttributeKeyString("task")
 var TypedSearchAttributeUser = temporal.NewSearchAttributeKeyString("user")
 var TypedSearchAttributeRole = temporal.NewSearchAttributeKeyString("role")
+var TypedSearchAttributeWorkflow = temporal.NewSearchAttributeKeyString("workflow")
+var TypedSearchAttributeProvider = temporal.NewSearchAttributeKeyString("provider")
 
 var TypedSearchAttributeApproved = temporal.NewSearchAttributeKeyBool("approved")
 
