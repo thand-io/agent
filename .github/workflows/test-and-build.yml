@@ -98,7 +98,7 @@ jobs:
 
   build-multi-platform:
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     
     steps:
     - name: Checkout code
@@ -167,7 +167,7 @@ jobs:
 
   docker-release:
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     needs: build-multi-platform
     
     steps:
@@ -205,9 +205,9 @@ jobs:
       with:
         images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
         tags: |
-          type=raw,value=latest
           type=raw,value=dev
           type=raw,value=${{ steps.version.outputs.version }}
+          type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
 
     - name: Build and push Docker image (dev + latest + version tags)
       uses: docker/build-push-action@v5
@@ -241,57 +241,3 @@ jobs:
       with:
         name: binaries-${{ steps.version.outputs.version }}
         path: dist/
-
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: ${{ steps.version.outputs.version }}
-        name: Release ${{ steps.version.outputs.version }}
-        draft: false
-        prerelease: false
-        generate_release_notes: true
-        body: |
-          ## Docker Image
-          
-          ```bash
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          ```
-        files: |
-          dist/agent-linux-amd64
-          dist/agent-linux-arm64
-          dist/agent-darwin-amd64
-          dist/agent-darwin-arm64
-          dist/agent-windows-amd64.exe
-          dist/agent-linux-amd64.tar.gz
-          dist/agent-linux-arm64.tar.gz
-          dist/agent-darwin-amd64.tar.gz
-          dist/agent-darwin-arm64.tar.gz
-          dist/agent-windows-amd64.zip
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  homebrew:
-    needs: release
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    
-    steps:
-    - name: Get version from tag
-      id: version
-      run: |
-        VERSION=${GITHUB_REF#refs/tags/}
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-    - name: Trigger Homebrew Tap Update
-      uses: peter-evans/repository-dispatch@v3
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        repository: thand-io/homebrew-tap
-        event-type: update-formula
-        client-payload: |
-          {
-            "version": "${{ steps.version.outputs.version }}",
-            "repository": "${{ github.repository }}",
-            "release_url": "https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.version }}"
-          }
