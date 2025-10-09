@@ -56,10 +56,22 @@ Thand Agent  ──HTTPS──▶  Thand Server        ──HTTPS──▶  Tha
 
 ### Option 1:  Use Thand Cloud (SaaS)
 
+Firstly, install the Thand agent on your local machine. You can do this via the install script:
+
 ```bash
-# Install agent
+# Install agent (https://github.com/thand-io/agent/blob/main/scripts/install.sh). Trust but verify!
 curl -sSL https://get.thand.io | sh
 
+```
+
+Or via Homebrew on macOS / Linux:
+
+```bash
+brew tap thand-io/tap
+brew install thand
+```
+
+```bash
 # Connect to cloud for AI features
 thand login
 
@@ -97,7 +109,7 @@ You can then connect the agent to your server.
 curl -sSL https://get.thand.io | sh
 
 # Connect to your server
-thand login --server http://localhost:8080
+thand login --login-server http://localhost:8080
 
 ```
 
