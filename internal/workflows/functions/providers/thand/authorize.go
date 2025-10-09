@@ -191,11 +191,9 @@ func (t *authorizeFunction) executeAuthorization(
 
 	maps.Copy(modelOutput, authOut)
 
-	// Set the workflow as approved
-	workflowTask.SetContextKeyValue(models.VarsContextApproved, true)
-
-	// Update temporal search attributes if applicable
-	t.updateTemporalSearchAttributes(workflowTask)
+	maps.Copy(modelOutput, map[string]any{
+		models.VarsContextApproved: true,
+	})
 
 	logrus.WithFields(logrus.Fields{
 		"authorized_at": authorizedAt.Format(time.RFC3339),
@@ -228,18 +226,13 @@ func (t *authorizeFunction) validateRoleAndBuildOutput(
 	return modelOutput, nil
 }
 
-// updateTemporalSearchAttributes updates the temporal search attributes if applicable
-func (t *authorizeFunction) updateTemporalSearchAttributes(workflowTask *models.WorkflowTask) {
-	if !workflowTask.HasTemporalContext() {
-		return
-	}
-
-	err := workflow.UpsertTypedSearchAttributes(workflowTask.GetTemporalContext(),
-		models.TypedSearchAttributeApproved.ValueSet(workflowTask.IsApproved()),
-	)
-
-	if err != nil {
-		logrus.WithError(err).Error("Failed to upsert search attributes")
+func (t *authorizeFunction) GetExport() *model.Export {
+	return &model.Export{
+		As: model.NewObjectOrRuntimeExpr(
+			model.RuntimeExpression{
+				Value: "${ $context + . }",
+			},
+		),
 	}
 }
 

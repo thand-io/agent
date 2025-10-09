@@ -27,9 +27,11 @@ func NewMockFunction(name string) *MockFunction {
 	}
 }
 
-func (m *MockFunction) GetName() string        { return m.name }
-func (m *MockFunction) GetDescription() string { return m.description }
-func (m *MockFunction) GetVersion() string     { return m.version }
+func (m *MockFunction) GetName() string          { return m.name }
+func (m *MockFunction) GetDescription() string   { return m.description }
+func (m *MockFunction) GetVersion() string       { return m.version }
+func (m *MockFunction) GetExport() *model.Export { return nil }
+func (m *MockFunction) GetOutput() *model.Output { return nil }
 
 func (m *MockFunction) GetRequiredParameters() []string {
 	return []string{}

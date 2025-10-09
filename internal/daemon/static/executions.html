@@ -23,12 +23,14 @@
                         {{range .Response.Workflows}}
                         <tr>
                             <td>
-                                <strong>{{.WorkflowID}}</strong>
-                                {{if .RunID}}
-                                    <div style="font-size: 0.75rem; color: hsl(var(--muted-foreground));">
-                                        Run: {{.RunID}}
-                                    </div>
-                                {{end}}
+                                <a href="/execution/{{.WorkflowID}}" style="text-decoration: none; color: inherit;">
+                                    <strong>{{.WorkflowID}}</strong>
+                                    {{if .RunID}}
+                                        <div style="font-size: 0.75rem; color: hsl(var(--muted-foreground));">
+                                            Run: {{.RunID}}
+                                        </div>
+                                    {{end}}
+                                </a>
                             </td>
                             <td>
                                 {{if .Role}}

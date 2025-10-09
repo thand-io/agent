@@ -38,7 +38,7 @@ func (r *ResumableWorkflowRunner) executeCallFunction(
 		"call": call.Call,
 	}).Info("Executing function call")
 
-	taskSupport := r.GetWorkflowTask()
+	workflowTask := r.GetWorkflowTask()
 
 	// Execute the function call
 
@@ -52,7 +52,7 @@ func (r *ResumableWorkflowRunner) executeCallFunction(
 	interpolatedCall := *call // Create a copy
 	if call.With != nil {
 
-		interpolatedWith, err := taskSupport.TraverseAndEvaluate(
+		interpolatedWith, err := workflowTask.TraverseAndEvaluate(
 			call.With, input)
 
 		if err != nil {
@@ -69,8 +69,20 @@ func (r *ResumableWorkflowRunner) executeCallFunction(
 
 	}
 
-	workflowTask := r.GetWorkflowTask()
+	// Validate input using the interpolated call
+	err := functionHandler.ValidateRequest(
+		workflowTask,
+		&interpolatedCall,
+		input,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate function %s: %w", call.Call, err)
+	}
+
 	serviceClient := r.config.GetServices()
+
+	var output any
 
 	if workflowTask.HasTemporalContext() && serviceClient.HasTemporal() {
 
@@ -97,13 +109,11 @@ func (r *ResumableWorkflowRunner) executeCallFunction(
 			call.Call, // Function name
 
 			// args
-			taskSupport,
+			workflowTask,
 			taskName,
 			interpolatedCall, // Use the interpolated call
 			input,
 		)
-
-		var output any
 
 		err := fut.Get(ctx, &output)
 
@@ -111,23 +121,10 @@ func (r *ResumableWorkflowRunner) executeCallFunction(
 			return nil, fmt.Errorf("failed to execute Set task activity: %w", err)
 		}
 
-		return output, nil
-
 	} else {
 
-		// Validate input using the interpolated call
-		err := functionHandler.ValidateRequest(
-			taskSupport,
-			&interpolatedCall,
-			input,
-		)
-
-		if err != nil {
-			return nil, fmt.Errorf("failed to validate function %s: %w", call.Call, err)
-		}
-
 		result, err := functionHandler.Execute(
-			taskSupport,
+			workflowTask,
 			&interpolatedCall, // Use the interpolated call
 			input,
 		)
@@ -136,7 +133,35 @@ func (r *ResumableWorkflowRunner) executeCallFunction(
 			return nil, fmt.Errorf("failed to execute function %s: %w", call.Call, err)
 		}
 
-		return result, nil
+		output = result
 
 	}
+
+	if output != nil && call.Export == nil {
+
+		// If no export is defined then lets check our calling function
+		// to see if we want our output merged into the context
+
+		exportHandler := functionHandler.GetExport()
+
+		if exportHandler != nil {
+			call.Export = exportHandler
+		}
+
+	}
+
+	if output != nil && call.Output != nil {
+
+		// If no export is defined then lets check our calling function
+		// to see if we want our output merged into the context
+
+		outputHandler := functionHandler.GetOutput()
+
+		if outputHandler != nil {
+			call.Output = outputHandler
+		}
+	}
+
+	return output, nil
+
 }

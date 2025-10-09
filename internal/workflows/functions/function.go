@@ -41,6 +41,11 @@ type Function interface {
 
 	// GetOptionalParameters returns the list of optional parameter names with their default values
 	GetOptionalParameters() map[string]any
+
+	// Handler to transform the output before exporting
+	GetOutput() *model.Output
+	// Handler to export the output into the workflow context
+	GetExport() *model.Export
 }
 
 // BaseFunction provides common functionality for all Functions
@@ -72,4 +77,14 @@ func (t *BaseFunction) GetDescription() string {
 // GetVersion returns the Function version
 func (t *BaseFunction) GetVersion() string {
 	return t.version
+}
+
+// GetOutput just returns nil - override in specific functions
+func (t *BaseFunction) GetOutput() *model.Output {
+	return nil
+}
+
+// GetExport just returns nil - override in specific functions
+func (t *BaseFunction) GetExport() *model.Export {
+	return nil
 }
