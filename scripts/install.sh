@@ -8,7 +8,7 @@ REPO_OWNER="thand-io"
 REPO_NAME="agent"
 GITHUB_API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest"
 INSTALL_DIR="/usr/local/bin"
-BINARY_NAME="thand-agent"
+BINARY_NAME="thand"
 
 # Colors for output
 RED='\033[0;31m'
@@ -71,7 +71,7 @@ detect_platform() {
             ;;
     esac
     
-    echo "${os}_${arch}"
+    echo "${os}-${arch}"
 }
 
 # Function to get latest release info from GitHub
@@ -100,13 +100,14 @@ get_download_url() {
     fi
     
     # Extract download URL using grep and sed (more portable than jq)
-    echo "$release_json" | grep -o "\"browser_download_url\":[^,]*${platform}[^,]*${extension}\"" | sed 's/.*"browser_download_url":"\([^"]*\)".*/\1/' | head -1
+    # Look for assets that match: agent-{platform}{extension}
+    echo "$release_json" | grep -o "\"browser_download_url\"[[:space:]]*:[[:space:]]*\"[^\"]*agent-${asset_platform}[^\"]*${extension}\"" | sed 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' | head -1
 }
 
 # Function to get version from release
 get_version() {
     local release_json="$1"
-    echo "$release_json" | grep -o '"tag_name":"[^"]*"' | sed 's/.*"tag_name":"\([^"]*\)".*/\1/'
+    echo "$release_json" | grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/'
 }
 
 # Function to download and install binary
@@ -189,7 +190,7 @@ install_binary() {
     # Verify installation
     if command -v "$BINARY_NAME" >/dev/null 2>&1; then
         print_status "Verification: $(which $BINARY_NAME)"
-        print_status "Version: $($BINARY_NAME --version 2>/dev/null || echo "Version command not available")"
+        print_status "Version: $($BINARY_NAME version 2>/dev/null || echo "Version command not available")"
     else
         print_warning "${INSTALL_DIR} may not be in your PATH"
         print_warning "Add ${INSTALL_DIR} to your PATH or use the full path: ${INSTALL_DIR}/${BINARY_NAME}"
@@ -198,7 +199,7 @@ install_binary() {
 
 # Main installation function
 main() {
-    print_status "Starting thand-agent installation..."
+    print_status "Starting thand installation..."
     
     # Detect platform
     local platform=$(detect_platform)
@@ -211,11 +212,10 @@ main() {
         print_error "Failed to fetch release information from GitHub"
         exit 1
     fi
-    
+
     # Extract version and download URL
     local version=$(get_version "$release_json")
-    local download_url=$(get_download_url "$release_json" "$platform")
-    
+ 
     if [[ -z "$version" ]]; then
         print_error "Could not determine latest version"
         exit 1
@@ -227,13 +227,15 @@ main() {
     if command -v "$BINARY_NAME" >/dev/null 2>&1; then
         local current_version=$($BINARY_NAME --version 2>/dev/null | grep -o 'v[0-9.]*' || echo "unknown")
         if [[ "$current_version" == "$version" ]]; then
-            print_status "thand-agent $version is already installed"
+            print_status "thand $version is already installed"
             exit 0
         else
             print_status "Upgrading from $current_version to $version"
         fi
     fi
     
+    local download_url=$(get_download_url "$release_json" "$platform")
+   
     # Download and install
     install_binary "$download_url" "$version" "$platform"
 }
