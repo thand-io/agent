@@ -33,10 +33,8 @@ RUN mkdir -p third_party/iam-dataset/aws third_party/iam-dataset/azure third_par
 # Verify the required files are present
 RUN ls -la third_party/iam-dataset/aws/ && ls -la third_party/iam-dataset/azure/ && ls -la third_party/iam-dataset/gcp/
 
-ENV GOEXPERIMENT=jsonv2
-
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo \
+RUN GOEXPERIMENT=jsonv2 CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo \
     -ldflags "-X github.com/thand-io/agent/internal/common.Version=${VERSION} -X github.com/thand-io/agent/internal/common.GitCommit=${COMMIT}" \
     -o bin/agent .
 

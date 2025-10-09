@@ -83,7 +83,7 @@ jobs:
           fi
           
           echo "Building for $os/$arch..."
-          GOOS=$os GOARCH=$arch go build \
+          GOEXPERIMENT=jsonv2 CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -a -installsuffix cgo \
             -ldflags "-X github.com/thand-io/agent/internal/common.Version=$VERSION -X github.com/thand-io/agent/internal/common.GitCommit=$COMMIT" \
             -o "dist/$output_name" .
           
