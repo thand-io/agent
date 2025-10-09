@@ -136,3 +136,20 @@ jobs:
           dist/*
         draft: false
         prerelease: false
+
+  homebrew:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+    - name: Trigger Homebrew Tap Update
+      uses: peter-evans/repository-dispatch@v3
+      with:
+        token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        repository: thand-io/homebrew-tap
+        event-type: update-formula
+        client-payload: |
+          {
+            "version": "${{ github.event.inputs.tag_version }}",
+            "repository": "${{ github.repository }}",
+            "release_url": "https://github.com/${{ github.repository }}/releases/tag/${{ github.event.inputs.tag_version }}"
+          }
