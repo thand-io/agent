@@ -129,7 +129,8 @@ jobs:
           
           ### Homebrew
           ```bash
-          brew install thand-io/tap/agent
+          brew tap thand-io/tap
+          brew install thand
           ```
           
         files: |
