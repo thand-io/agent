@@ -6,6 +6,7 @@
                 <ul class="footer-links">
                     <li><a href="{{.Config.Server.Health.Path}}" class="footer-link">Health</a></li>
                     {{if .Config.Server.Metrics.Enabled}}<li><a href="{{.Config.Server.Metrics.Path}}" class="footer-link">Metrics</a></li>{{end}}
+                    <li><a href="/logs" class="footer-link">Logs</a></li>
                     <li>
                         <!-- Place this tag where you want the button to render. -->
                         <a class="github-button" href="https://github.com/thand-io/agent" data-color-scheme="no-preference: light; light: light; dark: dark;" data-size="large" data-show-count="true" aria-label="Star thand-io/agent on GitHub">Star</a>

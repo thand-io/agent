@@ -32,7 +32,7 @@ func (m *WorkflowManager) registerActivities() error {
 
 	for _, functionName := range m.functions.GetRegisteredFunctions() {
 
-		logrus.WithField("function", functionName).Info("Registering activity for function")
+		logrus.WithField("function", functionName).Infof("Registering activity for function: %s", functionName)
 
 		// Capture the functionName in a local variable to avoid closure issues
 		fn := functionName

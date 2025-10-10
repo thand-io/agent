@@ -180,6 +180,9 @@ func (s *Server) Start() error {
 
 	router.Use(sessions.Sessions("thand", getSessionStore(s.GetConfig().GetSecret())))
 
+	// Set HTML template engine
+	router.SetHTMLTemplate(s.TemplateEngine)
+
 	// Setup routes
 	s.setupRoutes(router)
 
@@ -306,6 +309,8 @@ func (s *Server) setupRoutes(router *gin.Engine) {
 		})
 	}
 
+	router.GET("/logs", s.getLogsPage)
+
 	// Server shows the server info and calls the local daemon
 	// for session info. If in agent mode then this call just
 	// shows local session info
@@ -319,6 +324,8 @@ func (s *Server) setupRoutes(router *gin.Engine) {
 	// API endpoints
 	api := router.Group(s.Config.GetApiBasePath())
 	{
+
+		api.GET("/logs", s.getLogsPage)
 
 		if s.Config.IsAgent() || s.Config.IsClient() {
 

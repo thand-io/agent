@@ -496,6 +496,10 @@ func (c *Config) TraverseAndEvaluateProviderSecrets(providerName string, node ma
 	return nil, fmt.Errorf("provider '%s' not found", providerName)
 }
 
+func (c *Config) GetEventsWithFilter(filter LogFilter) []*models.LogEntry {
+	return c.logger.GetEventsWithFilter(filter)
+}
+
 func (r *Config) GetWorkflowFromElevationRequest(elevationRequest *models.ElevateRequest) (*models.Workflow, error) {
 
 	if elevationRequest == nil {
