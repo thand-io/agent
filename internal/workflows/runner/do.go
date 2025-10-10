@@ -94,6 +94,15 @@ func (d *ResumableWorkflowRunner) resumeTasks(
 			return output, err
 		}
 
+		err := d.updateTemporalSearchAttributes()
+
+		if err != nil {
+			logrus.WithFields(logrus.Fields{
+				"task":  currentTask,
+				"error": err,
+			}).Warn("Failed to update temporal search attributes")
+		}
+
 		taskSupport.SetTaskStatus(currentTask.Key, ctx.CompletedStatus)
 		input = utils.DeepCloneValue(output)
 		idx, currentTask = taskList.Next(idx)

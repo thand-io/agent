@@ -319,19 +319,19 @@ func (m *WorkflowManager) createTemporalWorkflow(workflowTask *models.WorkflowTa
 		return fmt.Errorf("failed to get workflow context: %w", err)
 	}
 
-	userInfo := ""
-	roleInfo := ""
+	userEmail := ""
+	roleName := ""
 
 	if workflowContext == nil {
 		return fmt.Errorf("workflow context is nil")
 	}
 
 	if workflowContext.User != nil {
-		userInfo = workflowContext.User.Email
+		userEmail = workflowContext.User.Email
 	}
 
 	if workflowContext.Role != nil {
-		roleInfo = workflowContext.Role.Name
+		roleName = workflowContext.Role.Name
 	}
 
 	ctx := workflowTask.GetContext()
@@ -341,10 +341,12 @@ func (m *WorkflowManager) createTemporalWorkflow(workflowTask *models.WorkflowTa
 		ID:        workflowTask.WorkflowID,
 		TaskQueue: temporalService.GetTaskQueue(),
 		TypedSearchAttributes: temporal.NewSearchAttributes(
-			models.TypedSearchAttributeUser.ValueSet(userInfo),
+			models.TypedSearchAttributeUser.ValueSet(userEmail),
+			models.TypedSearchAttributeRole.ValueSet(roleName),
+			models.TypedSearchAttributeProviders.ValueSet(workflowContext.Providers),
+			models.TypedSearchAttributeWorkflow.ValueSet(workflowContext.Workflow),
 			models.TypedSearchAttributeStatus.ValueSet(strings.ToUpper(string(swctx.PendingStatus))),
 			models.TypedSearchAttributeApproved.ValueSet(false),
-			models.TypedSearchAttributeRole.ValueSet(roleInfo),
 		),
 	}, models.TemporalExecuteElevationWorkflowName, workflowTask)
 

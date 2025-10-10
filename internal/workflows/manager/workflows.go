@@ -271,11 +271,6 @@ func (m *WorkflowManager) executeWorkflowLoop(
 			"Status":     workflowTask.GetStatus(),
 		}).Info("Resuming ...")
 
-		// Update search attributes
-		if err := m.updateSearchAttributes(cancelCtx, workflowTask); err != nil {
-			logrus.Error("Failed to update search attributes", "Error", err)
-		}
-
 		// Execute workflow step
 		result, err := m.executeWorkflowStep(cancelCtx, workflowTask)
 
@@ -313,52 +308,6 @@ func (m *WorkflowManager) waitForSignal(cancelCtx workflow.Context, workflowSele
 		logrus.Info("Signal pending", "Pending", pending)
 		return pending
 	})
-}
-
-// updateSearchAttributes updates the workflow search attributes
-func (m *WorkflowManager) updateSearchAttributes(
-	ctx workflow.Context, workflowTask *models.WorkflowTask) error {
-	elevationRequest, err := workflowTask.GetContextAsElevationRequest()
-	if err != nil {
-		return nil // Not an error, just skip updating search attributes
-	}
-
-	updates := []temporal.SearchAttributeUpdate{
-		models.TypedSearchAttributeStatus.ValueSet(string(workflowTask.GetStatus())),
-		models.TypedSearchAttributeApproved.ValueSet(workflowTask.IsApproved()),
-	}
-
-	if elevationRequest.User != nil && len(elevationRequest.User.Email) > 0 {
-		updates = append(updates,
-			models.TypedSearchAttributeUser.ValueSet(elevationRequest.User.Email),
-		)
-	}
-
-	if len(elevationRequest.Role.Name) > 0 {
-		updates = append(updates,
-			models.TypedSearchAttributeRole.ValueSet(elevationRequest.Role.Name),
-		)
-	}
-
-	if len(elevationRequest.Workflow) > 0 {
-		updates = append(updates,
-			models.TypedSearchAttributeWorkflow.ValueSet(elevationRequest.Workflow),
-		)
-	}
-
-	if len(elevationRequest.Providers) > 0 {
-		updates = append(updates,
-			models.TypedSearchAttributeProviders.ValueSet(elevationRequest.Providers),
-		)
-	}
-
-	if len(workflowTask.GetEntrypoint()) > 0 {
-		updates = append(updates,
-			models.TypedSearchAttributeTask.ValueSet(workflowTask.GetEntrypoint()),
-		)
-	}
-
-	return workflow.UpsertTypedSearchAttributes(ctx, updates...)
 }
 
 // executeWorkflowStep executes a single workflow step and handles the result
