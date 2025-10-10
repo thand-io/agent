@@ -86,7 +86,7 @@ func (t *revokeFunction) Execute(
 
 	user := elevateRequest.User
 	role := elevateRequest.Role
-	provider := elevateRequest.Provider
+	providers := elevateRequest.Providers
 	duration, err := elevateRequest.AsDuration()
 
 	if err != nil {
@@ -98,13 +98,14 @@ func (t *revokeFunction) Execute(
 	logrus.WithFields(logrus.Fields{
 		"user":     user,
 		"role":     role,
-		"provider": provider,
+		"provider": providers,
 		"duration": duration,
 	}).Info("Executing authorization logic")
 
 	// First lets call the provider to execute the role request.
+	primaryProvider := elevateRequest.Providers[0]
 
-	providerCall, err := t.config.GetProviderByName(provider)
+	providerCall, err := t.config.GetProviderByName(primaryProvider)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get provider: %w", err)
 	}
@@ -114,7 +115,7 @@ func (t *revokeFunction) Execute(
 	}
 
 	revokeOut, err := providerCall.GetClient().RevokeRole(
-		workflowTask.GetContext(), user, role)
+		workflowTask.GetContext(), user, role, req)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to revoke user: %w", err)

@@ -34,12 +34,23 @@ func (s *Server) getElevate(c *gin.Context) {
 		return
 	}
 
+	primaryWorkflow := request.Workflow
+
+	if len(primaryWorkflow) == 0 {
+		if len(role.Workflows) == 0 {
+			s.getErrorPage(c, http.StatusBadRequest, "No workflow specified and role has no associated workflows", err)
+			return
+		}
+		primaryWorkflow = role.Workflows[0]
+	}
+
 	s.elevate(c, models.ElevateRequest{
-		Role:     role,
-		Provider: request.Provider,
-		Reason:   request.Reason,
-		Duration: request.Duration,
-		Session:  request.Session,
+		Role:      role,
+		Providers: []string{request.Provider},
+		Workflow:  primaryWorkflow,
+		Reason:    request.Reason,
+		Duration:  request.Duration,
+		Session:   request.Session,
 	})
 }
 
@@ -129,7 +140,7 @@ func (s *Server) handleDynamicRequest(c *gin.Context, dynamicRequest models.Elev
 	dynamicRole := &models.Role{
 		Name:        "dynamic-role-" + time.Now().Format("20060102-150405"),
 		Description: "Dynamically created role: " + dynamicRequest.Reason,
-		Workflow:    dynamicRequest.Workflow,
+		Workflows:   []string{dynamicRequest.Workflow},
 		Permissions: models.Permissions{
 			Allow: dynamicRequest.Permissions,
 		},
@@ -147,11 +158,12 @@ func (s *Server) handleDynamicRequest(c *gin.Context, dynamicRequest models.Elev
 
 	// Convert to standard ElevateRequest
 	elevateRequest := models.ElevateRequest{
-		Role:     dynamicRole,
-		Provider: dynamicRequest.Providers[0], // Use first provider for now
-		Reason:   dynamicRequest.Reason,
-		Duration: dynamicRequest.Duration,
-		Session:  nil, // Session will be handled by the workflow if needed
+		Role:      dynamicRole,
+		Providers: dynamicRequest.Providers, // Use first provider for now
+		Workflow:  dynamicRequest.Workflow,
+		Reason:    dynamicRequest.Reason,
+		Duration:  dynamicRequest.Duration,
+		Session:   nil, // Session will be handled by the workflow if needed
 	}
 
 	s.elevate(c, elevateRequest)
@@ -164,7 +176,36 @@ func (s *Server) elevate(c *gin.Context, request models.ElevateRequest) {
 
 	ctx := context.Background()
 
-	WorkflowTask, err := s.Workflows.CreateWorkflow(ctx, request)
+	// If we have a web session and one hasn't been set then
+	// lets attach a user session to the request.
+	if s.Config.IsServer() {
+
+		// Get the auth provider from the workflow if set
+		authProvider := []string{}
+
+		if len(request.Workflow) > 0 {
+			workflowDef, err := s.Config.GetWorkflowByName(request.Workflow)
+			if err != nil {
+				s.getErrorPage(c, http.StatusBadRequest, "Invalid workflow specified", err)
+				return
+			}
+			authProvider = []string{workflowDef.GetAuthentication()}
+		}
+
+		foundUser, err := s.getUser(c, authProvider...)
+
+		if err != nil {
+			s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of available roles", err)
+			return
+		}
+
+		if foundUser != nil {
+			request.Session = foundUser.ToLocalSession(s.Config.GetServices().GetEncryption())
+		}
+
+	}
+
+	workflowTask, err := s.Workflows.CreateWorkflow(ctx, request)
 
 	if err != nil {
 		s.getErrorPage(c, http.StatusBadRequest, "Failed to execute workflow", err)
@@ -173,7 +214,7 @@ func (s *Server) elevate(c *gin.Context, request models.ElevateRequest) {
 
 	// We now redirect the user to the next workflow step.
 	c.Redirect(http.StatusTemporaryRedirect,
-		WorkflowTask.GetRedirectURL(),
+		workflowTask.GetRedirectURL(),
 	)
 }
 
@@ -288,6 +329,13 @@ func (s *Server) getElevateAuthOAuth2(c *gin.Context) {
 	fmt.Println("Resuming workflow with state:", state)
 
 	workflowTask.SetUser(session.User)
+
+	localSession := session.ToLocalSession(s.Config.GetServices().GetEncryption())
+
+	if err := s.setAuthCookie(c, authProvider, localSession); err != nil {
+		s.getErrorPage(c, http.StatusInternalServerError, "Failed to set auth cookie", err)
+		return
+	}
 
 	s.resumeWorkflow(c, workflowTask)
 

@@ -13,7 +13,6 @@ import (
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/workflows/functions"
-	"go.temporal.io/sdk/workflow"
 )
 
 // AuthorizeFunction implements access authorization based on roles and workflows
@@ -74,7 +73,7 @@ func (t *authorizeFunction) Execute(
 		return nil, err
 	}
 
-	if t.isWorkflowAlreadyApproved(workflowTask) {
+	if workflowTask.IsApproved() {
 		modelOutput := t.buildBasicModelOutput(elevateRequest)
 		return &modelOutput, nil
 	}
@@ -113,23 +112,6 @@ func (t *authorizeFunction) validateAndParseRequests(
 	return &elevateRequest, &authRequest, nil
 }
 
-// isWorkflowAlreadyApproved checks if the workflow has already been approved
-func (t *authorizeFunction) isWorkflowAlreadyApproved(workflowTask *models.WorkflowTask) bool {
-	if !workflowTask.HasTemporalContext() {
-		return false
-	}
-
-	attrs := workflow.GetTypedSearchAttributes(workflowTask.GetTemporalContext())
-	hasBeenApproved, hasAttr := attrs.GetBool(models.TypedSearchAttributeApproved)
-
-	if hasAttr && hasBeenApproved {
-		logrus.Info("Workflow has already been approved")
-		return true
-	}
-
-	return false
-}
-
 // buildBasicModelOutput creates the basic model output with timestamps
 func (t *authorizeFunction) buildBasicModelOutput(elevateRequest *models.ElevateRequestInternal) map[string]any {
 	duration, _ := elevateRequest.AsDuration()
@@ -154,13 +136,16 @@ func (t *authorizeFunction) executeAuthorization(
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"user":     elevateRequest.User,
-		"role":     elevateRequest.Role,
-		"provider": elevateRequest.Provider,
-		"duration": duration,
+		"user":      elevateRequest.User,
+		"role":      elevateRequest.Role,
+		"providers": elevateRequest.Providers,
+		"duration":  duration,
 	}).Info("Executing authorization logic")
 
-	providerCall, err := t.config.GetProviderByName(elevateRequest.Provider)
+	// First lets call the provider to execute the role request.
+	primaryProvider := elevateRequest.Providers[0]
+
+	providerCall, err := t.config.GetProviderByName(primaryProvider)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get provider: %w", err)
 	}

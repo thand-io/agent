@@ -49,13 +49,31 @@ func (p *gcpProvider) AuthorizeRole(ctx context.Context, user *models.User, role
 }
 
 // Revoke removes access for a user from a role
-func (p *gcpProvider) RevokeRole(ctx context.Context, user *models.User, role *models.Role) (map[string]any, error) {
+func (p *gcpProvider) RevokeRole(
+	ctx context.Context,
+	user *models.User,
+	role *models.Role,
+	metadata map[string]any,
+) (map[string]any, error) {
 
 	if user == nil || role == nil {
 		return nil, fmt.Errorf("user and role must be provided to revoke gcp role")
 	}
 
-	// TODO: Implement GCP revocation logic
+	projectId := p.GetProjectId()
+
+	// Check if the role exists
+	existingRole, err := p.getRole(projectId, role.GetSnakeCaseName())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get role: %w", err)
+	}
+
+	// Remove the user from the role via IAM policy
+	err = p.unbindUserFromRole(projectId, user, existingRole)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unbind user from role: %w", err)
+	}
+
 	return nil, nil
 }
 
@@ -131,6 +149,60 @@ func (p *gcpProvider) bindUserToRole(projectID string, user *models.User, iamRol
 			Members: []string{member},
 		}
 		policy.Bindings = append(policy.Bindings, newBinding)
+	}
+
+	// Set the updated IAM policy
+	_, err = crmService.Projects.SetIamPolicy(projectID, &cloudresourcemanager.SetIamPolicyRequest{
+		Policy: policy,
+	}).Do()
+	if err != nil {
+		return fmt.Errorf("failed to set IAM policy: %w", err)
+	}
+
+	return nil
+}
+
+func (p *gcpProvider) unbindUserFromRole(projectID string, user *models.User, iamRole *iam.Role) error {
+	crmService := p.crmClient
+
+	// Get current IAM policy
+	policy, err := crmService.Projects.GetIamPolicy(projectID, &cloudresourcemanager.GetIamPolicyRequest{}).Do()
+	if err != nil {
+		return fmt.Errorf("failed to get IAM policy: %w", err)
+	}
+
+	// Create member string based on user type
+	var member string
+	if len(user.Email) > 0 {
+		member = "user:" + user.Email
+	} else {
+		return fmt.Errorf("user email is required for GCP IAM binding")
+	}
+
+	// Find and remove the user from the role binding
+	bindingFound := false
+	for i, binding := range policy.Bindings {
+		if binding.Role == iamRole.Name {
+			bindingFound = true
+			// Find and remove the member from this binding
+			for j, bindingMember := range binding.Members {
+				if bindingMember == member {
+					// Remove the member from the slice
+					binding.Members = append(binding.Members[:j], binding.Members[j+1:]...)
+					break
+				}
+			}
+			// If the binding has no members left, remove the entire binding
+			if len(binding.Members) == 0 {
+				policy.Bindings = append(policy.Bindings[:i], policy.Bindings[i+1:]...)
+			}
+			break
+		}
+	}
+
+	// If no binding was found for this role, the user wasn't bound to it
+	if !bindingFound {
+		return fmt.Errorf("role binding not found for role %s", iamRole.Name)
 	}
 
 	// Set the updated IAM policy

@@ -217,7 +217,12 @@ func (p *samlProvider) AuthorizeRole(ctx context.Context, user *models.User, rol
 }
 
 // Revoke removes access for a user from a role
-func (p *samlProvider) RevokeRole(ctx context.Context, user *models.User, role *models.Role) (map[string]any, error) {
+func (p *samlProvider) RevokeRole(
+	ctx context.Context,
+	user *models.User,
+	role *models.Role,
+	metadata map[string]any,
+) (map[string]any, error) {
 	if user == nil {
 		return nil, fmt.Errorf("user is nil")
 	}

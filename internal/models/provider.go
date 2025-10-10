@@ -165,8 +165,20 @@ type ProviderRoleBasedAccessControl interface {
 
 	// Bind a user to a role
 	ValidateRole(ctx context.Context, user *User, role *Role) (map[string]any, error)
-	AuthorizeRole(ctx context.Context, user *User, role *Role) (map[string]any, error)
-	RevokeRole(ctx context.Context, user *User, role *Role) (map[string]any, error)
+	AuthorizeRole(
+		ctx context.Context,
+		user *User,
+		role *Role,
+	) (
+		map[string]any, // Return any custom metadata the provider wants to store
+		error,
+	)
+	RevokeRole(
+		ctx context.Context,
+		user *User,
+		role *Role,
+		metadata map[string]any, // Any metadata returned from AuthorizeRole
+	) (map[string]any, error)
 }
 
 type BaseProvider struct {
@@ -303,7 +315,7 @@ func (p *BaseProvider) AuthorizeRole(ctx context.Context, user *User, role *Role
 	return nil, fmt.Errorf("the provider '%s' does not implement AuthorizeRole", p.GetProvider())
 }
 
-func (p *BaseProvider) RevokeRole(ctx context.Context, user *User, role *Role) (map[string]any, error) {
+func (p *BaseProvider) RevokeRole(ctx context.Context, user *User, role *Role, metadata map[string]any) (map[string]any, error) {
 	// Default implementation does nothing
 	return nil, fmt.Errorf("the provider '%s' does not implement RevokeRole", p.GetProvider())
 }

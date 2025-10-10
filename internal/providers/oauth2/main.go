@@ -49,7 +49,12 @@ func (p *oauth2Provider) AuthorizeRole(ctx context.Context, user *models.User, r
 }
 
 // Revoke removes access for a user from a role
-func (p *oauth2Provider) RevokeRole(ctx context.Context, user *models.User, role *models.Role) (map[string]any, error) {
+func (p *oauth2Provider) RevokeRole(
+	ctx context.Context,
+	user *models.User,
+	role *models.Role,
+	metadata map[string]any,
+) (map[string]any, error) {
 	// TODO: Implement OAuth2 revocation logic
 	return nil, nil
 }

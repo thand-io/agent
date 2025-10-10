@@ -172,13 +172,7 @@ func (s *Server) getAuthCallbackPage(c *gin.Context, auth models.AuthWrapper) {
 	}
 
 	// Covert our sensitive session to one we can store on the users local system
-	localSession := &models.LocalSession{
-		Version: 1,
-		Expiry:  session.Expiry.UTC(),
-		Session: session.GetEncodedSession(
-			s.Config.GetServices().GetEncryption(),
-		),
-	}
+	localSession := session.ToLocalSession(s.Config.GetServices().GetEncryption())
 
 	data := AuthCallbackPageData{
 		TemplateData: s.GetTemplateData(c),
@@ -186,12 +180,8 @@ func (s *Server) getAuthCallbackPage(c *gin.Context, auth models.AuthWrapper) {
 		Session:      localSession,
 	}
 
-	cookie := sessions.Default(c)
-	cookie.Set(auth.Provider, localSession.GetEncodedLocalSession())
-	err = cookie.Save()
-
-	if err != nil {
-		s.getErrorPage(c, http.StatusInternalServerError, "Failed to set cookie", err)
+	if err := s.setAuthCookie(c, auth.Provider, localSession); err != nil {
+		s.getErrorPage(c, http.StatusInternalServerError, "Failed to set auth cookie", err)
 		return
 	}
 

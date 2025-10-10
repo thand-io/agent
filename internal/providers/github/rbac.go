@@ -28,7 +28,12 @@ func (p *githubProvider) AuthorizeRole(ctx context.Context, user *models.User, r
 }
 
 // Revoke removes access for a user from a role
-func (p *githubProvider) RevokeRole(ctx context.Context, user *models.User, role *models.Role) (map[string]any, error) {
+func (p *githubProvider) RevokeRole(
+	ctx context.Context,
+	user *models.User,
+	role *models.Role,
+	metadata map[string]any,
+) (map[string]any, error) {
 	username := user.Name
 
 	// Process each resource in the role

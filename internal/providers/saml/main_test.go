@@ -131,7 +131,7 @@ func TestSAMLProvider_Authorization(t *testing.T) {
 	}
 
 	// Test revocation
-	_, err = provider.RevokeRole(ctx, user, role)
+	_, err = provider.RevokeRole(ctx, user, role, nil)
 	if err != nil {
 		t.Errorf("Unexpected error in revocation: %v", err)
 	}

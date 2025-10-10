@@ -265,8 +265,8 @@ func (t *notifyFunction) addRequestDetailsSection(blocks *[]slack.Block, elevate
 		}
 	}
 
-	if len(elevateRequest.Provider) > 0 {
-		requestDetailsText.WriteString(fmt.Sprintf("• *Provider:* %s\n", elevateRequest.Provider))
+	if len(elevateRequest.Providers) > 0 {
+		requestDetailsText.WriteString(fmt.Sprintf("• *Providers:* %s\n", strings.Join(elevateRequest.Providers, ", ")))
 	}
 
 	if len(elevateRequest.Reason) > 0 {

@@ -112,11 +112,18 @@ func (m *WorkflowManager) registerActivities() error {
 			return nil, fmt.Errorf("no valid elevate request found in workflow context")
 		}
 
-		provider := elevateRequest.Provider
+		providers := elevateRequest.Providers
 		user := elevateRequest.User
 		role := elevateRequest.Role
 
-		providerHandler, err := m.config.GetProviderByName(provider)
+		if len(providers) == 0 {
+			log.Info("No providers found in elevate request, skipping cleanup")
+			return nil, fmt.Errorf("no providers found in elevate request")
+		}
+
+		primaryProvider := elevateRequest.Providers[0]
+
+		providerHandler, err := m.config.GetProviderByName(primaryProvider)
 
 		if err != nil {
 			log.Info("No valid provider found, skipping cleanup")
@@ -124,7 +131,7 @@ func (m *WorkflowManager) registerActivities() error {
 		}
 
 		output, err := providerHandler.GetClient().RevokeRole(
-			ctx, user, role)
+			ctx, user, role, workflowTask.GetContextAsMap())
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to revoke role: %w", err)

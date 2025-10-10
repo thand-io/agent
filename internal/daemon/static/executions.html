@@ -41,7 +41,11 @@
                                 {{if .Approved}}
                                     <span class="badge badge-success" title="This execution has been approved">Approved</span>
                                 {{else if eq .Approved false}}
-                                    <span class="badge badge-error" title="This execution has been denied">Denied</span>
+                                    {{if or (eq .Status "RUNNING") (eq .Status "PENDING")}}
+                                        <span class="badge badge-secondary" title="This execution is pending approval">Pending</span>
+                                    {{else}}
+                                        <span class="badge badge-error" title="This execution has been denied">Denied</span>
+                                    {{end}}
                                 {{end}}
                             </td>
                             <td>

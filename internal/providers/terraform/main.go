@@ -91,7 +91,12 @@ func (p *terraformProvider) AuthorizeRole(ctx context.Context, user *models.User
 }
 
 // Revoke removes access for a user from a role
-func (p *terraformProvider) RevokeRole(ctx context.Context, user *models.User, role *models.Role) (map[string]any, error) {
+func (p *terraformProvider) RevokeRole(
+	ctx context.Context,
+	user *models.User,
+	role *models.Role,
+	metadata map[string]any,
+) (map[string]any, error) {
 	// Loop over all resources in role.Resources.Allow as workspace IDs
 	if len(role.Resources.Allow) == 0 {
 		return nil, fmt.Errorf("no workspace IDs found in role.Resources.Allow")

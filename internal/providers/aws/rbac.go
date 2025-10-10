@@ -42,8 +42,23 @@ func (p *awsProvider) AuthorizeRole(ctx context.Context, user *models.User, role
 
 // Revoke removes access for a user from a role
 func (p *awsProvider) RevokeRole(
-	ctx context.Context, user *models.User, role *models.Role) (map[string]any, error) {
-	// Ok remove our role by name
+	ctx context.Context,
+	user *models.User,
+	role *models.Role,
+	metadata map[string]any,
+) (map[string]any, error) {
+	// Check if the role exists
+	existingRole, err := p.getRole(ctx, role)
+	if err != nil {
+		// If role doesn't exist, nothing to revoke
+		return nil, fmt.Errorf("role not found: %w", err)
+	}
+
+	// Unbind the user from the role by resetting the assume role policy to deny access
+	err = p.unbindUserFromRole(ctx, user, existingRole.RoleName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unbind user from role: %w", err)
+	}
 
 	return nil, nil
 }
@@ -180,6 +195,59 @@ func (p *awsProvider) bindUserToRole(ctx context.Context, user *models.User, rol
 					Effect: "Allow",
 					Principal: map[string]string{
 						"AWS": "*",
+					},
+					Action: "sts:AssumeRole",
+				},
+			},
+		}
+	}
+
+	assumeRolePolicyJSON, err := json.Marshal(assumeRolePolicy)
+	if err != nil {
+		return fmt.Errorf("failed to marshal assume role policy: %w", err)
+	}
+
+	// Update the role's assume role policy
+	updateInput := &iam.UpdateAssumeRolePolicyInput{
+		RoleName:       roleName,
+		PolicyDocument: aws.String(string(assumeRolePolicyJSON)),
+	}
+
+	_, err = p.service.UpdateAssumeRolePolicy(ctx, updateInput)
+	if err != nil {
+		return fmt.Errorf("failed to update assume role policy: %w", err)
+	}
+
+	return nil
+}
+
+// unbindUserFromRole updates the assume role policy to deny access to the specific user
+func (p *awsProvider) unbindUserFromRole(ctx context.Context, user *models.User, roleName *string) error {
+	// Create a restrictive assume role policy that denies access
+	// We'll create a policy that only allows a non-existent principal
+	assumeRolePolicy := PolicyDocument{
+		Version: "2012-10-17",
+		Statement: []Statement{
+			{
+				Effect: "Deny",
+				Principal: map[string]string{
+					"AWS": "*",
+				},
+				Action: "sts:AssumeRole",
+			},
+		},
+	}
+
+	// If we want to be more specific and only deny the particular user
+	if len(user.Email) > 0 {
+		username := strings.Split(user.Email, "@")[0]
+		assumeRolePolicy = PolicyDocument{
+			Version: "2012-10-17",
+			Statement: []Statement{
+				{
+					Effect: "Deny",
+					Principal: map[string]string{
+						"AWS": fmt.Sprintf("arn:aws:iam::*:user/%s", username),
 					},
 					Action: "sts:AssumeRole",
 				},

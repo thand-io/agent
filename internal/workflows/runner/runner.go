@@ -13,6 +13,8 @@ import (
 	"github.com/thand-io/agent/internal/config"
 	models "github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/workflows/functions"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 )
 
 // ResumableWorkflowRunner implements a workflow runner that can pause and resume
@@ -226,4 +228,61 @@ func (wr *ResumableWorkflowRunner) processInput(input any) (output any, err erro
 		}
 	}
 	return input, nil
+}
+
+// updateTemporalSearchAttributes updates the workflow search attributes
+func (wr *ResumableWorkflowRunner) updateTemporalSearchAttributes() error {
+
+	if !wr.workflowTask.HasTemporalContext() {
+		return nil
+	}
+
+	workflowTask := wr.GetWorkflowTask()
+
+	ctx := workflowTask.GetTemporalContext()
+
+	updates := []temporal.SearchAttributeUpdate{
+		models.TypedSearchAttributeStatus.ValueSet(string(workflowTask.GetStatus())),
+		models.TypedSearchAttributeApproved.ValueSet(workflowTask.IsApproved()),
+	}
+
+	if len(workflowTask.GetEntrypoint()) > 0 {
+		updates = append(updates,
+			models.TypedSearchAttributeTask.ValueSet(workflowTask.GetEntrypoint()),
+		)
+	}
+
+	elevationRequest, err := workflowTask.GetContextAsElevationRequest()
+
+	if err != nil {
+
+		logrus.WithError(err).Warn("No valid elevation context found, skipping search attribute update.")
+
+	} else {
+		if elevationRequest.User != nil && len(elevationRequest.User.Email) > 0 {
+			updates = append(updates,
+				models.TypedSearchAttributeUser.ValueSet(elevationRequest.User.Email),
+			)
+		}
+
+		if len(elevationRequest.Role.Name) > 0 {
+			updates = append(updates,
+				models.TypedSearchAttributeRole.ValueSet(elevationRequest.Role.Name),
+			)
+		}
+
+		if len(elevationRequest.Workflow) > 0 {
+			updates = append(updates,
+				models.TypedSearchAttributeWorkflow.ValueSet(elevationRequest.Workflow),
+			)
+		}
+
+		if len(elevationRequest.Providers) > 0 {
+			updates = append(updates,
+				models.TypedSearchAttributeProviders.ValueSet(elevationRequest.Providers),
+			)
+		}
+	}
+
+	return workflow.UpsertTypedSearchAttributes(ctx, updates...)
 }

@@ -155,7 +155,7 @@
             const role = generatedRole;
             
             // Set workflow (use first workflow from generated role if available, otherwise default)
-            document.getElementById('hiddenWorkflow').value = role.workflow || 'default-workflow';
+            document.getElementById('hiddenWorkflow').value = role.workflow || '';
             
             // Set providers from the generated role
             const providersContainer = document.getElementById('hiddenProviders');

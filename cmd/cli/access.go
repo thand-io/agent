@@ -42,8 +42,9 @@ var accessCmd = &cobra.Command{
 		}
 
 		err = MakeElevationRequest(&models.ElevateRequest{
-			Role:     foundRole,
-			Provider: resource,
+			Role:      foundRole,
+			Providers: []string{resource},
+			// Let the system pick the workflow based on role and provider
 			Reason:   reason,
 			Duration: duration,
 		})

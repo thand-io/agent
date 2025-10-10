@@ -31,12 +31,12 @@ import (
 type ctxKey string
 
 const (
-	VarsContextUser     = "user"
-	VarsContextRequest  = "request"
-	VarsContextProvider = "provider"
-	VarsContextWorkflow = "workflow"
-	VarsContextRole     = "role"
-	VarsContextApproved = "approved"
+	VarsContextUser      = "user"
+	VarsContextRequest   = "request"
+	VarsContextProviders = "providers"
+	VarsContextWorkflow  = "workflow"
+	VarsContextRole      = "role"
+	VarsContextApproved  = "approved"
 
 	runnerCtxKey   ctxKey = "wfRunnerContext"
 	temporalCtxKey ctxKey = "wfTemporalContext"
@@ -340,18 +340,6 @@ func (ctx *WorkflowTask) IsApproved() bool {
 
 	if context := ctx.GetContextAsMap(); len(context) > 0 {
 		if approved, ok := context[VarsContextApproved].(bool); ok {
-			return approved
-		}
-	}
-
-	if input := ctx.GetInputAsMap(); len(input) > 0 {
-		if approved, ok := input[VarsContextApproved].(bool); ok {
-			return approved
-		}
-	}
-
-	if output := ctx.GetOutputAsMap(); len(output) > 0 {
-		if approved, ok := output[VarsContextApproved].(bool); ok {
 			return approved
 		}
 	}

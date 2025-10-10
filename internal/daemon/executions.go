@@ -168,7 +168,7 @@ func (s *Server) getRunningWorkflow(c *gin.Context) {
 				elevationReq, err := workflowInfo.GetContextAsElevationRequest()
 
 				if err == nil && elevationReq != nil {
-					workflowName = elevationReq.Role.Workflow
+					workflowName = elevationReq.Workflow
 				}
 
 			}
@@ -197,7 +197,8 @@ func (s *Server) getRunningWorkflow(c *gin.Context) {
 			workflowInfo.Output = err.Error()
 		}
 
-		workflowInfo.Status = swctx.StatusPhase(strings.ToLower(workflowExecInfo.Status))
+		workflowInfo.Status = swctx.StatusPhase(
+			strings.ToLower(workflowExecInfo.Status))
 
 	}
 

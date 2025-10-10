@@ -144,12 +144,13 @@ func buildElevateRequest(role *models.Role, evaluationResponse *ElevationRequest
 	}
 
 	role.Providers = []string{evaluationResponse.Provider}
-	role.Workflow = evaluationResponse.Workflow
+	role.Workflows = []string{evaluationResponse.Workflow}
 
 	return &models.ElevateRequest{
-		Role:     role,
-		Provider: evaluationResponse.Provider,
-		Reason:   reason,
-		Duration: evaluationResponse.Duration.String(),
+		Role:      role,
+		Providers: []string{evaluationResponse.Provider},
+		Workflow:  evaluationResponse.Workflow,
+		Reason:    reason,
+		Duration:  evaluationResponse.Duration.String(),
 	}
 }

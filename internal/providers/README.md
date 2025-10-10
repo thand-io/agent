@@ -55,9 +55,9 @@ func (p *exampleProvider) AuthorizeRole(ctx context.Context, user *models.User, 
 }
 
 // Revoke removes access for a user from a role
-func (p *exampleProvider) RevokeRole(ctx context.Context, user *models.User, role *models.Role) (map[string]any, error) {
+func (p *exampleProvider) RevokeRole(ctx context.Context, user *models.User, role *models.Role, metadata map[string]any) (map[string]any, error) {
 	// TODO: Implement Example revocation logic
-	return nil
+	return nil, nil
 }
 
 func (p *exampleProvider) GetPermission(ctx context.Context, permission string) (*models.ProviderPermission, error) {

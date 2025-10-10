@@ -33,6 +33,14 @@ func (s *Session) GetEncodedSession(encryptor EncryptionImpl) string {
 	}.EncodeAndEncrypt(encryptor)
 }
 
+func (s *Session) ToLocalSession(encryptor EncryptionImpl) *LocalSession {
+	return &LocalSession{
+		Version: 1,
+		Expiry:  s.Expiry,
+		Session: s.GetEncodedSession(encryptor),
+	}
+}
+
 // Decode the remote session from the local session
 func (s *LocalSession) GetDecodedSession(decryptor EncryptionImpl) (*Session, error) {
 	decoded, err := EncodingWrapper{}.DecodeAndDecrypt(s.Session, decryptor)

@@ -13,7 +13,7 @@
                             <th>Name</th>
                             <th>Description</th>
                             <th>Providers</th>
-                            <th>Workflow</th>
+                            <th>Workflows</th>
                             <th>Status</th>
                             <th>Actions</th>
                         </tr>
@@ -42,8 +42,10 @@
                                 {{end}}
                             </td>
                             <td>
-                                {{if $role.Workflow}}
-                                    <span class="badge badge-secondary">{{$role.Workflow}}</span>
+                                {{if $role.Workflows}}
+                                    {{range $i, $workflow := $role.Workflows}}
+                                        {{if $i}}, {{end}}<span class="badge badge-secondary">{{$workflow}}</span>
+                                    {{end}}
                                 {{else}}
                                     <span class="text-muted">Default</span>
                                 {{end}}

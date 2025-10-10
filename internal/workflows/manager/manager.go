@@ -100,7 +100,7 @@ func (m *WorkflowManager) executeWorkflow(
 		return nil, fmt.Errorf(
 			"workflow not found for role '%s' and provider '%s'",
 			request.Role.Name,
-			request.Provider,
+			request.Providers,
 		)
 	}
 
@@ -117,12 +117,7 @@ func (m *WorkflowManager) executeWorkflow(
 	}
 
 	// Convert input to map
-	internalContext := map[string]any{
-		"role":     request.Role, // get role
-		"provider": request.Provider,
-		"reason":   request.Reason,
-		"duration": request.Duration,
-	}
+	internalContext := request.AsMap()
 
 	workflowTask, err := models.NewWorkflowContext(workflow)
 
@@ -324,19 +319,19 @@ func (m *WorkflowManager) createTemporalWorkflow(workflowTask *models.WorkflowTa
 		return fmt.Errorf("failed to get workflow context: %w", err)
 	}
 
-	userInfo := ""
-	roleInfo := ""
+	userEmail := ""
+	roleName := ""
 
 	if workflowContext == nil {
 		return fmt.Errorf("workflow context is nil")
 	}
 
 	if workflowContext.User != nil {
-		userInfo = workflowContext.User.Email
+		userEmail = workflowContext.User.Email
 	}
 
 	if workflowContext.Role != nil {
-		roleInfo = workflowContext.Role.Name
+		roleName = workflowContext.Role.Name
 	}
 
 	ctx := workflowTask.GetContext()
@@ -346,10 +341,12 @@ func (m *WorkflowManager) createTemporalWorkflow(workflowTask *models.WorkflowTa
 		ID:        workflowTask.WorkflowID,
 		TaskQueue: temporalService.GetTaskQueue(),
 		TypedSearchAttributes: temporal.NewSearchAttributes(
-			models.TypedSearchAttributeUser.ValueSet(userInfo),
+			models.TypedSearchAttributeUser.ValueSet(userEmail),
+			models.TypedSearchAttributeRole.ValueSet(roleName),
+			models.TypedSearchAttributeProviders.ValueSet(workflowContext.Providers),
+			models.TypedSearchAttributeWorkflow.ValueSet(workflowContext.Workflow),
 			models.TypedSearchAttributeStatus.ValueSet(strings.ToUpper(string(swctx.PendingStatus))),
 			models.TypedSearchAttributeApproved.ValueSet(false),
-			models.TypedSearchAttributeRole.ValueSet(roleInfo),
 		),
 	}, models.TemporalExecuteElevationWorkflowName, workflowTask)
 
