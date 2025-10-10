@@ -337,11 +337,6 @@ func (s *Server) getElevateAuthOAuth2(c *gin.Context) {
 		return
 	}
 
-	if err != nil {
-		s.getErrorPage(c, http.StatusInternalServerError, "Failed to set cookie", err)
-		return
-	}
-
 	s.resumeWorkflow(c, workflowTask)
 
 }

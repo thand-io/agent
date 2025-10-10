@@ -230,7 +230,7 @@ func (wr *ResumableWorkflowRunner) processInput(input any) (output any, err erro
 	return input, nil
 }
 
-// updateSearchAttributes updates the workflow search attributes
+// updateTemporalSearchAttributes updates the workflow search attributes
 func (wr *ResumableWorkflowRunner) updateTemporalSearchAttributes() error {
 
 	if !wr.workflowTask.HasTemporalContext() {

@@ -109,17 +109,6 @@ func (p *gcpProvider) getRole(projectID, roleName string) (*iam.Role, error) {
 	return role, nil
 }
 
-// findRoleBinding finds a binding for the specified role in the IAM policy
-// Returns the binding index and the binding itself, or -1 and nil if not found
-func (p *gcpProvider) findRoleBinding(policy *cloudresourcemanager.Policy, roleName string) (int, *cloudresourcemanager.Binding) {
-	for i, binding := range policy.Bindings {
-		if binding.Role == roleName {
-			return i, binding
-		}
-	}
-	return -1, nil
-}
-
 func (p *gcpProvider) bindUserToRole(projectID string, user *models.User, iamRole *iam.Role) error {
 	crmService := p.crmClient
 
@@ -138,15 +127,23 @@ func (p *gcpProvider) bindUserToRole(projectID string, user *models.User, iamRol
 	}
 
 	// Check if binding already exists
-	_, binding := p.findRoleBinding(policy, iamRole.Name)
-	if binding != nil {
-		// Binding exists, check if member is already in it
-		if !slices.Contains(binding.Members, member) {
-			// Add member to existing binding
-			binding.Members = append(binding.Members, member)
+	bindingExists := false
+	for _, binding := range policy.Bindings {
+		if binding.Role == iamRole.Name {
+			if slices.Contains(binding.Members, member) {
+				bindingExists = true
+			}
+			if !bindingExists {
+				// Add member to existing binding
+				binding.Members = append(binding.Members, member)
+				bindingExists = true
+			}
+			break
 		}
-	} else {
-		// If no binding exists for this role, create a new one
+	}
+
+	// If no binding exists for this role, create a new one
+	if !bindingExists {
 		newBinding := &cloudresourcemanager.Binding{
 			Role:    iamRole.Name,
 			Members: []string{member},
@@ -183,23 +180,29 @@ func (p *gcpProvider) unbindUserFromRole(projectID string, user *models.User, ia
 	}
 
 	// Find and remove the user from the role binding
-	bindingIndex, binding := p.findRoleBinding(policy, iamRole.Name)
-	if binding == nil {
-		return fmt.Errorf("role binding not found for role %s", iamRole.Name)
-	}
-
-	// Find and remove the member from this binding
-	for j, bindingMember := range binding.Members {
-		if bindingMember == member {
-			// Remove the member from the slice
-			binding.Members = append(binding.Members[:j], binding.Members[j+1:]...)
+	bindingFound := false
+	for i, binding := range policy.Bindings {
+		if binding.Role == iamRole.Name {
+			bindingFound = true
+			// Find and remove the member from this binding
+			for j, bindingMember := range binding.Members {
+				if bindingMember == member {
+					// Remove the member from the slice
+					binding.Members = append(binding.Members[:j], binding.Members[j+1:]...)
+					break
+				}
+			}
+			// If the binding has no members left, remove the entire binding
+			if len(binding.Members) == 0 {
+				policy.Bindings = append(policy.Bindings[:i], policy.Bindings[i+1:]...)
+			}
 			break
 		}
 	}
 
-	// If the binding has no members left, remove the entire binding
-	if len(binding.Members) == 0 {
-		policy.Bindings = append(policy.Bindings[:bindingIndex], policy.Bindings[bindingIndex+1:]...)
+	// If no binding was found for this role, the user wasn't bound to it
+	if !bindingFound {
+		return fmt.Errorf("role binding not found for role %s", iamRole.Name)
 	}
 
 	// Set the updated IAM policy

@@ -59,13 +59,11 @@ func (m *WorkflowManager) createPrimaryWorkflowHandler(
 			cleanupErr := m.runCleanup(rootCtx, workflowTask, temporalService)
 
 			outputTask = workflowTask
-			cancelErr := cancelCtx.Err()
 
 			if cleanupErr != nil {
 				logrus.WithError(cleanupErr).Error("Cleanup activity failed")
 				outputError = cleanupErr
-			} else if cancelErr != nil && (errors.Is(cancelErr, context.Canceled) ||
-				temporal.IsCanceledError(cancelErr)) {
+			} else if cancelCtx.Err() != nil && (errors.Is(cancelCtx.Err(), context.Canceled) || temporal.IsCanceledError(cancelCtx.Err())) {
 				// Suppress cancellation errors - workflow completed normally
 				outputError = nil
 			}
@@ -255,15 +253,13 @@ func (m *WorkflowManager) executeWorkflowLoop(
 			return nil, err
 		}
 
-		cancelErr := cancelCtx.Err()
-
-		if cancelErr != nil {
-			if errors.Is(cancelErr, context.Canceled) {
+		if cancelCtx.Err() != nil {
+			if errors.Is(cancelCtx.Err(), context.Canceled) {
 				logrus.Info("Workflow context cancelled, exiting main loop")
 				break
 			}
 			logrus.Error("Error while waiting for signal", "Error", cancelCtx.Err())
-			return nil, cancelErr
+			return nil, cancelCtx.Err()
 		}
 
 		workflowSelector.Select(cancelCtx)
@@ -280,12 +276,9 @@ func (m *WorkflowManager) executeWorkflowLoop(
 		// Execute workflow step
 		result, err := m.executeWorkflowStep(cancelCtx, workflowTask)
 
-		// Check for context cancellation
-		cancelErr = cancelCtx.Err()
-
 		// Check if the context was cancelled during execution
-		if cancelErr != nil {
-			if errors.Is(cancelErr, context.Canceled) {
+		if cancelCtx.Err() != nil {
+			if errors.Is(cancelCtx.Err(), context.Canceled) {
 				if result != nil {
 					result.SetStatus(swctx.CancelledStatus)
 				}
@@ -293,7 +286,7 @@ func (m *WorkflowManager) executeWorkflowLoop(
 				return result, nil
 			}
 			logrus.Error("Error while executing workflow step", "Error", cancelCtx.Err())
-			return result, cancelErr
+			return result, cancelCtx.Err()
 		}
 
 		return result, err
