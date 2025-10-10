@@ -510,25 +510,33 @@ func (r *Config) GetWorkflowFromElevationRequest(elevationRequest *models.Elevat
 		return nil, fmt.Errorf("role is nil")
 	}
 
-	if len(elevationRequest.Provider) == 0 {
-		return nil, fmt.Errorf("provider is nil")
+	if len(elevationRequest.Providers) == 0 {
+		return nil, fmt.Errorf("providers are empty")
 	}
 
+	primaryProvider := strings.ToLower(elevationRequest.Providers[0])
+
 	roleName := strings.ToLower(elevationRequest.Role.Name)
-	providerName := strings.ToLower(elevationRequest.Provider)
+	providerName := strings.ToLower(primaryProvider)
+	workflowName := strings.ToLower(elevationRequest.Workflow)
 
 	role := elevationRequest.Role
+
+	if len(workflowName) == 0 {
+		// If no workflow is specified, use the first workflow associated with the role
+		if len(role.Workflows) == 0 {
+			return nil, fmt.Errorf("no workflow specified and role has no associated workflows")
+		}
+
+		workflowName = role.Workflows[0]
+	}
 
 	if !slices.Contains(role.Providers, providerName) {
 		return nil, fmt.Errorf("provider '%s' not allowed for role '%s', roles: %v", providerName, roleName, role.Providers)
 	}
 
-	// Get the workflow for elevation
-	workflowName := strings.ToLower(role.Workflow)
-
-	// TODO: If this is empty then default to the default workflow
-	if len(workflowName) == 0 {
-		return nil, fmt.Errorf("workflow is nil for role '%s'", roleName)
+	if !slices.Contains(role.Workflows, workflowName) {
+		return nil, fmt.Errorf("workflow '%s' not allowed for role '%s', workflows: %v", workflowName, roleName, role.Workflows)
 	}
 
 	workflow, foundWorkflow := r.Workflows.Definitions[workflowName]

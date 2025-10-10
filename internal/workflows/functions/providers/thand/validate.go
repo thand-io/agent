@@ -134,7 +134,13 @@ func (t *validateFunction) Execute(
 		return nil, fmt.Errorf("failed to convert request: %w", err)
 	}
 
-	providerCall, err := t.config.GetProviderByName(elevateRequest.Provider)
+	if len(elevateRequest.Providers) == 0 {
+		return nil, errors.New("no providers specified in elevate request")
+	}
+
+	primaryProvider := elevateRequest.Providers[0]
+
+	providerCall, err := t.config.GetProviderByName(primaryProvider)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get provider: %w", err)
 	}
@@ -154,9 +160,9 @@ func (t *validateFunction) Execute(
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"role":     elevateRequest.Role,
-		"provider": elevateRequest.Provider,
-		"output":   validateOut,
+		"role":      elevateRequest.Role,
+		"providers": elevateRequest.Providers,
+		"output":    validateOut,
 	}).Info("Role validated successfully")
 
 	// TODO: Do something with the output for static validation

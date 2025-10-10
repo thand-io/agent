@@ -8,7 +8,7 @@ import (
 type Role struct {
 	Name        string       `json:"name"`
 	Description string       `json:"description"`
-	Workflow    string       `json:"workflow,omitempty"` // The workflow workflow to execute
+	Workflows   []string     `json:"workflows,omitempty"` // The workflows to execute
 	Inherits    []string     `json:"inherits,omitempty"`
 	Permissions Permissions  `json:"permissions,omitempty"`
 	Resources   Resources    `json:"resources,omitempty"`

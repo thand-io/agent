@@ -100,7 +100,7 @@ func (m *WorkflowManager) executeWorkflow(
 		return nil, fmt.Errorf(
 			"workflow not found for role '%s' and provider '%s'",
 			request.Role.Name,
-			request.Provider,
+			request.Providers,
 		)
 	}
 
@@ -117,12 +117,7 @@ func (m *WorkflowManager) executeWorkflow(
 	}
 
 	// Convert input to map
-	internalContext := map[string]any{
-		"role":     request.Role, // get role
-		"provider": request.Provider,
-		"reason":   request.Reason,
-		"duration": request.Duration,
-	}
+	internalContext := request.AsMap()
 
 	workflowTask, err := models.NewWorkflowContext(workflow)
 

@@ -40,7 +40,7 @@ func (m *WorkflowManager) Hydrate(workflowTask *models.WorkflowTask) error {
 			return fmt.Errorf("invalid elevation request")
 		}
 
-		workflowDsl, err := m.config.GetWorkflowByName(elevationRequest.Role.Workflow)
+		workflowDsl, err := m.config.GetWorkflowByName(elevationRequest.Workflow)
 
 		if err != nil {
 			return fmt.Errorf("failed to load workflow: %w", err)

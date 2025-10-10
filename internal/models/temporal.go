@@ -31,7 +31,7 @@ var TypedSearchAttributeTask = temporal.NewSearchAttributeKeyString("task")
 var TypedSearchAttributeUser = temporal.NewSearchAttributeKeyString(VarsContextUser)
 var TypedSearchAttributeRole = temporal.NewSearchAttributeKeyString(VarsContextRole)
 var TypedSearchAttributeWorkflow = temporal.NewSearchAttributeKeyString(VarsContextWorkflow)
-var TypedSearchAttributeProvider = temporal.NewSearchAttributeKeyString(VarsContextProvider)
+var TypedSearchAttributeProvider = temporal.NewSearchAttributeKeyKeywordList(VarsContextProvider)
 
 var TypedSearchAttributeApproved = temporal.NewSearchAttributeKeyBool(VarsContextApproved)
 

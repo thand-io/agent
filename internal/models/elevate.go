@@ -13,6 +13,7 @@ type ElevateStaticRequest struct {
 	// Mode     string `json:"mode" form:"mode" binding:"required,oneof=static dynamic llm"`
 	Role     string `json:"role" form:"role"`
 	Provider string `json:"provider" form:"provider"`
+	Workflow string `json:"workflow" form:"workflow"`
 	Reason   string `json:"reason" form:"reason" binding:"required"`
 	Duration string `json:"duration,omitempty" form:"duration,omitempty"` // Duration in ISO 8601 format
 
@@ -25,6 +26,7 @@ func (r *ElevateStaticRequest) GetUrlParams() url.Values {
 		// "mode":     {r.Mode},
 		"reason":   {r.Reason},
 		"role":     {r.Role},
+		"workflow": {r.Workflow},
 		"duration": {r.Duration},
 		"provider": {r.Provider},
 		"session":  {r.GetEncodedSession()}, // TODO provide the current auth session
@@ -47,19 +49,40 @@ type ElevateResponse struct {
 }
 
 type ElevateRequest struct {
-	Role     *Role         `json:"role"`
-	Provider string        `json:"provider"`
-	Reason   string        `json:"reason"`
-	Duration string        `json:"duration,omitempty"` // Duration in ISO 8601 format
-	Session  *LocalSession `json:"session,omitempty"`
+	Role      *Role         `json:"role"`
+	Providers []string      `json:"providers"` // A role can be applied to multiple providers
+	Workflow  string        `json:"workflow"`
+	Reason    string        `json:"reason"`
+	Duration  string        `json:"duration,omitempty"` // Duration in ISO 8601 format
+	Session   *LocalSession `json:"session,omitempty"`
 }
 
 func (e *ElevateRequest) IsValid() bool {
-	return !(e.Role == nil || len(e.Provider) == 0 || len(e.Reason) == 0)
+	return !(e.Role == nil || len(e.Providers) == 0 || len(e.Reason) == 0)
 }
 
 func (e *ElevateRequest) AsDuration() (time.Duration, error) {
 	return common.ValidateDuration(e.Duration)
+}
+
+func (e *ElevateRequest) AsMap() map[string]any {
+	return map[string]any{
+		"role":      e.Role, // get role
+		"providers": e.Providers,
+		"workflow":  e.Workflow,
+		"reason":    e.Reason,
+		"duration":  e.Duration,
+	}
+}
+
+func (e *ElevateRequest) GetWorkflow() string {
+	if len(e.Workflow) > 0 {
+		return e.Workflow
+	}
+	if e.Role != nil && len(e.Role.Workflows) > 0 {
+		return e.Role.Workflows[0]
+	}
+	return ""
 }
 
 type ElevateRequestInternal struct {

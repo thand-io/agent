@@ -136,13 +136,16 @@ func (t *authorizeFunction) executeAuthorization(
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"user":     elevateRequest.User,
-		"role":     elevateRequest.Role,
-		"provider": elevateRequest.Provider,
-		"duration": duration,
+		"user":      elevateRequest.User,
+		"role":      elevateRequest.Role,
+		"providers": elevateRequest.Providers,
+		"duration":  duration,
 	}).Info("Executing authorization logic")
 
-	providerCall, err := t.config.GetProviderByName(elevateRequest.Provider)
+	// First lets call the provider to execute the role request.
+	primaryProvider := elevateRequest.Providers[0]
+
+	providerCall, err := t.config.GetProviderByName(primaryProvider)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get provider: %w", err)
 	}

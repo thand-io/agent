@@ -339,15 +339,15 @@ func (m *WorkflowManager) updateSearchAttributes(
 		)
 	}
 
-	if len(elevationRequest.Role.Workflow) > 0 {
+	if len(elevationRequest.Workflow) > 0 {
 		updates = append(updates,
-			models.TypedSearchAttributeWorkflow.ValueSet(elevationRequest.Role.Workflow),
+			models.TypedSearchAttributeWorkflow.ValueSet(elevationRequest.Workflow),
 		)
 	}
 
-	if len(elevationRequest.Provider) > 0 {
+	if len(elevationRequest.Providers) > 0 {
 		updates = append(updates,
-			models.TypedSearchAttributeProvider.ValueSet(elevationRequest.Provider),
+			models.TypedSearchAttributeProvider.ValueSet(elevationRequest.Providers),
 		)
 	}
 

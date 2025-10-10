@@ -34,12 +34,23 @@ func (s *Server) getElevate(c *gin.Context) {
 		return
 	}
 
+	primaryWorkflow := request.Workflow
+
+	if len(primaryWorkflow) == 0 {
+		if len(role.Workflows) == 0 {
+			s.getErrorPage(c, http.StatusBadRequest, "No workflow specified and role has no associated workflows", err)
+			return
+		}
+		primaryWorkflow = role.Workflows[0]
+	}
+
 	s.elevate(c, models.ElevateRequest{
-		Role:     role,
-		Provider: request.Provider,
-		Reason:   request.Reason,
-		Duration: request.Duration,
-		Session:  request.Session,
+		Role:      role,
+		Providers: []string{request.Provider},
+		Workflow:  primaryWorkflow,
+		Reason:    request.Reason,
+		Duration:  request.Duration,
+		Session:   request.Session,
 	})
 }
 
@@ -129,7 +140,7 @@ func (s *Server) handleDynamicRequest(c *gin.Context, dynamicRequest models.Elev
 	dynamicRole := &models.Role{
 		Name:        "dynamic-role-" + time.Now().Format("20060102-150405"),
 		Description: "Dynamically created role: " + dynamicRequest.Reason,
-		Workflow:    dynamicRequest.Workflow,
+		Workflows:   []string{dynamicRequest.Workflow},
 		Permissions: models.Permissions{
 			Allow: dynamicRequest.Permissions,
 		},
@@ -147,11 +158,12 @@ func (s *Server) handleDynamicRequest(c *gin.Context, dynamicRequest models.Elev
 
 	// Convert to standard ElevateRequest
 	elevateRequest := models.ElevateRequest{
-		Role:     dynamicRole,
-		Provider: dynamicRequest.Providers[0], // Use first provider for now
-		Reason:   dynamicRequest.Reason,
-		Duration: dynamicRequest.Duration,
-		Session:  nil, // Session will be handled by the workflow if needed
+		Role:      dynamicRole,
+		Providers: dynamicRequest.Providers, // Use first provider for now
+		Workflow:  dynamicRequest.Workflow,
+		Reason:    dynamicRequest.Reason,
+		Duration:  dynamicRequest.Duration,
+		Session:   nil, // Session will be handled by the workflow if needed
 	}
 
 	s.elevate(c, elevateRequest)
@@ -164,7 +176,7 @@ func (s *Server) elevate(c *gin.Context, request models.ElevateRequest) {
 
 	ctx := context.Background()
 
-	WorkflowTask, err := s.Workflows.CreateWorkflow(ctx, request)
+	workflowTask, err := s.Workflows.CreateWorkflow(ctx, request)
 
 	if err != nil {
 		s.getErrorPage(c, http.StatusBadRequest, "Failed to execute workflow", err)
@@ -173,7 +185,7 @@ func (s *Server) elevate(c *gin.Context, request models.ElevateRequest) {
 
 	// We now redirect the user to the next workflow step.
 	c.Redirect(http.StatusTemporaryRedirect,
-		WorkflowTask.GetRedirectURL(),
+		workflowTask.GetRedirectURL(),
 	)
 }
 

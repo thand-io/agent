@@ -30,7 +30,7 @@ func RunRequestWizard(config *config.Config) (*models.ElevateRequest, error) {
 	if err != nil {
 		return nil, err
 	}
-	data.Provider = provider
+	data.Providers = []string{provider}
 
 	// Step 2: Select Role (filtered by provider)
 	role, err := selectRole(config, provider)
@@ -341,7 +341,7 @@ func displaySummary(data *models.ElevateRequest) {
 	fmt.Println(successStyle.Render("Request Configuration Complete!"))
 	fmt.Println()
 
-	fmt.Printf("Provider: %s\n", data.Provider)
+	fmt.Printf("Providers: %s\n", data.Providers)
 	fmt.Printf("Role: %s\n", data.Role.Name)
 	fmt.Printf("Duration: %s\n", data.Duration)
 	fmt.Printf("Reason: %s\n", data.Reason)

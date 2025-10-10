@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	"github.com/spf13/cobra"
+	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 )
 
@@ -118,11 +119,21 @@ var requestCmd = &cobra.Command{
 }
 
 func MakeElevationRequest(request *models.ElevateRequest) error {
+
 	if err := validateElevationRequest(request); err != nil {
 		return err
 	}
 
+	if len(request.Workflow) == 0 {
+		if len(request.Role.Workflows) == 0 {
+			return fmt.Errorf("no workflow specified and role has no associated workflows")
+		}
+
+		request.Workflow = request.Role.Workflows[0]
+	}
+
 	requestingWorkflow, err := cfg.GetWorkflowFromElevationRequest(request)
+
 	if err != nil {
 		return fmt.Errorf("failed to get workflow from elevation request: %w", err)
 	}
@@ -145,6 +156,15 @@ func validateElevationRequest(request *models.ElevateRequest) error {
 	}
 	if len(request.Reason) == 0 {
 		return fmt.Errorf("invalid request: empty reason")
+	}
+	if request.Role == nil {
+		return fmt.Errorf("invalid request: nil role")
+	}
+	if len(request.Providers) == 0 {
+		return fmt.Errorf("invalid request: no providers")
+	}
+	if _, err := common.ValidateDuration(request.Duration); err != nil {
+		return fmt.Errorf("invalid request: duration must be greater than zero")
 	}
 	return nil
 }
