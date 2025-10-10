@@ -75,7 +75,10 @@ func (p *salesForceProvider) AuthorizeRole(
 
 // Revoke removes access for a user from a role by reverting to a default profile
 func (p *salesForceProvider) RevokeRole(
-	ctx context.Context, user *models.User, role *models.Role,
+	ctx context.Context,
+	user *models.User,
+	role *models.Role,
+	metadata map[string]any,
 ) (map[string]any, error) {
 	client := p.client
 

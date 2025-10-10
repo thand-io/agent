@@ -521,6 +521,8 @@
                     const context = this.execution?.context;
                     if (context?.approved) {
                         return context.approved === true ? 'approved' : 'rejected';
+                    } else if (this.isWorkflowCompleted()) {
+                        return 'rejected';
                     }
                     // Default to pending if no approval info found
                     return 'pending';

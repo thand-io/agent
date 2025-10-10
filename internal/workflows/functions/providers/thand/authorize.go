@@ -13,7 +13,6 @@ import (
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/workflows/functions"
-	"go.temporal.io/sdk/workflow"
 )
 
 // AuthorizeFunction implements access authorization based on roles and workflows
@@ -74,7 +73,7 @@ func (t *authorizeFunction) Execute(
 		return nil, err
 	}
 
-	if t.isWorkflowAlreadyApproved(workflowTask) {
+	if workflowTask.IsApproved() {
 		modelOutput := t.buildBasicModelOutput(elevateRequest)
 		return &modelOutput, nil
 	}
@@ -111,23 +110,6 @@ func (t *authorizeFunction) validateAndParseRequests(
 	}
 
 	return &elevateRequest, &authRequest, nil
-}
-
-// isWorkflowAlreadyApproved checks if the workflow has already been approved
-func (t *authorizeFunction) isWorkflowAlreadyApproved(workflowTask *models.WorkflowTask) bool {
-	if !workflowTask.HasTemporalContext() {
-		return false
-	}
-
-	attrs := workflow.GetTypedSearchAttributes(workflowTask.GetTemporalContext())
-	hasBeenApproved, hasAttr := attrs.GetBool(models.TypedSearchAttributeApproved)
-
-	if hasAttr && hasBeenApproved {
-		logrus.Info("Workflow has already been approved")
-		return true
-	}
-
-	return false
 }
 
 // buildBasicModelOutput creates the basic model output with timestamps

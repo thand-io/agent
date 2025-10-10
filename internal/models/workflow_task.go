@@ -344,17 +344,5 @@ func (ctx *WorkflowTask) IsApproved() bool {
 		}
 	}
 
-	if input := ctx.GetInputAsMap(); len(input) > 0 {
-		if approved, ok := input[VarsContextApproved].(bool); ok {
-			return approved
-		}
-	}
-
-	if output := ctx.GetOutputAsMap(); len(output) > 0 {
-		if approved, ok := output[VarsContextApproved].(bool); ok {
-			return approved
-		}
-	}
-
 	return false
 }

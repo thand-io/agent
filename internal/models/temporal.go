@@ -28,12 +28,12 @@ var TemporalGetWorkflowTaskQueryName = "getWorkflowTask"
 var TypedSearchAttributeStatus = temporal.NewSearchAttributeKeyKeyword("status")
 
 var TypedSearchAttributeTask = temporal.NewSearchAttributeKeyString("task")
-var TypedSearchAttributeUser = temporal.NewSearchAttributeKeyString("user")
-var TypedSearchAttributeRole = temporal.NewSearchAttributeKeyString("role")
-var TypedSearchAttributeWorkflow = temporal.NewSearchAttributeKeyString("workflow")
-var TypedSearchAttributeProvider = temporal.NewSearchAttributeKeyString("provider")
+var TypedSearchAttributeUser = temporal.NewSearchAttributeKeyString(VarsContextUser)
+var TypedSearchAttributeRole = temporal.NewSearchAttributeKeyString(VarsContextRole)
+var TypedSearchAttributeWorkflow = temporal.NewSearchAttributeKeyString(VarsContextWorkflow)
+var TypedSearchAttributeProvider = temporal.NewSearchAttributeKeyString(VarsContextProvider)
 
-var TypedSearchAttributeApproved = temporal.NewSearchAttributeKeyBool("approved")
+var TypedSearchAttributeApproved = temporal.NewSearchAttributeKeyBool(VarsContextApproved)
 
 type TemporalConfig struct {
 	Host      string `mapstructure:"host" default:"localhost"`

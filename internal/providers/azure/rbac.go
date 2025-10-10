@@ -31,7 +31,11 @@ func (p *azureProvider) AuthorizeRole(
 
 // Revoke removes access for a user from a role
 func (p *azureProvider) RevokeRole(
-	ctx context.Context, user *models.User, role *models.Role) (map[string]any, error) {
+	ctx context.Context,
+	user *models.User,
+	role *models.Role,
+	metadata map[string]any,
+) (map[string]any, error) {
 	// Get the role definition
 	roleDefinition, err := p.getRoleDefinition(ctx, role.Name)
 	if err != nil {

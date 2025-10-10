@@ -114,7 +114,7 @@ func (t *revokeFunction) Execute(
 	}
 
 	revokeOut, err := providerCall.GetClient().RevokeRole(
-		workflowTask.GetContext(), user, role)
+		workflowTask.GetContext(), user, role, req)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to revoke user: %w", err)

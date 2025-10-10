@@ -124,7 +124,7 @@ func (m *WorkflowManager) registerActivities() error {
 		}
 
 		output, err := providerHandler.GetClient().RevokeRole(
-			ctx, user, role)
+			ctx, user, role, workflowTask.GetContextAsMap())
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to revoke role: %w", err)
