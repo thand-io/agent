@@ -261,14 +261,15 @@ func (m *WorkflowManager) executeWorkflowLoop(
 		}
 
 		workflowSelector.Select(cancelCtx)
-		logrus.WithFields(logrus.Fields{
-			"WorkflowID": workflowTask.WorkflowID,
-			"Status":     workflowTask.GetStatus(),
-		}).Info("Resuming ...")
 
 		if workflowTask == nil {
 			continue
 		}
+
+		logrus.WithFields(logrus.Fields{
+			"WorkflowID": workflowTask.WorkflowID,
+			"Status":     workflowTask.GetStatus(),
+		}).Info("Resuming ...")
 
 		// Update search attributes
 		if err := m.updateSearchAttributes(cancelCtx, workflowTask); err != nil {
@@ -347,7 +348,7 @@ func (m *WorkflowManager) updateSearchAttributes(
 
 	if len(elevationRequest.Providers) > 0 {
 		updates = append(updates,
-			models.TypedSearchAttributeProvider.ValueSet(elevationRequest.Providers),
+			models.TypedSearchAttributeProviders.ValueSet(elevationRequest.Providers),
 		)
 	}
 

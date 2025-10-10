@@ -31,12 +31,12 @@ import (
 type ctxKey string
 
 const (
-	VarsContextUser     = "user"
-	VarsContextRequest  = "request"
-	VarsContextProvider = "provider"
-	VarsContextWorkflow = "workflow"
-	VarsContextRole     = "role"
-	VarsContextApproved = "approved"
+	VarsContextUser      = "user"
+	VarsContextRequest   = "request"
+	VarsContextProviders = "providers"
+	VarsContextWorkflow  = "workflow"
+	VarsContextRole      = "role"
+	VarsContextApproved  = "approved"
 
 	runnerCtxKey   ctxKey = "wfRunnerContext"
 	temporalCtxKey ctxKey = "wfTemporalContext"
