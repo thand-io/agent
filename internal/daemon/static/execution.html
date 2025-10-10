@@ -37,7 +37,7 @@
                             </div>
                             
                             <!-- Approval Status -->
-                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <div x-show="!isWorkflowFailed()" style="display: flex; align-items: center; gap: 0.5rem;">
                                 <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: 1.5rem; border: 1px solid hsl(var(--border));"
                                      :style="{ 'background-color': getApprovalStatus() === 'approved' ? '#10b98115' : (getApprovalStatus() === 'rejected' ? '#ef444415' : 'hsl(var(--secondary))') }">
                                     <div style="width: 8px; height: 8px; border-radius: 50%;" 
@@ -423,9 +423,9 @@
                     if (isCurrent) {
                         classes.push('connecting');
                     } else if (hasExecuted) {
-                        if (status === 'completed') classes.push('success');
+                        if (status?.toUpperCase() === 'COMPLETED') classes.push('success');
                         else if (status === 'running') classes.push('connecting');
-                        else if (status === 'failed') classes.push('error');
+                        else if (status?.toUpperCase() === 'FAILED') classes.push('error');
                     }
                     
                     return classes.join(' ');
@@ -441,9 +441,9 @@
                     if (isCurrent) {
                         // Current task uses inline styles
                     } else if (hasExecuted) {
-                        if (status === 'completed') classes.push('badge-success');
+                        if (status?.toUpperCase() === 'COMPLETED') classes.push('badge-success');
                         else if (status === 'running') classes.push('badge-warning');
-                        else if (status === 'failed') classes.push('badge-error');
+                        else if (status?.toUpperCase() === 'FAILED') classes.push('badge-error');
                         else classes.push('badge-secondary');
                     } else {
                         classes.push('badge-secondary');
@@ -468,19 +468,19 @@
                 // Workflow status methods
                 getWorkflowStatusBadgeClass() {
                     const status = this.execution?.status;
-                    if (status === 'completed' || status === 'COMPLETED') return 'badge badge-success';
-                    if (status === 'FAILED' || status === 'failed') return 'badge badge-error';
+                    if (status?.toUpperCase() === 'COMPLETED') return 'badge badge-success';
+                    if (status?.toUpperCase() === 'FAILED') return 'badge badge-error';
                     return 'badge badge-warning';
                 },
                 
                 isWorkflowCompleted() {
                     const status = this.execution?.status;
-                    return status === 'completed' || status === 'COMPLETED';
+                    return status?.toUpperCase() === 'COMPLETED';
                 },
                 
                 isWorkflowFailed() {
                     const status = this.execution?.status;
-                    return status === 'FAILED' || status === 'failed';
+                    return status?.toUpperCase() === 'FAILED' || status?.toUpperCase() === 'CANCELED' || status?.toUpperCase() === 'TERMINATED';
                 },
                 
                 isWorkflowComplete() {

@@ -65,7 +65,7 @@ func (m *WorkflowManager) createPrimaryWorkflowHandler(temporalService interface
 			if cleanupErr != nil {
 				logrus.WithError(cleanupErr).Error("Cleanup activity failed")
 				outputError = cleanupErr
-			} else if cancelCtx.Err() != nil && errors.Is(cancelCtx.Err(), context.Canceled) {
+			} else if cancelCtx.Err() != nil && (errors.Is(cancelCtx.Err(), context.Canceled) || temporal.IsCanceledError(cancelCtx.Err())) {
 				// Suppress cancellation errors - workflow completed normally
 				outputError = nil
 			}
