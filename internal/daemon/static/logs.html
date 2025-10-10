@@ -308,7 +308,7 @@ function logViewer() {
         },
 
         getLogRowClass(log) {
-            switch (log.level.toUpperCase()) {
+            switch ((log.level || '').toUpperCase()) {
                 case 'ERROR': return 'log-row-error';
                 case 'WARNING': return 'log-row-warning';
                 default: return '';
