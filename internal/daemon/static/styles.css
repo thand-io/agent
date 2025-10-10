@@ -414,6 +414,29 @@ footer p {
     border-color: hsl(0 84% 60% / 0.2);
 }
 
+.badge-info {
+    background-color: hsl(221 83% 53% / 0.1);
+    color: hsl(221 83% 53%);
+    border-color: hsl(221 83% 53% / 0.2);
+}
+
+/* Log Row Styles */
+.log-row-error {
+    background-color: hsl(0 84% 60% / 0.05);
+}
+
+.log-row-warning {
+    background-color: hsl(38 92% 50% / 0.05);
+}
+
+.table tbody tr:hover.log-row-error {
+    background-color: hsl(0 84% 60% / 0.1);
+}
+
+.table tbody tr:hover.log-row-warning {
+    background-color: hsl(38 92% 50% / 0.1);
+}
+
 /* Utility Classes */
 .text-muted {
     color: hsl(var(--muted-foreground));
@@ -1310,6 +1333,24 @@ footer p {
     padding: 1rem;
     background-color: hsl(var(--muted) / 0.5);
     border-radius: 0.5rem;
+}
+
+/* Scrollbar styling for log viewer */
+.table-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.table-container::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+}
+
+.table-container::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 4px;
+}
+
+.table-container::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground));
 }
 
 .role-info h3 {

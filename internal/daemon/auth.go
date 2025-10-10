@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
@@ -25,11 +26,7 @@ func (s *Server) getAuthRequest(c *gin.Context) {
 
 	config := s.GetConfig()
 
-	if len(callback) == 0 {
-		callback = config.GetLocalServerUrl()
-	}
-
-	if strings.Compare(callback, config.GetLoginServerUrl()) == 0 {
+	if len(callback) > 0 && strings.Compare(callback, config.GetLoginServerUrl()) == 0 {
 		s.getErrorPage(c, http.StatusBadRequest, "Callback cannot be the login server")
 		return
 	}
@@ -127,12 +124,10 @@ func (s *Server) getAuthPage(c *gin.Context) {
 		return
 	}
 
-	config := s.GetConfig()
-
 	callback, foundCallback := c.GetQuery("callback")
 
 	if !foundCallback || len(callback) == 0 {
-		callback = config.GetLocalServerUrl()
+		logrus.Debug("Using local server URL as callback")
 	}
 
 	data := AuthPageData{
@@ -200,7 +195,11 @@ func (s *Server) getAuthCallbackPage(c *gin.Context, auth models.AuthWrapper) {
 		return
 	}
 
-	s.renderHtml(c, "auth_callback.html", data)
+	if len(auth.Callback) == 0 {
+		c.Redirect(http.StatusTemporaryRedirect, "/")
+	} else {
+		s.renderHtml(c, "auth_callback.html", data)
+	}
 }
 
 func (s *Server) getLogoutPage(c *gin.Context) {

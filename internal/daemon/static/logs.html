@@ -1,0 +1,421 @@
+{{template "header" .}}
+<main x-data="logViewer()" x-init="init()">
+    <div class="container" style="width: 100%;">
+        <!-- Page Header -->
+        <div class="page-header">
+            <h1>System Logs</h1>
+            <p>Real-time monitoring and analysis of system events and activities.</p>
+        </div>
+
+        <!-- Controls Section -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+            <!-- Left Controls -->
+            <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                <!-- Auto-refresh Toggle -->
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <label style="font-size: 0.875rem; font-weight: 500;">Auto-refresh:</label>
+                    <button @click="toggleAutoRefresh()" 
+                            :class="autoRefresh ? 'button-primary' : 'button-secondary'"
+                            class="button" 
+                            style="padding: 0.5rem 1rem; font-size: 0.75rem;">
+                        <span x-text="autoRefresh ? 'ON' : 'OFF'"></span>
+                    </button>
+                </div>
+
+                <!-- Refresh Interval -->
+                <div style="display: flex; align-items: center; gap: 0.5rem;" x-show="autoRefresh">
+                    <label style="font-size: 0.875rem;">Interval:</label>
+                    <select x-model="refreshInterval" @change="updateRefreshInterval()" 
+                            style="padding: 0.5rem; border: 1px solid hsl(var(--border)); border-radius: 0.25rem; background: hsl(var(--background)); color: hsl(var(--foreground)); font-size: 0.75rem;">
+                        <option value="1000">1s</option>
+                        <option value="5000">5s</option>
+                        <option value="10000">10s</option>
+                        <option value="30000">30s</option>
+                    </select>
+                </div>
+
+                <!-- Log Level Filter -->
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <label style="font-size: 0.875rem;">Level:</label>
+                    <select x-model="selectedLevel" @change="filterLogs()" 
+                            style="padding: 0.5rem; border: 1px solid hsl(var(--border)); border-radius: 0.25rem; background: hsl(var(--background)); color: hsl(var(--foreground)); font-size: 0.75rem;">
+                        <option value="">All</option>
+                        <option value="ERROR">Error</option>
+                        <option value="WARNING">Warning</option>
+                        <option value="INFO">Info</option>
+                        <option value="DEBUG">Debug</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Right Controls -->
+            <div style="display: flex; gap: 1rem; align-items: center;">
+                <!-- Status Indicator -->
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <div class="status-dot" :class="{ 'connecting': loading, 'error': error, 'success': !loading && !error }"></div>
+                    <span style="font-size: 0.875rem;" x-text="getStatusText()"></span>
+                </div>
+
+                <!-- Manual Refresh -->
+                <button @click="fetchLogs()" :disabled="loading" class="button button-secondary" 
+                        style="padding: 0.5rem 1rem; font-size: 0.75rem;">
+                    <span x-show="!loading">Refresh</span>
+                    <span x-show="loading">Loading...</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Search Bar and Summary -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; gap: 2rem; flex-wrap: wrap;">
+            <!-- Search Bar -->
+            <div style="flex: 0 0 300px; min-width: 250px;">
+                <input type="text" 
+                       x-model="searchQuery" 
+                       @input="filterLogs()"
+                       placeholder="Search logs..."
+                       style="width: 100%; padding: 0.75rem; border: 1px solid hsl(var(--border)); border-radius: 0.5rem; background: hsl(var(--background)); color: hsl(var(--foreground)); font-size: 0.875rem;">
+            </div>
+            
+            <!-- Summary Information -->
+            <div style="display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap;">
+                <!-- Event Type Counts -->
+                <div style="display: flex; gap: 1rem; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span class="badge badge-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">Total</span>
+                        <span style="font-weight: 600; font-size: 0.875rem;" x-text="logs.length"></span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span class="badge badge-error" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">Error</span>
+                        <span style="font-weight: 600; font-size: 0.875rem; color: #ef4444;" x-text="getLogCountByLevel('ERROR')"></span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span class="badge badge-warning" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">Warn</span>
+                        <span style="font-weight: 600; font-size: 0.875rem; color: #f59e0b;" x-text="getLogCountByLevel('WARNING')"></span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span class="badge badge-info" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">Info</span>
+                        <span style="font-weight: 600; font-size: 0.875rem; color: #3b82f6;" x-text="getLogCountByLevel('INFO')"></span>
+                    </div>
+                </div>
+                
+                <!-- Latest Event Time -->
+                <div style="display: flex; align-items: center; gap: 0.5rem; padding-left: 1rem; border-left: 1px solid hsl(var(--border));">
+                    <span style="font-size: 0.875rem; color: hsl(var(--muted-foreground));">Latest:</span>
+                    <span style="font-size: 0.875rem; font-weight: 500; font-family: monospace;" x-text="getLatestEventTime()"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Error State -->
+        <div x-show="error && !loading" class="status-card" style="text-align: center; padding: 2rem; margin-bottom: 2rem; border-color: #ef4444;">
+            <h3 style="color: #ef4444; margin-bottom: 1rem;">Error Loading Logs</h3>
+            <p x-text="error" style="color: hsl(var(--muted-foreground)); margin-bottom: 1rem;"></p>
+            <button @click="fetchLogs()" class="button button-primary">Retry</button>
+        </div>
+
+        <!-- Logs Container -->
+        <div class="table-container" style="max-height: 70vh; overflow-y: auto;" x-show="!error">
+            <!-- Loading State -->
+            <div x-show="loading && logs.length === 0" style="text-align: center; padding: 3rem;">
+                <div class="status-dot connecting" style="width: 2rem; height: 2rem; margin: 0 auto 1rem;"></div>
+                <p style="color: hsl(var(--muted-foreground));">Loading logs...</p>
+            </div>
+
+            <!-- Empty State -->
+            <div x-show="!loading && filteredLogs.length === 0 && logs.length === 0" style="text-align: center; padding: 3rem;">
+                <p style="color: hsl(var(--muted-foreground));">No logs available</p>
+            </div>
+
+            <!-- No Results State -->
+            <div x-show="!loading && filteredLogs.length === 0 && logs.length > 0" style="text-align: center; padding: 3rem;">
+                <p style="color: hsl(var(--muted-foreground));">No logs match your current filters</p>
+                <button @click="clearFilters()" class="button button-secondary" style="margin-top: 1rem;">Clear Filters</button>
+            </div>
+
+            <!-- Logs Table -->
+            <table class="table" x-show="filteredLogs.length > 0">
+                <thead>
+                    <tr>
+                        <th style="width: 210px;">Timestamp</th>
+                        <th style="width: 80px;">Level</th>
+                        <th style="width: 120px;">Source</th>
+                        <th>Message</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="(log, index) in filteredLogs" :key="index">
+                        <tr :class="getLogRowClass(log)">
+                            <td>
+                                <span style="font-size: 0.75rem; font-family: monospace;" x-text="formatTimestamp(log.time)"></span>
+                            </td>
+                            <td>
+                                <span :class="getLevelBadgeClass(log.level)" class="badge" x-text="log.level"></span>
+                            </td>
+                            <td>
+                                <span style="font-size: 0.75rem; font-family: monospace;" x-text="log.source || 'system'"></span>
+                            </td>
+                            <td>
+                                <div style="font-size: 0.875rem; line-height: 1.4;">
+                                    <span x-text="log.message"></span>
+                                    <div x-show="log.context" style="margin-top: 0.25rem;">
+                                        <details>
+                                            <summary style="cursor: pointer; color: hsl(var(--muted-foreground)); font-size: 0.75rem;">Context</summary>
+                                            <pre style="margin-top: 0.5rem; padding: 0.5rem; background: hsl(var(--muted)); border-radius: 0.25rem; font-size: 0.75rem; overflow-x: auto;" x-text="JSON.stringify(log.context, null, 2)"></pre>
+                                        </details>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Footer Info -->
+        <div style="margin-top: 2rem; text-align: center; color: hsl(var(--muted-foreground)); font-size: 0.875rem;">
+            <p>Showing <span x-text="filteredLogs.length"></span> of <span x-text="logs.length"></span> log entries</p>
+        </div>
+    </div>
+</main>
+
+<script>
+function logViewer() {
+    return {
+        logs: [],
+        filteredLogs: [],
+        loading: false,
+        error: null,
+        autoRefresh: false,
+        refreshInterval: 5000,
+        refreshTimer: null,
+        selectedLevel: '',
+        searchQuery: '',
+        lastUpdated: '',
+
+        init() {
+            this.fetchLogs();
+        },
+
+        async fetchLogs() {
+            this.loading = true;
+            this.error = null;
+
+            try {
+                const response = await fetch('{{.Config.GetApiBasePath}}/logs');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                this.logs = data.logs || [];
+                this.filterLogs();
+                this.lastUpdated = new Date().toLocaleTimeString();
+            } catch (err) {
+                this.error = err.message;
+                this.logs = [];
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        filterLogs() {
+            let filtered = [...this.logs];
+
+            // Filter by level
+            if (this.selectedLevel) {
+                filtered = filtered.filter(log => log.level === this.selectedLevel);
+            }
+
+            // Filter by search query
+            if (this.searchQuery) {
+                const query = this.searchQuery.toLowerCase();
+                filtered = filtered.filter(log => 
+                    (log.message || '').toLowerCase().includes(query) ||
+                    (log.source || '').toLowerCase().includes(query) ||
+                    (log.level || '').toLowerCase().includes(query)
+                );
+            }
+
+            // Sort by timestamp in descending order (most recent first)
+            filtered.sort((a, b) => {
+                const timeA = new Date(a.time || a.timestamp || 0);
+                const timeB = new Date(b.time || b.timestamp || 0);
+                return timeB - timeA; // Descending order (newest first)
+            });
+
+            this.filteredLogs = filtered;
+        },
+
+        toggleAutoRefresh() {
+            this.autoRefresh = !this.autoRefresh;
+            if (this.autoRefresh) {
+                this.startAutoRefresh();
+            } else {
+                this.stopAutoRefresh();
+            }
+        },
+
+        startAutoRefresh() {
+            this.stopAutoRefresh();
+            this.refreshTimer = setInterval(() => {
+                this.fetchLogs();
+            }, this.refreshInterval);
+        },
+
+        stopAutoRefresh() {
+            if (this.refreshTimer) {
+                clearInterval(this.refreshTimer);
+                this.refreshTimer = null;
+            }
+        },
+
+        updateRefreshInterval() {
+            if (this.autoRefresh) {
+                this.startAutoRefresh();
+            }
+        },
+
+        clearFilters() {
+            this.selectedLevel = '';
+            this.searchQuery = '';
+            this.filterLogs();
+        },
+
+        formatTimestamp(timestamp) {
+            // Handle both 'time' and 'timestamp' field names
+            const timeValue = timestamp || '';
+            
+            if (!timeValue) return 'N/A';
+            
+            const date = new Date(timeValue);
+            if (isNaN(date.getTime())) {
+                // If timestamp is invalid, try to parse it as a different format or return a fallback
+                return timeValue.toString().slice(0, 19) || 'Invalid Date';
+            }
+            
+            return date.toLocaleString();
+        },
+
+        getLevelBadgeClass(level) {
+            switch (level.toUpperCase()) {
+                case 'ERROR': return 'badge-error';
+                case 'WARNING': return 'badge-warning';
+                case 'INFO': return 'badge-info';
+                case 'DEBUG': return 'badge-secondary';
+                default: return 'badge-secondary';
+            }
+        },
+
+        getLogRowClass(log) {
+            switch ((log.level || '').toUpperCase()) {
+                case 'ERROR': return 'log-row-error';
+                case 'WARNING': return 'log-row-warning';
+                default: return '';
+            }
+        },
+
+        getLogCountByLevel(level) {
+            return this.logs.filter(log => log.level.toUpperCase() === level).length;
+        },
+
+        getLatestEventTime() {
+            if (this.logs.length === 0) return 'N/A';
+            
+            // Find the most recent log entry
+            const latestLog = this.logs.reduce((latest, current) => {
+                const latestTime = new Date(latest.time || latest.timestamp || 0);
+                const currentTime = new Date(current.time || current.timestamp || 0);
+                return currentTime > latestTime ? current : latest;
+            });
+            
+            const timeValue = latestLog.time || latestLog.timestamp;
+            if (!timeValue) return 'N/A';
+            
+            const date = new Date(timeValue);
+            if (isNaN(date.getTime())) return 'Invalid';
+            
+            // Return relative time for recent events, absolute time for older ones
+            const now = new Date();
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMs / 3600000);
+            
+            if (diffMins < 1) return 'Just now';
+            if (diffMins < 60) return `${diffMins}m ago`;
+            if (diffHours < 24) return `${diffHours}h ago`;
+            
+            return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        },
+
+        getStatusText() {
+            if (this.loading) return 'Loading...';
+            if (this.error) return 'Error';
+            return this.autoRefresh ? 'Live' : 'Connected';
+        }
+    }
+}
+</script>
+
+<style>
+/* Additional styles for log viewer */
+.badge-error {
+    background-color: hsl(0 84% 60% / 0.1);
+    color: hsl(0 84% 60%);
+    border-color: hsl(0 84% 60% / 0.2);
+}
+
+.badge-warning {
+    background-color: hsl(38 92% 50% / 0.1);
+    color: hsl(38 92% 50%);
+    border-color: hsl(38 92% 50% / 0.2);
+}
+
+.badge-info {
+    background-color: hsl(221 83% 53% / 0.1);
+    color: hsl(221 83% 53%);
+    border-color: hsl(221 83% 53% / 0.2);
+}
+
+.badge-secondary {
+    background-color: hsl(var(--muted));
+    color: hsl(var(--muted-foreground));
+    border-color: hsl(var(--border));
+}
+
+.log-row-error {
+    background-color: hsl(0 84% 60% / 0.05);
+}
+
+.log-row-warning {
+    background-color: hsl(38 92% 50% / 0.05);
+}
+
+.table tbody tr:hover.log-row-error {
+    background-color: hsl(0 84% 60% / 0.1);
+}
+
+.table tbody tr:hover.log-row-warning {
+    background-color: hsl(38 92% 50% / 0.1);
+}
+
+/* Scrollbar styling */
+.table-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.table-container::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+}
+
+.table-container::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 4px;
+}
+
+.table-container::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground));
+}
+</style>
+
+{{template "footer" .}}
