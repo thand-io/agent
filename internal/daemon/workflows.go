@@ -14,8 +14,9 @@ import (
 
 type ExecutionStatePageData struct {
 	config.TemplateData `json:"-"`
-	Execution           *models.WorkflowTask `json:"execution"`
-	Workflow            *model.Workflow      `json:"workflow"`
+	Execution           *models.WorkflowExecutionInfo `json:"execution"`
+	Task                *models.WorkflowTask          `json:"task"`
+	Workflow            *model.Workflow               `json:"workflow"`
 }
 
 type WorkflowPageData struct {

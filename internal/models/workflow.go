@@ -77,5 +77,7 @@ type WorkflowExecutionInfo struct {
 	// SearchAttributes are the custom search attributes associated with the workflow
 	Role     string `json:"role"`
 	User     string `json:"user"`
+	Reason   string `json:"reason,omitempty"`
+	Duration int64  `json:"duration,omitempty"` // Duration in seconds
 	Approved bool   `json:"approved" default:"false"`
 }

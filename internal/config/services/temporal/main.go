@@ -1,11 +1,13 @@
 package temporal
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 )
@@ -65,8 +67,14 @@ func (a *TemporalClient) Initialize() error {
 
 	a.client = temporalClient
 
-	// Lets register the worker
+	// Now that we have a client, lets validate the configuraiton of the external namespace
+	err = a.validateTemporalNamespace()
 
+	if err != nil {
+		logrus.WithError(err).Errorln("failed to validate Temporal namespace")
+	}
+
+	// Lets register the worker
 	a.worker = worker.New(
 		temporalClient,
 		a.GetTaskQueue(),
@@ -126,5 +134,78 @@ func (c *TemporalClient) GetIdentity() string {
 func (c *TemporalClient) Shutdown() error {
 	c.client.Close()
 	c.worker.Stop()
+	return nil
+}
+
+func (c *TemporalClient) validateTemporalNamespace() error {
+
+	// Check if the namespace exists
+	namespace := c.GetNamespace()
+	if len(namespace) == 0 {
+		return fmt.Errorf("namespace is not set")
+	}
+
+	// Validate the namespace with the Temporal server
+	namespaceResponse, err := c.client.WorkflowService().DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: namespace,
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to describe Temporal namespace '%s': %w", namespace, err)
+	}
+
+	// Get search attributes for the namespace
+	searchAttributesResponse, err := c.client.WorkflowService().GetSearchAttributes(context.Background(), &workflowservice.GetSearchAttributesRequest{})
+	if err != nil {
+		return fmt.Errorf("failed to get search attributes for namespace '%s': %w", namespace, err)
+	}
+
+	// Define required typed search attributes
+	requiredSearchAttributes := []any{
+		models.TypedSearchAttributeStatus,
+		models.TypedSearchAttributeTask,
+		models.TypedSearchAttributeUser,
+		models.TypedSearchAttributeRole,
+		models.TypedSearchAttributeWorkflow,
+		models.TypedSearchAttributeProviders,
+		models.TypedSearchAttributeReason,
+		models.TypedSearchAttributeDuration,
+		models.TypedSearchAttributeIdentities,
+		models.TypedSearchAttributeApproved,
+	}
+
+	// Check if all required search attributes are defined
+	missingAttributes := []string{}
+	for _, attr := range requiredSearchAttributes {
+		// Use type assertion to access the SearchAttributeKey interface methods
+		if searchAttr, ok := attr.(interface {
+			GetName() string
+			GetValueType() any
+		}); ok {
+			attributeName := searchAttr.GetName()
+			expectedType := searchAttr.GetValueType()
+
+			if actualType, exists := searchAttributesResponse.GetKeys()[attributeName]; !exists {
+				missingAttributes = append(missingAttributes, attributeName)
+			} else {
+				// Compare the enum values directly
+				if actualType != expectedType {
+					return fmt.Errorf("search attribute '%s' has incorrect type. Expected: %v, Actual: %v",
+						attributeName, expectedType, actualType)
+				}
+			}
+		}
+	}
+
+	if len(missingAttributes) > 0 {
+		return fmt.Errorf("namespace '%s' is missing required typed search attributes: %v",
+			namespace, missingAttributes)
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"namespace": namespace,
+		"state":     namespaceResponse.GetNamespaceInfo().GetState().String(),
+	}).Info("Temporal namespace validation successful")
+
 	return nil
 }

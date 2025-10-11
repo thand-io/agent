@@ -26,13 +26,14 @@ var TemporalIsApprovedQueryName = "isApproved"
 var TemporalGetWorkflowTaskQueryName = "getWorkflowTask"
 
 var TypedSearchAttributeStatus = temporal.NewSearchAttributeKeyKeyword("status")
-
 var TypedSearchAttributeTask = temporal.NewSearchAttributeKeyString("task")
 var TypedSearchAttributeUser = temporal.NewSearchAttributeKeyString(VarsContextUser)
 var TypedSearchAttributeRole = temporal.NewSearchAttributeKeyString(VarsContextRole)
 var TypedSearchAttributeWorkflow = temporal.NewSearchAttributeKeyString(VarsContextWorkflow)
 var TypedSearchAttributeProviders = temporal.NewSearchAttributeKeyKeywordList(VarsContextProviders)
-
+var TypedSearchAttributeReason = temporal.NewSearchAttributeKeyString("reason")
+var TypedSearchAttributeDuration = temporal.NewSearchAttributeKeyInt64("duration")
+var TypedSearchAttributeIdentities = temporal.NewSearchAttributeKeyKeywordList("identities")
 var TypedSearchAttributeApproved = temporal.NewSearchAttributeKeyBool(VarsContextApproved)
 
 type TemporalConfig struct {

@@ -1,147 +1,544 @@
 {{template "header" .TemplateData}}
-    <main>
-        <div class="container" style="width: 100%;">
-            <div class="page-header">
-                <h1>Executions</h1>
-                <p>Running workflow executions and their current status.</p>
+<main x-data="executionViewer()" x-init="init()">
+    <div class="container" style="width: 100%;">
+        <!-- Page Header -->
+        <div class="page-header">
+            <h1>Executions</h1>
+            <p>Real-time monitoring of workflow executions and their current status.</p>
+        </div>
+
+        <!-- Controls Section -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+            <!-- Left Controls -->
+            <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                <!-- Auto-refresh Toggle -->
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <label style="font-size: 0.875rem; font-weight: 500;">Auto-refresh:</label>
+                    <button @click="toggleAutoRefresh()" 
+                            :class="autoRefresh ? 'button-primary' : 'button-secondary'"
+                            class="button" 
+                            style="padding: 0.5rem 1rem; font-size: 0.75rem;">
+                        <span x-text="autoRefresh ? 'ON' : 'OFF'"></span>
+                    </button>
+                </div>
+
+                <!-- Refresh Interval -->
+                <div style="display: flex; align-items: center; gap: 0.5rem;" x-show="autoRefresh">
+                    <label style="font-size: 0.875rem;">Interval:</label>
+                    <select x-model="refreshInterval" @change="updateRefreshInterval()" 
+                            style="padding: 0.5rem; border: 1px solid hsl(var(--border)); border-radius: 0.25rem; background: hsl(var(--background)); color: hsl(var(--foreground)); font-size: 0.75rem;">
+                        <option value="1000">1s</option>
+                        <option value="5000">5s</option>
+                        <option value="10000">10s</option>
+                        <option value="30000">30s</option>
+                    </select>
+                </div>
+
+                <!-- Status Filter -->
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <label style="font-size: 0.875rem;">Status:</label>
+                    <select x-model="selectedStatus" @change="filterExecutions()" 
+                            style="padding: 0.5rem; border: 1px solid hsl(var(--border)); border-radius: 0.25rem; background: hsl(var(--background)); color: hsl(var(--foreground)); font-size: 0.75rem;">
+                        <option value="">All</option>
+                        <option value="RUNNING">Running</option>
+                        <option value="COMPLETED">Completed</option>
+                        <option value="FAILED">Failed</option>
+                        <option value="CANCELED">Canceled</option>
+                        <option value="PENDING">Pending</option>
+                    </select>
+                </div>
             </div>
 
-            <div class="table-container">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Workflow ID</th>
-                            <th>Role / Approval</th>
-                            <th>Initiator</th>
-                            <th>Status</th>
-                            <th>Started</th>
-                            <th>Duration</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {{range .Response.Workflows}}
-                        <tr>
-                            <td>
-                                <a href="/execution/{{.WorkflowID}}" style="text-decoration: none; color: inherit;">
-                                    <strong>{{.WorkflowID}}</strong>
-                                    {{if .RunID}}
-                                        <div style="font-size: 0.75rem; color: hsl(var(--muted-foreground));">
-                                            Run: {{.RunID}}
-                                        </div>
-                                    {{end}}
-                                </a>
-                            </td>
-                            <td>
-                                {{if .Role}}
-                                    <span class="badge badge-secondary">{{.Role}}</span>
-                                {{else}}
-                                    <span class="text-muted">-</span>
-                                {{end}}
-                                {{if .Approved}}
-                                    <span class="badge badge-success" title="This execution has been approved">Approved</span>
-                                {{else if eq .Approved false}}
-                                    {{if or (eq .Status "RUNNING") (eq .Status "PENDING")}}
-                                        <span class="badge badge-secondary" title="This execution is pending approval">Pending</span>
-                                    {{else}}
-                                        <span class="badge badge-error" title="This execution has been denied">Denied</span>
-                                    {{end}}
-                                {{end}}
-                            </td>
-                            <td>
-                                {{if .User}}
-                                    {{.User}}
-                                {{else}}
-                                    <span class="text-muted">-</span>
-                                {{end}}
-                            </td>
-                            <td>
-                                {{if eq .Status "RUNNING"}}
-                                    <span class="badge badge-success">
-                                        <div class="status-dot" style="margin-right: 0.25rem;"></div>
-                                        Running
-                                    </span>
-                                {{else if eq .Status "COMPLETED"}}
-                                    <span class="badge badge-success">Completed</span>
-                                {{else if eq .Status "FAILED"}}
-                                    <span class="badge badge-error">Failed</span>
-                                {{else if eq .Status "CANCELED"}}
-                                    <span class="badge badge-warning">Canceled</span>
-                                {{else if eq .Status "TERMINATED"}}
-                                    <span class="badge badge-error">Terminated</span>
-                                {{else if eq .Status "CONTINUED_AS_NEW"}}
-                                    <span class="badge badge-secondary">Continued</span>
-                                {{else if eq .Status "PENDING"}}
-                                    <span class="badge badge-secondary">Pending</span>
-                                {{else if eq .Status "TIMED_OUT"}}
-                                    <span class="badge badge-warning">Timed Out</span>
-                                {{else}}
-                                    <span class="badge badge-secondary">{{.Status}}</span>
-                                {{end}}
-                            </td>
-                            <td>
-                                {{if not .StartTime.IsZero}}
-                                    <span title="{{.StartTime.Format "2006-01-02 15:04:05 UTC"}}">
-                                        {{.StartTime.Format "Jan 2, 15:04"}}
-                                    </span>
-                                {{else}}
-                                    <span class="text-muted">-</span>
-                                {{end}}
-                            </td>
-                            <td>
-                                {{if not .StartTime.IsZero}}
-                                    {{if .CloseTime}}
-                                        {{$duration := .CloseTime.Sub .StartTime}}
-                                        {{$minutes := $duration.Minutes}}
-                                        {{$hours := $duration.Hours}}
-                                        {{if lt $minutes 60.0}}
-                                            {{printf "%.0fm" $minutes}}
-                                        {{else}}
-                                            {{printf "%.1fh" $hours}}
-                                        {{end}}
-                                    {{else}}
-                                        <!-- Running workflow duration -->
-                                        <span class="text-muted">Running...</span>
-                                    {{end}}
-                                {{else}}
-                                    <span class="text-muted">-</span>
-                                {{end}}
-                            </td>
-                            <td>
-                                <a href="/execution/{{.WorkflowID}}" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">View</a>
-                                <!-- Only show for running, waiting or pending workflows-->
-                                {{ if or (eq .Status "RUNNING") (eq .Status "PENDING") (eq .Status "WAITING") }}
-                                    <a href="/execution/{{.WorkflowID}}/cancel" class="button button-warning" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Cancel</a>
-                                {{end}}
-                            </td>
-                        </tr>
-                        {{else}}
-                        <tr>
-                            <td colspan="7" class="text-muted" style="text-align: center; padding: 2rem;">
-                                No running workflow executions found
-                            </td>
-                        </tr>
-                        {{end}}
-                    </tbody>
-                </table>
-            </div>
+            <!-- Right Controls -->
+            <div style="display: flex; gap: 1rem; align-items: center;">
+                <!-- Status Indicator -->
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <div class="status-dot" :class="{ 'connecting': loading, 'error': error, 'success': !loading && !error }"></div>
+                    <span style="font-size: 0.875rem;" x-text="getStatusText()"></span>
+                </div>
 
-            {{if .Response.Workflows}}
-            <div style="margin-top: 1.5rem; padding: 1rem; background-color: hsl(var(--muted) / 0.5); border-radius: 0.5rem;">
-                <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem;">Execution Information</h3>
-                <p style="font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin: 0;">
-                    <strong>Status:</strong> Current state of the workflow execution.<br>
-                    <strong>Duration:</strong> Time elapsed since the workflow started (or total runtime if completed).<br>
-                    <strong>Actions:</strong> View detailed workflow information or manage running executions.
-                </p>
-            </div>
-            {{end}}
-
-            <div class="button-group" style="margin-top: 2rem;">
-                <a href="/" class="button button-secondary">← Back to Home</a>
-                <a href="/elevate" class="button button-primary">Request Elevation</a>
+                <!-- Manual Refresh -->
+                <button @click="fetchExecutions()" :disabled="loading" class="button button-secondary" 
+                        style="padding: 0.5rem 1rem; font-size: 0.75rem;">
+                    <span x-show="!loading">Refresh</span>
+                    <span x-show="loading">Loading...</span>
+                </button>
             </div>
         </div>
-    </main>
+
+        <!-- Search Bar and Summary -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; gap: 2rem; flex-wrap: wrap;">
+            <!-- Search Bar -->
+            <div style="flex: 0 0 300px; min-width: 250px;">
+                <input type="text" 
+                       x-model="searchQuery" 
+                       @input="filterExecutions()"
+                       placeholder="Search executions..."
+                       style="width: 100%; padding: 0.75rem; border: 1px solid hsl(var(--border)); border-radius: 0.5rem; background: hsl(var(--background)); color: hsl(var(--foreground)); font-size: 0.875rem;">
+            </div>
+            
+            <!-- Summary Information -->
+            <div style="display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap;">
+                <!-- Execution Status Counts -->
+                <div style="display: flex; gap: 1rem; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span class="badge badge-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">Total</span>
+                        <span style="font-weight: 600; font-size: 0.875rem;" x-text="executions.length"></span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span class="badge badge-success" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">Running</span>
+                        <span style="font-weight: 600; font-size: 0.875rem; color: #10b981;" x-text="getExecutionCountByStatus('RUNNING')"></span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span class="badge badge-error" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">Failed</span>
+                        <span style="font-weight: 600; font-size: 0.875rem; color: #ef4444;" x-text="getExecutionCountByStatus('FAILED')"></span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span class="badge badge-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">Pending</span>
+                        <span style="font-weight: 600; font-size: 0.875rem; color: #6b7280;" x-text="getExecutionCountByStatus('PENDING')"></span>
+                    </div>
+                </div>
+                
+                <!-- Latest Execution Time -->
+                <div style="display: flex; align-items: center; gap: 0.5rem; padding-left: 1rem; border-left: 1px solid hsl(var(--border));">
+                    <span style="font-size: 0.875rem; color: hsl(var(--muted-foreground));">Latest:</span>
+                    <span style="font-size: 0.875rem; font-weight: 500; font-family: monospace;" x-text="getLatestExecutionTime()"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Error State -->
+        <div x-show="error && !loading" class="status-card" style="text-align: center; padding: 2rem; margin-bottom: 2rem; border-color: #ef4444;">
+            <h3 style="color: #ef4444; margin-bottom: 1rem;">Error Loading Executions</h3>
+            <p x-text="error" style="color: hsl(var(--muted-foreground)); margin-bottom: 1rem;"></p>
+            <button @click="fetchExecutions()" class="button button-primary">Retry</button>
+        </div>        <!-- Executions Container -->
+        <div class="table-container" style="max-height: 70vh; overflow-y: auto;" x-show="!error">
+            <!-- Loading State -->
+            <div x-show="loading && executions.length === 0" style="text-align: center; padding: 3rem;">
+                <div class="status-dot connecting" style="width: 2rem; height: 2rem; margin: 0 auto 1rem;"></div>
+                <p style="color: hsl(var(--muted-foreground));">Loading executions...</p>
+            </div>
+
+            <!-- Empty State -->
+            <div x-show="!loading && displayedExecutions.length === 0 && executions.length === 0" style="text-align: center; padding: 3rem;">
+                <p style="color: hsl(var(--muted-foreground));">No executions available</p>
+            </div>
+
+            <!-- No Results State -->
+            <div x-show="!loading && displayedExecutions.length === 0 && executions.length > 0" style="text-align: center; padding: 3rem;">
+                <p style="color: hsl(var(--muted-foreground));">No executions match your current filters</p>
+                <button @click="clearFilters()" class="button button-secondary" style="margin-top: 1rem;">Clear Filters</button>
+            </div>
+
+            <!-- Large Dataset Warning -->
+            <div x-show="filteredExecutions.length > maxDisplaySize" style="background-color: hsl(38 92% 50% / 0.1); border: 1px solid hsl(38 92% 50% / 0.2); border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem;">
+                <p style="color: hsl(38 92% 50%); margin: 0; font-size: 0.875rem;">
+                    <strong>Large Dataset:</strong> Showing first <span x-text="maxDisplaySize"></span> of <span x-text="filteredExecutions.length"></span> executions for performance. Use search or filters to narrow results.
+                </p>
+            </div>
+
+            <!-- Executions Table -->
+            <table class="table" x-show="displayedExecutions.length > 0">
+                <thead>
+                    <tr>
+                        <th>Approved</th>
+                        <th>Role</th>
+                        <th>Identities</th>
+                        <th>Reason</th>
+                        <th>Duration</th>
+                        <th>Started</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="(execution, index) in displayedExecutions" :key="index">
+                        <tr>
+                            <td>
+                                <span x-show="execution.approved === true" class="badge badge-success" title="This execution has been approved">Approved</span>
+                                <span x-show="execution.approved === false" class="badge badge-error" title="This execution has been denied">Denied</span>
+                                <span x-show="execution.approved === null && (execution.status === 'RUNNING' || execution.status === 'PENDING')" class="badge badge-secondary" title="This execution is pending approval">Pending</span>
+                                <span x-show="execution.approved === null && execution.status !== 'RUNNING' && execution.status !== 'PENDING'" class="text-muted">-</span>
+                            </td>
+                            <td>
+                                <span x-show="execution.role" class="badge badge-secondary" x-text="execution.role"></span>
+                                <span x-show="!execution.role" class="text-muted">-</span>
+                            </td>
+                            <td>
+                                <span x-show="execution.identities && execution.identities.length === 1" x-text="execution.identities ? execution.identities[0] : ''"></span>
+                                <span x-show="execution.identities && execution.identities.length > 1" x-text="execution.identities ? (execution.identities.length + ' Identities') : ''"></span>
+                                <span x-show="!execution.identities || execution.identities.length === 0" class="text-muted">-</span>
+                            </td>
+                            <td>
+                                <div x-show="execution.reason">
+                                    <div x-text="execution.reason ? (execution.reason.length > 70 ? execution.reason.substring(0, 70) + '...' : execution.reason) : ''"></div>
+                                    <div x-show="execution.user" style="font-size: 0.75rem; color: hsl(var(--muted-foreground)); margin-top: 0.25rem;" x-text="execution.user"></div>
+                                </div>
+                                <span x-show="!execution.reason" class="text-muted">-</span>
+                            </td>
+                            <td>
+                                <span x-show="execution.duration" x-text="formatDurationFromSeconds(execution.duration)"></span>
+                                <span x-show="!execution.duration && execution.started_at && !execution.finished_at && (execution.status === 'RUNNING' || execution.status === 'PENDING')" class="text-muted">Running...</span>
+                                <span x-show="!execution.duration && (!execution.started_at || execution.finished_at)" class="text-muted">-</span>
+                            </td>
+                            <td>
+                                <span x-show="execution.started_at" :title="formatTimestampFull(execution.started_at)" x-text="formatTimestamp(execution.started_at)"></span>
+                                <span x-show="!execution.started_at" class="text-muted">-</span>
+                            </td>
+                            <td>
+                                <span :class="getStatusBadgeClass(execution.status)" class="badge">
+                                    <div x-show="execution.status === 'RUNNING'" class="status-dot" style="margin-right: 0.25rem;"></div>
+                                    <span x-text="execution.status"></span>
+                                </span>
+                            </td>
+                            <td>
+                                <a :href="`/execution/${execution.id}`" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">View</a>
+                                <a x-show="execution.status === 'RUNNING' || execution.status === 'PENDING' || execution.status === 'WAITING'" 
+                                   :href="`/execution/${execution.id}/cancel`" 
+                                   class="button button-warning" 
+                                   style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Cancel</a>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Footer Info -->
+        <div style="margin-top: 2rem; text-align: center; color: hsl(var(--muted-foreground)); font-size: 0.875rem;">
+            <p>
+                Showing <span x-text="displayedExecutions.length"></span> 
+                <span x-show="filteredExecutions.length !== executions.length">of <span x-text="filteredExecutions.length"></span> filtered</span> 
+                of <span x-text="executions.length"></span> total executions
+            </p>
+        </div>
+
+        <!-- Navigation -->
+        <div class="button-group" style="margin-top: 2rem;">
+            <a href="/" class="button button-secondary">← Back to Home</a>
+            <a href="/elevate" class="button button-primary">Request Elevation</a>
+        </div>
+    </div>
+</main>
+
+    <script>
+        function executionViewer() {
+            return {
+                // Reactive state
+                loading: false,
+                error: null,
+                executions: [],
+                filteredExecutions: [],
+                displayedExecutions: [],
+                autoRefresh: false,
+                refreshInterval: 5000,
+                refreshTimer: null,
+                selectedStatus: '',
+                searchQuery: '',
+                lastUpdated: '',
+                currentPage: 1,
+                pageSize: 50,
+                maxDisplaySize: 1000, // Limit DOM rendering to prevent browser freeze
+
+                // Initialize the app
+                init() {
+                    // Load initial data from server template if available
+                    {{if .Executions}}
+                    const templateExecutions = JSON.parse({{.Executions | toJSON}});
+                    // Ensure executions is always an array
+                    this.executions = Array.isArray(templateExecutions) ? templateExecutions : [];
+                    this.filterExecutions();
+                    {{else}}
+                    this.fetchExecutions();
+                    {{end}}
+
+                    // Start auto-refresh if temporal is available
+                    {{if .Config.GetServices.HasTemporal}}
+                    this.autoRefresh = true;
+                    this.startAutoRefresh();
+                    {{end}}
+                },
+
+                // Fetch executions from API
+                async fetchExecutions() {
+                    this.loading = true;
+                    this.error = null;
+
+                    try {
+                        const response = await fetch('{{.Config.GetApiBasePath}}/executions');
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
+
+                        const data = await response.json();
+                        console.log('API Response:', data);
+                        console.log('Executions count:', (data.executions || []).length);
+                        console.log('First 3 executions:', (data.executions || []).slice(0, 3));
+                        
+                        this.executions = data.executions || [];
+                        this.filterExecutions();
+                        this.lastUpdated = new Date().toLocaleTimeString();
+                    } catch (err) {
+                        this.error = err.message;
+                        this.executions = [];
+                        this.filteredExecutions = [];
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                // Filter executions based on search and status
+                filterExecutions() {
+                    let filtered = [...this.executions];
+
+                    // Filter by status
+                    if (this.selectedStatus) {
+                        filtered = filtered.filter(execution => execution.status === this.selectedStatus);
+                    }
+
+                    // Filter by search query
+                    if (this.searchQuery) {
+                        const query = this.searchQuery.toLowerCase();
+                        filtered = filtered.filter(execution => 
+                            (execution.id || '').toLowerCase().includes(query) ||
+                            (execution.role || '').toLowerCase().includes(query) ||
+                            (execution.user || '').toLowerCase().includes(query) ||
+                            (execution.status || '').toLowerCase().includes(query) ||
+                            (execution.run || '').toString().toLowerCase().includes(query)
+                        );
+                    }
+
+                    // Sort by timestamp in descending order (most recent first)
+                    filtered.sort((a, b) => {
+                        const timeA = new Date(a.started_at || 0);
+                        const timeB = new Date(b.started_at || 0);
+                        return timeB - timeA; // Descending order (newest first)
+                    });
+
+                    this.filteredExecutions = filtered;
+                    
+                    // Limit displayed results to prevent browser freeze
+                    this.displayedExecutions = filtered.slice(0, this.maxDisplaySize);
+                    this.currentPage = 1;
+                },
+
+                // Clear all filters
+                clearFilters() {
+                    this.selectedStatus = '';
+                    this.searchQuery = '';
+                    this.filterExecutions();
+                },
+
+                // Auto-refresh management
+                toggleAutoRefresh() {
+                    this.autoRefresh = !this.autoRefresh;
+                    if (this.autoRefresh) {
+                        this.startAutoRefresh();
+                    } else {
+                        this.stopAutoRefresh();
+                    }
+                },
+
+                startAutoRefresh() {
+                    this.stopAutoRefresh();
+                    this.refreshTimer = setInterval(() => {
+                        this.fetchExecutions();
+                    }, this.refreshInterval);
+                },
+
+                stopAutoRefresh() {
+                    if (this.refreshTimer) {
+                        clearInterval(this.refreshTimer);
+                        this.refreshTimer = null;
+                    }
+                },
+
+                updateRefreshInterval() {
+                    if (this.autoRefresh) {
+                        this.startAutoRefresh();
+                    }
+                },
+
+                // Status badge classes
+                getStatusBadgeClass(status) {
+                    switch (status?.toUpperCase()) {
+                        case 'RUNNING': return 'badge-success';
+                        case 'COMPLETED': return 'badge-success';
+                        case 'FAILED': return 'badge-error';
+                        case 'CANCELED': return 'badge-warning';
+                        case 'TERMINATED': return 'badge-error';
+                        case 'CONTINUED_AS_NEW': return 'badge-secondary';
+                        case 'PENDING': return 'badge-secondary';
+                        case 'TIMED_OUT': return 'badge-warning';
+                        default: return 'badge-secondary';
+                    }
+                },
+
+                // Count executions by status
+                getExecutionCountByStatus(status) {
+                    // Ensure executions is an array before filtering
+                    if (!Array.isArray(this.executions)) {
+                        console.warn('executions is not an array:', this.executions);
+                        return 0;
+                    }
+                    return this.executions.filter(execution => execution.status?.toUpperCase() === status).length;
+                },
+
+                // Format timestamp for display
+                formatTimestamp(timestamp) {
+                    if (!timestamp) return 'N/A';
+                    
+                    const date = new Date(timestamp);
+                    if (isNaN(date.getTime())) return 'Invalid Date';
+                    
+                    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                },
+
+                // Format full timestamp for tooltip
+                formatTimestampFull(timestamp) {
+                    if (!timestamp) return 'N/A';
+                    
+                    const date = new Date(timestamp);
+                    if (isNaN(date.getTime())) return 'Invalid Date';
+                    
+                    return date.toLocaleString();
+                },
+
+                // Format duration between start and end times
+                formatDuration(startTime, endTime) {
+                    if (!startTime || !endTime) return '-';
+                    
+                    const start = new Date(startTime);
+                    const end = new Date(endTime);
+                    
+                    if (isNaN(start.getTime()) || isNaN(end.getTime())) return '-';
+                    
+                    const diffMs = end - start;
+                    const diffMins = Math.floor(diffMs / 60000);
+                    const diffHours = diffMs / 3600000;
+                    
+                    if (diffMins < 60) {
+                        return `${diffMins}m`;
+                    } else {
+                        return `${diffHours.toFixed(1)}h`;
+                    }
+                },
+
+                // Format duration from seconds
+                formatDurationFromSeconds(seconds) {
+                    if (!seconds || seconds <= 0) return '-';
+                    
+                    const hours = Math.floor(seconds / 3600);
+                    const minutes = Math.floor((seconds % 3600) / 60);
+                    const remainingSeconds = Math.floor(seconds % 60);
+                    
+                    if (hours > 0) {
+                        return `${hours}h ${minutes}m`;
+                    } else if (minutes > 0) {
+                        return `${minutes}m ${remainingSeconds}s`;
+                    } else {
+                        return `${remainingSeconds}s`;
+                    }
+                },
+
+                // Get status text for indicator
+                getStatusText() {
+                    if (this.loading) return 'Loading...';
+                    if (this.error) return 'Error';
+                    return this.autoRefresh ? 'Live' : 'Connected';
+                },
+
+                // Get latest execution start time
+                getLatestExecutionTime() {
+                    // Ensure executions is an array and has content
+                    if (!Array.isArray(this.executions) || this.executions.length === 0) {
+                        return 'N/A';
+                    }
+                    
+                    // Find the most recent execution
+                    const latestExecution = this.executions.reduce((latest, current) => {
+                        const latestTime = new Date(latest.started_at || 0);
+                        const currentTime = new Date(current.started_at || 0);
+                        return currentTime > latestTime ? current : latest;
+                    });
+                    
+                    const timeValue = latestExecution.started_at;
+                    if (!timeValue) return 'N/A';
+                    
+                    const date = new Date(timeValue);
+                    if (isNaN(date.getTime())) return 'Invalid';
+                    
+                    // Return relative time for recent events, absolute time for older ones
+                    const now = new Date();
+                    const diffMs = now - date;
+                    const diffMins = Math.floor(diffMs / 60000);
+                    const diffHours = Math.floor(diffMs / 3600000);
+                    
+                    if (diffMins < 1) return 'Just now';
+                    if (diffMins < 60) return `${diffMins}m ago`;
+                    if (diffHours < 24) return `${diffHours}h ago`;
+                    
+                    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                },
+
+                // Cleanup
+                destroy() {
+                    this.stopAutoRefresh();
+                }
+            }
+        }
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {
+            // Alpine.js will handle cleanup automatically
+        });
+    </script>
+
+    <style>
+        /* Additional styles for executions viewer */
+        .badge-error {
+            background-color: hsl(0 84% 60% / 0.1);
+            color: hsl(0 84% 60%);
+            border-color: hsl(0 84% 60% / 0.2);
+        }
+
+        .badge-warning {
+            background-color: hsl(38 92% 50% / 0.1);
+            color: hsl(38 92% 50%);
+            border-color: hsl(38 92% 50% / 0.2);
+        }
+
+        .badge-success {
+            background-color: hsl(142 76% 36% / 0.1);
+            color: hsl(142 76% 36%);
+            border-color: hsl(142 76% 36% / 0.2);
+        }
+
+        .badge-secondary {
+            background-color: hsl(var(--muted));
+            color: hsl(var(--muted-foreground));
+            border-color: hsl(var(--border));
+        }
+
+        /* Scrollbar styling */
+        .table-container::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .table-container::-webkit-scrollbar-track {
+            background: hsl(var(--muted));
+        }
+
+        .table-container::-webkit-scrollbar-thumb {
+            background: hsl(var(--border));
+            border-radius: 4px;
+        }
+
+        .table-container::-webkit-scrollbar-thumb:hover {
+            background: hsl(var(--muted-foreground));
+        }
+    </style>
 
 {{template "footer" .TemplateData}}

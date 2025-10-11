@@ -20,6 +20,11 @@ import (
 	"go.temporal.io/sdk/converter"
 )
 
+type ExecutionsPageData struct {
+	config.TemplateData
+	Executions []*models.WorkflowExecutionInfo `json:"executions"`
+}
+
 func (s *Server) listRunningWorkflows(c *gin.Context) {
 
 	ctx := context.Background()
@@ -67,27 +72,17 @@ func (s *Server) listRunningWorkflows(c *gin.Context) {
 
 	for _, exec := range resp.Executions {
 		runningWorkflows = append(
-			runningWorkflows, workflowExecutionInfo(exec))
+			runningWorkflows, workflowExecutionInfo(exec, foundUser.User))
 	}
 
-	response := struct {
-		Workflows []*models.WorkflowExecutionInfo `json:"workflows"`
-	}{
-		Workflows: runningWorkflows,
+	response := ExecutionsPageData{
+		TemplateData: s.GetTemplateData(c),
+		Executions:   runningWorkflows,
 	}
 
 	if s.canAcceptHtml(c) {
 
-		data := struct {
-			TemplateData config.TemplateData
-			Response     struct {
-				Workflows []*models.WorkflowExecutionInfo `json:"workflows"`
-			}
-		}{
-			TemplateData: s.GetTemplateData(c),
-			Response:     response,
-		}
-		s.renderHtml(c, "executions.html", data)
+		s.renderHtml(c, "executions.html", response)
 
 	} else {
 
@@ -117,6 +112,19 @@ func (s *Server) getRunningWorkflow(c *gin.Context) {
 		return
 	}
 
+	if !s.Config.IsServer() {
+		// In non-server mode we can assume a default user
+		// TODO: Proxy request to server
+		s.getErrorPage(c, http.StatusBadRequest, "Workflow listing is only available in server mode")
+		return
+	}
+
+	foundUser, err := s.getUser(c)
+	if err != nil {
+		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of available providers", err)
+		return
+	}
+
 	temporalClient := temporal.GetClient()
 
 	// If it timesout then get the workflow information without the task details
@@ -127,9 +135,9 @@ func (s *Server) getRunningWorkflow(c *gin.Context) {
 		return
 	}
 
-	workflowExecInfo := workflowExecutionInfo(wkflw.GetWorkflowExecutionInfo())
+	workflowExecInfo := workflowExecutionInfo(wkflw.GetWorkflowExecutionInfo(), foundUser.User)
 
-	workflowInfo := models.WorkflowTask{
+	workflowTask := models.WorkflowTask{
 		WorkflowID:   workflowExecInfo.WorkflowID,
 		WorkflowName: workflowExecInfo.WorkflowName,
 		Status:       swctx.StatusPhase(strings.ToLower(workflowExecInfo.Status)),
@@ -154,18 +162,18 @@ func (s *Server) getRunningWorkflow(c *gin.Context) {
 
 		if err == nil {
 
-			err = queryResponse.QueryResult.Get(&workflowInfo)
+			err = queryResponse.QueryResult.Get(&workflowTask)
 
 			if err != nil {
 				s.getErrorPage(c, http.StatusInternalServerError, "Failed to get workflow state", err)
 				return
 			}
 
-			workflowName := workflowInfo.WorkflowName
+			workflowName := workflowTask.WorkflowName
 
 			if len(workflowName) == 0 {
 
-				elevationReq, err := workflowInfo.GetContextAsElevationRequest()
+				elevationReq, err := workflowTask.GetContextAsElevationRequest()
 
 				if err == nil && elevationReq != nil {
 					workflowName = elevationReq.Workflow
@@ -177,9 +185,9 @@ func (s *Server) getRunningWorkflow(c *gin.Context) {
 			foundWorkflow, err := s.GetConfig().GetWorkflowByName(workflowName)
 
 			if err != nil {
-				logrus.Debug("Unable to find workflow template for execution", "WorkflowName", workflowInfo.WorkflowName, "Error", err)
+				logrus.WithError(err).Warn("Failed to get workflow definition")
 			} else {
-				workflowInfo.Workflow = foundWorkflow.GetWorkflow()
+				workflowTask.Workflow = foundWorkflow.GetWorkflow()
 			}
 
 		}
@@ -190,22 +198,20 @@ func (s *Server) getRunningWorkflow(c *gin.Context) {
 		fut := temporalClient.GetWorkflow(
 			ctx, workflowID, models.TemporalEmptyRunId)
 
-		err := fut.Get(ctx, &workflowInfo)
+		err := fut.Get(ctx, &workflowTask)
 
 		if err != nil {
 			logrus.WithError(err).Error("Failed to get workflow output")
-			workflowInfo.Output = err.Error()
+			workflowTask.Output = err.Error()
 		}
-
-		workflowInfo.Status = swctx.StatusPhase(
-			strings.ToLower(workflowExecInfo.Status))
 
 	}
 
 	data := ExecutionStatePageData{
 		TemplateData: s.GetTemplateData(c),
-		Execution:    &workflowInfo,
-		Workflow:     workflowInfo.Workflow,
+		Execution:    workflowExecInfo,
+		Task:         &workflowTask,
+		Workflow:     workflowTask.Workflow,
 	}
 
 	if s.canAcceptHtml(c) {
@@ -222,7 +228,10 @@ func (s *Server) getExecutionsPage(c *gin.Context) {
 	s.listRunningWorkflows(c)
 }
 
-func workflowExecutionInfo(workflowInfo *workflow.WorkflowExecutionInfo) *models.WorkflowExecutionInfo {
+func workflowExecutionInfo(
+	workflowInfo *workflow.WorkflowExecutionInfo,
+	user *models.User,
+) *models.WorkflowExecutionInfo {
 
 	exec := workflowInfo.GetExecution()
 
@@ -284,6 +293,20 @@ func workflowExecutionInfo(workflowInfo *workflow.WorkflowExecutionInfo) *models
 		var taskValue string
 		if err := dataConverter.FromPayload(taskAttr, &taskValue); err == nil {
 			response.Task = taskValue
+		}
+	}
+
+	if reasonAttr, exists := searchAttributes["reason"]; exists && reasonAttr != nil {
+		var reasonValue string
+		if err := dataConverter.FromPayload(reasonAttr, &reasonValue); err == nil {
+			response.Reason = reasonValue
+		}
+	}
+
+	if durationAttr, exists := searchAttributes["duration"]; exists && durationAttr != nil {
+		var durationValue int64
+		if err := dataConverter.FromPayload(durationAttr, &durationValue); err == nil {
+			response.Duration = durationValue
 		}
 	}
 
