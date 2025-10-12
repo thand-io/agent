@@ -12,7 +12,7 @@
             <div x-show="error && !loading" style="text-align: center; padding: 2rem;">
                 <h1>Error Loading Workflow</h1>
                 <p x-text="error"></p>
-                <button @click="fetchWorkflowStatus()" class="button button-primary">Retry</button>
+                <button @click="fetchWorkflowStatus('retry')" class="button button-primary">Retry</button>
             </div>
             
             <!-- Workflow Content -->
@@ -32,7 +32,7 @@
                                 <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background-color: hsl(var(--secondary)); border-radius: 1.5rem; border: 1px solid hsl(var(--border));">
                                     <div style="width: 8px; height: 8px; border-radius: 50%;" 
                                          :style="{ 'background-color': hasCurrentTask() ? '#10b981' : (isWorkflowCompleted() ? '#3b82f6' : '#f59e0b') }"></div>
-                                    <span style="font-size: 0.875rem; font-weight: 500;" x-text="hasCurrentTask() ? `Running: ${execution.entrypoint}` : (isWorkflowCompleted() ? 'Completed' : (isWorkflowFailed() ? 'Failed' : 'Initializing'))"></span>
+                                    <span style="font-size: 0.875rem; font-weight: 500;" x-text="hasCurrentTask() ? `Running: ${execution.task}` : (isWorkflowCompleted() ? 'Completed' : (isWorkflowFailed() ? 'Failed' : 'Initializing'))"></span>
                                 </div>
                             </div>
                             
@@ -181,22 +181,68 @@
                     <template x-if="hasCurrentTask()">
                         <div style="padding: 1.5rem; background-color: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 0.5rem;">
                             <h4 style="margin-bottom: 1rem; font-size: 1rem; font-weight: 600;">
-                                Current Step: <span x-text="execution.entrypoint"></span>
+                                Current Step: <span x-text="execution.task || 'Unknown'"></span>
                             </h4>
                             <div style="display: grid; gap: 1rem;">
+                                <!-- Execution Status -->
                                 <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                    <span style="font-size: 0.875rem; color: hsl(var(--muted-foreground));">Status:</span>
-                                    <div :class="getWorkflowStatusBadgeClass()" x-text="execution?.Status || execution?.status"></div>
+                                    <span style="font-size: 0.875rem; color: hsl(var(--muted-foreground));">Execution Status:</span>
+                                    <div :class="getWorkflowStatusBadgeClass()" x-text="execution?.status"></div>
                                 </div>
                                 
-                                <template x-if="hasWorkflowContext()">
+                                <!-- User Information -->
+                                <template x-if="execution && execution.user">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                        <span style="font-size: 0.875rem; color: hsl(var(--muted-foreground));">Requesting User:</span>
+                                        <div class="badge badge-secondary" x-text="execution.user"></div>
+                                    </div>
+                                </template>
+                                
+                                <!-- Role Information -->
+                                <template x-if="execution && execution.role">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                        <span style="font-size: 0.875rem; color: hsl(var(--muted-foreground));">Role:</span>
+                                        <div class="badge badge-secondary" x-text="execution.role"></div>
+                                    </div>
+                                </template>
+                                
+                                <!-- Reason -->
+                                <template x-if="execution && execution.reason">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                        <span style="font-size: 0.875rem; color: hsl(var(--muted-foreground));">Reason:</span>
+                                        <div style="font-size: 0.875rem;" x-text="execution.reason"></div>
+                                    </div>
+                                </template>
+                                
+                                <!-- Identities List -->
+                                <template x-if="execution && execution.identities && execution.identities.length > 0">
                                     <div>
-                                        <div style="font-size: 0.875rem; font-weight: 500; margin-bottom: 0.5rem; color: hsl(var(--muted-foreground));">Workflow Context:</div>
-                                        <div style="padding: 0.75rem; background-color: hsl(var(--secondary)); border-radius: 0.375rem; font-size: 0.875rem; font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Consolas', monospace; white-space: pre-wrap; overflow-x: auto; line-height: 1.5;">
-                                            <pre style="margin: 0; background: none; border: none; padding: 0; font-size: inherit; font-family: inherit; white-space: pre-wrap; overflow-x: auto;" x-text="getWorkflowContextJson()"></pre>
+                                        <span style="font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin-bottom: 0.5rem; display: block;">Identities:</span>
+                                        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                                            <template x-for="identity in execution.identities" :key="identity">
+                                                <div class="badge badge-secondary" x-text="identity"></div>
+                                            </template>
                                         </div>
                                     </div>
                                 </template>
+                                
+                                <!-- Approval Duration -->
+                                <template x-if="execution && execution.duration">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                        <span style="font-size: 0.875rem; color: hsl(var(--muted-foreground));">Approval Duration:</span>
+                                        <div class="badge badge-secondary" x-text="getDuration()"></div>
+                                    </div>
+                                </template>
+                                
+                                <!-- Execution Context JSON -->
+                                <div>
+                                    <details style="margin-top: 1rem;">
+                                        <summary style="cursor: pointer; font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin-bottom: 0.5rem;">
+                                            Execution Context (JSON)
+                                        </summary>
+                                        <pre style="background-color: hsl(var(--muted)); padding: 1rem; border-radius: 0.375rem; overflow-x: auto; font-size: 0.75rem; margin-top: 0.5rem;"><code x-text="JSON.stringify(execution, null, 2)"></code></pre>
+                                    </details>
+                                </div>
                             </div>
                         </div>
                     </template>
@@ -208,6 +254,7 @@
                                 <div>
                                     <h4 style="color: hsl(var(--success)); margin-bottom: 0.5rem;">✓ Workflow Complete</h4>
                                     <p style="color: hsl(var(--muted-foreground)); font-size: 0.875rem;">All tasks have been executed successfully.</p>
+                                    
                                     <div style="margin-top: 1rem;">
                                         <a href="/" class="button button-primary" style="margin-right: 0.5rem;">Back to Home</a>
                                         <a href="/elevate" class="button button-secondary">New Request</a>
@@ -219,16 +266,10 @@
                                 <div>
                                     <h4 style="color: hsl(var(--destructive)); margin-bottom: 0.5rem;">✗ Workflow Failed</h4>
                                     <p style="color: hsl(var(--muted-foreground)); font-size: 0.875rem;">The workflow encountered an error and could not complete.</p>
+                                    
                                     <div style="margin-top: 1rem;">
                                         <a href="/" class="button button-primary" style="margin-right: 0.5rem;">Back to Home</a>
                                         <a href="/elevate" class="button button-secondary">Try Again</a>
-                                    </div>
-                                    <!-- show the workflow output -->
-                                    <div x-show="hasWorkflowOutput()" style="margin-top: 1.5rem; text-align: left;">
-                                        <div style="font-size: 0.875rem; font-weight: 500; margin-bottom: 0.5rem; color: hsl(var(--muted-foreground));">Workflow Output:</div>
-                                        <div style="padding: 0.75rem; background-color: hsl(var(--secondary)); border-radius: 0.375rem; font-size: 0.875rem; font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Consolas', monospace; white-space: pre-wrap; overflow-x: auto; line-height: 1.5;">
-                                            <pre style="margin: 0; background: none; border: none; padding: 0; font-size: inherit; font-family: inherit; white-space: pre-wrap; overflow-x: auto;" x-text="getWorkflowOutputJson()"></pre>
-                                        </div>
                                     </div>
                                 </div>
                             </template>
@@ -237,8 +278,9 @@
                                 <div>
                                     <h4 style="margin-bottom: 0.5rem;">Workflow Initializing</h4>
                                     <p style="color: hsl(var(--muted-foreground)); font-size: 0.875rem;">Please wait while the workflow starts...</p>
+                                    
                                     <div style="margin-top: 1rem;">
-                                        <button @click="fetchWorkflowStatus()" class="button button-primary">Refresh Status</button>
+                                        <button @click="fetchWorkflowStatus('refresh')" class="button button-primary">Refresh Status</button>
                                         <a href="/" class="button button-secondary">Back to Home</a>
                                     </div>
                                 </div>
@@ -301,22 +343,41 @@
                 
                 // Initialize the app
                 init() {
-                    // Load initial data
-                    this.execution = JSON.parse({{.Execution | toJSON}});
-                    this.workflow = JSON.parse({{.Workflow | toJSON}}); // Will be populated by fetchWorkflowStatus or from execution data
+                    // Load initial data from new structure with error handling
+                    try {
+                        const executionData = `{{.Execution | toJSON}}`;
+                        this.execution = executionData ? JSON.parse(executionData) : {};
+                    } catch (e) {
+                        console.error('Error parsing execution data:', e);
+                        this.execution = {};
+                    }
+                    
+                    try {
+                        const workflowData = `{{if .Workflow}}{{.Workflow | toJSON}}{{else}}{}{{end}}`;
+                        this.workflow = workflowData ? JSON.parse(workflowData) : {};
+                    } catch (e) {
+                        console.error('Error parsing workflow data:', e);
+                        this.workflow = {};
+                    }
+                    
                     this.loading = false;
+
+                    console.log('Initialized with data:', {
+                        execution: this.execution,
+                        workflow: this.workflow
+                    });
 
                     // Start auto-refresh if needed
                     if (this.temporalAvailable && !this.isWorkflowComplete()) {
+                        this.fetchWorkflowStatus('init');
                         this.startAutoRefresh();
-                        this.fetchWorkflowStatus();
                     }
                 },
                 
                 // Fetch workflow status from API
-                async fetchWorkflowStatus() {
+                async fetchWorkflowStatus(source = 'unknown') {
                     try {
-                        console.log('Fetching workflow status for ID:', this.workflowId);
+                        console.log(`[${new Date().toISOString()}] Fetching workflow status from: ${source}, ID:`, this.workflowId);
                         const response = await fetch(`${this.apiBasePath}/execution/${this.workflowId}`);
                         
                         if (!response.ok) {
@@ -326,12 +387,12 @@
                         const data = await response.json();
                         console.log('Received workflow data:', data);
                         
-                        // Handle new response structure: { workflow: {...}, execution: {...} }
+                        // Handle response structure: { execution: {...}, workflow: {...} }
                         this.execution = data.execution;
                         this.workflow = data.workflow;
                         this.error = null;
 
-                        console.log(data)
+                        console.log('Updated state:', { execution: this.execution, workflow: this.workflow });
                         
                         // Stop auto-refresh if workflow is complete
                         if (this.isWorkflowComplete()) {
@@ -348,7 +409,7 @@
                 // Auto-refresh management
                 startAutoRefresh() {
                     this.refreshInterval = setInterval(() => {
-                        this.fetchWorkflowStatus();
+                        this.fetchWorkflowStatus('interval');
                     }, 5000);
                 },
                 
@@ -398,19 +459,26 @@
                 },
                 
                 isCurrentTask(task) {
-                    return this.getTaskKey(task) === this.execution?.entrypoint;
+                    // Check if this task matches the current task from execution
+                    const taskKey = this.getTaskKey(task);
+                    return taskKey === this.execution?.task;
                 },
                 
                 hasTaskExecuted(task) {
+                    // Check if task has been executed based on execution history
                     const taskKey = this.getTaskKey(task);
-                    const taskLogs = this.execution?.tasks?.[taskKey] || [];
-                    return taskLogs.length > 0;
+                    return this.execution?.history?.includes(taskKey) || false;
                 },
                 
                 getLatestTaskStatus(task) {
+                    // Get status based on execution data
                     const taskKey = this.getTaskKey(task);
-                    const taskLogs = this.execution?.tasks?.[taskKey] || [];
-                    return taskLogs.length > 0 ? taskLogs[taskLogs.length - 1].phase : 'pending';
+                    if (taskKey === this.execution?.task) {
+                        return this.execution?.status?.toLowerCase() || 'running';
+                    } else if (this.hasTaskExecuted(task)) {
+                        return 'completed';
+                    }
+                    return 'pending';
                 },
                 
                 getTaskStatusDotClass(task) {
@@ -475,7 +543,12 @@
                 
                 isWorkflowCompleted() {
                     const status = this.execution?.status;
-                    return status?.toUpperCase() === 'COMPLETED';
+                    console.log('Checking completion status:', status);
+                    // Check for various possible completion status values
+                    const completedStatuses = ['COMPLETED', 'WORKFLOW_EXECUTION_STATUS_COMPLETED', 'SUCCESS', 'SUCCEEDED'];
+                    return completedStatuses.some(completedStatus => 
+                        status?.toUpperCase() === completedStatus
+                    );
                 },
                 
                 isWorkflowFailed() {
@@ -492,38 +565,31 @@
                 },
                 
                 hasCurrentTask() {
-                    return !!this.execution?.entrypoint;
-                },
-                
-                hasWorkflowContext() {
-                    return !!this.execution?.context;
-                },
-
-                hasWorkflowOutput() {
-                    return !!this.execution?.output;
-                },
-                
-                getWorkflowContextJson() {
-                    return JSON.stringify(this.execution?.context, null, 2);
-                },
-
-                getWorkflowOutputJson() {
-                    return JSON.stringify(this.execution?.output, null, 2);
+                    // Don't show current task if workflow is complete
+                    if (this.isWorkflowComplete()) {
+                        return false;
+                    }
+                    return !!this.execution?.task;
                 },
                 
                 getWorkflowName() {
-                    return this.workflow?.document?.name || this.execution?.name || this.execution?.id || this.workflow?.name || this.workflow?.id  || this.execution?.context?.role?.workflow || 'Unknown Workflow';
+                    return this.workflow?.document?.name || 
+                           this.workflow?.name || 
+                           this.execution?.name || 
+                           this.execution?.id || 
+                           this.workflow?.id || 
+                           'Unknown Workflow';
                 },
                 
                 // Approval status methods
                 getApprovalStatus() {
-                    // Check if workflow has approval-related data
-                    const context = this.execution?.context;
-                    if (context?.approved) {
-                        return context.approved === true ? 'approved' : 'rejected';
-                    } else if (this.isWorkflowCompleted()) {
+                    // Check if execution has approval status
+                    if (this.execution?.approved === true) {
+                        return 'approved';
+                    } else if (this.execution?.approved === false) {
                         return 'rejected';
                     }
+                    
                     // Default to pending if no approval info found
                     return 'pending';
                 },
@@ -534,6 +600,31 @@
                         case 'approved': return 'Approved';
                         case 'rejected': return 'Rejected';
                         default: return 'Approval Pending';
+                    }
+                },
+                
+                // Get duration
+                getDuration() {
+                    // Duration time in seconds
+                    const duration = this.execution?.duration;
+
+                    if (!duration) {
+                        return 'Unknown';
+                    }
+
+                    const diffSeconds = Math.floor(duration);
+                    const diffMinutes = Math.floor(diffSeconds / 60);
+                    const diffHours = Math.floor(diffMinutes / 60);
+                    const diffDays = Math.floor(diffHours / 24);
+
+                    if (diffDays > 0) {
+                        return `${diffDays}d ${diffHours % 24}h ${diffMinutes % 60}m`;
+                    } else if (diffHours > 0) {
+                        return `${diffHours}h ${diffMinutes % 60}m ${diffSeconds % 60}s`;
+                    } else if (diffMinutes > 0) {
+                        return `${diffMinutes}m ${diffSeconds % 60}s`;
+                    } else {
+                        return `${diffSeconds}s`;
                     }
                 },
                 
@@ -560,7 +651,7 @@
                         }
                         
                         // Refresh the workflow status immediately
-                        await this.fetchWorkflowStatus();
+                        await this.fetchWorkflowStatus('cancel');
                         
                     } catch (err) {
                         console.error('Error canceling workflow:', err);

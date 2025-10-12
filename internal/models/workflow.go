@@ -65,17 +65,28 @@ func (r *WorkflowRequest) GetRedirectURL() string {
 }
 
 type WorkflowExecutionInfo struct {
-	WorkflowID   string     `json:"id"`
-	WorkflowName string     `json:"name"`
-	RunID        string     `json:"run"`
-	WorkflowType string     `json:"type"`
-	StartTime    time.Time  `json:"started_at"`
-	CloseTime    *time.Time `json:"finished_at"`
-	Status       string     `json:"status"`
-	Task         string     `json:"task,omitempty"`
+	WorkflowID string `json:"id"`
+	RunID      string `json:"run"`
+
+	StartTime time.Time  `json:"started_at"`
+	CloseTime *time.Time `json:"finished_at"`
+
+	Status string `json:"status"`
+	Task   string `json:"task,omitempty"`
+
+	History []string `json:"history,omitempty"` // History of state transitions
 
 	// SearchAttributes are the custom search attributes associated with the workflow
-	Role     string `json:"role"`
-	User     string `json:"user"`
-	Approved bool   `json:"approved" default:"false"`
+	Workflow   string   `json:"name"` // workflowName
+	Role       string   `json:"role"`
+	User       string   `json:"user"`
+	Reason     string   `json:"reason,omitempty"`
+	Duration   int64    `json:"duration,omitempty"` // Duration in seconds
+	Approved   *bool    `json:"approved"`           // nil = pending approval, true = approved, false = denied
+	Identities []string `json:"identities,omitempty"`
+
+	// Context
+	Input   any `json:"input,omitempty"`
+	Output  any `json:"output,omitempty"`
+	Context any `json:"context,omitempty"`
 }

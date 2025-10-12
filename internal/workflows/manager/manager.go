@@ -8,6 +8,7 @@ import (
 
 	swctx "github.com/serverlessworkflow/sdk-go/v3/impl/ctx"
 	"github.com/sirupsen/logrus"
+	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/config"
 	models "github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/workflows/functions"
@@ -313,7 +314,7 @@ func (m *WorkflowManager) createTemporalWorkflow(workflowTask *models.WorkflowTa
 	temporalService := serviceClient.GetTemporal()
 	temporalClient := temporalService.GetClient()
 
-	workflowContext, err := workflowTask.GetContextAsElevationRequest()
+	elevationRequest, err := workflowTask.GetContextAsElevationRequest()
 
 	if err != nil {
 		return fmt.Errorf("failed to get workflow context: %w", err)
@@ -322,16 +323,22 @@ func (m *WorkflowManager) createTemporalWorkflow(workflowTask *models.WorkflowTa
 	userEmail := ""
 	roleName := ""
 
-	if workflowContext == nil {
+	if elevationRequest == nil {
 		return fmt.Errorf("workflow context is nil")
 	}
 
-	if workflowContext.User != nil {
-		userEmail = workflowContext.User.Email
+	if elevationRequest.User != nil {
+		userEmail = elevationRequest.User.Email
 	}
 
-	if workflowContext.Role != nil {
-		roleName = workflowContext.Role.Name
+	if elevationRequest.Role != nil {
+		roleName = elevationRequest.Role.Name
+	}
+
+	// Convert duration to int64 seconds
+	duration, err := common.ValidateDuration(elevationRequest.Duration)
+	if err != nil {
+		return fmt.Errorf("invalid duration: %w", err)
 	}
 
 	ctx := workflowTask.GetContext()
@@ -343,10 +350,13 @@ func (m *WorkflowManager) createTemporalWorkflow(workflowTask *models.WorkflowTa
 		TypedSearchAttributes: temporal.NewSearchAttributes(
 			models.TypedSearchAttributeUser.ValueSet(userEmail),
 			models.TypedSearchAttributeRole.ValueSet(roleName),
-			models.TypedSearchAttributeProviders.ValueSet(workflowContext.Providers),
-			models.TypedSearchAttributeWorkflow.ValueSet(workflowContext.Workflow),
+			models.TypedSearchAttributeProviders.ValueSet(elevationRequest.Providers),
+			models.TypedSearchAttributeWorkflow.ValueSet(elevationRequest.Workflow),
 			models.TypedSearchAttributeStatus.ValueSet(strings.ToUpper(string(swctx.PendingStatus))),
-			models.TypedSearchAttributeApproved.ValueSet(false),
+			// models.TypedSearchAttributeApproved.ValueSet(false),
+			models.TypedSearchAttributeDuration.ValueSet(int64(duration.Seconds())),
+			models.TypedSearchAttributeReason.ValueSet(elevationRequest.Reason),
+			models.TypedSearchAttributeIdentities.ValueSet(elevationRequest.Identities),
 		),
 	}, models.TemporalExecuteElevationWorkflowName, workflowTask)
 

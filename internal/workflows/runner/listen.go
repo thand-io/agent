@@ -85,7 +85,7 @@ func (r *ResumableWorkflowRunner) executeListenTask(
 			// Wait for any of the signals
 			err := workflow.Await(cancelCtx, func() bool {
 
-				logrus.Info("Context listen error", "Error", cancelCtx.Err())
+				logrus.WithError(cancelCtx.Err()).Error("Context listen error")
 
 				if cancelCtx.Err() != nil {
 					if errors.Is(cancelCtx.Err(), context.Canceled) {
@@ -98,14 +98,14 @@ func (r *ResumableWorkflowRunner) executeListenTask(
 
 				pending := workflowSelector.HasPending()
 
-				logrus.Info("Signal listen pending", "Pending", pending)
+				logrus.Info("Signal listen pending")
 
 				return pending
 			})
 
 			if err != nil {
 
-				logrus.Error("Error while waiting for signal", "Error", err)
+				logrus.WithError(err).Error("Error while waiting for signal")
 				return nil, err
 
 			} else if cancelCtx.Err() != nil {
@@ -115,7 +115,7 @@ func (r *ResumableWorkflowRunner) executeListenTask(
 					break
 				}
 
-				logrus.Error("Error while waiting for signal", "Error", cancelCtx.Err())
+				logrus.WithError(cancelCtx.Err()).Error("Error while waiting for signal")
 				return nil, cancelCtx.Err()
 			}
 
