@@ -353,7 +353,7 @@ func (m *WorkflowManager) createTemporalWorkflow(workflowTask *models.WorkflowTa
 			models.TypedSearchAttributeProviders.ValueSet(elevationRequest.Providers),
 			models.TypedSearchAttributeWorkflow.ValueSet(elevationRequest.Workflow),
 			models.TypedSearchAttributeStatus.ValueSet(strings.ToUpper(string(swctx.PendingStatus))),
-			models.TypedSearchAttributeApproved.ValueSet(false),
+			// models.TypedSearchAttributeApproved.ValueSet(false),
 			models.TypedSearchAttributeDuration.ValueSet(int64(duration.Seconds())),
 			models.TypedSearchAttributeReason.ValueSet(elevationRequest.Reason),
 			models.TypedSearchAttributeIdentities.ValueSet(elevationRequest.Identities),

@@ -73,7 +73,9 @@ func (t *authorizeFunction) Execute(
 		return nil, err
 	}
 
-	if workflowTask.IsApproved() {
+	isApproved := workflowTask.IsApproved()
+
+	if isApproved != nil && *isApproved {
 		modelOutput := t.buildBasicModelOutput(elevateRequest)
 		return &modelOutput, nil
 	}

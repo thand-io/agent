@@ -15,7 +15,6 @@ import (
 type ExecutionStatePageData struct {
 	config.TemplateData `json:"-"`
 	Execution           *models.WorkflowExecutionInfo `json:"execution"`
-	Task                *models.WorkflowTask          `json:"task"`
 	Workflow            *model.Workflow               `json:"workflow"`
 }
 

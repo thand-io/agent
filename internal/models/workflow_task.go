@@ -336,13 +336,13 @@ func (ctx *WorkflowTask) GetEntrypointIndex() (int, error) {
 
 }
 
-func (ctx *WorkflowTask) IsApproved() bool {
+func (ctx *WorkflowTask) IsApproved() *bool {
 
 	if context := ctx.GetContextAsMap(); len(context) > 0 {
 		if approved, ok := context[VarsContextApproved].(bool); ok {
-			return approved
+			return &approved
 		}
 	}
 
-	return false
+	return nil
 }

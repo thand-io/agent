@@ -243,7 +243,14 @@ func (wr *ResumableWorkflowRunner) updateTemporalSearchAttributes() error {
 
 	updates := []temporal.SearchAttributeUpdate{
 		models.TypedSearchAttributeStatus.ValueSet(string(workflowTask.GetStatus())),
-		models.TypedSearchAttributeApproved.ValueSet(workflowTask.IsApproved()),
+	}
+
+	isApproved := workflowTask.IsApproved()
+
+	if isApproved != nil {
+		updates = append(updates,
+			models.TypedSearchAttributeApproved.ValueSet(*isApproved),
+		)
 	}
 
 	if len(workflowTask.GetEntrypoint()) > 0 {

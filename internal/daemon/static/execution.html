@@ -181,7 +181,7 @@
                     <template x-if="hasCurrentTask()">
                         <div style="padding: 1.5rem; background-color: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 0.5rem;">
                             <h4 style="margin-bottom: 1rem; font-size: 1rem; font-weight: 600;">
-                                Current Step: <span x-text="execution.task || task?.entrypoint || 'Unknown'"></span>
+                                Current Step: <span x-text="execution.task || 'Unknown'"></span>
                             </h4>
                             <div style="display: grid; gap: 1rem;">
                                 <!-- Execution Status -->
@@ -189,14 +189,6 @@
                                     <span style="font-size: 0.875rem; color: hsl(var(--muted-foreground));">Execution Status:</span>
                                     <div :class="getWorkflowStatusBadgeClass()" x-text="execution?.status"></div>
                                 </div>
-                                
-                                <!-- Task Status (if available) -->
-                                <template x-if="task && task.status">
-                                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                        <span style="font-size: 0.875rem; color: hsl(var(--muted-foreground));">Task Status:</span>
-                                        <div class="badge badge-secondary" x-text="task.status"></div>
-                                    </div>
-                                </template>
                                 
                                 <!-- User Information -->
                                 <template x-if="execution && execution.user">
@@ -221,25 +213,6 @@
                                         <div style="font-size: 0.875rem;" x-text="execution.reason"></div>
                                     </div>
                                 </template>
-                                
-                                <!-- Task Progress (if available) -->
-                                <template x-if="task && task.progress">
-                                    <div>
-                                        <div style="font-size: 0.875rem; font-weight: 500; margin-bottom: 0.5rem; color: hsl(var(--muted-foreground));">Task Progress:</div>
-                                        <div style="padding: 0.75rem; background-color: hsl(var(--secondary)); border-radius: 0.375rem; font-size: 0.875rem;">
-                                            <span x-text="task.progress"></span>
-                                        </div>
-                                    </div>
-                                </template>
-                                
-                                <template x-if="hasWorkflowContext()">
-                                    <div>
-                                        <div style="font-size: 0.875rem; font-weight: 500; margin-bottom: 0.5rem; color: hsl(var(--muted-foreground));">Task Context:</div>
-                                        <div style="padding: 0.75rem; background-color: hsl(var(--secondary)); border-radius: 0.375rem; font-size: 0.875rem; font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Consolas', monospace; white-space: pre-wrap; overflow-x: auto; line-height: 1.5;">
-                                            <pre style="margin: 0; background: none; border: none; padding: 0; font-size: inherit; font-family: inherit; white-space: pre-wrap; overflow-x: auto;" x-text="getWorkflowContextJson()"></pre>
-                                        </div>
-                                    </div>
-                                </template>
                             </div>
                         </div>
                     </template>
@@ -251,14 +224,6 @@
                                 <div>
                                     <h4 style="color: hsl(var(--success)); margin-bottom: 0.5rem;">✓ Workflow Complete</h4>
                                     <p style="color: hsl(var(--muted-foreground)); font-size: 0.875rem;">All tasks have been executed successfully.</p>
-                                    
-                                    <!-- Show final task status if available -->
-                                    <template x-if="task && task.status">
-                                        <div style="margin: 1rem 0; padding: 0.75rem; background-color: hsl(var(--secondary)); border-radius: 0.375rem;">
-                                            <div style="font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin-bottom: 0.25rem;">Final Task Status:</div>
-                                            <div style="font-weight: 500;" x-text="task.status"></div>
-                                        </div>
-                                    </template>
                                     
                                     <div style="margin-top: 1rem;">
                                         <a href="/" class="button button-primary" style="margin-right: 0.5rem;">Back to Home</a>
@@ -272,30 +237,9 @@
                                     <h4 style="color: hsl(var(--destructive)); margin-bottom: 0.5rem;">✗ Workflow Failed</h4>
                                     <p style="color: hsl(var(--muted-foreground)); font-size: 0.875rem;">The workflow encountered an error and could not complete.</p>
                                     
-                                    <!-- Show task failure information if available -->
-                                    <template x-if="task && task.status && task.status !== 'completed'">
-                                        <div style="margin: 1rem 0; padding: 0.75rem; background-color: hsl(var(--secondary)); border-radius: 0.375rem; text-align: left;">
-                                            <div style="font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin-bottom: 0.25rem;">Task Status:</div>
-                                            <div style="font-weight: 500; color: hsl(var(--destructive));" x-text="task.status"></div>
-                                            <template x-if="task.error">
-                                                <div style="margin-top: 0.5rem;">
-                                                    <div style="font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin-bottom: 0.25rem;">Error:</div>
-                                                    <div style="font-size: 0.875rem; font-family: monospace; color: hsl(var(--destructive));" x-text="task.error"></div>
-                                                </div>
-                                            </template>
-                                        </div>
-                                    </template>
-                                    
                                     <div style="margin-top: 1rem;">
                                         <a href="/" class="button button-primary" style="margin-right: 0.5rem;">Back to Home</a>
                                         <a href="/elevate" class="button button-secondary">Try Again</a>
-                                    </div>
-                                    <!-- show the workflow output -->
-                                    <div x-show="hasWorkflowOutput()" style="margin-top: 1.5rem; text-align: left;">
-                                        <div style="font-size: 0.875rem; font-weight: 500; margin-bottom: 0.5rem; color: hsl(var(--muted-foreground));">Workflow Output:</div>
-                                        <div style="padding: 0.75rem; background-color: hsl(var(--secondary)); border-radius: 0.375rem; font-size: 0.875rem; font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Consolas', monospace; white-space: pre-wrap; overflow-x: auto; line-height: 1.5;">
-                                            <pre style="margin: 0; background: none; border: none; padding: 0; font-size: inherit; font-family: inherit; white-space: pre-wrap; overflow-x: auto;" x-text="getWorkflowOutputJson()"></pre>
-                                        </div>
                                     </div>
                                 </div>
                             </template>
@@ -304,14 +248,6 @@
                                 <div>
                                     <h4 style="margin-bottom: 0.5rem;">Workflow Initializing</h4>
                                     <p style="color: hsl(var(--muted-foreground)); font-size: 0.875rem;">Please wait while the workflow starts...</p>
-                                    
-                                    <!-- Show task initialization status if available -->
-                                    <template x-if="task && task.status">
-                                        <div style="margin: 1rem 0; padding: 0.75rem; background-color: hsl(var(--secondary)); border-radius: 0.375rem;">
-                                            <div style="font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin-bottom: 0.25rem;">Task Status:</div>
-                                            <div style="font-weight: 500;" x-text="task.status"></div>
-                                        </div>
-                                    </template>
                                     
                                     <div style="margin-top: 1rem;">
                                         <button @click="fetchWorkflowStatus()" class="button button-primary">Refresh Status</button>
@@ -355,9 +291,7 @@
                 loading: true,
                 error: null,
                 execution: null,
-                task: null,
                 workflow: null,
-                tasks: null,
                 refreshInterval: null,
                 
                 // Task type colors mapping
@@ -389,14 +323,6 @@
                     }
                     
                     try {
-                        const taskData = `{{if .Task}}{{.Task | toJSON}}{{else}}{}{{end}}`;
-                        this.task = taskData ? JSON.parse(taskData) : {};
-                    } catch (e) {
-                        console.error('Error parsing task data:', e);
-                        this.task = {};
-                    }
-                    
-                    try {
                         const workflowData = `{{if .Workflow}}{{.Workflow | toJSON}}{{else}}{}{{end}}`;
                         this.workflow = workflowData ? JSON.parse(workflowData) : {};
                     } catch (e) {
@@ -404,15 +330,11 @@
                         this.workflow = {};
                     }
                     
-                    // No tasks execution history available in initial template data
-                    this.tasks = {};
                     this.loading = false;
 
                     console.log('Initialized with data:', {
                         execution: this.execution,
-                        task: this.task,
-                        workflow: this.workflow,
-                        tasks: this.tasks
+                        workflow: this.workflow
                     });
 
                     // Start auto-refresh if needed
@@ -435,14 +357,12 @@
                         const data = await response.json();
                         console.log('Received workflow data:', data);
                         
-                        // Handle new response structure: { execution: {...}, task: {...}, workflow: {...}, tasks: {...} }
+                        // Handle response structure: { execution: {...}, workflow: {...} }
                         this.execution = data.execution;
-                        this.task = data.task;
                         this.workflow = data.workflow;
-                        this.tasks = data.tasks;
                         this.error = null;
 
-                        console.log('Updated state:', { execution: this.execution, task: this.task, workflow: this.workflow, tasks: this.tasks });
+                        console.log('Updated state:', { execution: this.execution, workflow: this.workflow });
                         
                         // Stop auto-refresh if workflow is complete
                         if (this.isWorkflowComplete()) {
@@ -511,21 +431,22 @@
                 isCurrentTask(task) {
                     // Check if this task matches the current task from execution
                     const taskKey = this.getTaskKey(task);
-                    return taskKey === this.execution?.task || 
-                           (this.task && this.task.status === 'running' && this.task.entrypoint === taskKey);
-                },
-                
-                hasTaskExecuted(task) {
-                    // No task execution history available, determine based on current state
-                    const taskKey = this.getTaskKey(task);
                     return taskKey === this.execution?.task;
                 },
                 
+                hasTaskExecuted(task) {
+                    // Check if task has been executed based on execution history
+                    const taskKey = this.getTaskKey(task);
+                    return this.execution?.history?.includes(taskKey) || false;
+                },
+                
                 getLatestTaskStatus(task) {
-                    // No task execution history available, determine based on current state
+                    // Get status based on execution data
                     const taskKey = this.getTaskKey(task);
                     if (taskKey === this.execution?.task) {
                         return this.execution?.status?.toLowerCase() || 'running';
+                    } else if (this.hasTaskExecuted(task)) {
+                        return 'completed';
                     }
                     return 'pending';
                 },
@@ -592,7 +513,12 @@
                 
                 isWorkflowCompleted() {
                     const status = this.execution?.status;
-                    return status?.toUpperCase() === 'COMPLETED';
+                    console.log('Checking completion status:', status);
+                    // Check for various possible completion status values
+                    const completedStatuses = ['COMPLETED', 'WORKFLOW_EXECUTION_STATUS_COMPLETED', 'SUCCESS', 'SUCCEEDED'];
+                    return completedStatuses.some(completedStatus => 
+                        status?.toUpperCase() === completedStatus
+                    );
                 },
                 
                 isWorkflowFailed() {
@@ -609,42 +535,16 @@
                 },
                 
                 hasCurrentTask() {
-                    return !!this.execution?.task || (this.task && this.task.status === 'running');
-                },
-                
-                hasWorkflowContext() {
-                    return !!this.task?.context;
-                },
-
-                hasWorkflowOutput() {
-                    return !!this.task?.output;
-                },
-                
-                getWorkflowContextJson() {
-                    return JSON.stringify(this.task?.context, null, 2);
-                },
-
-                getWorkflowOutputJson() {
-                    return JSON.stringify(this.task?.output, null, 2);
-                },
-                
-                // Task-specific methods
-                hasTaskDetails() {
-                    return !!this.task;
-                },
-                
-                getTaskStatus() {
-                    return this.task?.status || 'unknown';
-                },
-                
-                getTaskProgress() {
-                    return this.task?.progress || null;
+                    // Don't show current task if workflow is complete
+                    if (this.isWorkflowComplete()) {
+                        return false;
+                    }
+                    return !!this.execution?.task;
                 },
                 
                 getWorkflowName() {
                     return this.workflow?.document?.name || 
                            this.workflow?.name || 
-                           this.task?.context?.workflow ||
                            this.execution?.name || 
                            this.execution?.id || 
                            this.workflow?.id || 
@@ -658,21 +558,6 @@
                         return 'approved';
                     } else if (this.execution?.approved === false) {
                         return 'rejected';
-                    }
-                    
-                    // Check task context for approval information
-                    const context = this.task?.context;
-                    if (context?.approvals) {
-                        const approvals = context.approvals;
-                        if (Array.isArray(approvals) && approvals.length > 0) {
-                            // Check if any approval is approved
-                            const hasApproval = approvals.some(approval => approval.approved === true);
-                            if (hasApproval) return 'approved';
-                            
-                            // Check if any approval is explicitly rejected
-                            const hasRejection = approvals.some(approval => approval.approved === false);
-                            if (hasRejection) return 'rejected';
-                        }
                     }
                     
                     // Default to pending if no approval info found

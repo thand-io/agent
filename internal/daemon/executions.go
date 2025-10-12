@@ -12,7 +12,6 @@ import (
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 
-	swctx "github.com/serverlessworkflow/sdk-go/v3/impl/ctx"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -72,7 +71,7 @@ func (s *Server) listRunningWorkflows(c *gin.Context) {
 
 	for _, exec := range resp.Executions {
 		runningWorkflows = append(
-			runningWorkflows, workflowExecutionInfo(exec, foundUser.User))
+			runningWorkflows, workflowExecutionInfo(exec))
 	}
 
 	response := ExecutionsPageData{
@@ -119,7 +118,7 @@ func (s *Server) getRunningWorkflow(c *gin.Context) {
 		return
 	}
 
-	foundUser, err := s.getUser(c)
+	_, err := s.getUser(c)
 	if err != nil {
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of available providers", err)
 		return
@@ -135,15 +134,9 @@ func (s *Server) getRunningWorkflow(c *gin.Context) {
 		return
 	}
 
-	workflowExecInfo := workflowExecutionInfo(wkflw.GetWorkflowExecutionInfo(), foundUser.User)
+	workflowExecInfo := workflowExecutionInfo(wkflw.GetWorkflowExecutionInfo())
 
-	workflowTask := models.WorkflowTask{
-		WorkflowID:   workflowExecInfo.WorkflowID,
-		WorkflowName: workflowExecInfo.WorkflowName,
-		Status:       swctx.StatusPhase(strings.ToLower(workflowExecInfo.Status)),
-		StartedAt:    workflowExecInfo.StartTime,
-		Entrypoint:   workflowExecInfo.Task,
-	}
+	var workflowTask models.WorkflowTask
 
 	// If workflow hasn't completed the query for the current state
 	if workflowExecInfo.CloseTime == nil {
@@ -190,6 +183,17 @@ func (s *Server) getRunningWorkflow(c *gin.Context) {
 				workflowTask.Workflow = foundWorkflow.GetWorkflow()
 			}
 
+			// Copy over task status phases to the response
+			phases := []string{}
+			for phase := range workflowTask.TasksStatusPhase {
+				phases = append(phases, phase)
+			}
+			workflowExecInfo.History = phases
+
+			workflowExecInfo.Input = workflowTask.Input
+			workflowExecInfo.Output = workflowTask.Output
+			workflowExecInfo.Context = workflowTask.Context
+
 		}
 	} else {
 
@@ -210,7 +214,6 @@ func (s *Server) getRunningWorkflow(c *gin.Context) {
 	data := ExecutionStatePageData{
 		TemplateData: s.GetTemplateData(c),
 		Execution:    workflowExecInfo,
-		Task:         &workflowTask,
 		Workflow:     workflowTask.Workflow,
 	}
 
@@ -230,7 +233,6 @@ func (s *Server) getExecutionsPage(c *gin.Context) {
 
 func workflowExecutionInfo(
 	workflowInfo *workflow.WorkflowExecutionInfo,
-	user *models.User,
 ) *models.WorkflowExecutionInfo {
 
 	exec := workflowInfo.GetExecution()
@@ -242,6 +244,8 @@ func workflowExecutionInfo(
 		RunID:      exec.GetRunId(),
 		StartTime:  workflowInfo.GetStartTime().AsTime(),
 		Status:     strings.ToUpper(workflowInfo.GetStatus().String()),
+		Identities: []string{},
+		History:    []string{},
 	}
 
 	if workflowInfo.GetCloseTime() != nil {
@@ -278,14 +282,14 @@ func workflowExecutionInfo(
 	if approvedAttr, exists := searchAttributes[models.VarsContextApproved]; exists && approvedAttr != nil {
 		var approvedValue bool
 		if err := dataConverter.FromPayload(approvedAttr, &approvedValue); err == nil {
-			response.Approved = approvedValue
+			response.Approved = &approvedValue
 		}
 	}
 
-	if workflowNameAttr, exists := searchAttributes["name"]; exists && workflowNameAttr != nil {
-		var workflowNameValue string
-		if err := dataConverter.FromPayload(workflowNameAttr, &workflowNameValue); err == nil {
-			response.WorkflowName = workflowNameValue
+	if workflowAttr, exists := searchAttributes[models.VarsContextWorkflow]; exists && workflowAttr != nil {
+		var workflowValue string
+		if err := dataConverter.FromPayload(workflowAttr, &workflowValue); err == nil {
+			response.Workflow = workflowValue
 		}
 	}
 
@@ -307,6 +311,13 @@ func workflowExecutionInfo(
 		var durationValue int64
 		if err := dataConverter.FromPayload(durationAttr, &durationValue); err == nil {
 			response.Duration = durationValue
+		}
+	}
+
+	if identitiesAttr, exists := searchAttributes["identities"]; exists && identitiesAttr != nil {
+		var identitiesValue []string
+		if err := dataConverter.FromPayload(identitiesAttr, &identitiesValue); err == nil {
+			response.Identities = identitiesValue
 		}
 	}
 

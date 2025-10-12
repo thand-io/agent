@@ -144,7 +144,7 @@ func (m *WorkflowManager) runCleanup(
 // setupQueryHandler sets up the query handler for the workflow
 func (m *WorkflowManager) setupIsApprovedQueryHandler(
 	ctx workflow.Context, workflowTask *models.WorkflowTask) error {
-	return workflow.SetQueryHandler(ctx, models.TemporalIsApprovedQueryName, func() (bool, error) {
+	return workflow.SetQueryHandler(ctx, models.TemporalIsApprovedQueryName, func() (*bool, error) {
 		logrus.WithFields(logrus.Fields{
 			"WorkflowID": workflowTask.WorkflowID,
 		}).Debug("IsApproved query received")
