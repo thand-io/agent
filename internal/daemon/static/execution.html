@@ -12,7 +12,7 @@
             <div x-show="error && !loading" style="text-align: center; padding: 2rem;">
                 <h1>Error Loading Workflow</h1>
                 <p x-text="error"></p>
-                <button @click="fetchWorkflowStatus()" class="button button-primary">Retry</button>
+                <button @click="fetchWorkflowStatus('retry')" class="button button-primary">Retry</button>
             </div>
             
             <!-- Workflow Content -->
@@ -213,6 +213,36 @@
                                         <div style="font-size: 0.875rem;" x-text="execution.reason"></div>
                                     </div>
                                 </template>
+                                
+                                <!-- Identities List -->
+                                <template x-if="execution && execution.identities && execution.identities.length > 0">
+                                    <div>
+                                        <span style="font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin-bottom: 0.5rem; display: block;">Identities:</span>
+                                        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                                            <template x-for="identity in execution.identities" :key="identity">
+                                                <div class="badge badge-secondary" x-text="identity"></div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </template>
+                                
+                                <!-- Approval Duration -->
+                                <template x-if="execution && execution.duration">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                        <span style="font-size: 0.875rem; color: hsl(var(--muted-foreground));">Approval Duration:</span>
+                                        <div class="badge badge-secondary" x-text="getDuration()"></div>
+                                    </div>
+                                </template>
+                                
+                                <!-- Execution Context JSON -->
+                                <div>
+                                    <details style="margin-top: 1rem;">
+                                        <summary style="cursor: pointer; font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin-bottom: 0.5rem;">
+                                            Execution Context (JSON)
+                                        </summary>
+                                        <pre style="background-color: hsl(var(--muted)); padding: 1rem; border-radius: 0.375rem; overflow-x: auto; font-size: 0.75rem; margin-top: 0.5rem;"><code x-text="JSON.stringify(execution, null, 2)"></code></pre>
+                                    </details>
+                                </div>
                             </div>
                         </div>
                     </template>
@@ -250,7 +280,7 @@
                                     <p style="color: hsl(var(--muted-foreground)); font-size: 0.875rem;">Please wait while the workflow starts...</p>
                                     
                                     <div style="margin-top: 1rem;">
-                                        <button @click="fetchWorkflowStatus()" class="button button-primary">Refresh Status</button>
+                                        <button @click="fetchWorkflowStatus('refresh')" class="button button-primary">Refresh Status</button>
                                         <a href="/" class="button button-secondary">Back to Home</a>
                                     </div>
                                 </div>
@@ -339,15 +369,15 @@
 
                     // Start auto-refresh if needed
                     if (this.temporalAvailable && !this.isWorkflowComplete()) {
+                        this.fetchWorkflowStatus('init');
                         this.startAutoRefresh();
-                        this.fetchWorkflowStatus();
                     }
                 },
                 
                 // Fetch workflow status from API
-                async fetchWorkflowStatus() {
+                async fetchWorkflowStatus(source = 'unknown') {
                     try {
-                        console.log('Fetching workflow status for ID:', this.workflowId);
+                        console.log(`[${new Date().toISOString()}] Fetching workflow status from: ${source}, ID:`, this.workflowId);
                         const response = await fetch(`${this.apiBasePath}/execution/${this.workflowId}`);
                         
                         if (!response.ok) {
@@ -379,7 +409,7 @@
                 // Auto-refresh management
                 startAutoRefresh() {
                     this.refreshInterval = setInterval(() => {
-                        this.fetchWorkflowStatus();
+                        this.fetchWorkflowStatus('interval');
                     }, 5000);
                 },
                 
@@ -573,6 +603,31 @@
                     }
                 },
                 
+                // Get duration
+                getDuration() {
+                    // Duration time in seconds
+                    const duration = this.execution?.duration;
+
+                    if (!duration) {
+                        return 'Unknown';
+                    }
+
+                    const diffSeconds = Math.floor(duration);
+                    const diffMinutes = Math.floor(diffSeconds / 60);
+                    const diffHours = Math.floor(diffMinutes / 60);
+                    const diffDays = Math.floor(diffHours / 24);
+
+                    if (diffDays > 0) {
+                        return `${diffDays}d ${diffHours % 24}h ${diffMinutes % 60}m`;
+                    } else if (diffHours > 0) {
+                        return `${diffHours}h ${diffMinutes % 60}m ${diffSeconds % 60}s`;
+                    } else if (diffMinutes > 0) {
+                        return `${diffMinutes}m ${diffSeconds % 60}s`;
+                    } else {
+                        return `${diffSeconds}s`;
+                    }
+                },
+                
                 // Cancel workflow method
                 async cancelWorkflow() {
                     if (this.isWorkflowComplete()) {
@@ -596,7 +651,7 @@
                         }
                         
                         // Refresh the workflow status immediately
-                        await this.fetchWorkflowStatus();
+                        await this.fetchWorkflowStatus('cancel');
                         
                     } catch (err) {
                         console.error('Error canceling workflow:', err);

@@ -231,7 +231,10 @@ func (wr *ResumableWorkflowRunner) processInput(input any) (output any, err erro
 }
 
 // updateTemporalSearchAttributes updates the workflow search attributes
-func (wr *ResumableWorkflowRunner) updateTemporalSearchAttributes() error {
+func (wr *ResumableWorkflowRunner) updateTemporalSearchAttributes(
+	currentTask *model.TaskItem,
+	status swctx.StatusPhase,
+) error {
 
 	if !wr.workflowTask.HasTemporalContext() {
 		return nil
@@ -242,7 +245,7 @@ func (wr *ResumableWorkflowRunner) updateTemporalSearchAttributes() error {
 	ctx := workflowTask.GetTemporalContext()
 
 	updates := []temporal.SearchAttributeUpdate{
-		models.TypedSearchAttributeStatus.ValueSet(string(workflowTask.GetStatus())),
+		models.TypedSearchAttributeStatus.ValueSet(string(status)),
 	}
 
 	isApproved := workflowTask.IsApproved()
@@ -253,9 +256,9 @@ func (wr *ResumableWorkflowRunner) updateTemporalSearchAttributes() error {
 		)
 	}
 
-	if len(workflowTask.GetEntrypoint()) > 0 {
+	if currentTask != nil && len(currentTask.Key) > 0 {
 		updates = append(updates,
-			models.TypedSearchAttributeTask.ValueSet(workflowTask.GetEntrypoint()),
+			models.TypedSearchAttributeTask.ValueSet(currentTask.Key),
 		)
 	}
 
@@ -289,7 +292,18 @@ func (wr *ResumableWorkflowRunner) updateTemporalSearchAttributes() error {
 				models.TypedSearchAttributeProviders.ValueSet(elevationRequest.Providers),
 			)
 		}
+
+		if len(elevationRequest.Identities) > 0 {
+			updates = append(updates,
+				models.TypedSearchAttributeIdentities.ValueSet(elevationRequest.Identities),
+			)
+		}
+
 	}
+
+	logrus.WithFields(logrus.Fields{
+		"workflowID": workflowTask.WorkflowID,
+	}).Info("Updating temporal search attributes")
 
 	return workflow.UpsertTypedSearchAttributes(ctx, updates...)
 }

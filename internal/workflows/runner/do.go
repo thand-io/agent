@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/serverlessworkflow/sdk-go/v3/impl/ctx"
+	swctx "github.com/serverlessworkflow/sdk-go/v3/impl/ctx"
 	utils "github.com/serverlessworkflow/sdk-go/v3/impl/utils"
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
@@ -61,16 +61,16 @@ func (d *ResumableWorkflowRunner) resumeTasks(
 			continue
 		}
 
-		taskSupport.SetTaskStatus(currentTask.Key, ctx.PendingStatus)
+		taskSupport.SetTaskStatus(currentTask.Key, swctx.PendingStatus)
 
 		// Check if this task is a SwitchTask and handle it
 		if switchTask, ok := currentTask.Task.(*model.SwitchTask); ok {
 			flowDirective, err := d.evaluateSwitchTask(input, currentTask.Key, switchTask)
 			if err != nil {
-				taskSupport.SetTaskStatus(currentTask.Key, ctx.FaultedStatus)
+				taskSupport.SetTaskStatus(currentTask.Key, swctx.FaultedStatus)
 				return output, err
 			}
-			taskSupport.SetTaskStatus(currentTask.Key, ctx.CompletedStatus)
+			taskSupport.SetTaskStatus(currentTask.Key, swctx.CompletedStatus)
 
 			// Process FlowDirective: update idx/currentTask accordingly
 			idx, currentTask = taskList.KeyAndIndex(flowDirective.Value)
@@ -87,14 +87,9 @@ func (d *ResumableWorkflowRunner) resumeTasks(
 			continue
 		}
 
-		taskSupport.SetTaskStatus(currentTask.Key, ctx.RunningStatus)
+		taskSupport.SetTaskStatus(currentTask.Key, swctx.RunningStatus)
 
-		if output, err = d.runTaskItem(currentTask, input); err != nil {
-			taskSupport.SetTaskStatus(currentTask.Key, ctx.FaultedStatus)
-			return output, err
-		}
-
-		err := d.updateTemporalSearchAttributes()
+		err := d.updateTemporalSearchAttributes(currentTask, swctx.RunningStatus)
 
 		if err != nil {
 			logrus.WithFields(logrus.Fields{
@@ -103,9 +98,16 @@ func (d *ResumableWorkflowRunner) resumeTasks(
 			}).Warn("Failed to update temporal search attributes")
 		}
 
-		taskSupport.SetTaskStatus(currentTask.Key, ctx.CompletedStatus)
+		if output, err = d.runTaskItem(currentTask, input); err != nil {
+			taskSupport.SetTaskStatus(currentTask.Key, swctx.FaultedStatus)
+			return output, err
+		}
+
+		taskSupport.SetTaskStatus(currentTask.Key, swctx.CompletedStatus)
 		input = utils.DeepCloneValue(output)
+
 		idx, currentTask = taskList.Next(idx)
+
 	}
 
 	return output, nil

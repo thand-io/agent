@@ -9,6 +9,7 @@ import (
 	swctx "github.com/serverlessworkflow/sdk-go/v3/impl/ctx"
 	"github.com/serverlessworkflow/sdk-go/v3/impl/utils"
 	"github.com/serverlessworkflow/sdk-go/v3/model"
+	"github.com/sirupsen/logrus"
 )
 
 func NewWorkflowContext(workflow *Workflow) (*WorkflowTask, error) {
@@ -271,9 +272,17 @@ func (ctx *WorkflowTask) GetOutputAsMap() map[string]any {
 func (ctx *WorkflowTask) SetTaskStatus(task string, status swctx.StatusPhase) {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
+
 	if ctx.TasksStatusPhase == nil {
 		ctx.TasksStatusPhase = map[string][]swctx.StatusPhaseLog{}
 	}
+
+	logrus.WithFields(logrus.Fields{
+		"workflowID": ctx.WorkflowID,
+		"task":       task,
+		"status":     status,
+	}).Info("Setting task status")
+
 	ctx.TasksStatusPhase[task] = append(ctx.TasksStatusPhase[task], swctx.NewStatusPhaseLog(status))
 }
 
