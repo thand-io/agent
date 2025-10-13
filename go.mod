@@ -5,7 +5,7 @@ go 1.25
 toolchain go1.25.0
 
 require (
-	cloud.google.com/go/iam v1.5.2
+	cloud.google.com/go/iam v1.5.3
 	cloud.google.com/go/kms v1.23.0
 	cloud.google.com/go/secretmanager v1.15.0
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.19.1
