@@ -53,7 +53,7 @@ require (
 	go.temporal.io/api v1.53.0
 	go.temporal.io/sdk v1.36.0
 	golang.org/x/crypto v0.42.0
-	golang.org/x/oauth2 v0.31.0
+	golang.org/x/oauth2 v0.32.0
 	google.golang.org/api v0.251.0
 	google.golang.org/genai v1.28.0
 	google.golang.org/genproto v0.0.0-20251002232023-7c0ddcbb5797
