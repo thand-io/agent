@@ -1,6 +1,6 @@
 # Thand Agent [![Go Report Card](https://goreportcard.com/badge/github.com/thand-io/agent)](https://goreportcard.com/report/github.com/thand-io/agent) [![Build and Release](https://github.com/thand-io/agent/actions/workflows/test-and-build.yml/badge.svg)](https://github.com/thand-io/agent/actions/workflows/test-and-build.yml)
 
-Open-source agent for privilege access management (PAM) and just-in-time access (JIT) to cloud infrastructure, SaaS applications and local systems. Thand uses [temporal.io](https://temporal.io/) to guarantee robust deterministic workflow execution and guarantees execution and revocation of permissions. Run it locally or on-prem to grant short-lived access to any programmatically accessible system or resource. Connect to Thand Cloud for enterprise features.
+Thand is an open-source agent for privilege access management (PAM) and just-in-time access (JIT) to cloud infrastructure, SaaS applications and local systems. It uses [Serverless Workflows](https://serverlessworkflow.io/) and [Temporal](https://www.temporal.io) to orchestrate and guarantee robust deterministic workflow execution and revocation, of permissions across cloud/on-prem environments and systems. It tasks “agents” to grant access where it needs to be rather than centralising permission stores. Run it locally for sudo, UAC. Or in the cloud for IAM or for individual applications
 
 ## 🎯 What is Thand?
 
