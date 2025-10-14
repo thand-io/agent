@@ -176,10 +176,8 @@ func (s *Server) elevate(c *gin.Context, request models.ElevateRequest) {
 	if s.Config.IsServer() {
 
 		if len(request.Workflow) == 0 {
-			// If no workflow is specified then we use the first provider
-			if len(request.Providers) > 0 {
-				request.Workflow = request.Providers[0]
-			}
+			s.getErrorPage(c, http.StatusBadRequest, "No workflow specified for elevation request")
+			return
 		}
 
 		workflowDef, err := s.Config.GetWorkflowByName(request.Workflow)
@@ -200,12 +198,12 @@ func (s *Server) elevate(c *gin.Context, request models.ElevateRequest) {
 
 		if foundUser != nil {
 
-			exportalbeSession := &models.ExportableSession{
+			exportableSession := &models.ExportableSession{
 				Session:  foundUser,
 				Provider: authProvider,
 			}
 
-			request.Session = exportalbeSession.ToLocalSession(s.Config.GetServices().GetEncryption())
+			request.Session = exportableSession.ToLocalSession(s.Config.GetServices().GetEncryption())
 		}
 
 	}
