@@ -83,6 +83,19 @@ func CreateAwsConfig(awsConfig *models.BasicConfig) (*AwsConfigurationProvider, 
 		config.WithRegion(
 			awsConfig.GetStringWithDefault("region", "us-east-1")))
 
+	// Support custom endpoint for testing (e.g., LocalStack)
+	if endpoint, found := awsConfig.GetString("endpoint"); found {
+		logrus.WithField("endpoint", endpoint).Info("Using custom AWS endpoint")
+		awsOptions = append(awsOptions, config.WithEndpointResolverWithOptions(
+			aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+				return aws.Endpoint{
+					URL:           endpoint,
+					SigningRegion: region,
+				}, nil
+			}),
+		))
+	}
+
 	// Initialize AWS SDK clients here
 	ctx := context.Background()
 
@@ -99,6 +112,10 @@ func CreateAwsConfig(awsConfig *models.BasicConfig) (*AwsConfigurationProvider, 
 		Config: awsSdkConfig,
 	}, nil
 
+}
+
+func (p *awsProvider) GetIamClient() *iam.Client {
+	return p.service
 }
 
 type AwsConfigurationProvider struct {
