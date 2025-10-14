@@ -506,14 +506,6 @@ footer p {
     font-size: 0.875rem;
 }
 
-.choices__inner {
-    background-color: hsl(var(--input));
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.375rem;
-    padding: 0.75rem;
-    min-height: auto;
-}
-
 .choices__placeholder {
     color: hsl(var(--muted-foreground));
 }
@@ -522,26 +514,55 @@ footer p {
     color: hsl(var(--foreground));
 }
 
+.choices[data-type*="select-one"]:after {
+    border-color: hsl(var(--muted-foreground)) transparent transparent transparent;
+}
+
+.choices__input:focus {
+    outline: none;
+}
+
+.choices {
+    margin-bottom: 0;
+}
+
+.choices__inner {
+    background-color: hsl(var(--input));
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.375rem;
+    color: hsl(var(--foreground));
+    min-height: 75px;
+    padding: 0.5rem;
+}
+
+.choices__list--multiple .choices__item {
+    background-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    border: 1px solid hsl(var(--primary));
+    border-radius: 0.25rem;
+    margin-bottom: 0.25rem;
+}
+
 .choices__list--dropdown {
     background-color: hsl(var(--card));
     border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    max-height: 300px;
 }
 
 .choices__item--choice {
     color: hsl(var(--foreground));
-    padding: 0.5rem 0.75rem;
+    padding: 0.5rem;
+    color: black !important;
 }
 
-.choices__item--choice:hover,
-.choices__item--choice.is-highlighted {
+.choices__item--choice:hover {
     background-color: hsl(var(--secondary));
-    color: hsl(var(--secondary-foreground));
 }
 
-.choices[data-type*="select-one"]:after {
-    border-color: hsl(var(--muted-foreground)) transparent transparent transparent;
+.choices__item--choice.is-highlighted {
+    background-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
 }
 
 .choices__input {
@@ -549,9 +570,16 @@ footer p {
     color: hsl(var(--foreground));
 }
 
-.choices__input:focus {
-    outline: none;
+.choices__input::placeholder {
+    color: hsl(var(--muted-foreground));
 }
+
+/* Form-specific overrides for this page */
+.scope-field {
+    display: flex;
+    flex-direction: column;
+}
+
 
 /* Two Column Layout */
 .two-column-layout {
@@ -1160,6 +1188,11 @@ footer p {
 /* Utility classes for common inline styles */
 .hidden {
     display: none;
+}
+
+.flex-column {
+    display: flex;
+    flex-direction: column;
 }
 
 .mt-05 {
