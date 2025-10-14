@@ -113,7 +113,7 @@ func (p *oauth2Provider) CreateSession(ctx context.Context, authRequest *models.
 	}
 
 	// Use a new context with a secure http client
-	secureContext := context.WithValue(context.TODO(), oauth2.HTTPClient, &http.Client{
+	secureContext := context.WithValue(ctx, oauth2.HTTPClient, &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: false, // Ensure this is false for production
@@ -146,7 +146,7 @@ func (p *oauth2Provider) CreateSession(ctx context.Context, authRequest *models.
 			Email:    userInfo.Email,
 			Name:     userInfo.Name,
 			Verified: userInfo.VerifiedEmail,
-			Provider: "google",
+			Source:   "google",
 		},
 		AccessToken:  token.AccessToken,
 		RefreshToken: token.RefreshToken,

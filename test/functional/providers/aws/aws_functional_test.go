@@ -63,7 +63,7 @@ func TestAWSProviderFunctional(t *testing.T) {
 		Username: "testuser",
 		Email:    "testuser@example.com",
 		Name:     "Test User",
-		Provider: "aws",
+		Source:   "aws",
 	}
 
 	// Create test role

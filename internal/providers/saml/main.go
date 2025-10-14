@@ -133,7 +133,7 @@ func (p *samlProvider) CreateSession(ctx context.Context, authRequest *models.Au
 	user := &models.User{
 		Username: "saml_user",        // Extract from SAML assertion
 		Email:    "user@example.com", // Extract from SAML assertion
-		Provider: "saml",
+		Source:   "saml",
 		Groups:   []string{}, // Extract groups from SAML assertion
 	}
 

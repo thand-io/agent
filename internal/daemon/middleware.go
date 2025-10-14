@@ -48,7 +48,11 @@ func (s *Server) AuthMiddleware() gin.HandlerFunc {
 }
 
 // processProviderCookies extracts sessions from provider cookies
-func (s *Server) processProviderCookies(cookie sessions.Session, encryptionServer models.EncryptionImpl, foundSessions map[string]*models.Session) {
+func (s *Server) processProviderCookies(
+	cookie sessions.Session,
+	encryptionServer models.EncryptionImpl,
+	foundSessions map[string]*models.Session,
+) {
 	allProviders := s.Config.GetProvidersByCapability(models.ProviderCapabilityAuthorizor)
 
 	for providerName := range allProviders {
@@ -65,12 +69,16 @@ func (s *Server) processProviderCookies(cookie sessions.Session, encryptionServe
 			continue
 		}
 
-		foundSessions[providerName] = decodedSession
+		foundSessions[providerName] = decodedSession.Session
 	}
 }
 
 // processBearerToken extracts session from Authorization Bearer token
-func (s *Server) processBearerToken(c *gin.Context, encryptionServer models.EncryptionImpl, foundSessions map[string]*models.Session) {
+func (s *Server) processBearerToken(
+	c *gin.Context,
+	encryptionServer models.EncryptionImpl,
+	foundSessions map[string]*models.Session,
+) {
 	authHeader := c.GetHeader("Authorization")
 	if len(authHeader) == 0 || !strings.HasPrefix(authHeader, "Bearer ") {
 		return
@@ -83,11 +91,20 @@ func (s *Server) processBearerToken(c *gin.Context, encryptionServer models.Encr
 		return
 	}
 
-	foundSessions["todo"] = decodedSession
+	if len(decodedSession.Provider) == 0 {
+		logrus.Warnln("Decoded session from bearer token has no provider information")
+		return
+	}
+
+	foundSessions[decodedSession.Provider] = decodedSession.Session
 }
 
 // processAPIKey extracts session from X-API-Key header
-func (s *Server) processAPIKey(c *gin.Context, encryptionServer models.EncryptionImpl, foundSessions map[string]*models.Session) {
+func (s *Server) processAPIKey(
+	c *gin.Context,
+	encryptionServer models.EncryptionImpl,
+	foundSessions map[string]*models.Session,
+) {
 	apiHeader := c.GetHeader("X-API-Key")
 	if len(apiHeader) == 0 {
 		return
@@ -99,7 +116,12 @@ func (s *Server) processAPIKey(c *gin.Context, encryptionServer models.Encryptio
 		return
 	}
 
-	foundSessions["todo"] = decodedSession
+	if len(decodedSession.Provider) == 0 {
+		logrus.Warnln("Decoded session from API key has no provider information")
+		return
+	}
+
+	foundSessions[decodedSession.Provider] = decodedSession.Session
 }
 
 // handleAgentMode processes sessions for agent/client mode
@@ -126,7 +148,7 @@ func (s *Server) handleAgentMode(c *gin.Context, cookie sessions.Session) {
 	c.Redirect(http.StatusTemporaryRedirect, c.Request.RequestURI)
 }
 
-func getDecodedSession(encryptor models.EncryptionImpl, session string) (*models.Session, error) {
+func getDecodedSession(encryptor models.EncryptionImpl, session string) (*models.ExportableSession, error) {
 
 	localSession, err := models.DecodedLocalSession(session)
 
