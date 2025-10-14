@@ -45,12 +45,13 @@ func (s *Server) getElevate(c *gin.Context) {
 	}
 
 	s.elevate(c, models.ElevateRequest{
-		Role:      role,
-		Providers: []string{request.Provider},
-		Workflow:  primaryWorkflow,
-		Reason:    request.Reason,
-		Duration:  request.Duration,
-		Session:   request.Session,
+		Role:       role,
+		Providers:  []string{request.Provider},
+		Identities: request.Identities,
+		Workflow:   primaryWorkflow,
+		Reason:     request.Reason,
+		Duration:   request.Duration,
+		Session:    request.Session,
 	})
 }
 
@@ -158,12 +159,13 @@ func (s *Server) handleDynamicRequest(c *gin.Context, dynamicRequest models.Elev
 
 	// Convert to standard ElevateRequest
 	elevateRequest := models.ElevateRequest{
-		Role:      dynamicRole,
-		Providers: dynamicRequest.Providers, // Use first provider for now
-		Workflow:  dynamicRequest.Workflow,
-		Reason:    dynamicRequest.Reason,
-		Duration:  dynamicRequest.Duration,
-		Session:   nil, // Session will be handled by the workflow if needed
+		Role:       dynamicRole,
+		Identities: dynamicRequest.Identities,
+		Providers:  dynamicRequest.Providers, // Use first provider for now
+		Workflow:   dynamicRequest.Workflow,
+		Reason:     dynamicRequest.Reason,
+		Duration:   dynamicRequest.Duration,
+		Session:    nil, // Session will be handled by the workflow if needed
 	}
 
 	s.elevate(c, elevateRequest)

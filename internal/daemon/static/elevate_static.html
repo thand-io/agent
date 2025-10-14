@@ -1,6 +1,5 @@
 {{template "header" .}}
 <!-- Choices.js CSS and JS -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/styles/choices.min.css">
 <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/scripts/choices.min.js"></script>
 
 <main>
@@ -9,34 +8,39 @@
             <h1>Static Elevation Request</h1>
             <p>Request temporary elevated privileges for a specific role and reason. Only providers with RBAC support are available for elevation.</p>
             
-            <form action="{{.Config.GetApiBasePath}}/elevate" method="GET" style="display: flex; flex-direction: column; gap: 1rem; max-width: 400px; margin: 2rem auto;">
-                <div class="form-section">
-                    <label class="form-label" for="identities">Select Identities to Assign Role</label>
-                    <select name="identities" id="identities" multiple required value="{{if .User.Email}}{{.User.Email}}{{end}}">
-                        <!-- Options will be populated dynamically -->
-                    </select>
-                    <div class="choice-help">
-                        Select which users or groups will receive this role. Your current identity is selected by default.
+            <form action="{{.Config.GetApiBasePath}}/elevate" method="GET" class="mt-2 text-left">
+            
+                <div class="form-section" style="max-width: 600px;">
+                    <h3>Select Identities to Assign Role</h3>
+                    <div class="choice-wrapper">
+                        <select name="identities" id="identities" multiple>
+                            <!-- Options will be populated dynamically -->
+                        </select>
+                        <div class="choice-help">
+                            Select which users or groups will receive this role. Your current identity is selected by default.
+                        </div>
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; gap: 1rem; margin: auto;">
+                        <select name="provider" id="provider" required class="form-select">
+                            <option value="">Select a Provider</option>
+                        </select>
+                        <select name="role" id="role" required disabled class="form-select" style="opacity: 0.5;">
+                            <option value="">Select a Provider First</option>
+                        </select>
+                        <select name="duration" required class="form-select">
+                            <option value="PT1M">1 Minute</option>
+                            <option value="PT5M">5 Minutes</option>
+                            <option value="PT15M">15 Minutes</option>
+                            <option value="PT30M">30 Minutes</option>
+                            <option value="PT1H">1 Hour</option>
+                            <option value="PT4H">4 Hours</option>
+                            <option value="PT8H">8 Hours</option>
+                        </select>
+                        <textarea name="reason" placeholder="Reason for elevation" rows="3" required class="form-textarea"></textarea>
+                        <button type="submit" class="button button-primary">Request Elevation</button>
                     </div>
                 </div>
-
-                <select name="provider" id="provider" required class="form-select">
-                    <option value="">Select a Provider</option>
-                </select>
-                <select name="role" id="role" required disabled class="form-select" style="opacity: 0.5;">
-                    <option value="">Select a Provider First</option>
-                </select>
-                <select name="duration" required class="form-select">
-                    <option value="PT1M">1 Minute</option>
-                    <option value="PT5M">5 Minutes</option>
-                    <option value="PT15M">15 Minutes</option>
-                    <option value="PT30M">30 Minutes</option>
-                    <option value="PT1H">1 Hour</option>
-                    <option value="PT4H">4 Hours</option>
-                    <option value="PT8H">8 Hours</option>
-                </select>
-                <textarea name="reason" placeholder="Reason for elevation" rows="3" required class="form-textarea"></textarea>
-                <button type="submit" class="button button-primary">Request Elevation</button>
             </form>
         </div>
     </div>
@@ -57,19 +61,6 @@
                 shouldSort: false,
                 searchResultLimit: 50,
                 searchFields: ['label', 'value'],
-                items: [
-                    {{if .User.Email}}{{.User.Email}}{{end}}
-                ],
-                choices: [
-                    {{if .User.Email}}
-                    {
-                        value: '{{.User.Email}}',
-                        label: '{{.User.Email}} (Current User)',
-                        selected: true,
-                        customProperties: { type: 'user' }
-                    }
-                    {{end}}
-                ],
             });
 
             // Load identities with current user pre-selected
@@ -81,6 +72,7 @@
                 .then(response => response.json())
                 .then(identitiesData => {
                     const identities = [];
+                    const currentUserEmail = '{{.User.Email}}';
                                         
                     // Add other available identities from the API
                     if (identitiesData && identitiesData.identities) {
@@ -101,14 +93,14 @@
                     }
                     
                     identityChoices.setChoices(identities, 'value', 'label', true);
+                    
+                    // Pre-select current user if available
+                    if (currentUserEmail) {
+                        identityChoices.setChoiceByValue(currentUserEmail);
+                    }
                 })
                 .catch(error => {
                     console.error('Error loading identities:', error);
-                    // Fallback to basic options if API calls fail
-                    const fallbackIdentities = [
-                        { value: 'current-user', label: '👤 Current User', selected: true, customProperties: { type: 'user', current: true } }
-                    ];
-                    identityChoices.setChoices(fallbackIdentities, 'value', 'label', true);
                 });
             }
 
