@@ -160,7 +160,7 @@ func (s *Server) getAuthCallbackPage(c *gin.Context, auth models.AuthWrapper) {
 	state := c.Query("state")
 	code := c.Query("code")
 
-	session, err := provider.GetClient().CreateSession(context.TODO(), &models.AuthorizeUser{
+	session, err := provider.GetClient().CreateSession(c, &models.AuthorizeUser{
 		State:       state,
 		Code:        code,
 		RedirectUri: s.GetConfig().GetAuthCallbackUrl(auth.Provider),
@@ -171,8 +171,14 @@ func (s *Server) getAuthCallbackPage(c *gin.Context, auth models.AuthWrapper) {
 		return
 	}
 
+	exportableSession := &models.ExportableSession{
+		Session:  session,
+		Provider: auth.Provider,
+	}
+
 	// Covert our sensitive session to one we can store on the users local system
-	localSession := session.ToLocalSession(s.Config.GetServices().GetEncryption())
+	localSession := exportableSession.ToLocalSession(
+		s.Config.GetServices().GetEncryption())
 
 	data := AuthCallbackPageData{
 		TemplateData: s.GetTemplateData(c),

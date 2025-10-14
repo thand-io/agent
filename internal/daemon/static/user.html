@@ -28,7 +28,7 @@
                     </div>
                     <div class="info-item">
                         <span class="form-label">Provider</span>
-                        <span class="info-value">{{if .User}}{{.User.Provider}}{{else}}N/A{{end}}</span>
+                        <span class="info-value">{{if .User}}{{.User.Source}}{{else}}N/A{{end}}</span>
                     </div>
                     <div class="info-item">
                         <span class="form-label">Verified</span>
@@ -295,9 +295,8 @@
         async function logout() {
             if (confirm('Are you sure you want to logout?')) {
                 try {
-                    const response = await fetch('/api/v1/auth/logout', {
-                        method: 'POST',
-                        credentials: 'include'
+                    const response = await fetch('{{.Config.GetApiBasePath}}/auth/logout', {
+                        method: 'GET',
                     });
                     
                     if (response.ok) {

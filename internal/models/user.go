@@ -11,7 +11,7 @@ type User struct {
 	Email    string   `json:"email"`
 	Name     string   `json:"name"`
 	Verified *bool    `json:"verified,omitempty"`
-	Provider string   `json:"provider"`
+	Source   string   `json:"source,omitempty"`
 	Groups   []string `json:"groups,omitempty"`
 }
 

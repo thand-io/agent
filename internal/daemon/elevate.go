@@ -86,25 +86,6 @@ func (s *Server) postElevateJSON(c *gin.Context) {
 		return
 	}
 
-	// Parse as raw JSON to detect request type
-	var rawData map[string]any
-	if err := json.Unmarshal(body, &rawData); err != nil {
-		s.getErrorPage(c, http.StatusBadRequest, "Invalid JSON payload", err)
-		return
-	}
-
-	// Check if this is a dynamic request (has providers array, permissions array, etc.)
-	if providers, hasProviders := rawData["providers"].([]any); hasProviders && len(providers) > 0 {
-		// This is a dynamic request
-		var dynamicRequest models.ElevateDynamicRequest
-		if err := json.Unmarshal(body, &dynamicRequest); err != nil {
-			s.getErrorPage(c, http.StatusBadRequest, "Invalid dynamic request payload", err)
-			return
-		}
-		s.handleDynamicRequest(c, dynamicRequest)
-		return
-	}
-
 	// This is a standard elevation request
 	var request models.ElevateRequest
 	if err := json.Unmarshal(body, &request); err != nil {
@@ -112,7 +93,19 @@ func (s *Server) postElevateJSON(c *gin.Context) {
 		return
 	}
 
-	s.elevate(c, request)
+	if request.IsValid() {
+		s.elevate(c, request)
+		return
+	}
+
+	// Parse as raw JSON to detect request type
+	var dynamicRequest models.ElevateDynamicRequest
+	if err := json.Unmarshal(body, &dynamicRequest); err != nil {
+		s.getErrorPage(c, http.StatusBadRequest, "Invalid dynamic request payload", err)
+		return
+	}
+	s.handleDynamicRequest(c, dynamicRequest)
+
 }
 
 func (s *Server) handleDynamicRequest(c *gin.Context, dynamicRequest models.ElevateDynamicRequest) {
@@ -182,19 +175,23 @@ func (s *Server) elevate(c *gin.Context, request models.ElevateRequest) {
 	// lets attach a user session to the request.
 	if s.Config.IsServer() {
 
-		// Get the auth provider from the workflow if set
-		authProvider := []string{}
-
-		if len(request.Workflow) > 0 {
-			workflowDef, err := s.Config.GetWorkflowByName(request.Workflow)
-			if err != nil {
-				s.getErrorPage(c, http.StatusBadRequest, "Invalid workflow specified", err)
-				return
+		if len(request.Workflow) == 0 {
+			// If no workflow is specified then we use the first provider
+			if len(request.Providers) > 0 {
+				request.Workflow = request.Providers[0]
 			}
-			authProvider = []string{workflowDef.GetAuthentication()}
 		}
 
-		foundUser, err := s.getUser(c, authProvider...)
+		workflowDef, err := s.Config.GetWorkflowByName(request.Workflow)
+
+		if err != nil {
+			s.getErrorPage(c, http.StatusBadRequest, "Invalid workflow specified", err)
+			return
+		}
+
+		authProvider := workflowDef.GetAuthentication()
+
+		foundUser, err := s.getUser(c, authProvider)
 
 		if err != nil {
 			s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of available roles", err)
@@ -202,7 +199,13 @@ func (s *Server) elevate(c *gin.Context, request models.ElevateRequest) {
 		}
 
 		if foundUser != nil {
-			request.Session = foundUser.ToLocalSession(s.Config.GetServices().GetEncryption())
+
+			exportalbeSession := &models.ExportableSession{
+				Session:  foundUser,
+				Provider: authProvider,
+			}
+
+			request.Session = exportalbeSession.ToLocalSession(s.Config.GetServices().GetEncryption())
 		}
 
 	}
@@ -323,7 +326,8 @@ func (s *Server) getElevateAuthOAuth2(c *gin.Context) {
 	})
 
 	if err != nil {
-		s.getErrorPage(c, http.StatusInternalServerError, "Failed to create session for elevation request", err)
+		s.getErrorPage(c, http.StatusInternalServerError,
+			"Failed to create session for elevation request", err)
 		return
 	}
 
@@ -332,7 +336,13 @@ func (s *Server) getElevateAuthOAuth2(c *gin.Context) {
 
 	workflowTask.SetUser(session.User)
 
-	localSession := session.ToLocalSession(s.Config.GetServices().GetEncryption())
+	exportableSession := &models.ExportableSession{
+		Session:  session,
+		Provider: authProvider,
+	}
+
+	localSession := exportableSession.ToLocalSession(
+		s.Config.GetServices().GetEncryption())
 
 	if err := s.setAuthCookie(c, authProvider, localSession); err != nil {
 		s.getErrorPage(c, http.StatusInternalServerError, "Failed to set auth cookie", err)

@@ -25,15 +25,20 @@ type Session struct {
 	Expiry       time.Time `json:"expiry"`
 }
 
+type ExportableSession struct {
+	*Session
+	Provider string `json:"provider"`
+}
+
 // Encode the remote session from the local session
-func (s *Session) GetEncodedSession(encryptor EncryptionImpl) string {
+func (s *ExportableSession) GetEncodedSession(encryptor EncryptionImpl) string {
 	return EncodingWrapper{
 		Type: ENCODED_SESSION,
 		Data: s,
 	}.EncodeAndEncrypt(encryptor)
 }
 
-func (s *Session) ToLocalSession(encryptor EncryptionImpl) *LocalSession {
+func (s *ExportableSession) ToLocalSession(encryptor EncryptionImpl) *LocalSession {
 	return &LocalSession{
 		Version: 1,
 		Expiry:  s.Expiry,
@@ -42,7 +47,7 @@ func (s *Session) ToLocalSession(encryptor EncryptionImpl) *LocalSession {
 }
 
 // Decode the remote session from the local session
-func (s *LocalSession) GetDecodedSession(decryptor EncryptionImpl) (*Session, error) {
+func (s *LocalSession) GetDecodedSession(decryptor EncryptionImpl) (*ExportableSession, error) {
 	decoded, err := EncodingWrapper{}.DecodeAndDecrypt(s.Session, decryptor)
 
 	if err != nil {
@@ -53,7 +58,7 @@ func (s *LocalSession) GetDecodedSession(decryptor EncryptionImpl) (*Session, er
 		return nil, fmt.Errorf("invalid session type: %s", decoded.Type)
 	}
 
-	var session *Session
+	var session *ExportableSession
 	common.ConvertMapToInterface(decoded.Data.(map[string]any), &session)
 
 	return session, nil

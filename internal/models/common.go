@@ -15,8 +15,9 @@ var ENCODED_SESSION = "session"
 var ENCODED_SESSION_LOCAL = "session_local"
 
 type EncodingWrapper struct {
-	Type string `json:"type"`
-	Data any    `json:"data"`
+	Type       string `json:"type"`
+	Identifier string `json:"identifier,omitempty"`
+	Data       any    `json:"data"`
 }
 
 func (e EncodingWrapper) EncodeAndEncrypt(encryptor EncryptionImpl) string {

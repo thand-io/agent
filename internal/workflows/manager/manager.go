@@ -147,7 +147,7 @@ func (m *WorkflowManager) executeWorkflow(
 
 		if existingSession.Expiry.UTC().After(time.Now().UTC()) {
 
-			err = authProvider.GetClient().ValidateSession(ctx, decodedSession)
+			err = authProvider.GetClient().ValidateSession(ctx, decodedSession.Session)
 
 			if err == nil {
 
