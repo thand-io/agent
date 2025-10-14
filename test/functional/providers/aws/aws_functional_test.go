@@ -48,14 +48,14 @@ func TestAWSProviderFunctional(t *testing.T) {
 		}
 	}()
 
-	// Get LocalStack endpoint
-	endpoint, err := localstackContainer.Endpoint(ctx, "")
+	// Get LocalStack endpoint for port 4566
+	host, err := localstackContainer.Host(ctx)
 	require.NoError(t, err)
 
-	// Ensure endpoint has http:// prefix for LocalStack
-	if !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
-		endpoint = "http://" + endpoint
-	}
+	mappedPort, err := localstackContainer.MappedPort(ctx, "4566/tcp")
+	require.NoError(t, err)
+
+	endpoint := fmt.Sprintf("http://%s:%s", host, mappedPort.Port())
 
 	// Create test user
 	testUser := &models.User{
