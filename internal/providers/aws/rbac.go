@@ -15,6 +15,14 @@ import (
 
 // Authorize grants access for a user to a role
 func (p *awsProvider) AuthorizeRole(ctx context.Context, user *models.User, role *models.Role) (map[string]any, error) {
+	// Check for nil inputs
+	if user == nil {
+		return nil, fmt.Errorf("user cannot be nil")
+	}
+	if role == nil {
+		return nil, fmt.Errorf("role cannot be nil")
+	}
+
 	// Check if the role exists
 	existingRole, err := p.getRole(ctx, role)
 	if err != nil {
@@ -47,6 +55,14 @@ func (p *awsProvider) RevokeRole(
 	role *models.Role,
 	metadata map[string]any,
 ) (map[string]any, error) {
+	// Check for nil inputs
+	if user == nil {
+		return nil, fmt.Errorf("user cannot be nil")
+	}
+	if role == nil {
+		return nil, fmt.Errorf("role cannot be nil")
+	}
+
 	// Check if the role exists
 	existingRole, err := p.getRole(ctx, role)
 	if err != nil {
@@ -221,13 +237,46 @@ func (p *awsProvider) bindUserToRole(ctx context.Context, user *models.User, rol
 	return nil
 }
 
-// unbindUserFromRole updates the assume role policy to deny access to the specific user
+// unbindUserFromRole removes the user from the assume role policy
 func (p *awsProvider) unbindUserFromRole(ctx context.Context, user *models.User, roleName *string) error {
-	// Create a restrictive assume role policy that denies access
-	// We'll create a policy that only allows a non-existent principal
-	assumeRolePolicy := PolicyDocument{
-		Version: "2012-10-17",
-		Statement: []Statement{
+	// Get current assume role policy
+	roleOutput, err := p.service.GetRole(ctx, &iam.GetRoleInput{
+		RoleName: roleName,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to get role %s: %w", *roleName, err)
+	}
+
+	// Parse the current policy document
+	var currentPolicy PolicyDocument
+	if roleOutput.Role.AssumeRolePolicyDocument != nil {
+		if err := json.Unmarshal([]byte(*roleOutput.Role.AssumeRolePolicyDocument), &currentPolicy); err != nil {
+			return fmt.Errorf("failed to parse assume role policy: %w", err)
+		}
+	}
+
+	// Extract username from email
+	username := strings.Split(user.Email, "@")[0]
+	userArn := fmt.Sprintf("arn:aws:iam::*:user/%s", username)
+
+	// Remove statements that reference this user
+	var newStatements []Statement
+	for _, stmt := range currentPolicy.Statement {
+		// Check if this statement references our user
+		if principal, ok := stmt.Principal.(map[string]interface{}); ok {
+			if awsPrincipal, exists := principal["AWS"]; exists {
+				if awsStr, ok := awsPrincipal.(string); ok && awsStr == userArn {
+					// Skip this statement - we're removing the user
+					continue
+				}
+			}
+		}
+		newStatements = append(newStatements, stmt)
+	}
+
+	// If no statements remain, create a minimal deny-all policy to prevent open access
+	if len(newStatements) == 0 {
+		newStatements = []Statement{
 			{
 				Effect: "Deny",
 				Principal: map[string]string{
@@ -235,40 +284,27 @@ func (p *awsProvider) unbindUserFromRole(ctx context.Context, user *models.User,
 				},
 				Action: "sts:AssumeRole",
 			},
-		},
-	}
-
-	// If we want to be more specific and only deny the particular user
-	if len(user.Email) > 0 {
-		username := strings.Split(user.Email, "@")[0]
-		assumeRolePolicy = PolicyDocument{
-			Version: "2012-10-17",
-			Statement: []Statement{
-				{
-					Effect: "Deny",
-					Principal: map[string]string{
-						"AWS": fmt.Sprintf("arn:aws:iam::*:user/%s", username),
-					},
-					Action: "sts:AssumeRole",
-				},
-			},
 		}
 	}
 
-	assumeRolePolicyJSON, err := json.Marshal(assumeRolePolicy)
-	if err != nil {
-		return fmt.Errorf("failed to marshal assume role policy: %w", err)
+	// Create new policy document
+	newPolicy := PolicyDocument{
+		Version:   "2012-10-17",
+		Statement: newStatements,
 	}
 
-	// Update the role's assume role policy
-	updateInput := &iam.UpdateAssumeRolePolicyInput{
+	// Update the assume role policy
+	newPolicyJSON, err := json.Marshal(newPolicy)
+	if err != nil {
+		return fmt.Errorf("failed to marshal new policy: %w", err)
+	}
+
+	_, err = p.service.UpdateAssumeRolePolicy(ctx, &iam.UpdateAssumeRolePolicyInput{
 		RoleName:       roleName,
-		PolicyDocument: aws.String(string(assumeRolePolicyJSON)),
-	}
-
-	_, err = p.service.UpdateAssumeRolePolicy(ctx, updateInput)
+		PolicyDocument: aws.String(string(newPolicyJSON)),
+	})
 	if err != nil {
-		return fmt.Errorf("failed to update assume role policy: %w", err)
+		return fmt.Errorf("failed to update assume role policy for role %s: %w", *roleName, err)
 	}
 
 	return nil
