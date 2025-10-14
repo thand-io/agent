@@ -1,35 +1,108 @@
 {{template "header" .}}
+<!-- Choices.js CSS and JS -->
+<script src="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/scripts/choices.min.js"></script>
+
 <main>
     <div class="container">
         <div class="hero">
             <h1>Static Elevation Request</h1>
             <p>Request temporary elevated privileges for a specific role and reason. Only providers with RBAC support are available for elevation.</p>
             
-            <form action="{{.Config.GetApiBasePath}}/elevate" method="GET" style="display: flex; flex-direction: column; gap: 1rem; max-width: 400px; margin: 2rem auto;">
-                <select name="provider" id="provider" required style="padding: 0.75rem; border-radius: 0.375rem; border: 1px solid hsl(var(--border)); background-color: hsl(var(--input)); color: hsl(var(--foreground));">
-                    <option value="">Select a Provider</option>
-                </select>
-                <select name="role" id="role" required disabled style="padding: 0.75rem; border-radius: 0.375rem; border: 1px solid hsl(var(--border)); background-color: hsl(var(--input)); color: hsl(var(--foreground)); opacity: 0.5;">
-                    <option value="">Select a Provider First</option>
-                </select>
-                <select name="duration" required style="padding: 0.75rem; border-radius: 0.375rem; border: 1px solid hsl(var(--border)); background-color: hsl(var(--input)); color: hsl(var(--foreground));">
-                    <option value="PT1M">1 Minute</option>
-                    <option value="PT5M">5 Minutes</option>
-                    <option value="PT15M">15 Minutes</option>
-                    <option value="PT30M">30 Minutes</option>
-                    <option value="PT1H">1 Hour</option>
-                    <option value="PT4H">4 Hours</option>
-                    <option value="PT8H">8 Hours</option>
-                </select>
-                <textarea name="reason" placeholder="Reason for elevation" rows="3" required style="padding: 0.75rem; border-radius: 0.375rem; border: 1px solid hsl(var(--border)); background-color: hsl(var(--input)); color: hsl(var(--foreground));"></textarea>
-                <button type="submit" class="button button-primary">Request Elevation</button>
+            <form action="{{.Config.GetApiBasePath}}/elevate" method="GET" class="mt-2 text-left">
+            
+                <div class="form-section" style="max-width: 600px;">
+                    <h3>Select Identities to Assign Role</h3>
+                    <div class="choice-wrapper">
+                        <select name="identities" id="identities" multiple>
+                            <!-- Options will be populated dynamically -->
+                        </select>
+                        <div class="choice-help">
+                            Select which users or groups will receive this role. Your current identity is selected by default.
+                        </div>
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; gap: 1rem; margin: auto;">
+                        <select name="provider" id="provider" required class="form-select">
+                            <option value="">Select a Provider</option>
+                        </select>
+                        <select name="role" id="role" required disabled class="form-select" style="opacity: 0.5;">
+                            <option value="">Select a Provider First</option>
+                        </select>
+                        <select name="duration" required class="form-select">
+                            <option value="PT1M">1 Minute</option>
+                            <option value="PT5M">5 Minutes</option>
+                            <option value="PT15M">15 Minutes</option>
+                            <option value="PT30M">30 Minutes</option>
+                            <option value="PT1H">1 Hour</option>
+                            <option value="PT4H">4 Hours</option>
+                            <option value="PT8H">8 Hours</option>
+                        </select>
+                        <textarea name="reason" placeholder="Reason for elevation" rows="3" required class="form-textarea"></textarea>
+                        <button type="submit" class="button button-primary">Request Elevation</button>
+                    </div>
+                </div>
             </form>
         </div>
     </div>
+
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const roleSelect = document.getElementById('role');
             const providerSelect = document.getElementById('provider');
+            let identityChoices = null;
+
+            // Initialize Choices.js for identity selection
+            identityChoices = new Choices('#identities', {
+                removeItemButton: true,
+                searchEnabled: true,
+                placeholder: true,
+                placeholderValue: 'Search identities...',
+                noResultsText: 'No identities found',
+                shouldSort: false,
+                searchResultLimit: 50,
+                searchFields: ['label', 'value'],
+            });
+
+            // Load identities with current user pre-selected
+            loadIdentities();
+
+            function loadIdentities() {
+                // Use template value for current user and fetch available identities
+                fetch('{{.Config.GetApiBasePath}}/identities')
+                .then(response => response.json())
+                .then(identitiesData => {
+                    const identities = [];
+                    const currentUserEmail = '{{.User.Email}}';
+                                        
+                    // Add other available identities from the API
+                    if (identitiesData && identitiesData.identities) {
+                        Object.keys(identitiesData.identities).forEach(key => {
+                            const identity = identitiesData.identities[key];
+                            
+                            const label = identity.name ? 
+                                `${identity.name} (${identity.email || identity.id})` : 
+                                (identity.email || identity.id);
+                            
+                            identities.push({
+                                id: identity.id,
+                                value: identity.email,
+                                label: `${label}`,
+                                customProperties: { type: 'user' },
+                            });
+                        });
+                    }
+                    
+                    identityChoices.setChoices(identities, 'value', 'label', true);
+                    
+                    // Pre-select current user if available
+                    if (currentUserEmail) {
+                        identityChoices.setChoiceByValue(currentUserEmail);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading identities:', error);
+                });
+            }
 
             // Fetch only providers with RBAC capability (those that support elevation)
             fetch('{{.Config.GetApiBasePath}}/providers?capability=rbac')
@@ -99,6 +172,16 @@
                     roleSelect.disabled = true;
                     roleSelect.style.opacity = '0.5';
                     roleSelect.innerHTML = '<option value="">Select a Provider First</option>';
+                }
+            });
+
+            // Add form validation
+            document.querySelector('form').addEventListener('submit', function(e) {
+                const selectedIdentities = identityChoices.getValue();
+                if (selectedIdentities.length === 0) {
+                    e.preventDefault();
+                    alert('Please select at least one identity to assign the role to');
+                    return false;
                 }
             });
         });

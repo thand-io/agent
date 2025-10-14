@@ -1,6 +1,5 @@
 {{template "header" .}}
 <!-- Choices.js CSS and JS -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/styles/choices.min.css">
 <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/scripts/choices.min.js"></script>
 
 <main>
@@ -12,11 +11,25 @@
             
         <form action="{{.Config.GetApiBasePath}}/elevate" method="POST" enctype="application/x-www-form-urlencoded" class="mt-2 text-left" id="customRoleForm">
                 
+            <div  style="display: flex; flex-direction: column; gap: 1rem; max-width: 600px;"></div>
+
+                <!-- Stage 0: Identity Selection -->
+                <div class="form-section">
+                    <h3>1. Select Identities to Assign Role</h3>
+                    <div class="choice-wrapper">
+                        <select name="identities" id="identities" multiple>
+                            <!-- Options will be populated dynamically -->
+                        </select>
+                        <div class="choice-help">
+                            Select which users or groups will receive this role. Your current identity is selected by default.
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Stage 1: Provider Selection -->
                 <div class="form-section">
-                    <h3>1. Select Providers (Max 3)</h3>
+                    <h3>2. Select Providers (Max 3)</h3>
                     <div class="choice-wrapper">
-                        <label class="form-label" for="providerSelect">Select Providers</label>
                         <select id="providerSelect" name="providers" multiple required>
                             <!-- Options will be populated dynamically -->
                         </select>
@@ -28,9 +41,8 @@
 
                 <!-- Stage 2: Role Inheritance -->
                 <div class="form-section hidden" id="inheritanceSection">
-                    <h3>2. Select Role Inheritance (Optional)</h3>
+                    <h3>3. Select Role Inheritance (Optional)</h3>
                     <div class="choice-wrapper">
-                        <label class="form-label" for="inheritanceSelect">Select Roles to Inherit</label>
                         <select id="inheritanceSelect" name="inherits" multiple>
                             <!-- Options will be populated dynamically -->
                         </select>
@@ -42,7 +54,7 @@
 
                 <!-- Stage 3: Permission Selection -->
                 <div class="form-section hidden" id="permissionsSection">
-                    <h3>3. Configure Permissions</h3>
+                    <h3>4. Configure Permissions</h3>
                     <div class="choice-help mb-1 text-sm text-muted">
                         Select specific permissions for this role. Either role inheritance above or specific permissions must be selected to proceed to scopes.
                     </div>
@@ -70,7 +82,7 @@
 
                 <!-- Stage 4: Scopes -->
                 <div class="form-section hidden" id="scopesSection">
-                    <h3>4. Define Scopes</h3>
+                    <h3>5. Define Scopes</h3>
                     <div class="scopes-container">
                         <div class="scope-field">
                             <label class="form-label" for="groupsSelect">Groups</label>
@@ -90,7 +102,7 @@
 
                 <!-- Reason and Duration Fields -->
                 <div class="form-section hidden" id="reasonSection">
-                    <h3>5. Provide Details</h3>
+                    <h3>6. Provide Details</h3>
                     <div class="scopes-container">
                         <div class="scope-field">
                             <label class="form-label" for="reason">Reason</label>
@@ -133,73 +145,6 @@
         </div>
     </div>
 
-    <style>
-        /* Custom utility classes */
-        .flex-column {
-            display: flex;
-            flex-direction: column;
-        }
-
-        /* Custom Choices.js styling to match theme */
-        .choices {
-            margin-bottom: 0;
-        }
-
-        .choices__inner {
-            background-color: hsl(var(--input));
-            border: 1px solid hsl(var(--border));
-            border-radius: 0.375rem;
-            color: hsl(var(--foreground));
-            min-height: 75px;
-            padding: 0.5rem;
-        }
-
-        .choices__list--multiple .choices__item {
-            background-color: hsl(var(--primary));
-            color: hsl(var(--primary-foreground));
-            border: 1px solid hsl(var(--primary));
-            border-radius: 0.25rem;
-            margin-bottom: 0.25rem;
-        }
-
-        .choices__list--dropdown {
-            background-color: hsl(var(--card));
-            border: 1px solid hsl(var(--border));
-            border-radius: 0.375rem;
-            max-height: 300px;
-        }
-
-        .choices__item--choice {
-            color: hsl(var(--foreground));
-            padding: 0.5rem;
-            color: black !important;
-        }
-
-        .choices__item--choice:hover {
-            background-color: hsl(var(--secondary));
-        }
-
-        .choices__item--choice.is-highlighted {
-            background-color: hsl(var(--primary));
-            color: hsl(var(--primary-foreground));
-        }
-
-        .choices__input {
-            background-color: transparent;
-            color: hsl(var(--foreground));
-        }
-
-        .choices__input::placeholder {
-            color: hsl(var(--muted-foreground));
-        }
-
-        /* Form-specific overrides for this page */
-        .scope-field {
-            display: flex;
-            flex-direction: column;
-        }
-    </style>
-
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             let selectedProviders = [];
@@ -212,6 +157,7 @@
             let permissionChoices = null;
             let groupsChoices = null;
             let usersChoices = null;
+            let identityChoices = null;
 
             // Sample data for groups and users (in a real app, these would come from APIs)
             const sampleGroups = [
@@ -232,10 +178,23 @@
 
             // Initialize all Choices.js components
             initializeAllChoices();
+            loadIdentities();
             loadProviders();
             loadWorkflows();
 
             function initializeAllChoices() {
+                // Initialize Identity selector
+                identityChoices = new Choices('#identities', {
+                    removeItemButton: true,
+                    searchEnabled: true,
+                    placeholder: true,
+                    placeholderValue: 'Search identities...',
+                    noResultsText: 'No identities found',
+                    shouldSort: false,
+                    searchResultLimit: 50,
+                    searchFields: ['label', 'value'],
+                });
+
                 // Initialize Provider selector
                 providerChoices = new Choices('#providerSelect', {
                     removeItemButton: true,
@@ -377,6 +336,44 @@
                         const workflowSelect = document.getElementById('workflowSelect');
                         workflowSelect.innerHTML = '<option value="" disabled selected>Error loading workflows</option>';
                     });
+            }
+
+            function loadIdentities() {
+                // Use template value for current user and fetch available identities
+                fetch('{{.Config.GetApiBasePath}}/identities')
+                .then(response => response.json())
+                .then(identitiesData => {
+                    const identities = [];
+                    const currentUserEmail = '{{.User.Email}}';
+                                        
+                    // Add other available identities from the API
+                    if (identitiesData && identitiesData.identities) {
+                        Object.keys(identitiesData.identities).forEach(key => {
+                            const identity = identitiesData.identities[key];
+                            
+                            const label = identity.name ? 
+                                `${identity.name} (${identity.email || identity.id})` : 
+                                (identity.email || identity.id);
+                            
+                            identities.push({
+                                id: identity.id,
+                                value: identity.email,
+                                label: `${label}`,
+                                customProperties: { type: 'user' },
+                            });
+                        });
+                    }
+                    
+                    identityChoices.setChoices(identities, 'value', 'label', true);
+                    
+                    // Pre-select current user if available
+                    if (currentUserEmail) {
+                        identityChoices.setChoiceByValue(currentUserEmail);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading identities:', error);
+                });
             }
 
             function loadInheritanceOptions() {
@@ -668,10 +665,17 @@
                 });
                 
                 // Validate required fields before allowing form submission
+                const selectedIdentities = identityChoices.getValue();
                 const providers = Array.from(document.getElementById('providerSelect').selectedOptions);
                 const inherits = Array.from(document.getElementById('inheritanceSelect').selectedOptions);
                 const reason = document.getElementById('reason').value.trim();
                 const workflow = document.getElementById('workflowSelect').value;
+                
+                if (selectedIdentities.length === 0) {
+                    e.preventDefault();
+                    alert('Please select at least one identity to assign the role to');
+                    return false;
+                }
                 
                 if (providers.length === 0) {
                     e.preventDefault();

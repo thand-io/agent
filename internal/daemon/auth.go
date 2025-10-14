@@ -203,5 +203,12 @@ func (s *Server) getLogoutPage(c *gin.Context) {
 		return
 	}
 
-	c.Redirect(http.StatusTemporaryRedirect, "/")
+	if s.canAcceptHtml(c) {
+		c.Redirect(http.StatusTemporaryRedirect, "/")
+	} else {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Logged out successfully",
+		})
+	}
+
 }

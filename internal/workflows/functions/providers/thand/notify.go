@@ -216,6 +216,9 @@ func (t *notifyFunction) createSlackBlocks(
 	// Add request details section
 	t.addRequestDetailsSection(&blocks, elevateRequest)
 
+	// Add identities section
+	t.addIdentitiesSection(&blocks, elevateRequest)
+
 	// Add inherited roles section
 	t.addInheritedRolesSection(&blocks, elevateRequest)
 
@@ -392,6 +395,29 @@ func (t *notifyFunction) addUserInfoSection(blocks *[]slack.Block, elevateReques
 			slack.NewTextBlockObject(
 				slack.MarkdownType,
 				userText.String(),
+				false,
+				false,
+			),
+			nil,
+			nil,
+		))
+	}
+}
+
+// addIdentitiesSection adds identities section if available
+func (t *notifyFunction) addIdentitiesSection(blocks *[]slack.Block, elevateRequest *models.ElevateRequestInternal) {
+	if len(elevateRequest.Identities) > 0 {
+		var identitiesText strings.Builder
+		identitiesText.WriteString("*Target Identities:*\n")
+
+		for _, identity := range elevateRequest.Identities {
+			identitiesText.WriteString(fmt.Sprintf("• %s\n", identity))
+		}
+
+		*blocks = append(*blocks, slack.NewSectionBlock(
+			slack.NewTextBlockObject(
+				slack.MarkdownType,
+				identitiesText.String(),
 				false,
 				false,
 			),

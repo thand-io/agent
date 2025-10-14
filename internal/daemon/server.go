@@ -356,11 +356,15 @@ func (s *Server) setupRoutes(router *gin.Engine) {
 			api.GET("/provider/:provider/roles", s.getProviderRoles)
 			api.POST("/provider/:provider/authorizeSession", s.postProviderAuthorizeSession)
 
+			api.GET("/identities", s.getIdentities)
+
 			// Sync endpoints
 			api.GET("/sync", s.getSync)
 
 			api.GET("/auth/request/:provider", s.getAuthRequest)
 			api.GET("/auth/callback/:provider", s.getAuthCallback)
+			api.GET("/auth/logout/:provider", s.getLogoutPage)
+			api.GET("/auth/logout", s.getLogoutPage)
 
 			// /elevate?role=admin&provider=server&reason=maintenance&duration=1h
 			api.GET("/elevate", s.getElevate)
