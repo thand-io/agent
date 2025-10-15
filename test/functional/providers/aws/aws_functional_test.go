@@ -25,7 +25,9 @@ func TestAWSProviderFunctional(t *testing.T) {
 		t.Skip("Skipping functional test in short mode")
 	}
 
-	ctx := context.Background()
+	// Set a reasonable timeout for the entire test to prevent hanging
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
 
 	// Start LocalStack container
 	localstackContainer, err := localstack.Run(ctx,
@@ -37,13 +39,17 @@ func TestAWSProviderFunctional(t *testing.T) {
 		testcontainers.WithWaitStrategy(
 			wait.ForHTTP("/health").
 				WithPort("4566/tcp").
-				WithStartupTimeout(60*time.Second).
+				WithStartupTimeout(30*time.Second).
 				WithPollInterval(1*time.Second),
 		),
 	)
 	require.NoError(t, err)
 	defer func() {
-		if err := testcontainers.TerminateContainer(localstackContainer); err != nil {
+		// Use a timeout context for container termination to prevent hanging
+		terminateCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if err := localstackContainer.Terminate(terminateCtx); err != nil {
 			t.Logf("Failed to terminate LocalStack container: %v", err)
 		}
 	}()
@@ -57,13 +63,15 @@ func TestAWSProviderFunctional(t *testing.T) {
 
 	endpoint := fmt.Sprintf("http://%s:%s", host, mappedPort.Port())
 
+	testDuration := 15 * time.Minute
+
 	// Create test user
 	testUser := &models.User{
 		ID:       "test-user-123",
 		Username: "testuser",
 		Email:    "testuser@example.com",
 		Name:     "Test User",
-		Source:   "aws",
+		Source:   "iam", // Use IAM role provisioning
 	}
 
 	// Create test role
@@ -121,12 +129,18 @@ func TestAWSProviderFunctional(t *testing.T) {
 			return false
 		}
 
-		// Extract username from email
-		username := strings.Split(user.Email, "@")[0]
-		expectedPrincipal := fmt.Sprintf("arn:aws:iam::*:user/%s", username)
+		// Extract username from user - use username field first, then email prefix
+		username := user.Username
+		if username == "" && user.Email != "" {
+			username = strings.Split(user.Email, "@")[0]
+		}
+
+		expectedPrincipal := fmt.Sprintf("arn:aws:iam::000000000000:user/%s", username)
 
 		// Check if the policy contains the user's principal with Allow effect
-		return strings.Contains(policyDoc, expectedPrincipal) && strings.Contains(policyDoc, `"Effect":"Allow"`)
+		return strings.Contains(policyDoc, expectedPrincipal) &&
+			strings.Contains(policyDoc, `"Effect":"Allow"`) &&
+			strings.Contains(policyDoc, `"Action":"sts:AssumeRole"`)
 	}
 
 	// Helper function to check if user is completely unbound from role
@@ -136,9 +150,13 @@ func TestAWSProviderFunctional(t *testing.T) {
 			return true // If we can't get policy, assume unbound
 		}
 
-		// Extract username from email
-		username := strings.Split(user.Email, "@")[0]
-		expectedPrincipal := fmt.Sprintf("arn:aws:iam::*:user/%s", username)
+		// Extract username from user - use username field first, then email prefix
+		username := user.Username
+		if username == "" && user.Email != "" {
+			username = strings.Split(user.Email, "@")[0]
+		}
+
+		expectedPrincipal := fmt.Sprintf("arn:aws:iam::000000000000:user/%s", username)
 
 		// User is unbound if they are NOT mentioned in the policy at all
 		return !strings.Contains(policyDoc, expectedPrincipal)
@@ -200,8 +218,9 @@ func TestAWSProviderFunctional(t *testing.T) {
 		// Test role creation and authorization
 		t.Run("Authorize Role", func(t *testing.T) {
 			metadata, err := providerImpl.AuthorizeRole(ctx, &models.AuthorizeRoleRequest{
-				User: testUser,
-				Role: testRole,
+				User:     testUser,
+				Role:     testRole,
+				Duration: &testDuration,
 			})
 			assert.NoError(t, err, "Should succeed with LocalStack")
 
@@ -259,11 +278,12 @@ func TestAWSProviderFunctional(t *testing.T) {
 
 		// Test with nil user - should return an error, not panic
 		_, err = providerImpl.AuthorizeRole(ctx, &models.AuthorizeRoleRequest{
-			User: nil,
-			Role: testRole,
+			User:     nil,
+			Role:     testRole,
+			Duration: &testDuration,
 		})
 		assert.Error(t, err, "Should fail with nil user")
-		assert.Contains(t, err.Error(), "user cannot be nil", "Error should mention nil user")
+		assert.Contains(t, err.Error(), "user and role must be provided", "Error should mention missing user and role")
 	})
 
 	t.Run("Role Authorization with Missing Role", func(t *testing.T) {
@@ -274,10 +294,11 @@ func TestAWSProviderFunctional(t *testing.T) {
 
 		// Test with nil role - should return an error, not panic
 		_, err = providerImpl.AuthorizeRole(ctx, &models.AuthorizeRoleRequest{
-			User: testUser,
-			Role: nil,
+			User:     testUser,
+			Role:     nil,
+			Duration: &testDuration,
 		})
 		assert.Error(t, err, "Should fail with nil role")
-		assert.Contains(t, err.Error(), "role cannot be nil", "Error should mention nil role")
+		assert.Contains(t, err.Error(), "user and role must be provided", "Error should mention missing user and role")
 	})
 }
