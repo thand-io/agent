@@ -125,8 +125,14 @@ func (c *Config) GetProviderByName(name string) (*models.Provider, error) {
 func (c *Config) GetProvidersByCapability(capability ...models.ProviderCapability) map[string]models.Provider {
 	providers := make(map[string]models.Provider)
 	for name, provider := range c.Providers.Definitions {
+		// Skip providers that don't have a client initialized
+		client := provider.GetClient()
+		if client == nil {
+			continue
+		}
+
 		for _, cap := range capability {
-			if slices.Contains(provider.GetClient().GetCapabilities(), cap) {
+			if slices.Contains(client.GetCapabilities(), cap) {
 				providers[name] = provider
 			}
 		}

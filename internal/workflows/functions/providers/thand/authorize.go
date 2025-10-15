@@ -132,7 +132,9 @@ func (t *authorizeFunction) executeAuthorization(
 	elevateRequest *models.ElevateRequestInternal,
 	authRequest *ThandAuthorizeRequest,
 ) (any, error) {
+
 	duration, err := elevateRequest.AsDuration()
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to get duration: %w", err)
 	}
@@ -170,8 +172,19 @@ func (t *authorizeFunction) executeAuthorization(
 		return nil, fmt.Errorf("failed to schedule revocation: %w", err)
 	}
 
+	durationParsed, err := common.ValidateDuration(elevateRequest.Duration)
+
+	if err != nil {
+		return nil, fmt.Errorf("invalid duration format: %w", err)
+	}
+
 	authOut, err := providerCall.GetClient().AuthorizeRole(
-		workflowTask.GetContext(), elevateRequest.User, elevateRequest.Role)
+		workflowTask.GetContext(), &models.AuthorizeRoleRequest{
+			User:     elevateRequest.User,
+			Role:     elevateRequest.Role,
+			Duration: &durationParsed,
+		},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to authorize user: %w", err)
 	}

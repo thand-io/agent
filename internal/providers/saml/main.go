@@ -199,13 +199,17 @@ func (p *samlProvider) RenewSession(ctx context.Context, session *models.Session
 }
 
 // Authorize grants access for a user to a role
-func (p *samlProvider) AuthorizeRole(ctx context.Context, user *models.User, role *models.Role) (map[string]any, error) {
-	if user == nil {
-		return nil, fmt.Errorf("user is nil")
+func (p *samlProvider) AuthorizeRole(
+	ctx context.Context,
+	req *models.AuthorizeRoleRequest,
+) (map[string]any, error) {
+
+	if !req.IsValid() {
+		return nil, fmt.Errorf("user and role must be provided to authorize azure role")
 	}
-	if role == nil {
-		return nil, fmt.Errorf("role is nil")
-	}
+
+	user := req.GetUser()
+	role := req.GetRole()
 
 	// Check if user has permission for the role
 	if !role.HasPermission(user) {

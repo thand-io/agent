@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/sirupsen/logrus"
 )
@@ -140,6 +141,33 @@ type AuthorizeSessionResponse struct {
 	Url string `json:"url"`
 }
 
+type AuthorizeRoleRequest struct {
+	User     *User          `json:"user"`
+	Role     *Role          `json:"role"`
+	Duration *time.Duration `json:"duration,omitempty"` // Optional duration for temporary access
+}
+
+// IsValid checks if any of the fields are nil
+// if they are then it returns false
+func (r *AuthorizeRoleRequest) IsValid() bool {
+	return r.User != nil && r.Role != nil && r.Duration != nil
+}
+
+func (r *AuthorizeRoleRequest) GetUser() *User {
+	return r.User
+}
+
+func (r *AuthorizeRoleRequest) GetRole() *Role {
+	return r.Role
+}
+
+func (r *AuthorizeRoleRequest) GetDuration() *time.Duration {
+	return r.Duration
+}
+
+type AuthorizeRoleResponse struct {
+}
+
 type ProviderAuthorizor interface {
 
 	// Allow this provider to authorize a user
@@ -167,8 +195,7 @@ type ProviderRoleBasedAccessControl interface {
 	ValidateRole(ctx context.Context, user *User, role *Role) (map[string]any, error)
 	AuthorizeRole(
 		ctx context.Context,
-		user *User,
-		role *Role,
+		req *AuthorizeRoleRequest,
 	) (
 		map[string]any, // Return any custom metadata the provider wants to store
 		error,
@@ -310,7 +337,10 @@ func (p *BaseProvider) ListResources(ctx context.Context, filters ...string) ([]
 	return nil, fmt.Errorf("the provider '%s' does not implement ListResources", p.GetProvider())
 }
 
-func (p *BaseProvider) AuthorizeRole(ctx context.Context, user *User, role *Role) (map[string]any, error) {
+func (p *BaseProvider) AuthorizeRole(
+	ctx context.Context,
+	req *AuthorizeRoleRequest,
+) (map[string]any, error) {
 	// Default implementation does nothing
 	return nil, fmt.Errorf("the provider '%s' does not implement AuthorizeRole", p.GetProvider())
 }

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -118,14 +119,20 @@ func preRunServerE(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func preAuthenticateE(_ *cobra.Command, _ []string) error {
+func preAuthenticateE(cmd *cobra.Command, _ []string) error {
 
 	// Now we have our session sync the remote state
 	err := cfg.SyncWithLoginServer()
 
 	if err != nil {
-		logrus.WithError(err).Errorln("Failed to sync configuration with login server")
-		return fmt.Errorf("failed to sync configuration with login server: %w", err)
+		if errors.Is(err, config.ErrNoActiveLoginSession) {
+			logrus.Debugln("No login session")
+			cmd.Root().SetArgs([]string{"login"})
+			return nil
+		} else {
+			logrus.WithError(err).Errorln("Failed to sync configuration with login server")
+			return fmt.Errorf("failed to sync configuration with login server: %w", err)
+		}
 	}
 
 	return nil

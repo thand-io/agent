@@ -20,9 +20,10 @@ func TestAWSProviderPermissions(t *testing.T) {
 		Description: "Test AWS provider",
 		Provider:    "aws",
 		Config: &models.BasicConfig{
-			"region":         "us-east-1",
-			"account_id":     "test",
-			"account_secret": "test",
+			"region":            "us-east-1",
+			"account_id":        "000000000000",
+			"access_key_id":     "test",
+			"secret_access_key": "test",
 		},
 		Enabled: true,
 	}
@@ -120,9 +121,10 @@ func TestAWSProviderRoles(t *testing.T) {
 		Description: "Test AWS provider",
 		Provider:    "aws",
 		Config: &models.BasicConfig{
-			"region":         "us-east-1",
-			"account_id":     "test",
-			"account_secret": "test",
+			"region":            "us-east-1",
+			"account_id":        "000000000000",
+			"access_key_id":     "test",
+			"secret_access_key": "test",
 		},
 		Enabled: true,
 	}

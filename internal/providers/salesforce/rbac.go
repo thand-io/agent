@@ -9,8 +9,16 @@ import (
 )
 
 func (p *salesForceProvider) AuthorizeRole(
-	ctx context.Context, user *models.User, role *models.Role,
+	ctx context.Context,
+	req *models.AuthorizeRoleRequest,
 ) (map[string]any, error) {
+
+	if !req.IsValid() {
+		return nil, fmt.Errorf("user and role must be provided to authorize salesforce role")
+	}
+
+	user := req.GetUser()
+	role := req.GetRole()
 
 	client := p.client
 

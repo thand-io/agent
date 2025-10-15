@@ -11,11 +11,17 @@ import (
 )
 
 // Authorize grants access for a user to a role
-func (p *gcpProvider) AuthorizeRole(ctx context.Context, user *models.User, role *models.Role) (map[string]any, error) {
+func (p *gcpProvider) AuthorizeRole(
+	ctx context.Context,
+	req *models.AuthorizeRoleRequest,
+) (map[string]any, error) {
 
-	if user == nil || role == nil {
+	if !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to authorize gcp role")
 	}
+
+	user := req.GetUser()
+	role := req.GetRole()
 
 	config := p.GetConfig()
 	projectId := p.GetProjectId()

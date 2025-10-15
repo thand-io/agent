@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
@@ -103,55 +102,63 @@ func (c *Config) shouldIncludeProvider(providerKey string, p models.Provider, ex
 	return true
 }
 
-// initializeProviders initializes all providers in parallel
+// initResult represents the result of provider initialization
+type initResult struct {
+	key      string
+	provider *models.Provider
+	err      error
+}
+
+// initializeProviders initializes all providers in parallel using channels
 func (c *Config) initializeProviders(defs map[string]models.Provider) (map[string]models.Provider, error) {
-	var defsMutex sync.Mutex
-	var wg sync.WaitGroup
+	resultChan := make(chan initResult, len(defs))
 
+	// Start goroutines for each provider
 	for providerKey, p := range defs {
-		wg.Add(1)
-		go func(providerKey string, p models.Provider) {
-			defer wg.Done()
-
-			if err := c.initializeSingleProvider(providerKey, p, &defsMutex, defs); err != nil {
-				logrus.WithError(err).Errorln("Failed to initialize provider:", providerKey)
-				defsMutex.Lock()
-				delete(defs, providerKey)
-				defsMutex.Unlock()
+		go func(providerKey string, provider models.Provider) {
+			err := c.initializeSingleProvider(providerKey, &provider)
+			resultChan <- initResult{
+				key:      providerKey,
+				provider: &provider,
+				err:      err,
 			}
 		}(providerKey, p)
 	}
 
-	wg.Wait()
+	// Collect results from all goroutines
+	results := make(map[string]models.Provider)
+	for i := 0; i < len(defs); i++ {
+		result := <-resultChan
+		if result.err != nil {
+			logrus.WithError(result.err).Errorln("Failed to initialize provider:", result.key)
+			// Skip failed providers - don't add to results
+			continue
+		}
+		// The provider returned from the goroutine already has the client set
+		results[result.key] = *result.provider
+	}
+
 	logrus.Debugln("All providers initialized successfully")
-	return defs, nil
+	return results, nil
 }
 
 // initializeSingleProvider initializes a single provider
-func (c *Config) initializeSingleProvider(providerKey string, p models.Provider, defsMutex *sync.Mutex, defs map[string]models.Provider) error {
-	impl, err := c.getProviderImplementation(providerKey, p)
+func (c *Config) initializeSingleProvider(providerKey string, p *models.Provider) error {
+	impl, err := c.getProviderImplementation(providerKey, p.Provider)
 	if err != nil {
 		return err
 	}
 
-	if err := impl.Initialize(p); err != nil {
+	if err := impl.Initialize(*p); err != nil {
 		return err
 	}
 
 	p.SetClient(impl)
-
-	// Thread-safe addition to the defs map
-	defsMutex.Lock()
-	defs[providerKey] = p
-	defsMutex.Unlock()
-
 	return nil
-}
-
-// getProviderImplementation returns the appropriate provider implementation based on config mode
-func (c *Config) getProviderImplementation(providerKey string, p models.Provider) (models.ProviderImpl, error) {
+} // getProviderImplementation returns the appropriate provider implementation based on config mode
+func (c *Config) getProviderImplementation(providerKey string, providerName string) (models.ProviderImpl, error) {
 	if c.IsServer() || c.IsAgent() {
-		return providers.Get(strings.ToLower(p.Provider))
+		return providers.CreateInstance(strings.ToLower(providerName))
 	}
 
 	if c.IsClient() {
