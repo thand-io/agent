@@ -150,10 +150,11 @@ func TestAWSProviderFunctional(t *testing.T) {
 		Description: "Test AWS provider using LocalStack",
 		Provider:    "aws",
 		Config: &models.BasicConfig{
-			"region":         "us-east-1",
-			"account_id":     "000000000000", // LocalStack default account ID
-			"account_secret": "test",
-			"endpoint":       endpoint, // Configure to use LocalStack endpoint
+			"region":            "us-east-1",
+			"account_id":        "000000000000", // Dummy account ID for LocalStack
+			"access_key_id":     "test",
+			"secret_access_key": "test",
+			"endpoint":          endpoint, // Configure to use LocalStack endpoint
 		},
 		Enabled: true,
 	}

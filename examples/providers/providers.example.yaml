@@ -7,9 +7,9 @@ providers:
     config:
       region: us-east-1
       profile: aws_profile
-      account_id: aws_account_id
-      # If the account secret is not provided IAM will be used.
-      account_secret: aws_account_secret
+      access_key_id: aws_access_key_id
+      # If the secret access key is not provided IAM will be used.
+      secret_access_key: aws_secret_access_key
     enabled: true
   aws-dev:
     name: AWS Development
@@ -18,9 +18,9 @@ providers:
     config:
       region: us-west-2
       profile: aws_profile
-      account_id: aws_account_id
-      # If the account secret is not provided IAM will be used.
-      account_secret: aws_account_secret
+      access_key_id: aws_access_key_id
+      # If the secret access key is not provided IAM will be used.
+      secret_access_key: aws_secret_access_key
     enabled: false
   google_oauth2:
     name: Google OAuth2

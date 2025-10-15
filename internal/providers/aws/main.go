@@ -68,7 +68,7 @@ func (p *awsProvider) Initialize(provider models.Provider) error {
 	p.identityStoreClient = identitystore.NewFromConfig(sdkConfig.Config)
 
 	// Set the account ID from config or retrieve it via STS
-	err = p.setAccountID(context.Background())
+	err = p.GetAccountId(awsConfig)
 	if err != nil {
 		return fmt.Errorf("failed to set account ID: %w", err)
 	}
@@ -82,8 +82,8 @@ func CreateAwsConfig(awsConfig *models.BasicConfig) (*AwsConfigurationProvider, 
 
 	awsProfile, foundProfile := awsConfig.GetString("profile")
 
-	awsAccountId, foundAccountId := awsConfig.GetString("account_id")
-	awsAccountSecret, foundAccountSecret := awsConfig.GetString("account_secret")
+	awsAccountId, foundAccountId := awsConfig.GetString("access_key_id")
+	awsAccountSecret, foundAccountSecret := awsConfig.GetString("secret_access_key")
 
 	if foundProfile {
 		logrus.Info("Using shared AWS config profile")
@@ -145,8 +145,18 @@ func (p *awsProvider) GetRegion() string {
 	return p.region
 }
 
-// setAccountID sets the AWS account ID from config or retrieves it via STS
-func (p *awsProvider) setAccountID(ctx context.Context) error {
+// GetAccountId sets the AWS account ID from config or retrieves it via STS
+func (p *awsProvider) GetAccountId(config *models.BasicConfig) error {
+
+	ctx := context.Background()
+
+	accountId, found := config.GetString("account_id")
+
+	if found && len(accountId) > 0 {
+		p.accountID = accountId
+		logrus.WithField("account_id", p.accountID).Info("Using configured AWS account ID")
+		return nil
+	}
 
 	// If not in config, retrieve via STS
 	callerIdentity, err := p.stsService.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
