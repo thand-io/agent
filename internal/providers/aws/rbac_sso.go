@@ -396,7 +396,7 @@ func (p *awsProvider) findIdentityCenterUser(ctx context.Context, email string) 
 // createAccountAssignment assigns a permission set to a user for the current account
 func (p *awsProvider) createAccountAssignment(ctx context.Context, instanceArn, permissionSetArn, principalId string) error {
 
-	assingmentOutput, err := p.ssoAdminService.CreateAccountAssignment(ctx, &ssoadmin.CreateAccountAssignmentInput{
+	assignmentOutput, err := p.ssoAdminService.CreateAccountAssignment(ctx, &ssoadmin.CreateAccountAssignmentInput{
 		InstanceArn:      aws.String(instanceArn),
 		PermissionSetArn: aws.String(permissionSetArn),
 		PrincipalId:      aws.String(principalId),
@@ -414,7 +414,7 @@ func (p *awsProvider) createAccountAssignment(ctx context.Context, instanceArn, 
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"principalId": *assingmentOutput.AccountAssignmentCreationStatus.PrincipalId,
+		"principalId": *assignmentOutput.AccountAssignmentCreationStatus.PrincipalId,
 	}).Info("Created account assignment")
 
 	return nil
