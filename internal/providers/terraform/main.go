@@ -71,7 +71,7 @@ func (p *terraformProvider) AuthorizeRole(
 ) (map[string]any, error) {
 
 	if !req.IsValid() {
-		return nil, fmt.Errorf("user and role must be provided to authorize azure role")
+		return nil, fmt.Errorf("user and role must be provided to authorize terraform role")
 	}
 
 	user := req.GetUser()

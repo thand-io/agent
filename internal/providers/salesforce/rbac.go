@@ -14,7 +14,7 @@ func (p *salesForceProvider) AuthorizeRole(
 ) (map[string]any, error) {
 
 	if !req.IsValid() {
-		return nil, fmt.Errorf("user and role must be provided to authorize azure role")
+		return nil, fmt.Errorf("user and role must be provided to authorize salesforce role")
 	}
 
 	user := req.GetUser()
