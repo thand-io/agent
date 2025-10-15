@@ -46,7 +46,7 @@ func (p *awsProvider) authorizeRoleTraditionalIAM(
 }
 
 // revokeRoleTraditionalIAM handles role revocation for traditional IAM users
-func (p *awsProvider) revokeRoleTraditionalIAM(ctx context.Context, user *models.User, role *models.Role, metadata map[string]any) (map[string]any, error) {
+func (p *awsProvider) revokeRoleTraditionalIAM(ctx context.Context, user *models.User, role *models.Role) (map[string]any, error) {
 
 	// Check if the role exists
 	existingRole, err := p.getRole(ctx, role)

@@ -54,7 +54,7 @@ func (p *awsProvider) RevokeRole(
 		}
 		return nil, nil
 	} else {
-		return p.revokeRoleTraditionalIAM(ctx, user, role, metadata)
+		return p.revokeRoleTraditionalIAM(ctx, user, role)
 	}
 }
 

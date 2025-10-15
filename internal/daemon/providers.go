@@ -110,6 +110,11 @@ func (s *Server) getProvidersAsProviderResponse(
 			providerName = provider.Name
 		}
 
+		// Skip providers that don't have a client initialized
+		if provider.GetClient() == nil {
+			continue
+		}
+
 		if len(capabilities) > 0 && !provider.GetClient().HasAnyCapability(capabilities...) {
 			continue
 		}

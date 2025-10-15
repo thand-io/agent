@@ -220,8 +220,21 @@ func (p *awsProvider) attachPolicyToPermissionSet(ctx context.Context, instanceA
 
 	// Check if it's an AWS managed policy (contains ":aws:") or customer managed policy
 	if strings.Contains(policyArn, ":aws:iam::aws:policy/") {
-		// AWS managed policy
-		_, err := p.ssoAdminService.AttachManagedPolicyToPermissionSet(ctx, &ssoadmin.AttachManagedPolicyToPermissionSetInput{
+		// AWS managed policy - check if already attached first
+		isAlreadyAttached, err := p.isManagedPolicyAttached(ctx, instanceArn, permissionSetArn, policyArn)
+		if err != nil {
+			return fmt.Errorf("failed to check if managed policy is already attached: %w", err)
+		}
+
+		if isAlreadyAttached {
+			logrus.WithFields(logrus.Fields{
+				"policyArn":        policyArn,
+				"permissionSetArn": permissionSetArn,
+			}).Info("AWS managed policy is already attached to permission set - skipping")
+			return nil
+		}
+
+		_, err = p.ssoAdminService.AttachManagedPolicyToPermissionSet(ctx, &ssoadmin.AttachManagedPolicyToPermissionSetInput{
 			InstanceArn:      aws.String(instanceArn),
 			PermissionSetArn: aws.String(permissionSetArn),
 			ManagedPolicyArn: aws.String(policyArn),
@@ -247,7 +260,22 @@ func (p *awsProvider) attachPolicyToPermissionSet(ctx context.Context, instanceA
 		policyPath := arnParts[5] // This is "policy/PolicyName"
 		policyName := strings.TrimPrefix(policyPath, "policy/")
 
-		_, err := p.ssoAdminService.AttachCustomerManagedPolicyReferenceToPermissionSet(ctx, &ssoadmin.AttachCustomerManagedPolicyReferenceToPermissionSetInput{
+		// Check if customer managed policy is already attached
+		isAlreadyAttached, err := p.isCustomerManagedPolicyAttached(ctx, instanceArn, permissionSetArn, policyName)
+		if err != nil {
+			return fmt.Errorf("failed to check if customer managed policy is already attached: %w", err)
+		}
+
+		if isAlreadyAttached {
+			logrus.WithFields(logrus.Fields{
+				"policyName":       policyName,
+				"accountId":        accountId,
+				"permissionSetArn": permissionSetArn,
+			}).Info("Customer managed policy is already attached to permission set - skipping")
+			return nil
+		}
+
+		_, err = p.ssoAdminService.AttachCustomerManagedPolicyReferenceToPermissionSet(ctx, &ssoadmin.AttachCustomerManagedPolicyReferenceToPermissionSetInput{
 			InstanceArn:      aws.String(instanceArn),
 			PermissionSetArn: aws.String(permissionSetArn),
 			CustomerManagedPolicyReference: &types.CustomerManagedPolicyReference{
@@ -267,7 +295,51 @@ func (p *awsProvider) attachPolicyToPermissionSet(ctx context.Context, instanceA
 	}
 
 	return nil
-} // findIdentityCenterUser finds a user in Identity Center by email
+}
+
+// isManagedPolicyAttached checks if a managed policy is already attached to a permission set
+func (p *awsProvider) isManagedPolicyAttached(ctx context.Context, instanceArn, permissionSetArn, policyArn string) (bool, error) {
+	// List managed policies attached to the permission set
+	resp, err := p.ssoAdminService.ListManagedPoliciesInPermissionSet(ctx, &ssoadmin.ListManagedPoliciesInPermissionSetInput{
+		InstanceArn:      aws.String(instanceArn),
+		PermissionSetArn: aws.String(permissionSetArn),
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to list managed policies in permission set: %w", err)
+	}
+
+	// Check if the policy ARN is in the list
+	for _, attachedPolicy := range resp.AttachedManagedPolicies {
+		if attachedPolicy.Arn != nil && *attachedPolicy.Arn == policyArn {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// isCustomerManagedPolicyAttached checks if a customer managed policy is already attached to a permission set
+func (p *awsProvider) isCustomerManagedPolicyAttached(ctx context.Context, instanceArn, permissionSetArn, policyName string) (bool, error) {
+	// List customer managed policies attached to the permission set
+	resp, err := p.ssoAdminService.ListCustomerManagedPolicyReferencesInPermissionSet(ctx, &ssoadmin.ListCustomerManagedPolicyReferencesInPermissionSetInput{
+		InstanceArn:      aws.String(instanceArn),
+		PermissionSetArn: aws.String(permissionSetArn),
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to list customer managed policies in permission set: %w", err)
+	}
+
+	// Check if the policy name is in the list
+	for _, attachedPolicy := range resp.CustomerManagedPolicyReferences {
+		if attachedPolicy.Name != nil && *attachedPolicy.Name == policyName {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// findIdentityCenterUser finds a user in Identity Center by email
 func (p *awsProvider) findIdentityCenterUser(ctx context.Context, email string) (string, error) {
 
 	// First, get the identity store ID from the SSO instance
