@@ -24,6 +24,9 @@ import (
 	"github.com/thand-io/agent/internal/sessions"
 )
 
+var ErrNoActiveLoginSession = fmt.Errorf(
+	"you must login first. No valid session found to sync with login server")
+
 func DefaultConfig() *Config {
 
 	v := viper.New()
@@ -359,13 +362,11 @@ func (c *Config) SyncWithLoginServer() error {
 	if c.HasAPIKey() {
 
 		logrus.Debugln("Using API key for login server authentication")
-
 		localToken = c.GetAPIKey()
 
 	} else {
 
 		logrus.Debugf("Looking for valid session to sync with login server at: %s", apiUrl)
-
 		localSessions := loginServer.GetSessions()
 
 		// Find the first non-expired session token
@@ -378,8 +379,7 @@ func (c *Config) SyncWithLoginServer() error {
 		}
 
 		if len(localToken) == 0 {
-			return fmt.Errorf(
-				"you must login first. No valid session found to sync with login server at: %s", apiUrl)
+			return ErrNoActiveLoginSession
 		}
 
 	}
@@ -393,11 +393,9 @@ func (c *Config) SyncWithLoginServer() error {
 		return fmt.Errorf("failed to register with login server: %w", err)
 	}
 
-	logrus.Infoln("Successfully registered with login server:", regResponse)
-
-	fmt.Println(regResponse)
-
-	logrus.Debugf("Syncing configuration with login server at: %s", apiUrl)
+	logrus.WithFields(logrus.Fields{
+		"response": regResponse,
+	}).Debugf("Syncing configuration with login server at: %s", apiUrl)
 
 	// Overwrite everything.
 	c.Providers = ProviderConfig{

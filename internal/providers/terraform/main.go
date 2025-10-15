@@ -65,7 +65,18 @@ func (p *terraformProvider) Initialize(provider models.Provider) error {
 }
 
 // Authorize grants access for a user to a role
-func (p *terraformProvider) AuthorizeRole(ctx context.Context, user *models.User, role *models.Role) (map[string]any, error) {
+func (p *terraformProvider) AuthorizeRole(
+	ctx context.Context,
+	req *models.AuthorizeRoleRequest,
+) (map[string]any, error) {
+
+	if !req.IsValid() {
+		return nil, fmt.Errorf("user and role must be provided to authorize azure role")
+	}
+
+	user := req.GetUser()
+	role := req.GetRole()
+
 	// Loop over all resources in role.Resources.Allow as workspace IDs
 	if len(role.Resources.Allow) == 0 {
 		return nil, fmt.Errorf("no workspace IDs found in role.Resources.Allow")

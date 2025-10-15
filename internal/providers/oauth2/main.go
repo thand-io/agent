@@ -43,7 +43,14 @@ func (p *oauth2Provider) RenewSession(ctx context.Context, session *models.Sessi
 }
 
 // Authorize grants access for a user to a role
-func (p *oauth2Provider) AuthorizeRole(ctx context.Context, user *models.User, role *models.Role) (map[string]any, error) {
+func (p *oauth2Provider) AuthorizeRole(
+	ctx context.Context,
+	req *models.AuthorizeRoleRequest,
+) (map[string]any, error) {
+	if !req.IsValid() {
+		return nil, fmt.Errorf("user and role must be provided to authorize oauth2 role")
+	}
+
 	// TODO: Implement OAuth2 authorization logic
 	return nil, nil
 }

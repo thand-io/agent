@@ -119,13 +119,19 @@ func TestSAMLProvider_Authorization(t *testing.T) {
 	}
 
 	// Test authorization with nil user
-	_, err := provider.AuthorizeRole(ctx, nil, role)
+	_, err := provider.AuthorizeRole(ctx, &models.AuthorizeRoleRequest{
+		User: nil,
+		Role: role,
+	})
 	if err == nil {
 		t.Error("Expected error for nil user")
 	}
 
 	// Test authorization with nil role
-	_, err = provider.AuthorizeRole(ctx, user, nil)
+	_, err = provider.AuthorizeRole(ctx, &models.AuthorizeRoleRequest{
+		User: user,
+		Role: nil,
+	})
 	if err == nil {
 		t.Error("Expected error for nil role")
 	}

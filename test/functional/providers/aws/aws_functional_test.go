@@ -198,7 +198,10 @@ func TestAWSProviderFunctional(t *testing.T) {
 
 		// Test role creation and authorization
 		t.Run("Authorize Role", func(t *testing.T) {
-			metadata, err := providerImpl.AuthorizeRole(ctx, testUser, testRole)
+			metadata, err := providerImpl.AuthorizeRole(ctx, &models.AuthorizeRoleRequest{
+				User: testUser,
+				Role: testRole,
+			})
 			assert.NoError(t, err, "Should succeed with LocalStack")
 
 			// Allow nil metadata for now (AWS provider limitation)
@@ -254,7 +257,10 @@ func TestAWSProviderFunctional(t *testing.T) {
 		require.NoError(t, err)
 
 		// Test with nil user - should return an error, not panic
-		_, err = providerImpl.AuthorizeRole(ctx, nil, testRole)
+		_, err = providerImpl.AuthorizeRole(ctx, &models.AuthorizeRoleRequest{
+			User: nil,
+			Role: testRole,
+		})
 		assert.Error(t, err, "Should fail with nil user")
 		assert.Contains(t, err.Error(), "user cannot be nil", "Error should mention nil user")
 	})
@@ -266,7 +272,10 @@ func TestAWSProviderFunctional(t *testing.T) {
 		require.NoError(t, err)
 
 		// Test with nil role - should return an error, not panic
-		_, err = providerImpl.AuthorizeRole(ctx, testUser, nil)
+		_, err = providerImpl.AuthorizeRole(ctx, &models.AuthorizeRoleRequest{
+			User: testUser,
+			Role: nil,
+		})
 		assert.Error(t, err, "Should fail with nil role")
 		assert.Contains(t, err.Error(), "role cannot be nil", "Error should mention nil role")
 	})
