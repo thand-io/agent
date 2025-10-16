@@ -70,11 +70,12 @@
                 {{if .User}}
                     <div class="elevation-actions">
                         <p>Elevating as: {{.User.Name}} ({{.User.Email}})</p>
+                        <a href="/auth" class="button button-primary">Change User</a>
                     </div>
                 {{ else }}
                     <div class="alternative-actions">
                         <p>Need to authenticate first?</p>
-                        <a href="/auth" class="button button-secondary">Sign In</a>
+                        <a href="/auth" class="button button-primary">Sign In</a>
                     </div>
                 {{end}}
             </div>

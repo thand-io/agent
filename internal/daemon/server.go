@@ -326,13 +326,12 @@ func (s *Server) setupRoutes(router *gin.Engine) {
 	{
 
 		api.GET("/logs", s.getLogsPage)
+		api.GET("/sessions", s.getSessions)
 
+		// Agent endpoints
 		if s.Config.IsAgent() || s.Config.IsClient() {
 
-			// Agent endpoints
-
 			// Session management
-			api.GET("/sessions", s.getSessions)
 			api.GET("/session/:provider", s.getSessionByProvider)
 			api.POST("/sessions", s.postSession)
 			api.DELETE("/session/:provider", s.deleteSession)

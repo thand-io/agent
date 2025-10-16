@@ -196,27 +196,17 @@ func (s *Server) getUserFromElevationRequest(c *gin.Context, request models.Elev
 
 func (s *Server) getUser(c *gin.Context, authProviders ...string) (string, *models.Session, error) {
 
-	if !s.Config.IsServer() {
-		return "", nil, fmt.Errorf("getUser can only be called in server mode")
-	}
+	remoteSessions, err := s.getUserSessions(c)
 
-	session, hasSession := c.Get(SessionContextKey)
-
-	if !hasSession {
-		return "", nil, fmt.Errorf("no user session found in context")
-	}
-
-	remoteSession, ok := session.(map[string]*models.Session)
-
-	if !ok {
-		return "", nil, fmt.Errorf("invalid session type found in context")
+	if err != nil {
+		return "", nil, err
 	}
 
 	if len(authProviders) > 0 {
 
 		// Return the first session we find
 		for _, providerName := range authProviders {
-			if session, ok := remoteSession[providerName]; ok {
+			if session, ok := remoteSessions[providerName]; ok {
 				return providerName, session, nil
 			}
 		}
@@ -226,9 +216,30 @@ func (s *Server) getUser(c *gin.Context, authProviders ...string) (string, *mode
 	}
 
 	// Otherwise return the first session we find
-	for providerName, session := range remoteSession {
+	for providerName, session := range remoteSessions {
 		return providerName, session, nil
 	}
 
 	return "", nil, fmt.Errorf("no user session found")
+}
+
+func (s *Server) getUserSessions(c *gin.Context, authProviders ...string) (map[string]*models.Session, error) {
+
+	if !s.Config.IsServer() {
+		return nil, fmt.Errorf("getUserSessions can only be called in server mode")
+	}
+
+	session, hasSession := c.Get(SessionContextKey)
+
+	if !hasSession {
+		return nil, fmt.Errorf("no user session found in context")
+	}
+
+	remoteSession, ok := session.(map[string]*models.Session)
+
+	if !ok {
+		return nil, fmt.Errorf("invalid session type found in context")
+	}
+
+	return remoteSession, nil
 }
