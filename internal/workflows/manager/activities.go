@@ -50,6 +50,7 @@ func (m *WorkflowManager) registerActivities() error {
 				return nil, fmt.Errorf("failed to hydrate workflow task: %w", err)
 			}
 
+			workflowTask.SetInternalContext(ctx)
 			workflowTask.SetState(&models.WorkflowTaskState{
 				Definition: callFunction,
 				StartedAt:  time.Now().UTC(),

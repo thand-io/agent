@@ -7,6 +7,7 @@ import (
 	"github.com/blevesearch/bleve/v2"
 	"github.com/sirupsen/logrus"
 
+	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/providers"
 
@@ -69,8 +70,14 @@ func (p *awsProvider) Initialize(provider models.Provider) error {
 
 	// Set the account ID from config or retrieve it via STS
 	err = p.GetAccountId(awsConfig)
+
 	if err != nil {
 		return fmt.Errorf("failed to set account ID: %w", err)
+	}
+
+	// Lets just validate our account id is a number
+	if !common.IsAllDigits(p.accountID) {
+		return fmt.Errorf("invalid AWS account ID: %s", p.accountID)
 	}
 
 	return nil

@@ -443,6 +443,11 @@ func (c *Config) GetApiBasePath() string {
 }
 
 func (c *Config) GetAuthCallbackUrl(providerName string) string {
+
+	if len(providerName) == 0 {
+		logrus.Fatalf("provider name cannot be null")
+	}
+
 	return fmt.Sprintf(
 		"%s/%s/auth/callback/%s",
 		c.GetLoginServerUrl(),

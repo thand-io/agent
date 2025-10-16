@@ -95,9 +95,7 @@ func (m *WorkflowManager) executeWorkflow(
 		return nil, fmt.Errorf("failed to create workflow: %w", err)
 	}
 
-	defaultAuth := request.Authenticator
-
-	if len(defaultAuth) == 0 {
+	if len(request.Authenticator) == 0 {
 
 		// Get the user information from the context
 		// and use the first auth provider from the role
@@ -118,12 +116,12 @@ func (m *WorkflowManager) executeWorkflow(
 				}
 			}
 
-			defaultAuth = providerAuth
+			request.Authenticator = providerAuth
 
 		}
 	}
 
-	if len(defaultAuth) == 0 {
+	if len(request.Authenticator) == 0 {
 		return nil, fmt.Errorf("no authenticator specified or found in session")
 	}
 
@@ -143,10 +141,10 @@ func (m *WorkflowManager) executeWorkflow(
 		"functions":     len(workflowDsl.Use.Functions),
 	}).Info("Starting workflow execution")
 
-	authProvider, foundAuthProvider := m.config.GetProviderByName(defaultAuth)
+	authProvider, foundAuthProvider := m.config.GetProviderByName(request.Authenticator)
 
 	if foundAuthProvider != nil {
-		return nil, fmt.Errorf("authentication provider not found: %s", defaultAuth)
+		return nil, fmt.Errorf("authentication provider not found: %s", request.Authenticator)
 	}
 
 	// Convert input to map
