@@ -103,7 +103,7 @@
                                 </td>
                                 <td>
                                     <span :class="getStatusBadgeClass(session.status)" class="status-badge">
-                                        <span x-text="session.status.toUpperCase()"></span>
+                                        <span x-text="(session.status || '').toUpperCase()"></span>
                                     </span>
                                 </td>
                                 <td>
