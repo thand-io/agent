@@ -7,11 +7,10 @@ import (
 )
 
 type Workflow struct {
-	Name           string          `json:"name"`
-	Description    string          `json:"description"`
-	Authentication string          `json:"authentication" default:"default"`
-	Workflow       *model.Workflow `json:"workflow,omitempty"`
-	Enabled        bool            `json:"enabled" default:"true"` // By default enable the workflow
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Workflow    *model.Workflow `json:"workflow,omitempty"`
+	Enabled     bool            `json:"enabled" default:"true"` // By default enable the workflow
 }
 
 func (r *Workflow) HasPermission(user *User) bool {
@@ -24,10 +23,6 @@ func (w *Workflow) GetName() string {
 
 func (w *Workflow) GetDescription() string {
 	return w.Description
-}
-
-func (w *Workflow) GetAuthentication() string {
-	return w.Authentication
 }
 
 func (w *Workflow) GetWorkflow() *model.Workflow {
@@ -45,10 +40,9 @@ type WorkflowsResponse struct {
 }
 
 type WorkflowResponse struct {
-	Name           string `json:"name"`
-	Description    string `json:"description"`
-	Authentication string `json:"authentication"`
-	Enabled        bool   `json:"enabled"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Enabled     bool   `json:"enabled"`
 }
 
 type WorkflowRequest struct {

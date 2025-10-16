@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/charmbracelet/huh"
 	"github.com/kardianos/service"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -119,6 +120,51 @@ func preRunServerE(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// promptAndLogin prompts the user if they want to login and handles the login process
+func promptAndLogin(cmd *cobra.Command) error {
+	fmt.Println()
+	fmt.Println(titleStyle.Render("Authentication Required"))
+	fmt.Println("No active login session found.")
+	fmt.Println()
+
+	var shouldLogin bool
+
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Would you like to login now?").
+				Description("This will open your browser to authenticate with the login server").
+				Value(&shouldLogin),
+		),
+	)
+
+	err := form.Run()
+	if err != nil {
+		return fmt.Errorf("login prompt cancelled: %w", err)
+	}
+
+	if shouldLogin {
+		fmt.Println()
+		fmt.Println("Starting login process...")
+
+		// Call the login function directly
+		err = runLogin(cmd, []string{})
+		if err != nil {
+			return fmt.Errorf("login failed: %w", err)
+		}
+
+		// After successful login, try to sync again
+		err = cfg.SyncWithLoginServer()
+		if err != nil {
+			return fmt.Errorf("failed to sync configuration after login: %w", err)
+		}
+	} else {
+		return fmt.Errorf("authentication required but login was declined")
+	}
+
+	return nil
+}
+
 func preAuthenticateE(cmd *cobra.Command, _ []string) error {
 
 	// Now we have our session sync the remote state
@@ -126,9 +172,7 @@ func preAuthenticateE(cmd *cobra.Command, _ []string) error {
 
 	if err != nil {
 		if errors.Is(err, config.ErrNoActiveLoginSession) {
-			logrus.Debugln("No login session")
-			cmd.Root().SetArgs([]string{"login"})
-			return nil
+			return promptAndLogin(cmd)
 		} else {
 			logrus.WithError(err).Errorln("Failed to sync configuration with login server")
 			return fmt.Errorf("failed to sync configuration with login server: %w", err)

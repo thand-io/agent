@@ -42,9 +42,10 @@ func (s *Server) listRunningWorkflows(c *gin.Context) {
 		return
 	}
 
-	foundUser, err := s.getUser(c)
+	_, foundUser, err := s.getUser(c)
+
 	if err != nil {
-		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of available providers", err)
+		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of running workflows", err)
 		return
 	}
 
@@ -118,9 +119,10 @@ func (s *Server) getRunningWorkflow(c *gin.Context) {
 		return
 	}
 
-	_, err := s.getUser(c)
+	_, _, err := s.getUser(c)
+
 	if err != nil {
-		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of available providers", err)
+		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user to get workflow information", err)
 		return
 	}
 

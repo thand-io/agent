@@ -180,16 +180,7 @@ func (s *Server) elevate(c *gin.Context, request models.ElevateRequest) {
 			return
 		}
 
-		workflowDef, err := s.Config.GetWorkflowByName(request.Workflow)
-
-		if err != nil {
-			s.getErrorPage(c, http.StatusBadRequest, "Invalid workflow specified", err)
-			return
-		}
-
-		authProvider := workflowDef.GetAuthentication()
-
-		foundUser, err := s.getUser(c, authProvider)
+		authProvider, foundUser, err := s.getUserFromElevationRequest(c, request)
 
 		if err != nil {
 			s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of available roles", err)
@@ -203,7 +194,8 @@ func (s *Server) elevate(c *gin.Context, request models.ElevateRequest) {
 				Provider: authProvider,
 			}
 
-			request.Session = exportableSession.ToLocalSession(s.Config.GetServices().GetEncryption())
+			request.Session = exportableSession.ToLocalSession(
+				s.Config.GetServices().GetEncryption())
 		}
 
 	}
@@ -464,7 +456,7 @@ func (s *Server) handleLargeLanguageModelRequest(c *gin.Context, elevateRequest 
 		return
 	}
 
-	foundUser, err := s.getUser(c)
+	_, foundUser, err := s.getUser(c)
 
 	if err != nil {
 		logrus.WithError(err).Error("failed to get user")

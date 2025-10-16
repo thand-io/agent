@@ -3,6 +3,9 @@ roles:
   gcp-admin:
     name: GCP Admin bundle for production
     description: Full access to all resources and capabilities.
+    authenticators:
+      - google_oauth2
+      - thand_oauth2
     workflow: slack_approval
     inherits: # allow for inclusion of IAM admin capabilities - URNS
       - user

@@ -18,7 +18,7 @@ func (s *Server) getLogsPage(c *gin.Context) {
 	// Check if we have a valid user
 
 	if s.Config.IsServer() {
-		_, err := s.getUser(c)
+		_, _, err := s.getUser(c)
 		if err != nil {
 			s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of available roles", err)
 			return

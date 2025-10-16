@@ -61,10 +61,9 @@ type WorkflowTask struct {
 	localExprVars   map[string]any     `json:"-"` // local variables for expressions
 
 	// Core workfork/task fields
-	WorkflowID             string `json:"id"`
-	WorkflowName           string `json:"name"`
-	AuthenticationProvider string `json:"authentication"` // The authorisor used for this task
-	Signature              string `json:"signature"`      // The signature of the task, used for validation
+	WorkflowID   string `json:"id"`
+	WorkflowName string `json:"name"`
+	Signature    string `json:"signature"` // The signature of the task, used for validation
 
 	// TaskSupport implementation fields
 	// Entrypoint is the current task name to start from
@@ -113,10 +112,6 @@ func (r *WorkflowTask) GetEncodedTask(encryptor EncryptionImpl) string {
 
 func (r *WorkflowTask) HasStatus() bool {
 	return len(r.Status) > 0
-}
-
-func (r *WorkflowTask) SetAuthentication(auth string) {
-	r.AuthenticationProvider = auth
 }
 
 func (r *WorkflowTask) GetWorkflowDef() *model.Workflow {
@@ -220,7 +215,16 @@ func (r *WorkflowTask) SetContextKeyValue(key string, value any) {
 }
 
 func (r *WorkflowTask) GetAuthenticationProvider() string {
-	return r.AuthenticationProvider
+
+	elevationRequest, err := r.GetContextAsElevationRequest()
+
+	if err != nil {
+		logrus.Warnf("failed to get elevation request from context: %v", err)
+		return ""
+	}
+
+	return elevationRequest.Authenticator
+
 }
 
 func (r *WorkflowTask) GetTaskList() *model.TaskList {

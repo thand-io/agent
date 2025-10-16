@@ -3,6 +3,7 @@ package daemon
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/gin-contrib/sessions"
@@ -165,35 +166,69 @@ func getDecodedSession(encryptor models.EncryptionImpl, session string) (*models
 	return remoteSession, nil
 }
 
-func (s *Server) getUser(c *gin.Context, providerName ...string) (*models.Session, error) {
+func (s *Server) getUserFromElevationRequest(c *gin.Context, request models.ElevateRequest) (string, *models.Session, error) {
+
+	// Get a list of providers we want to auth against
+	findAuthProviders := []string{}
+
+	// TODO: If specified should be enforced to be used
+	if len(request.Authenticator) > 0 {
+		findAuthProviders = append(findAuthProviders, request.Authenticator)
+	}
+
+	// Add role providers
+	if request.Role != nil && len(request.Role.Authenticators) > 0 {
+
+		findAuthProviders = append(findAuthProviders, request.Role.Authenticators...)
+
+		// Check if request.Authenticator is in the list of elevation request's role authenticators
+		if len(request.Authenticator) > 0 {
+			if !slices.Contains(request.Role.Authenticators, request.Authenticator) {
+				return "", nil, fmt.Errorf("authenticator %s is not allowed for the specified role", request.Authenticator)
+			}
+		}
+
+	}
+
+	return s.getUser(c, findAuthProviders...)
+
+}
+
+func (s *Server) getUser(c *gin.Context, authProviders ...string) (string, *models.Session, error) {
 
 	if !s.Config.IsServer() {
-		return nil, fmt.Errorf("getUser can only be called in server mode")
+		return "", nil, fmt.Errorf("getUser can only be called in server mode")
 	}
 
 	session, hasSession := c.Get(SessionContextKey)
 
 	if !hasSession {
-		return nil, fmt.Errorf("no user session found in context")
+		return "", nil, fmt.Errorf("no user session found in context")
 	}
 
 	remoteSession, ok := session.(map[string]*models.Session)
 
 	if !ok {
-		return nil, fmt.Errorf("invalid session type found in context")
+		return "", nil, fmt.Errorf("invalid session type found in context")
 	}
 
-	if len(providerName) > 0 {
-		if session, ok := remoteSession[providerName[0]]; ok {
-			return session, nil
+	if len(authProviders) > 0 {
+
+		// Return the first session we find
+		for _, providerName := range authProviders {
+			if session, ok := remoteSession[providerName]; ok {
+				return providerName, session, nil
+			}
 		}
-		return nil, fmt.Errorf("no user session found for provider: %s", providerName[0])
+
+		return "", nil, fmt.Errorf("no user session found for the requested providers: %s", strings.Join(authProviders, ", "))
+
 	}
 
-	// Return the first session we find
-	for _, remoteSession := range remoteSession {
-		return remoteSession, nil
+	// Otherwise return the first session we find
+	for providerName, session := range remoteSession {
+		return providerName, session, nil
 	}
 
-	return nil, fmt.Errorf("no user session found")
+	return "", nil, fmt.Errorf("no user session found")
 }

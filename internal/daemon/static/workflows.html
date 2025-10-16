@@ -12,7 +12,6 @@
                         <tr>
                             <th>Name</th>
                             <th>Description</th>
-                            <th>Authentication</th>
                             <th>Status</th>
                             <th>Actions</th>
                         </tr>
@@ -29,9 +28,6 @@
                                 {{else}}
                                     <span class="text-muted">No description available</span>
                                 {{end}}
-                            </td>
-                            <td>
-                                <span class="badge badge-secondary">{{$workflow.Authentication}}</span>
                             </td>
                             <td>
                                 {{if $workflow.Enabled}}

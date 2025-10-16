@@ -6,15 +6,16 @@ import (
 )
 
 type Role struct {
-	Name        string       `json:"name"`
-	Description string       `json:"description"`
-	Workflows   []string     `json:"workflows,omitempty"` // The workflows to execute
-	Inherits    []string     `json:"inherits,omitempty"`
-	Permissions Permissions  `json:"permissions,omitempty"`
-	Resources   Resources    `json:"resources,omitempty"`
-	Applies     *RoleApplies `json:"applies,omitempty"`
-	Providers   []string     `json:"providers"`
-	Enabled     bool         `json:"enabled" default:"true"` // By default enable the role
+	Name           string       `json:"name"`
+	Description    string       `json:"description"`
+	Authenticators []string     `json:"authenticators"`      // All the auth providers that the role can use. If empty then any provider can be used
+	Workflows      []string     `json:"workflows,omitempty"` // The workflows to execute
+	Inherits       []string     `json:"inherits,omitempty"`
+	Permissions    Permissions  `json:"permissions,omitempty"`
+	Resources      Resources    `json:"resources,omitempty"`
+	Applies        *RoleApplies `json:"applies,omitempty"`
+	Providers      []string     `json:"providers"`
+	Enabled        bool         `json:"enabled" default:"true"` // By default enable the role
 }
 
 func (r *Role) HasPermission(user *User) bool {

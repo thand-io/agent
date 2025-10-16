@@ -17,14 +17,13 @@ func NewWorkflowContext(workflow *Workflow) (*WorkflowTask, error) {
 	workflowID := fmt.Sprintf("wf_%d", time.Now().UTC().UnixNano())
 
 	workflowCtx := WorkflowTask{
-		state:                  NewWorkflowTaskState(),
-		Status:                 swctx.PendingStatus,
-		AuthenticationProvider: workflow.GetAuthentication(),
-		WorkflowID:             workflowID,
-		WorkflowName:           workflow.GetName(),
-		Workflow:               workflow.Workflow,
-		Context:                map[string]any{},
-		internalContext:        context.Background(),
+		state:           NewWorkflowTaskState(),
+		Status:          swctx.PendingStatus,
+		WorkflowID:      workflowID,
+		WorkflowName:    workflow.GetName(),
+		Workflow:        workflow.Workflow,
+		Context:         map[string]any{},
+		internalContext: context.Background(),
 	}
 
 	return &workflowCtx, nil
@@ -61,10 +60,9 @@ func (ctx *WorkflowTask) Clone() swctx.WorkflowContext {
 		TasksStatusPhase: ctx.cloneTasksStatusPhase(),
 
 		// Copy read-only/shared fields
-		AuthenticationProvider: ctx.AuthenticationProvider,
-		WorkflowID:             ctx.WorkflowID,
-		Workflow:               ctx.Workflow,
-		internalContext:        ctx.internalContext,
+		WorkflowID:      ctx.WorkflowID,
+		Workflow:        ctx.Workflow,
+		internalContext: ctx.internalContext,
 	}
 }
 

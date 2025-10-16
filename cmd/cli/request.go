@@ -132,13 +132,7 @@ func MakeElevationRequest(request *models.ElevateRequest) error {
 		request.Workflow = request.Role.Workflows[0]
 	}
 
-	requestingWorkflow, err := cfg.GetWorkflowFromElevationRequest(request)
-
-	if err != nil {
-		return fmt.Errorf("failed to get workflow from elevation request: %w", err)
-	}
-
-	if err := ensureValidSession(request, requestingWorkflow); err != nil {
+	if err := ensureValidSession(request); err != nil {
 		return err
 	}
 
@@ -169,12 +163,13 @@ func validateElevationRequest(request *models.ElevateRequest) error {
 	return nil
 }
 
-func ensureValidSession(request *models.ElevateRequest, workflow *models.Workflow) error {
-	session, err := sessionManager.GetSession(cfg.GetLoginServerHostname(), workflow.Authentication)
+func ensureValidSession(request *models.ElevateRequest) error {
+	session, err := sessionManager.GetSession(
+		cfg.GetLoginServerHostname(), request.Authenticator)
 	request.Session = session
 
 	if err != nil || isSessionExpired(session) {
-		return authenticateUser(request, workflow)
+		return authenticateUser(request)
 	}
 	return nil
 }
@@ -186,8 +181,16 @@ func isSessionExpired(session *models.LocalSession) bool {
 	return time.Now().UTC().After(session.Expiry.UTC())
 }
 
-func authenticateUser(request *models.ElevateRequest, workflow *models.Workflow) error {
-	callbackUrl := url.Values{"callback": {cfg.GetLocalServerUrl()}}
+func authenticateUser(request *models.ElevateRequest) error {
+
+	callbackUrl := url.Values{
+		"callback": {cfg.GetLocalServerUrl()},
+	}
+
+	if len(request.Authenticator) > 0 {
+		callbackUrl.Set("provider", request.Authenticator)
+	}
+
 	authUrl := fmt.Sprintf("%s/auth?%s", cfg.GetLoginServerUrl(), callbackUrl.Encode())
 
 	fmt.Printf("Opening browser to: %s with callback to: %s\n", authUrl, cfg.GetLocalServerUrl())
@@ -196,16 +199,42 @@ func authenticateUser(request *models.ElevateRequest, workflow *models.Workflow)
 		return fmt.Errorf("failed to open browser: %w", err)
 	}
 
-	if err := sessionManager.AwaitProviderRefresh(cfg.GetLoginServerHostname(), workflow.Authentication); err != nil {
-		return fmt.Errorf("failed to await provider refresh: %w", err)
-	}
+	// If an auth provider is specified then we need to wait for it to be
+	// completed before we can get the session
+	// This is useful for SSO providers where the user must complete
+	// the auth in the browser
+	if len(request.Authenticator) > 0 {
 
-	session, err := sessionManager.GetSession(cfg.GetLoginServerHostname(), workflow.Authentication)
-	if err != nil {
-		return fmt.Errorf("failed to get session: %w", err)
-	}
+		if err := sessionManager.AwaitProviderRefresh(
+			cfg.GetLoginServerHostname(), request.Authenticator); err != nil {
+			return fmt.Errorf("failed to await provider refresh: %w", err)
+		}
 
-	request.Session = session
+		session, err := sessionManager.GetSession(
+			cfg.GetLoginServerHostname(), request.Authenticator)
+
+		if err != nil {
+			return fmt.Errorf("failed to get session: %w", err)
+		}
+
+		request.Session = session
+
+	} else {
+
+		// If no auth provider is specified then we just wait for any
+		// valid session to be created
+		sessionHandler := sessionManager.AwaitRefresh(
+			cfg.GetLoginServerHostname())
+
+		session, err := sessionHandler.GetFirstActiveSession()
+
+		if err != nil {
+			return fmt.Errorf("failed to get session: %w", err)
+		}
+
+		request.Session = session
+
+	}
 	return nil
 }
 
@@ -265,6 +294,8 @@ func displayStatusMessage(status ctx.StatusPhase) {
 		fmt.Println(warningStyle.Render("⏳ Elevation In Progress..."))
 	case ctx.SuspendedStatus:
 		fmt.Println(warningStyle.Render("⏸️ Elevation Suspended"))
+	case ctx.PendingStatus:
+		fmt.Println(warningStyle.Render("⏳ Elevation Pending..."))
 	default:
 		fmt.Println(warningStyle.Render(fmt.Sprintf("Unknown Status: %s", status)))
 	}
