@@ -25,22 +25,23 @@ func (s *Server) AuthMiddleware() gin.HandlerFunc {
 
 	return func(c *gin.Context) {
 		foundSessions := map[string]*models.Session{}
-		cookie := sessions.Default(c)
 
 		// Process different authentication sources
-		s.processProviderCookies(cookie, encryptionServer, foundSessions)
+		s.processProviderCookies(c, encryptionServer, foundSessions)
 		s.processBearerToken(c, encryptionServer, foundSessions)
 		s.processAPIKey(c, encryptionServer, foundSessions)
 
 		// Handle agent/client mode if no sessions found
 		if len(foundSessions) == 0 && (s.Config.IsAgent() || s.Config.IsClient()) {
-			s.handleAgentMode(c, cookie)
+			s.handleAgentMode(c)
 			return
 		}
 
 		// Set session context if sessions were found
 		if len(foundSessions) > 0 {
-			logrus.WithField("providers", foundSessions).Debugln("User sessions found in context")
+			logrus.WithFields(logrus.Fields{
+				"providers": len(foundSessions),
+			}).Debugln("User sessions found in context")
 			c.Set(SessionContextKey, foundSessions)
 		}
 
@@ -50,14 +51,22 @@ func (s *Server) AuthMiddleware() gin.HandlerFunc {
 
 // processProviderCookies extracts sessions from provider cookies
 func (s *Server) processProviderCookies(
-	cookie sessions.Session,
+	c *gin.Context,
 	encryptionServer models.EncryptionImpl,
 	foundSessions map[string]*models.Session,
 ) {
 	allProviders := s.Config.GetProvidersByCapability(models.ProviderCapabilityAuthorizor)
 
 	for providerName := range allProviders {
-		providerSessionData, ok := cookie.Get(providerName).(string)
+
+		cookie := sessions.DefaultMany(c, CreateCookieName(providerName))
+
+		if cookie == nil {
+			continue
+		}
+
+		providerSessionData, ok := cookie.Get(ThandCookieAttributeSessionName).(string)
+
 		if !ok {
 			continue
 		}
@@ -126,7 +135,7 @@ func (s *Server) processAPIKey(
 }
 
 // handleAgentMode processes sessions for agent/client mode
-func (s *Server) handleAgentMode(c *gin.Context, cookie sessions.Session) {
+func (s *Server) handleAgentMode(c *gin.Context) {
 	sm := sessionManager.GetSessionManager()
 	loginServer, err := sm.GetLoginServer(s.Config.GetLoginServerHostname())
 	if err != nil {
@@ -136,13 +145,17 @@ func (s *Server) handleAgentMode(c *gin.Context, cookie sessions.Session) {
 
 	agentSessions := loginServer.GetSessions()
 	for providerName, remoteSession := range agentSessions {
-		cookie.Set(providerName, remoteSession.GetEncodedLocalSession())
-	}
 
-	err = cookie.Save()
-	if err != nil {
-		logrus.WithError(err).Warnln("Failed to save session cookie")
-		return
+		cookie := sessions.DefaultMany(c, CreateCookieName(providerName))
+		cookie.Set(ThandCookieAttributeSessionName, remoteSession.GetEncodedLocalSession())
+
+		err = cookie.Save()
+
+		if err != nil {
+			logrus.WithError(err).Warnln("Failed to save session cookie")
+			return
+		}
+
 	}
 
 	// Redirect to reload the page with new cookies
@@ -196,27 +209,17 @@ func (s *Server) getUserFromElevationRequest(c *gin.Context, request models.Elev
 
 func (s *Server) getUser(c *gin.Context, authProviders ...string) (string, *models.Session, error) {
 
-	if !s.Config.IsServer() {
-		return "", nil, fmt.Errorf("getUser can only be called in server mode")
-	}
+	remoteSessions, err := s.getUserSessions(c)
 
-	session, hasSession := c.Get(SessionContextKey)
-
-	if !hasSession {
-		return "", nil, fmt.Errorf("no user session found in context")
-	}
-
-	remoteSession, ok := session.(map[string]*models.Session)
-
-	if !ok {
-		return "", nil, fmt.Errorf("invalid session type found in context")
+	if err != nil {
+		return "", nil, err
 	}
 
 	if len(authProviders) > 0 {
 
 		// Return the first session we find
 		for _, providerName := range authProviders {
-			if session, ok := remoteSession[providerName]; ok {
+			if session, ok := remoteSessions[providerName]; ok {
 				return providerName, session, nil
 			}
 		}
@@ -225,10 +228,56 @@ func (s *Server) getUser(c *gin.Context, authProviders ...string) (string, *mode
 
 	}
 
-	// Otherwise return the first session we find
-	for providerName, session := range remoteSession {
-		return providerName, session, nil
+	// Otherwise return the primary session if it exists
+	primaryCookie := sessions.DefaultMany(c, ThandCookieName)
+
+	if primaryCookie != nil {
+
+		activeProvider, ok := primaryCookie.Get(ThandCookieAttributeActiveName).(string)
+
+		if ok && len(activeProvider) > 0 {
+			if session, exists := remoteSessions[activeProvider]; exists {
+				return activeProvider, session, nil
+			}
+		}
+	}
+
+	// Otherwise return the session that is the most recently active
+
+	var latestProvider string
+	var latestSession *models.Session
+
+	for providerName, session := range remoteSessions {
+		if latestSession == nil || session.Expiry.After(latestSession.Expiry) {
+			latestProvider = providerName
+			latestSession = session
+		}
+	}
+
+	if latestSession != nil {
+		return latestProvider, latestSession, nil
 	}
 
 	return "", nil, fmt.Errorf("no user session found")
+}
+
+func (s *Server) getUserSessions(c *gin.Context) (map[string]*models.Session, error) {
+
+	if !s.Config.IsServer() {
+		return nil, fmt.Errorf("getUserSessions can only be called in server mode")
+	}
+
+	session, hasSession := c.Get(SessionContextKey)
+
+	if !hasSession {
+		return nil, fmt.Errorf("no user session found in context")
+	}
+
+	remoteSession, ok := session.(map[string]*models.Session)
+
+	if !ok {
+		return nil, fmt.Errorf("invalid session type found in context")
+	}
+
+	return remoteSession, nil
 }

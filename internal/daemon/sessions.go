@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
@@ -63,22 +64,59 @@ func (s *Server) postSession(c *gin.Context) {
 
 func (s *Server) getSessions(c *gin.Context) {
 
-	loginServer := s.Config.GetLoginServerHostname()
+	if s.Config.IsServer() {
 
-	logrus.WithFields(logrus.Fields{
-		"loginServer": loginServer,
-	}).Debugln("Fetching sessions")
+		remoteSessions, err := s.getUserSessions(c)
 
-	sessionManager := sessions.GetSessionManager()
-	sessionManager.Load(loginServer)
-	sessionsList, err := sessionManager.GetLoginServer(loginServer)
+		if err != nil {
+			s.getErrorPage(c, http.StatusBadRequest, "Failed to get user sessions", err)
+			return
+		}
 
-	if err != nil {
-		s.getErrorPage(c, http.StatusInternalServerError, "Failed to list sessions", err)
+		foundSessions := map[string]models.LocalSession{}
+
+		// Convert to response format
+		for providerName, session := range remoteSessions {
+			foundSessions[providerName] = models.LocalSession{
+				Version: 1,
+				Expiry:  session.Expiry,
+			}
+		}
+
+		sessionsList := sessions.LoginServer{
+			Version:   "1",
+			Timestamp: time.Now(),
+			Sessions:  foundSessions,
+		}
+
+		c.JSON(http.StatusOK, sessionsList)
+		return
+
+	} else if s.Config.IsAgent() {
+
+		loginServer := s.Config.GetLoginServerHostname()
+
+		logrus.WithFields(logrus.Fields{
+			"loginServer": loginServer,
+		}).Debugln("Fetching sessions")
+
+		sessionManager := sessions.GetSessionManager()
+		sessionManager.Load(loginServer)
+		sessionsList, err := sessionManager.GetLoginServer(loginServer)
+
+		if err != nil {
+			s.getErrorPage(c, http.StatusInternalServerError, "Failed to list sessions", err)
+			return
+		}
+
+		c.JSON(http.StatusOK, sessionsList)
+		return
+
+	} else {
+
+		s.getErrorPage(c, http.StatusBadRequest, "Get sessions can only be called in agent or server mode")
 		return
 	}
-
-	c.JSON(http.StatusOK, sessionsList)
 }
 
 func (s *Server) getSessionByProvider(c *gin.Context) {

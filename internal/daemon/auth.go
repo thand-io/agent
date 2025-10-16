@@ -229,7 +229,7 @@ func (s *Server) getAuthCallbackPage(c *gin.Context, auth models.AuthWrapper) {
 
 func (s *Server) getLogoutPage(c *gin.Context) {
 
-	cookie := sessions.Default(c)
+	cookie := sessions.DefaultMany(c, ThandCookieName)
 	cookie.Clear()
 	err := cookie.Save()
 

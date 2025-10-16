@@ -71,9 +71,9 @@ type SessionCreateRequest struct {
 
 // Session stored on the users local system
 type LocalSession struct {
-	Version int       `json:"version" yaml:"version"`      // Version of the session config
-	Expiry  time.Time `json:"expiry" yaml:"expiry"`        // Expiry time of the session
-	Session string    `json:"session" yaml:"session,flow"` // Encoded session token
+	Version int       `json:"version,omitempty" yaml:"version"`      // Version of the session config
+	Expiry  time.Time `json:"expiry" yaml:"expiry"`                  // Expiry time of the session
+	Session string    `json:"session,omitempty" yaml:"session,flow"` // Encoded session token
 }
 
 func (s *LocalSession) IsExpired() bool {

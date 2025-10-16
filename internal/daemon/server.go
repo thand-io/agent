@@ -88,24 +88,18 @@ func (s *Server) GetTemplateEngine() *template.Template {
 
 func (s *Server) GetTemplateData(c *gin.Context) config.TemplateData {
 
-	var user *models.User
+	var foundUser *models.User
+	var foundProvider string
 
-	sessions, foundSessions := c.Get(SessionContextKey)
+	if s.Config.IsServer() {
 
-	if foundSessions {
+		provider, session, err := s.getUser(c)
 
-		foundSessions, ok := sessions.(map[string]*models.Session)
-
-		if !ok {
-			logrus.Warnln("Invalid session type found in context")
-		} else if len(foundSessions) > 0 {
-			logrus.WithField("providers", foundSessions).Debugln("User sessions found in context")
-
-			for _, session := range foundSessions {
-				user = session.User
-				break
-			}
+		if err == nil {
+			foundUser = session.User
+			foundProvider = provider
 		}
+
 	}
 
 	serverName := "Thand Service"
@@ -119,7 +113,8 @@ func (s *Server) GetTemplateData(c *gin.Context) config.TemplateData {
 	return config.TemplateData{
 		Config:      s.Config,
 		ServiceName: serverName,
-		User:        user,
+		Provider:    foundProvider,
+		User:        foundUser,
 		Version:     s.GetVersion(),
 		Status:      "Online",
 	}
@@ -178,7 +173,21 @@ func (s *Server) Start() error {
 		AllowCredentials: false,
 	}))
 
-	router.Use(sessions.Sessions("thand", getSessionStore(s.GetConfig().GetSecret())))
+	cookieNames := []string{ThandCookieName}
+
+	foundProviders := s.Config.GetProvidersByCapability(
+		models.ProviderCapabilityAuthorizor,
+	)
+
+	for providerName := range foundProviders {
+		cookieNames = append(cookieNames, CreateCookieName(providerName))
+	}
+
+	sessionStore := getSessionStore(s.GetConfig().GetSecret())
+	router.Use(sessions.SessionsMany(
+		cookieNames,
+		sessionStore,
+	))
 
 	// Set HTML template engine
 	router.SetHTMLTemplate(s.TemplateEngine)
@@ -326,13 +335,12 @@ func (s *Server) setupRoutes(router *gin.Engine) {
 	{
 
 		api.GET("/logs", s.getLogsPage)
+		api.GET("/sessions", s.getSessions)
 
+		// Agent endpoints
 		if s.Config.IsAgent() || s.Config.IsClient() {
 
-			// Agent endpoints
-
 			// Session management
-			api.GET("/sessions", s.getSessions)
 			api.GET("/session/:provider", s.getSessionByProvider)
 			api.POST("/sessions", s.postSession)
 			api.DELETE("/session/:provider", s.deleteSession)
