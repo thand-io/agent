@@ -129,9 +129,9 @@ func (r *WorkflowTask) GetContext() context.Context {
 	return context.Background()
 }
 
-// WithInternalContext sets the internal context used by this workflow task.
+// SetInternalContext sets the internal context used by this workflow task.
 // This keeps the task's context coherent when cloning runners.
-func (r *WorkflowTask) WithInternalContext(ctx context.Context) {
+func (r *WorkflowTask) SetInternalContext(ctx context.Context) {
 	r.internalContext = ctx
 }
 

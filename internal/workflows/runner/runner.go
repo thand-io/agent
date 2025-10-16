@@ -47,7 +47,7 @@ func (r *ResumableWorkflowRunner) CloneWithContext(ctx context.Context) *Resumab
 	}
 	// attach the provided context into the workflow task so GetContext() is coherent
 	if ctx != nil {
-		wf.WithInternalContext(ctx)
+		wf.SetInternalContext(ctx)
 	}
 	return &ResumableWorkflowRunner{
 		config:    r.config,

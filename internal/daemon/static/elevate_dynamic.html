@@ -344,7 +344,7 @@
                 .then(response => response.json())
                 .then(identitiesData => {
                     const identities = [];
-                    const currentUserEmail = '{{.User.Email}}';
+                    const currentUserEmail = '{{if .User}}{{.User.Email}}{{end}}';
                                         
                     // Add other available identities from the API
                     if (identitiesData && identitiesData.identities) {
