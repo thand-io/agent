@@ -20,7 +20,7 @@ func (s *Server) getRoles(c *gin.Context) {
 	// This is because roles can contain sensitive information
 	// and we want to ensure that only authenticated users can access them
 	if s.Config.IsServer() {
-		foundUser, err := s.getUser(c)
+		_, foundUser, err := s.getUser(c)
 		if err != nil {
 			s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of available roles", err)
 			return

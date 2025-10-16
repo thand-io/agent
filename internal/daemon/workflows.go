@@ -20,11 +20,10 @@ type ExecutionStatePageData struct {
 
 type WorkflowPageData struct {
 	config.TemplateData
-	Workflow       map[string]any
-	Name           string
-	Description    string
-	Authentication string
-	Enabled        bool
+	Workflow    map[string]any
+	Name        string
+	Description string
+	Enabled     bool
 }
 
 // getWorkflows handles GET /api/v1/workflows
@@ -37,7 +36,7 @@ func (s *Server) getWorkflows(c *gin.Context) {
 	// This is because roles can contain sensitive information
 	// and we want to ensure that only authenticated users can access them
 	if s.Config.IsServer() {
-		foundUser, err := s.getUser(c)
+		_, foundUser, err := s.getUser(c)
 		if err != nil {
 			s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of available workflows", err)
 			return
@@ -58,10 +57,9 @@ func (s *Server) getWorkflows(c *gin.Context) {
 		}
 
 		workflows[name] = models.WorkflowResponse{
-			Name:           name,
-			Description:    workflow.Description,
-			Authentication: workflow.Authentication,
-			Enabled:        workflow.Enabled,
+			Name:        name,
+			Description: workflow.Description,
+			Enabled:     workflow.Enabled,
 		}
 	}
 
@@ -124,12 +122,11 @@ func (s *Server) getWorkflowByName(c *gin.Context) {
 		// including the steps and their descriptions
 
 		data := WorkflowPageData{
-			TemplateData:   s.GetTemplateData(c),
-			Workflow:       workflowMap,
-			Name:           name,
-			Description:    workflow.GetDescription(),
-			Authentication: workflow.GetAuthentication(),
-			Enabled:        workflow.GetEnabled(),
+			TemplateData: s.GetTemplateData(c),
+			Workflow:     workflowMap,
+			Name:         name,
+			Description:  workflow.GetDescription(),
+			Enabled:      workflow.GetEnabled(),
 		}
 
 		s.renderHtml(c, "workflow.html", data)
@@ -157,7 +154,7 @@ func (s *Server) cancelRunningWorkflow(c *gin.Context) {
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to cancel workflow", nil)
 	}
 
-	authenticatedUser, err := s.getUser(c)
+	_, authenticatedUser, err := s.getUser(c)
 	if err != nil {
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for terminating workflow", err)
 		return

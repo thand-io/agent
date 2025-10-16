@@ -7,7 +7,11 @@ import (
 	models "github.com/thand-io/agent/internal/models"
 )
 
-func CreateWorkflowFromEncodedTask(encryption models.EncryptionImpl, encodedTask string) (*models.WorkflowTask, error) {
+func CreateWorkflowFromEncodedTask(
+	encryption models.EncryptionImpl,
+	encodedTask string,
+) (*models.WorkflowTask, error) {
+
 	// Tasks may contain sensitive information, ensure encryption is used
 	decodedTask, err := models.EncodingWrapper{}.DecodeAndDecrypt(encodedTask, encryption)
 

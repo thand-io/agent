@@ -130,13 +130,42 @@ func (s *Server) getAuthPage(c *gin.Context) {
 		logrus.Debug("Using local server URL as callback")
 	}
 
-	data := AuthPageData{
-		TemplateData: s.GetTemplateData(c),
-		Providers:    foundProviders,
-		Callback:     callback,
-	}
+	// Has a provider been specified
+	provider, foundProvider := c.GetQuery("provider")
 
-	s.renderHtml(c, "auth.html", data)
+	if foundProvider && len(provider) > 0 {
+
+		// If a provider has been specified then redirect to the
+		// auth endpoint for that provider
+
+		if _, exists := foundProviders[provider]; !exists {
+			s.getErrorPage(c, http.StatusBadRequest, "Invalid provider",
+				fmt.Errorf("provider %s not found", provider))
+			return
+		}
+
+		// {{$.Config.GetApiBasePath}}/auth/request/{{$key}}?callback={{$.Callback}}
+
+		c.Redirect(http.StatusTemporaryRedirect, fmt.Sprintf("%s/auth/request/%s?callback=%s",
+			s.Config.GetApiBasePath(),
+			provider,
+			callback,
+		))
+
+		return
+
+	} else {
+
+		data := AuthPageData{
+			TemplateData: s.GetTemplateData(c),
+			Providers:    foundProviders,
+			Callback:     callback,
+		}
+
+		s.renderHtml(c, "auth.html", data)
+		return
+
+	}
 }
 
 type AuthCallbackPageData struct {

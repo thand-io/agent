@@ -52,13 +52,14 @@ type ElevateResponse struct {
 }
 
 type ElevateRequest struct {
-	Role       *Role         `json:"role"`
-	Providers  []string      `json:"providers"` // A role can be applied to multiple providers
-	Workflow   string        `json:"workflow"`
-	Reason     string        `json:"reason"`
-	Duration   string        `json:"duration,omitempty"`   // Duration in ISO 8601 format
-	Identities []string      `json:"identities,omitempty"` // Optional identities to elevate, if empty the requesting user is used
-	Session    *LocalSession `json:"session,omitempty"`
+	Role          *Role         `json:"role"`
+	Providers     []string      `json:"providers"`     // A role can be applied to multiple providers
+	Authenticator string        `json:"authenticator"` // Which provider to use for authentication
+	Workflow      string        `json:"workflow"`
+	Reason        string        `json:"reason"`
+	Duration      string        `json:"duration,omitempty"`   // Duration in ISO 8601 format
+	Identities    []string      `json:"identities,omitempty"` // Optional identities to elevate, if empty the requesting user is used
+	Session       *LocalSession `json:"session,omitempty"`
 }
 
 func (e *ElevateRequest) IsValid() bool {
@@ -71,12 +72,13 @@ func (e *ElevateRequest) AsDuration() (time.Duration, error) {
 
 func (e *ElevateRequest) AsMap() map[string]any {
 	return map[string]any{
-		"role":       e.Role, // get role
-		"providers":  e.Providers,
-		"workflow":   e.Workflow,
-		"reason":     e.Reason,
-		"duration":   e.Duration,
-		"identities": e.Identities,
+		"role":          e.Role, // get role
+		"providers":     e.Providers,
+		"authenticator": e.Authenticator,
+		"workflow":      e.Workflow,
+		"reason":        e.Reason,
+		"duration":      e.Duration,
+		"identities":    e.Identities,
 	}
 }
 
@@ -99,16 +101,17 @@ type ElevateRequestInternal struct {
 }
 
 type ElevateDynamicRequest struct {
-	Workflow    string   `form:"workflow" json:"workflow" binding:"required"`
-	Reason      string   `form:"reason" json:"reason" binding:"required"`
-	Duration    string   `form:"duration" json:"duration" binding:"required"` // Duration in ISO 8601 format
-	Identities  []string `form:"identities" json:"identities"`
-	Providers   []string `form:"providers" json:"providers" binding:"required"`
-	Inherits    []string `form:"inherits" json:"inherits"`
-	Permissions []string `form:"permissions" json:"permissions"` // Comma-separated permissions
-	Resources   []string `form:"resources" json:"resources"`     // Comma-separated resources
-	Groups      []string `form:"groups" json:"groups"`
-	Users       []string `form:"users" json:"users"`
+	Authenticator string   `form:"authenticator" json:"authenticator" binding:"required"`
+	Workflow      string   `form:"workflow" json:"workflow" binding:"required"`
+	Reason        string   `form:"reason" json:"reason" binding:"required"`
+	Duration      string   `form:"duration" json:"duration" binding:"required"` // Duration in ISO 8601 format
+	Identities    []string `form:"identities" json:"identities"`
+	Providers     []string `form:"providers" json:"providers" binding:"required"`
+	Inherits      []string `form:"inherits" json:"inherits"`
+	Permissions   []string `form:"permissions" json:"permissions"` // Comma-separated permissions
+	Resources     []string `form:"resources" json:"resources"`     // Comma-separated resources
+	Groups        []string `form:"groups" json:"groups"`
+	Users         []string `form:"users" json:"users"`
 }
 
 type ElevateLLMRequest struct {

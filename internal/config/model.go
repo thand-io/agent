@@ -506,7 +506,8 @@ func (c *Config) GetEventsWithFilter(filter LogFilter) []*models.LogEntry {
 	return c.logger.GetEventsWithFilter(filter)
 }
 
-func (r *Config) GetWorkflowFromElevationRequest(elevationRequest *models.ElevateRequest) (*models.Workflow, error) {
+func (r *Config) GetWorkflowFromElevationRequest(
+	elevationRequest *models.ElevateRequest) (*models.Workflow, error) {
 
 	if elevationRequest == nil {
 		return nil, fmt.Errorf("elevation request is nil")

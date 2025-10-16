@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -94,7 +95,38 @@ func (m *WorkflowManager) executeWorkflow(
 		return nil, fmt.Errorf("failed to create workflow: %w", err)
 	}
 
-	defaultAuth := workflow.GetAuthentication()
+	defaultAuth := request.Authenticator
+
+	if len(defaultAuth) == 0 {
+
+		// Get the user information from the context
+		// and use the first auth provider from the role
+		if request.Session != nil {
+			decodedSession, err := request.Session.GetDecodedSession(
+				m.config.GetServices().GetEncryption())
+
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode session from request: %w", err)
+			}
+
+			providerAuth := decodedSession.Provider
+
+			// Check that the session is valid for one of the role's authenticators
+			if request.Role != nil && len(request.Role.Authenticators) > 0 {
+				if !slices.Contains(request.Role.Authenticators, providerAuth) {
+					return nil, fmt.Errorf("authenticator %s is not allowed for the specified role", providerAuth)
+				}
+			}
+
+			defaultAuth = providerAuth
+
+		}
+	}
+
+	if len(defaultAuth) == 0 {
+		return nil, fmt.Errorf("no authenticator specified or found in session")
+	}
+
 	workflowDsl := workflow.GetWorkflow()
 
 	if workflowDsl == nil {
@@ -174,7 +206,7 @@ func (m *WorkflowManager) executeWorkflow(
 
 	sessionResponse, err := authProvider.GetClient().AuthorizeSession(ctx, &models.AuthorizeUser{
 		State:       workflowTask.GetEncodedTask(m.config.GetServices().GetEncryption()),
-		RedirectUri: m.config.GetAuthCallbackUrl(workflow.Authentication),
+		RedirectUri: m.config.GetAuthCallbackUrl(request.Authenticator),
 	})
 
 	if err != nil {
