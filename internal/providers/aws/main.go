@@ -75,9 +75,9 @@ func (p *awsProvider) Initialize(provider models.Provider) error {
 		return fmt.Errorf("failed to set account ID: %w", err)
 	}
 
-	// Lets just validate our account id is a number
-	if !common.IsAllDigits(p.accountID) {
-		return fmt.Errorf("invalid AWS account ID: %s", p.accountID)
+	// Validate AWS account ID: must be exactly 12 digits
+	if len(p.accountID) != 12 || !common.IsAllDigits(p.accountID) {
+		return fmt.Errorf("invalid AWS account ID (must be 12 digits): %s", p.accountID)
 	}
 
 	return nil
