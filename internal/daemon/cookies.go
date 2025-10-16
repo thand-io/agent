@@ -3,8 +3,6 @@ package daemon
 import (
 	"encoding/base64"
 	"fmt"
-	"strings"
-
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/thand-io/agent/internal/models"
