@@ -34,9 +34,8 @@ func (s *Server) setAuthCookie(c *gin.Context, authProvider string, localSession
 }
 
 func CreateCookieName(provider string) string {
-	// base64 encode the provider name to ensure it's safe for cookie names
-	encoded := base64.URLEncoding.EncodeToString([]byte(provider))
+	// base64 encode the provider name to ensure it's safe for cookie names, omitting padding
+	encoded := base64.RawURLEncoding.EncodeToString([]byte(provider))
 	// prepend the thand cookie name
-	encoded = strings.ReplaceAll(encoded, "=", "")
 	return fmt.Sprintf("%s_%s", ThandCookieName, encoded)
 }
