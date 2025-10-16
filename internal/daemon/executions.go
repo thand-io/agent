@@ -45,7 +45,7 @@ func (s *Server) listRunningWorkflows(c *gin.Context) {
 	_, foundUser, err := s.getUser(c)
 
 	if err != nil {
-		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of available workflows", err)
+		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of running workflows", err)
 		return
 	}
 
