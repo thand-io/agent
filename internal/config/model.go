@@ -445,7 +445,7 @@ func (c *Config) GetApiBasePath() string {
 func (c *Config) GetAuthCallbackUrl(providerName string) string {
 
 	if len(providerName) == 0 {
-		logrus.Fatalf("provider name cannot be null")
+		logrus.Fatalf("provider name cannot be empty")
 	}
 
 	return fmt.Sprintf(
