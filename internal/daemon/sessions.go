@@ -78,7 +78,8 @@ func (s *Server) getSessions(c *gin.Context) {
 		// Convert to response format
 		for providerName, session := range remoteSessions {
 			foundSessions[providerName] = models.LocalSession{
-				Expiry: session.Expiry,
+				Version: 1,
+				Expiry:  session.Expiry,
 			}
 		}
 

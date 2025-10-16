@@ -12,14 +12,22 @@
         <div class="form-section">
             <h3>Account Summary</h3>
             <div class="user-info-grid">
+                {{ if .Provider }}
+                <div class="info-item">
+                    <span class="form-label">Provider</span>
+                    <span class="info-value">{{.Provider}}</span>
+                </div>
+                {{end}}
                 <div class="info-item">
                     <span class="form-label">User ID</span>
                     <span class="info-value">{{.User.ID}}</span>
                 </div>
+                {{ if .User.Username }}
                 <div class="info-item">
                     <span class="form-label">Username</span>
                     <span class="info-value">{{.User.Username}}</span>
                 </div>
+                {{end}}
                 <div class="info-item">
                     <span class="form-label">Email</span>
                     <span class="info-value">{{.User.Email}}</span>

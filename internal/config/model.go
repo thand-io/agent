@@ -565,6 +565,7 @@ func (r *Config) GetWorkflowFromElevationRequest(
 type TemplateData struct {
 	Config      *Config
 	ServiceName string
+	Provider    string `json:"provider,omitempty" yaml:"provider,omitempty"`
 	User        *models.User
 	Version     string
 	Status      string
