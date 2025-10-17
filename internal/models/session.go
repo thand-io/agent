@@ -25,6 +25,10 @@ type Session struct {
 	Expiry       time.Time `json:"expiry"`
 }
 
+func (s *Session) IsExpired() bool {
+	return time.Now().After(s.Expiry)
+}
+
 type ExportableSession struct {
 	*Session
 	Provider string `json:"provider"`

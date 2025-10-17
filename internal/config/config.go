@@ -167,6 +167,7 @@ func bindCloudProviderEnvVars(v *viper.Viper) {
 	v.BindEnv("environment.config.region", "THAND_ENVIRONMENT_CONFIG_REGION")
 	v.BindEnv("environment.config.access_key_id", "THAND_ENVIRONMENT_CONFIG_ACCESS_KEY_ID")
 	v.BindEnv("environment.config.secret_access_key", "THAND_ENVIRONMENT_CONFIG_SECRET_ACCESS_KEY")
+	v.BindEnv("environment.config.kms_arn", "THAND_ENVIRONMENT_CONFIG_KMS_ARN")
 }
 
 // bindVaultEnvVars binds HashiCorp Vault and secret management environment variables

@@ -41,6 +41,15 @@ func (a *awsEncrypt) Initialize() error {
 
 	a.service = kms.NewFromConfig(sdkConfig.Config)
 
+	// Get the KMS Key ARN from config
+	kmsArn, found := a.config.GetString("kms_arn")
+
+	if !found || len(kmsArn) == 0 {
+		return fmt.Errorf("missing required AWS KMS configuration: kms_arn is required")
+	}
+
+	a.kmsArn = kmsArn
+
 	return nil
 }
 

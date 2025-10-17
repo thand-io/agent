@@ -217,15 +217,32 @@ func (s *Server) getUser(c *gin.Context, authProviders ...string) (string, *mode
 
 	if len(authProviders) > 0 {
 
-		// Return the first session we find
+		validProviders := []string{}
+
+		// Ok first, check to see what sessions we have for the requested providers
 		for _, providerName := range authProviders {
-			if session, ok := remoteSessions[providerName]; ok {
-				return providerName, session, nil
+			if _, ok := remoteSessions[providerName]; ok {
+				validProviders = append(validProviders, providerName)
 			}
 		}
 
-		return "", nil, fmt.Errorf("no user session found for the requested providers: %s", strings.Join(authProviders, ", "))
+		if len(validProviders) == 0 {
+			return "", nil, fmt.Errorf("no user session found for the requested providers: %s", strings.Join(authProviders, ", "))
+		}
 
+		// First see if we can find any of the requested providers
+		// that haven't expired
+		for _, providerName := range validProviders {
+			if session, ok := remoteSessions[providerName]; ok {
+				if !session.IsExpired() {
+					return providerName, session, nil
+				}
+			}
+		}
+
+		// Otherwise return the first requested provider even if expired
+		firstProvider := validProviders[0]
+		return firstProvider, remoteSessions[firstProvider], nil
 	}
 
 	// Otherwise return the primary session if it exists
