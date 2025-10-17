@@ -3,7 +3,6 @@ package encrypt
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
 	"github.com/sirupsen/logrus"
@@ -79,7 +78,7 @@ func (a *azureEncrypt) Shutdown() error {
 	return nil
 }
 
-func (a *azureEncrypt) Encrypt(plaintext []byte) ([]byte, error) {
+func (a *azureEncrypt) Encrypt(ctx context.Context, plaintext []byte) ([]byte, error) {
 
 	logrus.Debugln("Encrypting data with Azure Key Vault")
 
@@ -88,8 +87,10 @@ func (a *azureEncrypt) Encrypt(plaintext []byte) ([]byte, error) {
 		return nil, fmt.Errorf("azure Key Vault client not initialized")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	if len(a.keyName) == 0 {
+		logrus.Errorln("Key name is not configured")
+		return nil, fmt.Errorf("key name is not configured")
+	}
 
 	// Use RSA-OAEP encryption algorithm
 	algorithm := azkeys.EncryptionAlgorithmRSAOAEP
@@ -109,17 +110,18 @@ func (a *azureEncrypt) Encrypt(plaintext []byte) ([]byte, error) {
 	return resp.Result, nil
 }
 
-func (a *azureEncrypt) Decrypt(ciphertext []byte) ([]byte, error) {
+func (a *azureEncrypt) Decrypt(ctx context.Context, ciphertext []byte) ([]byte, error) {
 
 	logrus.Debugln("Decrypting data with Azure Key Vault")
+
+	if len(ciphertext) == 0 {
+		return nil, fmt.Errorf("cipher text cannot be empty")
+	}
 
 	if a.client == nil {
 		logrus.Errorln("Azure Key Vault client not initialized")
 		return nil, fmt.Errorf("azure Key Vault client not initialized")
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 
 	// Use RSA-OAEP encryption algorithm
 	algorithm := azkeys.EncryptionAlgorithmRSAOAEP

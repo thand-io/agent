@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/identitystore"
 	"github.com/aws/aws-sdk-go-v2/service/ssoadmin"
@@ -124,6 +125,11 @@ func CreateAwsConfig(awsConfig *models.BasicConfig) (*AwsConfigurationProvider, 
 				}, nil
 			}),
 		))
+	}
+
+	if imsdEnable, _found := awsConfig.GetBool("imsd_enable"); _found && imsdEnable {
+		logrus.Info("Using IMDSv2 for AWS credentials")
+		awsOptions = append(awsOptions, config.WithEC2IMDSClientEnableState(imds.ClientDisabled))
 	}
 
 	// Initialize AWS SDK clients here

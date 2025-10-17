@@ -21,6 +21,10 @@ type TemporalClient struct {
 
 func NewTemporalClient(config *models.TemporalConfig, identity string) *TemporalClient {
 
+	if len(identity) == 0 {
+		logrus.Fatalln("identity must be provided")
+	}
+
 	return &TemporalClient{
 		config:   config,
 		identity: identity,
@@ -28,8 +32,6 @@ func NewTemporalClient(config *models.TemporalConfig, identity string) *Temporal
 }
 
 func (a *TemporalClient) Initialize() error {
-
-	a.identity = fmt.Sprintf("thand-agent-%s", a.config.Namespace)
 
 	clientOptions := client.Options{
 		Logger:    newLogrusLogger(),
