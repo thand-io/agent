@@ -71,7 +71,7 @@ func (l *localVault) Shutdown() error {
 func (l *localVault) Encrypt(ctx context.Context, plainText []byte) ([]byte, error) {
 
 	if len(plainText) == 0 {
-		return nil, fmt.Errorf("plain text cannot be empty")
+		return nil, fmt.Errorf("plaintext cannot be empty")
 	}
 
 	// Generate random nonce
@@ -103,7 +103,7 @@ func (l *localVault) Encrypt(ctx context.Context, plainText []byte) ([]byte, err
 func (l *localVault) Decrypt(ctx context.Context, cipherText []byte) ([]byte, error) {
 
 	if len(cipherText) == 0 {
-		return nil, fmt.Errorf("cipher text cannot be empty")
+		return nil, fmt.Errorf("ciphertext cannot be empty")
 	}
 
 	// Parse encrypted data

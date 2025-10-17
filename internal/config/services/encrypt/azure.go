@@ -115,7 +115,7 @@ func (a *azureEncrypt) Decrypt(ctx context.Context, ciphertext []byte) ([]byte, 
 	logrus.Debugln("Decrypting data with Azure Key Vault")
 
 	if len(ciphertext) == 0 {
-		return nil, fmt.Errorf("cipher text cannot be empty")
+		return nil, fmt.Errorf("ciphertext cannot be empty")
 	}
 
 	if a.client == nil {

@@ -117,18 +117,11 @@ func CreateAwsConfig(awsConfig *models.BasicConfig) (*AwsConfigurationProvider, 
 	// Support custom endpoint for testing (e.g., LocalStack)
 	if endpoint, found := awsConfig.GetString("endpoint"); found {
 		logrus.WithField("endpoint", endpoint).Info("Using custom AWS endpoint")
-		awsOptions = append(awsOptions, config.WithEndpointResolverWithOptions(
-			aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-				return aws.Endpoint{
-					URL:           endpoint,
-					SigningRegion: region,
-				}, nil
-			}),
-		))
+		awsOptions = append(awsOptions, config.WithBaseEndpoint(endpoint))
 	}
 
-	if imsdEnable, _found := awsConfig.GetBool("imsd_enable"); _found && imsdEnable {
-		logrus.Info("Using IMDSv2 for AWS credentials")
+	if imsdDisable, found := awsConfig.GetBool("imsd_disable"); found && imsdDisable {
+		logrus.Info("Disabling IMDSv2 for AWS credentials")
 		awsOptions = append(awsOptions, config.WithEC2IMDSClientEnableState(imds.ClientDisabled))
 	}
 

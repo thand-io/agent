@@ -21,10 +21,6 @@ type TemporalClient struct {
 
 func NewTemporalClient(config *models.TemporalConfig, identity string) *TemporalClient {
 
-	if len(identity) == 0 {
-		logrus.Fatalln("identity must be provided")
-	}
-
 	return &TemporalClient{
 		config:   config,
 		identity: identity,
@@ -32,6 +28,10 @@ func NewTemporalClient(config *models.TemporalConfig, identity string) *Temporal
 }
 
 func (a *TemporalClient) Initialize() error {
+
+	if len(a.identity) == 0 {
+		return fmt.Errorf("temporal client identity cannot be empty")
+	}
 
 	clientOptions := client.Options{
 		Logger:    newLogrusLogger(),
