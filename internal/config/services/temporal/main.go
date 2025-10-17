@@ -29,7 +29,9 @@ func NewTemporalClient(config *models.TemporalConfig, identity string) *Temporal
 
 func (a *TemporalClient) Initialize() error {
 
-	a.identity = fmt.Sprintf("thand-agent-%s", a.config.Namespace)
+	if len(a.identity) == 0 {
+		return fmt.Errorf("temporal client identity cannot be empty")
+	}
 
 	clientOptions := client.Options{
 		Logger:    newLogrusLogger(),

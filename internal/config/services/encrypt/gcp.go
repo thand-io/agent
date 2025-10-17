@@ -90,11 +90,10 @@ func (g *gcpEncrypt) Shutdown() error {
 	return nil
 }
 
-func (g *gcpEncrypt) Encrypt(plaintext []byte) ([]byte, error) {
-	ctx := context.Background()
+func (g *gcpEncrypt) Encrypt(ctx context.Context, plaintext []byte) ([]byte, error) {
 
-	if g.service == nil {
-		return nil, fmt.Errorf("GCP KMS client not initialized")
+	if err := g.validate(); err != nil {
+		return nil, err
 	}
 
 	cryptoKeyName := fmt.Sprintf("projects/%s/locations/%s/keyRings/%s/cryptoKeys/%s",
@@ -113,11 +112,14 @@ func (g *gcpEncrypt) Encrypt(plaintext []byte) ([]byte, error) {
 	return result.Ciphertext, nil
 }
 
-func (g *gcpEncrypt) Decrypt(ciphertext []byte) ([]byte, error) {
-	ctx := context.Background()
+func (g *gcpEncrypt) Decrypt(ctx context.Context, ciphertext []byte) ([]byte, error) {
 
-	if g.service == nil {
-		return nil, fmt.Errorf("GCP KMS client not initialized")
+	if err := g.validate(); err != nil {
+		return nil, err
+	}
+
+	if len(ciphertext) == 0 {
+		return nil, fmt.Errorf("ciphertext cannot be empty")
 	}
 
 	cryptoKeyName := fmt.Sprintf("projects/%s/locations/%s/keyRings/%s/cryptoKeys/%s",
@@ -134,4 +136,25 @@ func (g *gcpEncrypt) Decrypt(ciphertext []byte) ([]byte, error) {
 	}
 
 	return result.Plaintext, nil
+}
+
+func (g *gcpEncrypt) validate() error {
+
+	if g.service == nil {
+		return fmt.Errorf("GCP KMS client not initialized")
+	}
+
+	if len(g.location) == 0 {
+		return fmt.Errorf("location is not configured")
+	}
+
+	if len(g.keyRing) == 0 {
+		return fmt.Errorf("key ring is not configured")
+	}
+
+	if len(g.keyName) == 0 {
+		return fmt.Errorf("key name is not configured")
+	}
+
+	return nil
 }

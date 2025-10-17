@@ -57,16 +57,20 @@ func (a *awsEncrypt) Shutdown() error {
 	return nil
 }
 
-func (a *awsEncrypt) Decrypt(cipherText []byte) ([]byte, error) {
+func (a *awsEncrypt) Decrypt(ctx context.Context, cipherText []byte) ([]byte, error) {
 
-	if a.service == nil {
-		return nil, fmt.Errorf("AWS KMS service not initialized")
+	if err := a.validate(); err != nil {
+		return nil, err
+	}
+
+	if len(cipherText) == 0 {
+		return nil, fmt.Errorf("ciphertext cannot be empty")
 	}
 
 	// Implementation for getting a secret from AWS KMS
 	// use the AWS KMS client to retrive the secret
 
-	output, err := a.service.Decrypt(context.TODO(), &kms.DecryptInput{
+	output, err := a.service.Decrypt(ctx, &kms.DecryptInput{
 		CiphertextBlob: cipherText,
 		KeyId:          aws.String(a.kmsArn),
 	})
@@ -79,13 +83,17 @@ func (a *awsEncrypt) Decrypt(cipherText []byte) ([]byte, error) {
 	return output.Plaintext, nil
 }
 
-func (a *awsEncrypt) Encrypt(plainText []byte) ([]byte, error) {
+func (a *awsEncrypt) Encrypt(ctx context.Context, plainText []byte) ([]byte, error) {
 
-	if a.service == nil {
-		return nil, fmt.Errorf("AWS KMS service not initialized")
+	if err := a.validate(); err != nil {
+		return nil, err
 	}
 
-	output, err := a.service.Encrypt(context.TODO(), &kms.EncryptInput{
+	if len(plainText) == 0 {
+		return nil, fmt.Errorf("plaintext cannot be empty")
+	}
+
+	output, err := a.service.Encrypt(ctx, &kms.EncryptInput{
 		KeyId:     aws.String(a.kmsArn), // Replace with your KMS key alias or ID
 		Plaintext: plainText,
 	})
@@ -96,4 +104,17 @@ func (a *awsEncrypt) Encrypt(plainText []byte) ([]byte, error) {
 	}
 
 	return output.CiphertextBlob, nil
+}
+
+func (a *awsEncrypt) validate() error {
+
+	if a.service == nil {
+		return fmt.Errorf("AWS KMS service not initialized")
+	}
+
+	if len(a.kmsArn) == 0 {
+		return fmt.Errorf("KMS ARN is not configured")
+	}
+
+	return nil
 }

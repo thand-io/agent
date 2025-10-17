@@ -1,6 +1,7 @@
 package encrypt
 
 import (
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -67,7 +68,12 @@ func (l *localVault) Shutdown() error {
 	return nil
 }
 
-func (l *localVault) Encrypt(plainText []byte) ([]byte, error) {
+func (l *localVault) Encrypt(ctx context.Context, plainText []byte) ([]byte, error) {
+
+	if len(plainText) == 0 {
+		return nil, fmt.Errorf("plaintext cannot be empty")
+	}
+
 	// Generate random nonce
 	nonce := make([]byte, l.gcm.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
@@ -94,7 +100,12 @@ func (l *localVault) Encrypt(plainText []byte) ([]byte, error) {
 	return data, nil
 }
 
-func (l *localVault) Decrypt(cipherText []byte) ([]byte, error) {
+func (l *localVault) Decrypt(ctx context.Context, cipherText []byte) ([]byte, error) {
+
+	if len(cipherText) == 0 {
+		return nil, fmt.Errorf("ciphertext cannot be empty")
+	}
+
 	// Parse encrypted data
 	var encData encryptedData
 	if err := json.Unmarshal(cipherText, &encData); err != nil {

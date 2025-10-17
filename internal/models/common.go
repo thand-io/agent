@@ -3,6 +3,7 @@ package models
 import (
 	"bytes"
 	"compress/zlib"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -44,12 +45,13 @@ func (e EncodingWrapper) encode(modifiers ...EncryptionImpl) string {
 	_ = writer.Close()
 
 	finalData := compressed.Bytes()
+	ctx := context.Background()
 
 	if len(modifiers) > 0 {
 
 		for _, encryptor := range modifiers {
 			// Now encrypt data
-			encryptedData, err := encryptor.Encrypt(finalData)
+			encryptedData, err := encryptor.Encrypt(ctx, finalData)
 
 			if err != nil {
 				panic(err)
@@ -83,12 +85,13 @@ func (e EncodingWrapper) decode(input string, modifiers ...EncryptionImpl) (*Enc
 	}
 
 	decodedData := decoded
+	ctx := context.Background()
 
 	if len(modifiers) > 0 {
 
 		for _, decryptor := range modifiers {
 			// Now decrypt data
-			decryptedData, err := decryptor.Decrypt(decodedData)
+			decryptedData, err := decryptor.Decrypt(ctx, decodedData)
 
 			if err != nil {
 				return nil, err
