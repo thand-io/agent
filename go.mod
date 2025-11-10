@@ -34,7 +34,7 @@ require (
 	github.com/cloudevents/sdk-go/v2 v2.16.2
 	github.com/cloudflare/cloudflare-go v0.116.0
 	github.com/crewjam/saml v0.5.1
-	github.com/docker/docker v28.5.1+incompatible
+	github.com/docker/docker v28.5.2+incompatible
 	github.com/getkin/kin-openapi v0.133.0
 	github.com/gin-contrib/cors v1.7.6
 	github.com/gin-contrib/sessions v1.0.4
