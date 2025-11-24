@@ -7,6 +7,7 @@ toolchain go1.25.0
 replace github.com/serverlessworkflow/sdk-go/v3 => github.com/hughneale/serverless-sdk-go/v3 v3.0.0-20251022183658-27de3226307f
 
 require (
+	cloud.google.com/go/compute/metadata v0.9.0
 	cloud.google.com/go/kms v1.23.2
 	cloud.google.com/go/secretmanager v1.16.0
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.20.0
@@ -41,7 +42,7 @@ require (
 	github.com/gin-contrib/sessions v1.0.4
 	github.com/gin-gonic/gin v1.10.1
 	github.com/go-co-op/gocron v1.37.0
-	github.com/go-resty/resty/v2 v2.16.5
+	github.com/go-resty/resty/v2 v2.17.0
 	github.com/google/flatbuffers v25.9.23+incompatible
 	github.com/google/go-github/v57 v57.0.0
 	github.com/google/uuid v1.6.0
@@ -90,7 +91,6 @@ require (
 	cloud.google.com/go v0.123.0 // indirect
 	cloud.google.com/go/auth v0.17.0 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
-	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	cloud.google.com/go/iam v1.5.3 // indirect
 	cloud.google.com/go/longrunning v0.7.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.11.2 // indirect
