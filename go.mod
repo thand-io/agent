@@ -20,7 +20,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.1
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.1
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.14
-	github.com/aws/aws-sdk-go-v2/service/iam v1.52.1
+	github.com/aws/aws-sdk-go-v2/service/iam v1.52.2
 	github.com/aws/aws-sdk-go-v2/service/identitystore v1.34.3
 	github.com/aws/aws-sdk-go-v2/service/kms v1.49.0
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.40.1
