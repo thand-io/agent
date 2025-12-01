@@ -26,7 +26,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.40.1
 	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.55.0
 	github.com/aws/aws-sdk-go-v2/service/ssoadmin v1.36.9
-	github.com/aws/aws-sdk-go-v2/service/sts v1.41.1
+	github.com/aws/aws-sdk-go-v2/service/sts v1.41.2
 	github.com/aws/smithy-go v1.23.2
 	github.com/blevesearch/bleve/v2 v2.5.5
 	github.com/charmbracelet/bubbles v0.21.1-0.20250623103423-23b8fd6302d7
