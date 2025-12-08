@@ -394,8 +394,8 @@ github.com/hashicorp/go-slug v0.18.0 h1:PInWGLemcAh4RxMJQg7HJR0mDOoiTgajpfHfevgn
 github.com/hashicorp/go-slug v0.18.0/go.mod h1:Zxkkl8/LfXmhxZO3fLXQUCy3MVXAJK9pybY8WoDPgvs=
 github.com/hashicorp/go-sockaddr v1.0.7 h1:G+pTkSO01HpR5qCxg7lxfsFEZaG+C0VssTy/9dbT+Fw=
 github.com/hashicorp/go-sockaddr v1.0.7/go.mod h1:FZQbEYa1pxkQ7WLpyXJ6cbjpT8q0YgQaK/JakXqGyWw=
-github.com/hashicorp/go-tfe v1.96.0 h1:goTDOZIQ8rsf1vRQXvqvK8v/inD4SQe5T2vcEX1q2MU=
-github.com/hashicorp/go-tfe v1.96.0/go.mod h1:umRhpwmiMAa5Dhu8dzF0itJfBZHJPoTmS8BpNZs9+2Y=
+github.com/hashicorp/go-tfe v1.97.0 h1:UmIUUPuWAVPKxTa9N5qTUWd7FblKbgLq+HBio1X7/Qc=
+github.com/hashicorp/go-tfe v1.97.0/go.mod h1:nmGZMS3pdU7gPPmoe1xYhzU9O2BmasV36XggDOSCDW0=
 github.com/hashicorp/go-uuid v1.0.3 h1:2gKiV6YVmrJ1i2CKKa9obLvRieoRGviZFL26PcT/Co8=
 github.com/hashicorp/go-uuid v1.0.3/go.mod h1:6SBZvOh/SIDV7/2o3Jml5SYk/TvGqwFJ/bN7x4byOro=
 github.com/hashicorp/go-version v1.8.0 h1:KAkNb1HAiZd1ukkxDFGmokVZe1Xy9HG6NUp+bPle2i4=
@@ -432,8 +432,6 @@ github.com/kelseyhightower/envconfig v1.4.0 h1:Im6hONhd3pLkfDFsbRgu68RDNkGF1r3dv
 github.com/kelseyhightower/envconfig v1.4.0/go.mod h1:cccZRl6mQpaq41TPp5QxidR+Sa3axMbJDNb//FQX6Gg=
 github.com/keybase/go-keychain v0.0.1 h1:way+bWYa6lDppZoZcgMbYsvC7GxljxrskdNInRtuthU=
 github.com/keybase/go-keychain v0.0.1/go.mod h1:PdEILRW3i9D8JcdM+FmY6RwkHGnhHxXwkPPMeUgOK1k=
-github.com/kfcampbell/ghinstallation v0.0.6 h1:L4QkjRqNosJ6Kyetymq7FswY1wUxMQO+fyYXJAWl0WY=
-github.com/kfcampbell/ghinstallation v0.0.6/go.mod h1:UXWfCKaLwF+AiyCo8gxE5oA0VMQsAmCdRXgTyyRdUnA=
 github.com/kisielk/errcheck v1.5.0/go.mod h1:pFxgyoBC7bSaBwPgfKdkLd5X25qrDl4LWUI2bnpBCr8=
 github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+oQHNcck=
 github.com/klauspost/cpuid/v2 v2.3.0 h1:S4CRMLnYUhGeDFDqkGriYKdfoFlDnMtqTiI/sFzhA9Y=
@@ -525,8 +523,6 @@ github.com/oasdiff/yaml v0.0.0-20250309154309-f31be36b4037 h1:G7ERwszslrBzRxj//J
 github.com/oasdiff/yaml v0.0.0-20250309154309-f31be36b4037/go.mod h1:2bpvgLBZEtENV5scfDFEtB/5+1M4hkQhDQrccEJ/qGw=
 github.com/oasdiff/yaml3 v0.0.0-20250309153720-d2182401db90 h1:bQx3WeLcUWy+RletIKwUIt4x3t8n2SxavmoclizMb8c=
 github.com/oasdiff/yaml3 v0.0.0-20250309153720-d2182401db90/go.mod h1:y5+oSEHCPT/DGrS++Wc/479ERge0zTFxaF8PbGKcg2o=
-github.com/octokit/go-sdk v0.0.30 h1:8D0rbDef606O5qVNRcVMufAz032JkkxnKR8n3m54xew=
-github.com/octokit/go-sdk v0.0.30/go.mod h1:LkQ3v15yJvAp+8sbA3WOI+/2PwfTF2knBB8XhIX2xck=
 github.com/okta/okta-sdk-golang/v2 v2.20.0 h1:EDKM+uOPfihOMNwgHMdno+NAsIfyXkVnoFAYVPay0YU=
 github.com/okta/okta-sdk-golang/v2 v2.20.0/go.mod h1:FMy5hN5G8Rd/VoS0XrfyPPhIfOVo78ZK7lvwiQRS2+U=
 github.com/onsi/ginkgo/v2 v2.21.0 h1:7rg/4f3rB88pb5obDgNZrNHrQ4e6WpjonchcpuBRnZM=
