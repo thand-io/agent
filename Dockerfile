@@ -39,7 +39,7 @@ RUN GOEXPERIMENT=jsonv2 CGO_ENABLED=1 GOOS=linux go build -a \
     -o bin/thand .
 
 # Final stage
-FROM alpine:3.20
+FROM alpine:3.23
 
 LABEL org.opencontainers.image.source=https://github.com/thand-io/agent
 LABEL org.opencontainers.image.description="Thand Agent - Open-source agent for AI-ready privilege access management (PAM) and just-in-time access (JIT) to cloud infrastructure, SaaS applications and local systems."
