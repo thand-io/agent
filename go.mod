@@ -24,7 +24,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/identitystore v1.34.6
 	github.com/aws/aws-sdk-go-v2/service/kms v1.49.0
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.40.1
-	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.55.0
+	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.56.0
 	github.com/aws/aws-sdk-go-v2/service/ssoadmin v1.36.9
 	github.com/aws/aws-sdk-go-v2/service/sts v1.41.3
 	github.com/aws/smithy-go v1.24.0
@@ -53,7 +53,6 @@ require (
 	github.com/itchyny/gojq v0.12.17
 	github.com/kardianos/service v1.2.4
 	github.com/microsoftgraph/msgraph-sdk-go v1.90.0
-	github.com/octokit/go-sdk v0.0.30
 	github.com/okta/okta-sdk-golang/v2 v2.20.0
 	github.com/senseyeio/duration v0.0.0-20180430131211-7c2a214ada46
 	github.com/serverlessworkflow/sdk-go/v3 v3.1.1
@@ -109,7 +108,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.15 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.15 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.4 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.14 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.15 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.15 // indirect
 	github.com/aws/aws-sdk-go-v2/service/signin v1.0.3 // indirect
@@ -227,7 +226,6 @@ require (
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kelseyhightower/envconfig v1.4.0 // indirect
-	github.com/kfcampbell/ghinstallation v0.0.6 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
