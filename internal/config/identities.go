@@ -278,14 +278,25 @@ func (c *Config) GetIdentitiesWithFilter(user *models.User, identityType Identit
 			identities = append(identities, identity)
 		}
 
-		// If no results, no filter, and the identity type includes users,
-		// return the current user as the only result
-		if len(identities) == 0 && len(filter) == 0 && user != nil && (identityType == IdentityTypeUser || identityType == IdentityTypeAll) {
-			identities = append(identities, models.Identity{
-				ID:    user.Email,
-				Label: user.Name,
-				User:  user,
-			})
+		// Always include the current user in the identities list if not already present
+		// This ensures users can always request access for themselves
+		if user != nil && (identityType == IdentityTypeUser || identityType == IdentityTypeAll) {
+			userAlreadyIncluded := false
+			for _, identity := range identities {
+				if identity.ID == user.Email {
+					userAlreadyIncluded = true
+					break
+				}
+			}
+			if !userAlreadyIncluded {
+				// Add current user at the beginning of the list
+				currentUserIdentity := models.Identity{
+					ID:    user.Email,
+					Label: user.Name,
+					User:  user,
+				}
+				identities = append([]models.Identity{currentUserIdentity}, identities...)
+			}
 		}
 	}
 
