@@ -34,6 +34,16 @@ func (a *approvalsNotifier) createApprovalEmailBody() (string, string) {
 
 	if len(elevationReq.Providers) > 0 {
 		plainText.WriteString(fmt.Sprintf("Providers: %s\n", strings.Join(elevationReq.Providers, ", ")))
+
+		// Add provider-specific details (e.g., GCP project ID)
+		for _, providerName := range elevationReq.Providers {
+			provider, err := a.config.GetProviderByName(providerName)
+			if err == nil && provider != nil && provider.Config != nil {
+				if projectID, found := provider.Config.GetString("project_id"); found {
+					plainText.WriteString(fmt.Sprintf("GCP Project: %s\n", projectID))
+				}
+			}
+		}
 	}
 
 	if len(elevationReq.Duration) > 0 {

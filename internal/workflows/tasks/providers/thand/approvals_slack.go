@@ -86,6 +86,16 @@ func (a *approvalsNotifier) addRequestDetailsSection(blocks *[]slack.Block, elev
 
 	if len(elevateRequest.Providers) > 0 {
 		requestDetailsText.WriteString(fmt.Sprintf("- *Providers:* %s\n", strings.Join(elevateRequest.Providers, ", ")))
+
+		// Add provider-specific details (e.g., GCP project ID)
+		for _, providerName := range elevateRequest.Providers {
+			provider, err := a.config.GetProviderByName(providerName)
+			if err == nil && provider != nil && provider.Config != nil {
+				if projectID, found := provider.Config.GetString("project_id"); found {
+					requestDetailsText.WriteString(fmt.Sprintf("- *GCP Project:* %s\n", projectID))
+				}
+			}
+		}
 	}
 
 	if len(elevateRequest.Reason) > 0 {
