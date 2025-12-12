@@ -87,12 +87,21 @@ func (a *approvalsNotifier) addRequestDetailsSection(blocks *[]slack.Block, elev
 	if len(elevateRequest.Providers) > 0 {
 		requestDetailsText.WriteString(fmt.Sprintf("- *Providers:* %s\n", strings.Join(elevateRequest.Providers, ", ")))
 
-		// Add provider-specific details (e.g., GCP project ID)
+		// Add provider-specific resource details (project, account, subscription, etc.)
 		for _, providerName := range elevateRequest.Providers {
 			provider, err := a.config.GetProviderByName(providerName)
 			if err == nil && provider != nil && provider.Config != nil {
+				// GCP project
 				if projectID, found := provider.Config.GetString("project_id"); found {
 					requestDetailsText.WriteString(fmt.Sprintf("- *Provider %s Project ID:* %s\n", providerName, projectID))
+				}
+				// AWS account
+				if accountID, found := provider.Config.GetString("account_id"); found {
+					requestDetailsText.WriteString(fmt.Sprintf("- *AWS Account:* %s\n", accountID))
+				}
+				// Azure subscription
+				if subscriptionID, found := provider.Config.GetString("subscription_id"); found {
+					requestDetailsText.WriteString(fmt.Sprintf("- *Azure Subscription:* %s\n", subscriptionID))
 				}
 			}
 		}

@@ -35,12 +35,21 @@ func (a *approvalsNotifier) createApprovalEmailBody() (string, string) {
 	if len(elevationReq.Providers) > 0 {
 		plainText.WriteString(fmt.Sprintf("Providers: %s\n", strings.Join(elevationReq.Providers, ", ")))
 
-		// Add provider-specific details (e.g., GCP project ID)
+		// Add provider-specific resource details (project, account, subscription, etc.)
 		for _, providerName := range elevationReq.Providers {
 			provider, err := a.config.GetProviderByName(providerName)
 			if err == nil && provider != nil && provider.Config != nil {
+				// GCP project
 				if projectID, found := provider.Config.GetString("project_id"); found {
 					plainText.WriteString(fmt.Sprintf("Project ID: %s\n", projectID))
+				}
+				// AWS account
+				if accountID, found := provider.Config.GetString("account_id"); found {
+					plainText.WriteString(fmt.Sprintf("AWS Account: %s\n", accountID))
+				}
+				// Azure subscription
+				if subscriptionID, found := provider.Config.GetString("subscription_id"); found {
+					plainText.WriteString(fmt.Sprintf("Azure Subscription: %s\n", subscriptionID))
 				}
 			}
 		}
