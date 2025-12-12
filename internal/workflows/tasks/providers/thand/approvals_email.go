@@ -40,7 +40,7 @@ func (a *approvalsNotifier) createApprovalEmailBody() (string, string) {
 			provider, err := a.config.GetProviderByName(providerName)
 			if err == nil && provider != nil && provider.Config != nil {
 				if projectID, found := provider.Config.GetString("project_id"); found {
-					plainText.WriteString(fmt.Sprintf("GCP Project: %s\n", projectID))
+					plainText.WriteString(fmt.Sprintf("Project ID: %s\n", projectID))
 				}
 			}
 		}
