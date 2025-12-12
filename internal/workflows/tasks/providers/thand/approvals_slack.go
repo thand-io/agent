@@ -92,7 +92,7 @@ func (a *approvalsNotifier) addRequestDetailsSection(blocks *[]slack.Block, elev
 			provider, err := a.config.GetProviderByName(providerName)
 			if err == nil && provider != nil && provider.Config != nil {
 				if projectID, found := provider.Config.GetString("project_id"); found {
-					requestDetailsText.WriteString(fmt.Sprintf("- *GCP Project:* %s\n", projectID))
+					requestDetailsText.WriteString(fmt.Sprintf("- *Provider %s Project ID:* %s\n", providerName, projectID))
 				}
 			}
 		}
