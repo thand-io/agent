@@ -75,6 +75,11 @@ func TestAWSElevationApprovalsWorkflow(t *testing.T) {
 
 	provider.GetClient().AddIdentities(
 		models.Identity{
+			ID:    testUser.Email,
+			Label: testUser.Name,
+			User:  testUser,
+		},
+		models.Identity{
 			ID:    "approver1@thand.io",
 			Label: "Approver 1",
 			User: &models.User{
