@@ -1,0 +1,30 @@
+version: "1.0"
+providers:
+  # AWS provider configured for LocalStack
+  aws-localstack:
+    name: AWS LocalStack Test
+    description: AWS provider pointing to LocalStack for testing
+    provider: aws
+    enabled: true
+    config:
+      region: us-east-1
+      endpoint: "${LOCALSTACK_ENDPOINT}"
+      access_key_id: test
+      secret_access_key: test
+      account_id: "000000000000"
+      imds_disable: true
+
+  # Email provider configured for MailHog
+  email-test:
+    name: MailHog Test Email
+    description: Email provider pointing to MailHog for testing
+    provider: email
+    enabled: true
+    config:
+      platform: smtp
+      host: "${MAILHOG_HOST}"
+      port: "${MAILHOG_PORT}"
+      from: test@thand.io
+      # MailHog doesn't require authentication
+      user: ""
+      pass: ""
