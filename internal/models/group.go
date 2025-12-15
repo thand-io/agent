@@ -1,5 +1,9 @@
 package models
 
+import (
+	"strings"
+)
+
 // Group represents a collection of users that share common access permissions.
 // Groups are used to manage access control at scale by assigning permissions to
 // groups rather than individual users.
@@ -21,6 +25,22 @@ func (g *Group) String() string {
 		return g.Email
 	}
 	return ""
+}
+
+func (g *Group) Equals(other *Group) bool {
+	if other == nil {
+		return false
+	}
+	if len(g.ID) > 0 && len(other.ID) > 0 {
+		return strings.EqualFold(g.ID, other.ID)
+	}
+	if len(g.Name) > 0 && len(other.Name) > 0 {
+		return strings.EqualFold(g.Name, other.Name)
+	}
+	if len(g.Email) > 0 && len(other.Email) > 0 {
+		return strings.EqualFold(g.Email, other.Email)
+	}
+	return false
 }
 
 func (g *Group) GetID() string {

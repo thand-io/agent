@@ -46,6 +46,22 @@ func (i *Identity) GetEmail() string {
 	return ""
 }
 
+func (i *Identity) Equals(other *Identity) bool {
+
+	if other == nil {
+		return false
+	}
+
+	if i.IsUser() && other.IsUser() {
+		return i.User.Equals(other.User)
+	} else if i.IsGroup() && other.IsGroup() {
+		return i.Group.Equals(other.Group)
+	}
+
+	return false
+
+}
+
 func (i *Identity) GetMappableIdentifier() string {
 	return strings.ToLower(strings.TrimSpace(i.mapableIdentifier()))
 }

@@ -44,6 +44,22 @@ func (u *User) String() string {
 	return ""
 }
 
+func (u *User) Equals(other *User) bool {
+	if other == nil {
+		return false
+	}
+	if len(u.ID) > 0 && len(other.ID) > 0 {
+		return strings.EqualFold(u.ID, other.ID)
+	}
+	if len(u.Email) > 0 && len(other.Email) > 0 {
+		return strings.EqualFold(u.Email, other.Email)
+	}
+	if len(u.Username) > 0 && len(other.Username) > 0 {
+		return strings.EqualFold(u.Username, other.Username)
+	}
+	return false
+}
+
 func (u *User) GetName() string {
 	if len(u.Name) > 0 {
 		return u.Name

@@ -26,6 +26,7 @@ func (p *awsProviderMock) Initialize(identifier string, provider models.Provider
 		identifier,
 		provider,
 		models.ProviderCapabilityRBAC,
+		models.ProviderCapabilityIdentities,
 	)
 
 	// Load AWS Permissions and Roles from shared singleton
@@ -42,4 +43,29 @@ func (p *awsProviderMock) Synchronize(
 	req *models.SynchronizeRequest,
 ) error {
 	return PreSynchronizeActivities(ctx, temporalService, p)
+}
+
+// This inherits the awsProvider methods but overrides the synchronization methods to return empty results
+func (p *awsProviderMock) SynchronizeGroups(ctx context.Context, req *models.SynchronizeGroupsRequest) (*models.SynchronizeGroupsResponse, error) {
+	return &models.SynchronizeGroupsResponse{}, nil
+}
+
+func (p *awsProviderMock) SynchronizeUsers(ctx context.Context, req *models.SynchronizeUsersRequest) (*models.SynchronizeUsersResponse, error) {
+	return &models.SynchronizeUsersResponse{}, nil
+}
+
+func (p *awsProviderMock) SynchronizeIdentities(ctx context.Context, req *models.SynchronizeIdentitiesRequest) (*models.SynchronizeIdentitiesResponse, error) {
+	return &models.SynchronizeIdentitiesResponse{}, nil
+}
+
+func (p *awsProviderMock) SynchronizeRoles(ctx context.Context, req *models.SynchronizeRolesRequest) (*models.SynchronizeRolesResponse, error) {
+	return &models.SynchronizeRolesResponse{}, nil
+}
+
+func (p *awsProviderMock) SynchronizePermissions(ctx context.Context, req *models.SynchronizePermissionsRequest) (*models.SynchronizePermissionsResponse, error) {
+	return &models.SynchronizePermissionsResponse{}, nil
+}
+
+func (p *awsProviderMock) SynchronizeResources(ctx context.Context, req *models.SynchronizeResourcesRequest) (*models.SynchronizeResourcesResponse, error) {
+	return &models.SynchronizeResourcesResponse{}, nil
 }

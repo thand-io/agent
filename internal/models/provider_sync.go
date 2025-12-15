@@ -129,61 +129,75 @@ func Synchronize(
 	var errs []error
 
 	if provider.HasCapability(ProviderCapabilityIdentities) {
-		// Synchronize Identities
-		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeIdentities, &SynchronizeIdentitiesRequest{},
-			func(ctx context.Context, req *SynchronizeIdentitiesRequest) (*SynchronizeIdentitiesResponse, error) {
-				return provider.SynchronizeIdentities(ctx, req)
-			},
-			func(resp *SynchronizeIdentitiesResponse) {
-				provider.AddIdentities(resp.Identities...)
-			})
 
-		// Synchronize Users
-		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeUsers, &SynchronizeUsersRequest{},
-			func(ctx context.Context, req *SynchronizeUsersRequest) (*SynchronizeUsersResponse, error) {
-				return provider.SynchronizeUsers(ctx, req)
-			},
-			func(resp *SynchronizeUsersResponse) {
-				provider.AddIdentities(resp.Identities...)
-			})
+		if provider.CanSynchronizeIdentities() {
+			// Synchronize Identities
+			executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeIdentities, &SynchronizeIdentitiesRequest{},
+				func(ctx context.Context, req *SynchronizeIdentitiesRequest) (*SynchronizeIdentitiesResponse, error) {
+					return provider.SynchronizeIdentities(ctx, req)
+				},
+				func(resp *SynchronizeIdentitiesResponse) {
+					provider.AddIdentities(resp.Identities...)
+				})
+		}
 
-		// Synchronize Groups
-		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeGroups, &SynchronizeGroupsRequest{},
-			func(ctx context.Context, req *SynchronizeGroupsRequest) (*SynchronizeGroupsResponse, error) {
-				return provider.SynchronizeGroups(ctx, req)
-			},
-			func(resp *SynchronizeGroupsResponse) {
-				provider.AddIdentities(resp.Identities...)
-			})
+		if provider.CanSynchronizeUsers() {
+			// Synchronize Users
+			executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeUsers, &SynchronizeUsersRequest{},
+				func(ctx context.Context, req *SynchronizeUsersRequest) (*SynchronizeUsersResponse, error) {
+					return provider.SynchronizeUsers(ctx, req)
+				},
+				func(resp *SynchronizeUsersResponse) {
+					provider.AddIdentities(resp.Identities...)
+				})
+		}
+
+		if provider.CanSynchronizeGroups() {
+			// Synchronize Groups
+			executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeGroups, &SynchronizeGroupsRequest{},
+				func(ctx context.Context, req *SynchronizeGroupsRequest) (*SynchronizeGroupsResponse, error) {
+					return provider.SynchronizeGroups(ctx, req)
+				},
+				func(resp *SynchronizeGroupsResponse) {
+					provider.AddIdentities(resp.Identities...)
+				})
+		}
 	}
 
 	if provider.HasCapability(ProviderCapabilityRBAC) {
-		// Synchronize Resources
-		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeResources, &SynchronizeResourcesRequest{},
-			func(ctx context.Context, req *SynchronizeResourcesRequest) (*SynchronizeResourcesResponse, error) {
-				return provider.SynchronizeResources(ctx, req)
-			},
-			func(resp *SynchronizeResourcesResponse) {
-				provider.AddResources(resp.Resources...)
-			})
 
-		// Synchronize Roles
-		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeRoles, &SynchronizeRolesRequest{},
-			func(ctx context.Context, req *SynchronizeRolesRequest) (*SynchronizeRolesResponse, error) {
-				return provider.SynchronizeRoles(ctx, req)
-			},
-			func(resp *SynchronizeRolesResponse) {
-				provider.AddRoles(resp.Roles...)
-			})
+		if provider.CanSynchronizeResources() {
+			// Synchronize Resources
+			executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeResources, &SynchronizeResourcesRequest{},
+				func(ctx context.Context, req *SynchronizeResourcesRequest) (*SynchronizeResourcesResponse, error) {
+					return provider.SynchronizeResources(ctx, req)
+				},
+				func(resp *SynchronizeResourcesResponse) {
+					provider.AddResources(resp.Resources...)
+				})
+		}
 
-		// Synchronize Permissions
-		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizePermissions, &SynchronizePermissionsRequest{},
-			func(ctx context.Context, req *SynchronizePermissionsRequest) (*SynchronizePermissionsResponse, error) {
-				return provider.SynchronizePermissions(ctx, req)
-			},
-			func(resp *SynchronizePermissionsResponse) {
-				provider.AddPermissions(resp.Permissions...)
-			})
+		if provider.CanSynchronizeRoles() {
+			// Synchronize Roles
+			executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeRoles, &SynchronizeRolesRequest{},
+				func(ctx context.Context, req *SynchronizeRolesRequest) (*SynchronizeRolesResponse, error) {
+					return provider.SynchronizeRoles(ctx, req)
+				},
+				func(resp *SynchronizeRolesResponse) {
+					provider.AddRoles(resp.Roles...)
+				})
+		}
+
+		if provider.CanSynchronizePermissions() {
+			// Synchronize Permissions
+			executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizePermissions, &SynchronizePermissionsRequest{},
+				func(ctx context.Context, req *SynchronizePermissionsRequest) (*SynchronizePermissionsResponse, error) {
+					return provider.SynchronizePermissions(ctx, req)
+				},
+				func(resp *SynchronizePermissionsResponse) {
+					provider.AddPermissions(resp.Permissions...)
+				})
+		}
 	}
 
 	logrus.WithFields(logrus.Fields{

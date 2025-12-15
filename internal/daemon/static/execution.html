@@ -908,7 +908,7 @@
                     // Get identity from execution
                     if (this.execution?.identities && this.execution.identities.length > 0) {
                         this.execution.identities.forEach(identity => {
-                            params.append('identity', identity);
+                            params.append('identity', identity.email || identity.id);
                         });
                     }
                     
