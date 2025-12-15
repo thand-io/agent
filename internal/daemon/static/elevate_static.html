@@ -180,7 +180,8 @@
 
         // Constants
         const API_BASE_PATH = '{{.Config.ApiBasePath}}';
-        const CURRENT_USER_EMAIL = '{{if .User}}{{.User.Email}}{{end}}';
+        const CURRENT_USER_IDENTIFIER = '{{if .User}}{{.User.GetIdentity}}{{end}}';
+        const CURRENT_USER_LABEL = '{{if .User}}{{.User.String}}{{end}}';
 
         // Choices.js instance (kept outside Alpine to avoid reactivity issues)
         let identityChoicesInstance = null;
@@ -206,6 +207,12 @@
                 duplicateItemsAllowed: false,
             });
 
+            // Pre-select identities based on URL params or current user
+            preselectIdentities(prefilledIdentities);
+
+            // Initial fetch of identities to populate the selector
+            fetchIdentities();
+
             // Set up search event listener using Choices.js event
             const identityElement = document.getElementById('elevate-identities');
             let searchTimeout;
@@ -215,13 +222,10 @@
                     clearTimeout(searchTimeout);
                     const query = e.detail.value.trim();
                     searchTimeout = setTimeout(() => {
-                        fetchIdentities([], query);
+                        fetchIdentities(query);
                     }, 300);
                 });
             }
-
-            // Fetch and populate identities
-            fetchIdentities(prefilledIdentities);
 
             // Set up form validation
             setupFormValidation();
@@ -232,7 +236,7 @@
          * @param {string[]} prefilledIdentities - Identity IDs to pre-select from URL params
          * @param {string} query - Search query
          */
-        function fetchIdentities(prefilledIdentities, query = '') {
+        function fetchIdentities(query = '') {
             const url = query 
                 ? `${API_BASE_PATH}/identities?q=${encodeURIComponent(query)}`
                 : `${API_BASE_PATH}/identities`;
@@ -257,9 +261,6 @@
                     // replaceItems: false (default/6th arg) - preserves selected items
                     identityChoicesInstance.setChoices(newChoices, 'value', 'label', true);
                     
-                    if (!query) {
-                        preselectIdentities(prefilledIdentities);
-                    }
                 })
                 .catch(error => {
                     console.error('Error loading identities:', error);
@@ -315,12 +316,22 @@
         function preselectIdentities(prefilledIdentities) {
             if (prefilledIdentities.length > 0) {
                 // Pre-select identities from URL params
-                prefilledIdentities.forEach(identity => {
-                    identityChoicesInstance.setChoiceByValue(identity);
-                });
-            } else if (CURRENT_USER_EMAIL) {
+                identityChoicesInstance.setChoices(
+                    prefilledIdentities.map(identity => {
+                        return {
+                            value: identity,
+                            label: identity,
+                            selected: true,
+                        };
+                    })
+                , 'value', 'label', false);
+            } else if (CURRENT_USER_IDENTIFIER) {
                 // Fall back to pre-selecting current user
-                identityChoicesInstance.setChoiceByValue(CURRENT_USER_EMAIL);
+                identityChoicesInstance.setChoices([{
+                    value: CURRENT_USER_IDENTIFIER,
+                    label: CURRENT_USER_LABEL,
+                    selected: true,
+                }], 'value', 'label', false);
             }
         }
 

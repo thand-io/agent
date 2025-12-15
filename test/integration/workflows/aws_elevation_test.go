@@ -288,6 +288,19 @@ func TestAWSElevationWithTemporal(t *testing.T) {
 		Source:   "iam", // This tells the AWS provider to use traditional IAM
 	}
 
+	// Register the test user identity in the provider
+	// This is necessary because GetIdentity checks the provider for existence
+	provider, err := cfg.GetProviderByName("aws-localstack")
+	require.NoError(t, err, "Failed to get aws-localstack provider")
+
+	provider.GetClient().AddIdentities(
+		models.Identity{
+			ID:    testUser.Email,
+			Label: testUser.Name,
+			User:  testUser,
+		},
+	)
+
 	// Get the workflow and role
 	workflow := testCase.Workflows["aws_self_approval"]
 	role := testCase.Roles["aws_test_admin"]
