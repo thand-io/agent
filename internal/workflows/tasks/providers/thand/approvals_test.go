@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
+	"github.com/thand-io/agent/internal/providers/aws"
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
 )
@@ -765,29 +766,30 @@ func TestExecuteApprovalsTask_ProcessEvent(t *testing.T) {
 	requesterID := "requester@example.com"
 	approverID := "approver@example.com"
 
-	mockProvider := &mockProviderImpl{
-		identities: map[string]*models.Identity{
-			requesterID: {
-				ID: requesterID,
-				User: &models.User{
-					ID:    requesterID,
-					Email: requesterID,
-				},
-			},
-			approverID: {
-				ID: approverID,
-				User: &models.User{
-					ID:    approverID,
-					Email: approverID,
-				},
-			},
-		},
-	}
-
+	mockProvider := aws.NewMockAwsProvider()
 	provider := models.Provider{
 		Name:     "mock",
-		Provider: "mock",
+		Provider: "aws",
 	}
+	mockProvider.Initialize("mock", provider)
+
+	mockProvider.SetIdentities([]models.Identity{
+		{
+			ID: requesterID,
+			User: &models.User{
+				ID:    requesterID,
+				Email: requesterID,
+			},
+		},
+		{
+			ID: approverID,
+			User: &models.User{
+				ID:    approverID,
+				Email: approverID,
+			},
+		},
+	})
+
 	provider.SetClient(mockProvider)
 
 	cfg := &config.Config{
@@ -861,22 +863,23 @@ func TestExecuteApprovalsTask_SelfApprovalDenied(t *testing.T) {
 	// Setup identities where requester tries to approve
 	requesterID := "requester@example.com"
 
-	mockProvider := &mockProviderImpl{
-		identities: map[string]*models.Identity{
-			requesterID: {
-				ID: requesterID,
-				User: &models.User{
-					ID:    requesterID,
-					Email: requesterID,
-				},
-			},
-		},
-	}
-
+	mockProvider := aws.NewMockAwsProvider()
 	provider := models.Provider{
 		Name:     "mock",
-		Provider: "mock",
+		Provider: "aws",
 	}
+	mockProvider.Initialize("mock", provider)
+
+	mockProvider.SetIdentities([]models.Identity{
+		{
+			ID: requesterID,
+			User: &models.User{
+				ID:    requesterID,
+				Email: requesterID,
+			},
+		},
+	})
+
 	provider.SetClient(mockProvider)
 
 	cfg := &config.Config{
