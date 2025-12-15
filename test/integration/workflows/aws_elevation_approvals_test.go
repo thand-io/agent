@@ -68,6 +68,32 @@ func TestAWSElevationApprovalsWorkflow(t *testing.T) {
 		Source:   "iam", // This tells the AWS provider to use traditional IAM
 	}
 
+	// Register approver identities in the provider
+	// This is necessary because GetIdentity checks the provider for existence
+	provider, err := cfg.GetProviderByName("aws-localstack")
+	require.NoError(t, err, "Failed to get aws-localstack provider")
+
+	provider.GetClient().AddIdentities(
+		models.Identity{
+			ID:    "approver1@thand.io",
+			Label: "Approver 1",
+			User: &models.User{
+				Email:    "approver1@thand.io",
+				Username: "approver1",
+				Name:     "Approver 1",
+			},
+		},
+		models.Identity{
+			ID:    "approver2@thand.io",
+			Label: "Approver 2",
+			User: &models.User{
+				Email:    "approver2@thand.io",
+				Username: "approver2",
+				Name:     "Approver 2",
+			},
+		},
+	)
+
 	// Get the workflow and role
 	workflow := testCase.Workflows["aws_multi_approval"]
 	role := testCase.Roles["aws_test_admin"]

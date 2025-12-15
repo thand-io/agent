@@ -151,6 +151,17 @@ func TestUser_Equals(t *testing.T) {
 			expected: false,
 		},
 		{
+			name: "ID and Email vs Email only",
+			user1: User{
+				ID:    "123",
+				Email: "john@example.com",
+			},
+			user2: &User{
+				Email: "john@example.com",
+			},
+			expected: true,
+		},
+		{
 			name:     "Nil Other",
 			user1:    User{},
 			user2:    nil,

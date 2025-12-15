@@ -136,6 +136,17 @@ func TestGroup_Equals(t *testing.T) {
 			expected: false,
 		},
 		{
+			name: "ID and Email vs Email only",
+			group1: Group{
+				ID:    "123",
+				Email: "admins@example.com",
+			},
+			group2: &Group{
+				Email: "admins@example.com",
+			},
+			expected: true,
+		},
+		{
 			name:     "Nil Other",
 			group1:   Group{},
 			group2:   nil,

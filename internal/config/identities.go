@@ -59,21 +59,7 @@ func (c *Config) GetIdentity(identity string) (*models.Identity, error) {
 	providerMap := c.GetProvidersByCapability(models.ProviderCapabilityIdentities)
 
 	if len(providerMap) == 0 {
-		// No identity providers, create a basic identity from the string
-		// Extract username from email if possible
-		username := ""
-		if atIdx := strings.Index(identity, "@"); atIdx > 0 {
-			username = identity[:atIdx]
-		}
-		return &models.Identity{
-			ID:    identity,
-			Label: identity,
-			User: &models.User{
-				Email:    identity,
-				Username: username,
-				Source:   "", // Empty source means use traditional IAM, not Identity Center
-			},
-		}, nil
+		return nil, fmt.Errorf("identity not found: %s (no identity providers configured)", identity)
 	}
 
 	// Query all providers in parallel and return the first match
@@ -121,21 +107,7 @@ func (c *Config) GetIdentity(identity string) (*models.Identity, error) {
 	}
 
 	// All goroutines finished without finding a result
-	// Return a basic identity
-	// Extract username from email if possible
-	username := ""
-	if atIdx := strings.Index(identityKey, "@"); atIdx > 0 {
-		username = identityKey[:atIdx]
-	}
-	return &models.Identity{
-		ID:    identity,
-		Label: identity,
-		User: &models.User{
-			Email:    identity,
-			Username: username,
-			Source:   "", // Empty source means use traditional IAM, not Identity Center
-		},
-	}, nil
+	return nil, fmt.Errorf("identity not found: %s", identityKey)
 }
 
 // GetIdentitiesWithFilter retrieves identities from all identity providers that support identity listing.

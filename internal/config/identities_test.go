@@ -110,15 +110,14 @@ func TestGetIdentity(t *testing.T) {
 			errorContains: "provider 'nonexistent' not found",
 		},
 		{
-			name:          "get identity without providers - returns basic identity",
+			name:          "get identity without providers - returns error",
 			identity:      "john@example.com",
 			providers:     map[string]*MockIdentityProvider{},
-			expectedID:    "john@example.com",
-			expectedEmail: "john@example.com",
-			expectError:   false,
+			expectError:   true,
+			errorContains: "identity not found",
 		},
 		{
-			name:     "get identity not found in provider - returns basic identity",
+			name:     "get identity not found in provider - returns error",
 			identity: "unknown@example.com",
 			providers: map[string]*MockIdentityProvider{
 				"gsuite": NewMockIdentityProvider("gsuite", []models.Identity{
@@ -132,9 +131,8 @@ func TestGetIdentity(t *testing.T) {
 					},
 				}),
 			},
-			expectedID:    "unknown@example.com",
-			expectedEmail: "unknown@example.com",
-			expectError:   false,
+			expectError:   true,
+			errorContains: "identity not found",
 		},
 	}
 
@@ -738,14 +736,10 @@ func TestGetIdentity_EmailParsing(t *testing.T) {
 		},
 	}
 
-	// No providers configured - should return basic identity with parsed username
-	result, err := config.GetIdentity("john.doe@example.com")
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.Equal(t, "john.doe@example.com", result.ID)
-	assert.NotNil(t, result.User)
-	assert.Equal(t, "john.doe@example.com", result.User.Email)
-	assert.Equal(t, "john.doe", result.User.Username)
+	// No providers configured - should return error
+	_, err := config.GetIdentity("john.doe@example.com")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "identity not found")
 }
 
 // TestGetIdentity_NonEmail tests identity lookup for non-email identities
@@ -756,14 +750,10 @@ func TestGetIdentity_NonEmail(t *testing.T) {
 		},
 	}
 
-	// No providers configured - should return basic identity
-	result, err := config.GetIdentity("johndoe")
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.Equal(t, "johndoe", result.ID)
-	assert.NotNil(t, result.User)
-	assert.Equal(t, "johndoe", result.User.Email)
-	assert.Equal(t, "", result.User.Username) // No @ in identity, so username is empty
+	// No providers configured - should return error
+	_, err := config.GetIdentity("johndoe")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "identity not found")
 }
 
 // TestGetIdentity_ProviderPrefixFormat tests various provider prefix formats

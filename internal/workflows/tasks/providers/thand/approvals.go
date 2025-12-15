@@ -175,19 +175,19 @@ func (t *thandTask) executeApprovalsTask(
 		approvalEvent.DataAs(&approvalData)
 		extensions := approvalEvent.Extensions()
 
-		approverIdentityId, userExists := extensions[models.VarsContextUser].(string)
+		approverIdentityID, userExists := extensions[models.VarsContextUser].(string)
 
 		if !userExists {
 			logrus.Warn("Approval event missing user extension")
 			return &defaultFlowState, nil
 		}
 
-		approverIdentity, err := t.config.GetIdentity(approverIdentityId)
+		approverIdentity, err := t.config.GetIdentity(approverIdentityID)
 
 		if err != nil {
 			logrus.WithError(err).WithFields(logrus.Fields{
 				"taskName":        taskName,
-				"approverIdentity": approverIdentityId,
+				"approverIdentity": approverIdentityID,
 			}).Warn("Failed to resolve approver identity from event")
 			return &defaultFlowState, nil
 		}
@@ -197,7 +197,7 @@ func (t *thandTask) executeApprovalsTask(
 		if approverUser == nil {
 			logrus.WithFields(logrus.Fields{
 				"taskName":        taskName,
-				"approverUser": approverUser,
+				"approverUser": approverUser.String(),
 			}).Warn("Approver identity is not a user; cannot process approval")
 			return &defaultFlowState, nil
 		}
@@ -207,7 +207,7 @@ func (t *thandTask) executeApprovalsTask(
 
 			logrus.WithFields(logrus.Fields{
 				"taskName":     taskName,
-				"approverUser": approverUser,
+				"approverUser": approverUser.String(),
 			}).Info("Self-approval is disabled; checking if approver is requester or identity being elevated")
 
 			// Get requester identity
@@ -216,7 +216,7 @@ func (t *thandTask) executeApprovalsTask(
 			if requestingUser == nil {
 				logrus.WithFields(logrus.Fields{
 					"taskName":     taskName,
-					"approverUser": approverUser,
+					"approverUser": approverUser.String(),
 				}).Warn("Elevation request has no requesting user; cannot check for self-approval")
 				return &defaultFlowState, nil
 			}
@@ -225,8 +225,8 @@ func (t *thandTask) executeApprovalsTask(
 			if approverUser.Equals(requestingUser) {
 				logrus.WithFields(logrus.Fields{
 					"taskName":          taskName,
-					"approverUser":  approverUser,
-					"requesterUser": requestingUser,
+					"approverUser":  approverUser.String(),
+					"requesterUser": requestingUser.String(),
 				}).Warn("Self-approval is disabled; ignoring approval from requester")
 
 				// Return to the default flow state to await more approvals
@@ -234,9 +234,9 @@ func (t *thandTask) executeApprovalsTask(
 			}
 
 			// Loop through the identities being elevated
-			for _, requestedIdentityId := range elevationRequest.Identities {
+			for _, requestedIdentityID := range elevationRequest.Identities {
 
-				requestedIdentity, foundRequestedIdentity := availableIdentities[requestedIdentityId]
+				requestedIdentity, foundRequestedIdentity := availableIdentities[requestedIdentityID]
 
 				if !foundRequestedIdentity {
 					continue
@@ -252,8 +252,8 @@ func (t *thandTask) executeApprovalsTask(
 				if approverUser.Equals(requestedUser) {
 					logrus.WithFields(logrus.Fields{
 						"taskName":     taskName,
-						"requestedUser": requestedUser,
-						"approverUser": approverUser,
+						"requestedUser": requestedUser.String(),
+						"approverUser": approverUser.String(),
 					}).Warn("Self-approval is disabled; ignoring approval from identity being elevated")
 
 					// Return to the default flow state to await more approvals
@@ -271,12 +271,12 @@ func (t *thandTask) executeApprovalsTask(
 			if !ok {
 				logrus.WithFields(logrus.Fields{
 					"taskName":     taskName,
-					"approverUser": approverUser,
+					"approverUser": approverUser.String(),
 				}).Warn("Approval value is not a boolean; ignoring this approval")
 				return &defaultFlowState, nil
 			}
 
-			approvals[approverIdentityId] = map[string]any{
+			approvals[approverIdentityID] = map[string]any{
 				"approved":  approved,
 				"timestamp": time.Now().UTC().Format(time.RFC3339),
 			}
@@ -286,7 +286,7 @@ func (t *thandTask) executeApprovalsTask(
 
 				logrus.WithFields(logrus.Fields{
 					"taskName":     taskName,
-					"approverUser": approverUser,
+					"approverUser": approverUser.String(),
 				}).Info("Approval denied by user")
 
 				workflowTask.SetContextKeyValue(models.VarsContextApproved, false)
@@ -423,32 +423,32 @@ func (t *thandTask) makeApprovalNotifications(
 		}).Info("Processing approval notifier")
 
 		// Build notification tasks for each recipient
-		for _, recipientId := range recipients {
+		for _, recipientID := range recipients {
 
 			recipientIdentity := t.resolveIdentity(
-				recipientId,
+				recipientID,
 			)
 
 			if recipientIdentity == nil {
 				logrus.WithFields(logrus.Fields{
-					"recipient":   recipientId,
+					"recipient":   recipientID,
 					"providerKey": providerKey,
 				}).Warn("Failed to resolve recipient identity; skipping notification for this recipient")
 				continue
 			}
 
-			recipientIdentity.ID = recipientId
+			recipientIdentity.ID = recipientID
 			recipientPayload := approvalNotifier.GetPayload(recipientIdentity)
 
 			notifyTasks = append(notifyTasks, notifyTask{
-				Recipient: recipientId,
+				Recipient: recipientID,
 				CallFunc:  approvalNotifier.GetCallFunction(recipientIdentity),
 				Payload:   recipientPayload,
 				Provider:  approvalNotifier.GetProviderName(),
 			})
 
 			logrus.WithFields(logrus.Fields{
-				"recipient":   recipientId,
+				"recipient":   recipientID,
 				"provider":    approvalNotifier.GetProviderName(),
 				"providerKey": providerKey,
 			}).Debug("Prepared approval notification task")
