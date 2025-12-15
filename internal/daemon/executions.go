@@ -11,7 +11,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
-	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 
 	"go.temporal.io/api/enums/v1"
@@ -23,7 +22,7 @@ import (
 )
 
 type ExecutionsPageData struct {
-	config.TemplateData
+	TemplateData
 	Executions []*models.WorkflowExecutionInfo `json:"executions"`
 }
 
@@ -461,7 +460,7 @@ func (s *Server) workflowExecutionInfo(
 		var identitiesValue []string
 		if err := dataConverter.FromPayload(identitiesAttr, &identitiesValue); err == nil {
 
-			// We have identities. Lets lookup the identity inforamtion
+			// We have identities. Lets lookup the identity information
 			for _, identityId := range identitiesValue {
 				identity, err := s.Config.GetIdentity(identityId)
 				if err != nil {

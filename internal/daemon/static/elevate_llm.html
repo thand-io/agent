@@ -56,7 +56,7 @@
                 </form>
                 
                 <!-- Hidden form for submitting elevation request -->
-                <form id="elevationSubmitForm" method="POST" action="{{.Config.GetApiBasePath}}/elevate" style="display: none;">
+                <form id="elevationSubmitForm" method="POST" action="{{.Config.ApiBasePath}}/elevate" style="display: none;">
                     <input type="hidden" name="workflow" id="hiddenWorkflow">
                     <input type="hidden" name="reason" id="hiddenReason">
                     <input type="hidden" name="duration" id="hiddenDuration" value="PT1H">
@@ -101,7 +101,7 @@
         reasonError.style.display = 'none';
 
         try {
-            const response = await fetch(`{{.Config.GetApiBasePath}}/elevate/llm?reason=${encodeURIComponent(reason)}`, {
+            const response = await fetch(`{{.Config.ApiBasePath}}/elevate/llm?reason=${encodeURIComponent(reason)}`, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json'

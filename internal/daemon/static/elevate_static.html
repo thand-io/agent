@@ -9,7 +9,7 @@
             <p>Request temporary elevated privileges for a specific role and reason. Only providers with RBAC support are available for elevation.</p>
         </div>
 
-        <form action="{{.Config.GetApiBasePath}}/elevate" method="GET" class="mt-2 text-left" id="elevate-form">
+        <form action="{{.Config.ApiBasePath}}/elevate" method="GET" class="mt-2 text-left" id="elevate-form">
             <div class="form-section" style="max-width: 600px; margin: 0 auto;">
                 
                 <!-- Identity Selection (managed by Choices.js, outside Alpine scope) -->
@@ -179,7 +179,7 @@
         'use strict';
 
         // Constants
-        const API_BASE_PATH = '{{.Config.GetApiBasePath}}';
+        const API_BASE_PATH = '{{.Config.ApiBasePath}}';
         const CURRENT_USER_EMAIL = '{{if .User}}{{.User.Email}}{{end}}';
 
         // Choices.js instance (kept outside Alpine to avoid reactivity issues)

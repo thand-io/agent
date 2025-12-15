@@ -418,8 +418,8 @@
             return {
                 // Initial data from server
                 workflowId: '{{.Execution.WorkflowID}}',
-                apiBasePath: '{{.Config.GetApiBasePath}}',
-                temporalAvailable: {{.Config.GetServices.HasTemporal}},
+                apiBasePath: '{{.Config.ApiBasePath}}',
+                temporalAvailable: {{.Config.Services.HasTemporal}},
                 
                 // Reactive state
                 loading: true,

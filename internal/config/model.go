@@ -634,17 +634,6 @@ func (r *Config) HasThandService() bool {
 	return len(r.Thand.Endpoint) != 0 && len(r.Thand.ApiKey) != 0
 }
 
-// TemplateData represents data passed to HTML templates
-type TemplateData struct {
-	Config      *Config
-	ServiceName string
-	Environment models.EnvironmentConfig
-	Provider    string `json:"provider,omitempty" yaml:"provider,omitempty"`
-	User        *models.User
-	Version     string
-	Status      string
-}
-
 type PreflightRequest struct {
 	Mode       Mode      `json:"mode,omitempty"`
 	Version    string    `json:"version,omitempty"`

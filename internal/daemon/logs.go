@@ -9,7 +9,7 @@ import (
 )
 
 type LogPageData struct {
-	config.TemplateData
+	TemplateData
 	Logs []*models.LogEntry
 }
 
