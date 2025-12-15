@@ -126,6 +126,12 @@ func (s *Server) GetTemplateData(c *gin.Context) TemplateData {
 		serverName = "Thand Server"
 	}
 
+	hasTemporal := false
+
+	if s.Config.GetServices().HasTemporal() {
+		hasTemporal = true
+	}
+
 	return TemplateData{
 		Config: SimpleConfig{
 			ApiBasePath: s.Config.GetApiBasePath(),
@@ -136,13 +142,13 @@ func (s *Server) GetTemplateData(c *gin.Context) TemplateData {
 					Enabled: s.Config.Server.Health.Enabled,
 					Path:    s.Config.Server.Health.Path,
 				},
-				Mertics: SimpleMetrics{
+				Metrics: SimpleMetrics{
 					Enabled: s.Config.Server.Metrics.Enabled,
 					Path:    s.Config.Server.Metrics.Path,
 				},
 			},
 			Services: SimpleServices{
-				HasTemporal: false,
+				HasTemporal: hasTemporal,
 			},
 		},
 		ServiceName: serverName,

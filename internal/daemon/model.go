@@ -17,7 +17,7 @@ type SimpleServer struct {
 	Port int
 
 	Health  SimpleHealth
-	Mertics SimpleMetrics
+	Metrics SimpleMetrics
 }
 
 type SimpleHealth struct {
