@@ -5,9 +5,14 @@ import (
 	"testing"
 	"time"
 
+	cloudevents "github.com/cloudevents/sdk-go/v2"
+	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
+	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
+	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
 )
 
 // TestEvaluateApprovalSwitch tests the approval switch logic with various scenarios
@@ -735,4 +740,192 @@ func TestGetIdentityVariations(t *testing.T) {
 			assert.Equal(t, tt.expectedIdentity, identity, "Test: %s", tt.description)
 		})
 	}
+}
+
+func TestApprovalsTask_Helpers(t *testing.T) {
+	t.Run("IsValid", func(t *testing.T) {
+		task := &ApprovalsTask{Approvals: 1}
+		assert.True(t, task.IsValid())
+
+		taskInvalid := &ApprovalsTask{Approvals: 0}
+		assert.False(t, taskInvalid.IsValid())
+	})
+
+	t.Run("HasNotifiers", func(t *testing.T) {
+		task := &ApprovalsTask{Notifiers: map[string]thandFunction.NotifierRequest{"email": {}}}
+		assert.True(t, task.HasNotifiers())
+
+		taskEmpty := &ApprovalsTask{}
+		assert.False(t, taskEmpty.HasNotifiers())
+	})
+}
+
+func TestExecuteApprovalsTask_ProcessEvent(t *testing.T) {
+	// Setup identities
+	requesterID := "requester@example.com"
+	approverID := "approver@example.com"
+
+	mockProvider := &mockProviderImpl{
+		identities: map[string]*models.Identity{
+			requesterID: {
+				ID: requesterID,
+				User: &models.User{
+					ID:    requesterID,
+					Email: requesterID,
+				},
+			},
+			approverID: {
+				ID: approverID,
+				User: &models.User{
+					ID:    approverID,
+					Email: approverID,
+				},
+			},
+		},
+	}
+
+	provider := models.Provider{
+		Name:     "mock",
+		Provider: "mock",
+	}
+	provider.SetClient(mockProvider)
+
+	cfg := &config.Config{
+		Providers: config.ProviderConfig{
+			Definitions: map[string]models.Provider{
+				"mock": provider,
+			},
+		},
+	}
+
+	// Setup WorkflowTask with ElevationRequest context
+	workflowTask := &models.WorkflowTask{
+		WorkflowID:   "test-workflow",
+		WorkflowName: "Test Workflow",
+		Context: map[string]any{
+			"user": map[string]any{
+				"id":    requesterID,
+				"email": requesterID,
+			},
+			"identities": []string{"target-identity"},
+			"approvals":  map[string]any{}, // Empty approvals initially
+		},
+	}
+
+	// Setup the Task Definition
+	taskDef := &taskModel.ThandTask{
+		With: &models.BasicConfig{
+			"approvals":   1,
+			"selfApprove": false,
+		},
+		On: &models.BasicConfig{
+			"approved": "authorize",
+			"denied":   "denied",
+		},
+	}
+
+	// Create the CloudEvent representing an approval
+	event := cloudevents.NewEvent()
+	event.SetType(ThandApprovalEventType)
+	event.SetSource("test-source")
+	event.SetExtension(models.VarsContextUser, approverID)
+	event.SetData(cloudevents.ApplicationJSON, map[string]any{
+		"approved": true,
+	})
+
+	// Create task handler with mock config
+	taskHandler := &thandTask{
+		config: cfg,
+	}
+
+	// Execute
+	// We pass the event as 'input' to simulate the task resuming after receiving an event
+	result, err := taskHandler.executeApprovalsTask(workflowTask, "approval_task", taskDef, &event)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify FlowDirective
+	directive, ok := result.(*model.FlowDirective)
+	require.True(t, ok)
+	assert.Equal(t, "authorize", directive.Value, "Should transition to 'authorize' state after valid approval")
+
+	// Verify Context Update
+	approvals := workflowTask.Context.(map[string]any)["approvals"].(map[string]any)
+	assert.Contains(t, approvals, approverID)
+	approvalData := approvals[approverID].(map[string]any)
+	assert.Equal(t, true, approvalData["approved"])
+}
+
+func TestExecuteApprovalsTask_SelfApprovalDenied(t *testing.T) {
+	// Setup identities where requester tries to approve
+	requesterID := "requester@example.com"
+
+	mockProvider := &mockProviderImpl{
+		identities: map[string]*models.Identity{
+			requesterID: {
+				ID: requesterID,
+				User: &models.User{
+					ID:    requesterID,
+					Email: requesterID,
+				},
+			},
+		},
+	}
+
+	provider := models.Provider{
+		Name:     "mock",
+		Provider: "mock",
+	}
+	provider.SetClient(mockProvider)
+
+	cfg := &config.Config{
+		Providers: config.ProviderConfig{
+			Definitions: map[string]models.Provider{
+				"mock": provider,
+			},
+		},
+	}
+
+	workflowTask := &models.WorkflowTask{
+		WorkflowID: "test-workflow",
+		Context: map[string]any{
+			"user":      map[string]any{"id": requesterID, "email": requesterID},
+			"approvals": map[string]any{},
+		},
+	}
+
+	taskDef := &taskModel.ThandTask{
+		With: &models.BasicConfig{
+			"approvals":   1,
+			"selfApprove": false, // Explicitly disable self-approval
+		},
+		On: &models.BasicConfig{
+			"approved": "authorize",
+			"denied":   "denied",
+		},
+	}
+
+	// Event from the requester
+	event := cloudevents.NewEvent()
+	event.SetType(ThandApprovalEventType)
+	event.SetSource("test-source")
+	event.SetExtension(models.VarsContextUser, requesterID)
+	event.SetData(cloudevents.ApplicationJSON, map[string]any{"approved": true})
+
+	taskHandler := &thandTask{config: cfg}
+
+	// Execute
+	result, err := taskHandler.executeApprovalsTask(workflowTask, "approval_task", taskDef, &event)
+
+	require.NoError(t, err)
+	directive, ok := result.(*model.FlowDirective)
+	require.True(t, ok)
+
+	// Should loop back (default case) because the approval was ignored
+	assert.Equal(t, "approval_task", directive.Value, "Should loop back when self-approval is ignored")
+
+	// Verify approval was NOT recorded
+	approvals := workflowTask.Context.(map[string]any)["approvals"].(map[string]any)
+	assert.NotContains(t, approvals, requesterID, "Self-approval should not be recorded in context")
 }
