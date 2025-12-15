@@ -9,7 +9,7 @@
             <p>Create a custom role by selecting providers, permissions, and scopes. Either role inheritance or specific permissions must be selected to proceed to scopes, but both are not required to create a role.</p>
         </div>
             
-        <form action="{{.Config.GetApiBasePath}}/elevate" method="POST" enctype="application/x-www-form-urlencoded" class="mt-2 text-left" id="customRoleForm">
+        <form action="{{.Config.ApiBasePath}}/elevate" method="POST" enctype="application/x-www-form-urlencoded" class="mt-2 text-left" id="customRoleForm">
                 
             <div  style="display: flex; flex-direction: column; gap: 1rem; max-width: 600px;"></div>
 
@@ -292,7 +292,7 @@
             }
 
             function loadProviders() {
-                fetch('{{.Config.GetApiBasePath}}/providers?capability=rbac')
+                fetch('{{.Config.ApiBasePath}}/providers?capability=rbac')
                     .then(response => response.json())
                     .then(data => {
                         const providers = Object.keys(data.providers).map(key => ({
@@ -308,7 +308,7 @@
             }
 
             function loadWorkflows() {
-                fetch('{{.Config.GetApiBasePath}}/workflows')
+                fetch('{{.Config.ApiBasePath}}/workflows')
                     .then(response => response.json())
                     .then(data => {
                         const workflowSelect = document.getElementById('workflowSelect');
@@ -339,8 +339,8 @@
             function loadIdentities(query = '') {
                 // Use template value for current user and fetch available identities
                 const url = query 
-                    ? `{{.Config.GetApiBasePath}}/identities?t=all&q=${encodeURIComponent(query)}`
-                    : `{{.Config.GetApiBasePath}}/identities?t=all`;
+                    ? `{{.Config.ApiBasePath}}/identities?t=all&q=${encodeURIComponent(query)}`
+                    : `{{.Config.ApiBasePath}}/identities?t=all`;
 
                 fetch(url)
                 .then(response => response.json())
@@ -403,8 +403,8 @@
 
                 selectedProviders.forEach(provider => {
                     const url = query
-                        ? `{{.Config.GetApiBasePath}}/provider/${provider.value}/roles?limit=1000&q=${encodeURIComponent(query)}`
-                        : `{{.Config.GetApiBasePath}}/provider/${provider.value}/roles?limit=1000`;
+                        ? `{{.Config.ApiBasePath}}/provider/${provider.value}/roles?limit=1000&q=${encodeURIComponent(query)}`
+                        : `{{.Config.ApiBasePath}}/provider/${provider.value}/roles?limit=1000`;
 
                     fetch(url)
                         .then(response => response.json())
@@ -460,7 +460,7 @@
                 let loadedCount = 0;
 
                 selectedProviders.forEach(provider => {
-                    fetch(`{{.Config.GetApiBasePath}}/provider/${provider.value}/permissions?limit=5000`)
+                    fetch(`{{.Config.ApiBasePath}}/provider/${provider.value}/permissions?limit=5000`)
                         .then(response => response.json())
                         .then(data => {
                             // Check if data.permissions exists and is an array before calling slice
@@ -793,8 +793,8 @@
             // Function to load scope data (groups or users) from API
             function loadScopeData(type, choicesInstance, query = '') {
                 const apiUrl = query 
-                    ? `{{.Config.GetApiBasePath}}/identities?t=${type}&q=${encodeURIComponent(query)}`
-                    : `{{.Config.GetApiBasePath}}/identities?t=${type}`;
+                    ? `{{.Config.ApiBasePath}}/identities?t=${type}&q=${encodeURIComponent(query)}`
+                    : `{{.Config.ApiBasePath}}/identities?t=${type}`;
 
                 fetch(apiUrl)
                     .then(response => response.json())

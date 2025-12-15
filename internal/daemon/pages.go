@@ -8,12 +8,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
-	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 )
 
 type ErrorPageData struct {
-	config.TemplateData
+	TemplateData
 	Error models.ErrorResponse
 }
 

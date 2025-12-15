@@ -90,7 +90,7 @@ func (s *Server) getRoles(c *gin.Context) {
 	if s.canAcceptHtml(c) {
 
 		data := struct {
-			TemplateData config.TemplateData
+			TemplateData TemplateData
 			Response     models.RolesResponse
 		}{
 			TemplateData: s.GetTemplateData(c),

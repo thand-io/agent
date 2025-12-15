@@ -14,7 +14,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/slack-go/slack"
 	"github.com/thand-io/agent/internal/common"
-	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
 	thandProvider "github.com/thand-io/agent/internal/workflows/tasks/providers/thand"
@@ -23,7 +22,7 @@ import (
 
 // FormPageData contains data for rendering the form page
 type FormPageData struct {
-	config.TemplateData
+	TemplateData
 	WorkflowID   string      `json:"workflow_id"`
 	WorkflowName string      `json:"workflow_name"`
 	TaskName     string      `json:"task_name"`

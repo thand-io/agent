@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 )
 
@@ -316,7 +315,7 @@ func (s *Server) getProviders(c *gin.Context) {
 	if s.canAcceptHtml(c) {
 
 		data := struct {
-			TemplateData config.TemplateData
+			TemplateData TemplateData
 			Response     models.ProvidersResponse
 		}{
 			TemplateData: s.GetTemplateData(c),

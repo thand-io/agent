@@ -201,7 +201,7 @@ function logViewer() {
             this.error = null;
 
             try {
-                const response = await fetch('{{.Config.GetApiBasePath}}/logs');
+                const response = await fetch('{{.Config.ApiBasePath}}/logs');
                 
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);

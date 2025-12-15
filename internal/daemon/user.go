@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/sessions"
 )
@@ -15,7 +14,7 @@ type SessionResponse struct {
 }
 
 type UserPageData struct {
-	config.TemplateData
+	TemplateData
 	Sessions sessions.LoginServer `json:"sessions"`
 	Callback string               `json:"callback"`
 }

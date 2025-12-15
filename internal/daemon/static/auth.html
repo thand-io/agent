@@ -8,7 +8,7 @@
             <div class="auth-providers">
                 {{range $key, $provider := .Providers}}
                     <div class="sso-provider">
-                        {{$baseUrl := printf "%s/auth/request/%s" $.Config.GetApiBasePath $key}}
+                        {{$baseUrl := printf "%s/auth/request/%s" $.Config.ApiBasePath $key}}
                         {{if and $.Callback $.Code}}
                         <a href="{{$baseUrl}}?callback={{$.Callback}}&amp;code={{$.Code}}" class="sso-button">
                         {{else if $.Callback}}

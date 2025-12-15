@@ -7,12 +7,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/serverlessworkflow/sdk-go/v3/model"
-	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 )
 
 type ExecutionStatePageData struct {
-	config.TemplateData `json:"-"`
+	TemplateData `json:"-"`
 	ExecutionStatePageResponse
 }
 
@@ -22,7 +21,7 @@ type ExecutionStatePageResponse struct {
 }
 
 type WorkflowPageData struct {
-	config.TemplateData
+	TemplateData
 	Workflow    map[string]any
 	Name        string
 	Description string
@@ -84,7 +83,7 @@ func (s *Server) getWorkflows(c *gin.Context) {
 	if s.canAcceptHtml(c) {
 
 		data := struct {
-			TemplateData config.TemplateData
+			TemplateData TemplateData
 			Response     models.WorkflowsResponse
 		}{
 			TemplateData: s.GetTemplateData(c),

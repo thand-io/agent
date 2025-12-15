@@ -102,7 +102,7 @@ func (s *Server) GetTemplateEngine() *template.Template {
 	return s.TemplateEngine
 }
 
-func (s *Server) GetTemplateData(c *gin.Context) config.TemplateData {
+func (s *Server) GetTemplateData(c *gin.Context) TemplateData {
 
 	var foundUser *models.User
 	var foundProvider string
@@ -126,14 +126,39 @@ func (s *Server) GetTemplateData(c *gin.Context) config.TemplateData {
 		serverName = "Thand Server"
 	}
 
-	return config.TemplateData{
-		Config:      s.Config,
+	hasTemporal := false
+
+	if s.Config.GetServices().HasTemporal() {
+		hasTemporal = true
+	}
+
+	return TemplateData{
+		Config: SimpleConfig{
+			ApiBasePath: s.Config.GetApiBasePath(),
+			Server: SimpleServer{
+				Host: s.Config.Server.Host,
+				Port: s.Config.Server.Port,
+				Health: SimpleHealth{
+					Enabled: s.Config.Server.Health.Enabled,
+					Path:    s.Config.Server.Health.Path,
+				},
+				Metrics: SimpleMetrics{
+					Enabled: s.Config.Server.Metrics.Enabled,
+					Path:    s.Config.Server.Metrics.Path,
+				},
+			},
+			Services: SimpleServices{
+				HasTemporal: hasTemporal,
+			},
+		},
 		ServiceName: serverName,
 		Provider:    foundProvider,
-		Environment: s.Config.Environment,
-		User:        foundUser,
-		Version:     s.GetVersion(),
-		Status:      "Online",
+		Environment: SimpleEnvrinment{
+			Platform: string(s.Config.Environment.Platform),
+		},
+		User:    foundUser,
+		Version: s.GetVersion(),
+		Status:  "Online",
 	}
 }
 

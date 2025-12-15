@@ -254,7 +254,7 @@
                     {{end}}
 
                     // Start auto-refresh if temporal is available
-                    {{if .Config.GetServices.HasTemporal}}
+                    {{if .Config.Services.HasTemporal}}
                     this.autoRefresh = true;
                     this.startAutoRefresh();
                     {{end}}
@@ -266,7 +266,7 @@
                     this.error = null;
 
                     try {
-                        const response = await fetch('{{.Config.GetApiBasePath}}/executions');
+                        const response = await fetch('{{.Config.ApiBasePath}}/executions');
                         
                         if (!response.ok) {
                             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
