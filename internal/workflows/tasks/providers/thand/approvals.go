@@ -196,8 +196,7 @@ func (t *thandTask) executeApprovalsTask(
 
 		if approverUser == nil {
 			logrus.WithFields(logrus.Fields{
-				"taskName":     taskName,
-				"approverUser": approverUser.String(),
+				"taskName": taskName,
 			}).Warn("Approver identity is not a user; cannot process approval")
 			return &defaultFlowState, nil
 		}
@@ -235,7 +234,7 @@ func (t *thandTask) executeApprovalsTask(
 				t.notifyApprovalRejection(
 					workflowTask, taskName,
 					approverUser, &approvalsTask,
-					"Self-approval is disabled. As the requestor you cannot approve your own elevation request.")
+					"Self-approval is disabled. As the requester you cannot approve your own elevation request.")
 
 				// Return to the default flow state to await more approvals
 				return &defaultFlowState, nil
@@ -521,7 +520,7 @@ func (t *thandTask) notifyApprovalRejection(
 			"taskName":     taskName,
 			"approverUser": approverUser.String(),
 			"reason":       reason,
-		}).Warn("Approval rejected (no notifiers configured): " + reason)
+		}).Warn("Approval rejected (no notifiers configured)")
 		return
 	}
 
