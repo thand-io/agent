@@ -180,9 +180,41 @@
 
         // Constants
         const API_BASE_PATH = '{{.Config.ApiBasePath}}';
-        const CURRENT_USER_IDENTIFIER = '{{if .User}}{{.User.GetIdentity}}{{end}}';
-        const CURRENT_USER_LABEL = '{{if .User}}{{.User.String}}{{end}}';
+        
+        // Parse backend prefill data
+        let PREFILLED_IDENTITIES = [];
+        let PREFILLED_PROVIDERS = [];
+        let PREFILLED_ROLES = [];
+        let PREFILLED_DURATION = '';
+        let PREFILLED_REASON = '';
+        
+        try {
+            const identityData = `{{.Identities | toJSON}}`;
+            PREFILLED_IDENTITIES = identityData ? JSON.parse(identityData) : [];
+        } catch (e) {
+            console.error('Error parsing identitiy data:', e);
+            PREFILLED_IDENTITIES = [];
+        }
 
+        try {
+            const providersData = `{{.Providers | toJSON}}`;
+            PREFILLED_PROVIDERS = providersData ? JSON.parse(providersData) : [];
+        } catch (e) {
+            console.error('Error parsing providers data:', e);
+            PREFILLED_PROVIDERS = [];
+        }
+        
+        try {
+            const rolesData = `{{.Roles | toJSON}}`;
+            PREFILLED_ROLES = rolesData ? JSON.parse(rolesData) : [];
+        } catch (e) {
+            console.error('Error parsing roles data:', e);
+            PREFILLED_ROLES = [];
+        }
+        
+        PREFILLED_DURATION = '{{.Duration}}' || '';
+        PREFILLED_REASON = '{{.Reason}}' || '';
+        
         // Choices.js instance (kept outside Alpine to avoid reactivity issues)
         let identityChoicesInstance = null;
 
@@ -191,8 +223,6 @@
          * This runs on DOMContentLoaded to ensure it executes before Alpine.js
          */
         document.addEventListener('DOMContentLoaded', function() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const prefilledIdentities = urlParams.getAll('identity');
 
             // Initialize Choices.js for identity multi-select
             identityChoicesInstance = new Choices('#elevate-identities', {
@@ -207,91 +237,32 @@
                 duplicateItemsAllowed: false,
             });
 
-            // Pre-select identities based on URL params or current user
-            preselectIdentities(prefilledIdentities);
-
-            // Initial fetch of identities to populate the selector
-            fetchIdentities();
-
-            // Set up search event listener using Choices.js event
-            const identityElement = document.getElementById('elevate-identities');
-            let searchTimeout;
-            
-            if (identityElement) {
-                identityElement.addEventListener('search', function(e) {
-                    clearTimeout(searchTimeout);
-                    const query = e.detail.value.trim();
-                    searchTimeout = setTimeout(() => {
-                        fetchIdentities(query);
-                    }, 300);
-                });
-            }
+            // Initialize Choices.js with backend identities
+            const identityChoices = buildIdentityChoices(PREFILLED_IDENTITIES);
+            console.log(identityChoices);
+            identityChoicesInstance.setChoices(identityChoices, 'value', 'label', true);
 
             // Set up form validation
             setupFormValidation();
         });
 
         /**
-         * Fetch identities from the API and populate the Choices.js selector
-         * @param {string[]} prefilledIdentities - Identity IDs to pre-select from URL params
-         * @param {string} query - Search query
+         * Build identity choices array from backend data
+         * @param {Array} identities - Array of identity objects from backend
+         * @returns {Array} Formatted choices array for Choices.js
          */
-        function fetchIdentities(query = '') {
-            const url = query 
-                ? `${API_BASE_PATH}/identities?q=${encodeURIComponent(query)}`
-                : `${API_BASE_PATH}/identities`;
-
-            fetch(url)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    // Sort by score descending
-                    if (data.identities) {
-                        data.identities.sort((a, b) => (b._score || 0) - (a._score || 0));
-                    }
-
-                    const newChoices = parseIdentitiesResponse(data);
-
-                    // Replace choices
-                    // replaceChoices: true (4th arg) - removes existing choices
-                    // replaceItems: false (default/6th arg) - preserves selected items
-                    identityChoicesInstance.setChoices(newChoices, 'value', 'label', true);
-                    
-                })
-                .catch(error => {
-                    console.error('Error loading identities:', error);
-                });
-        }
-
-        /**
-         * Parse the identities API response into Choices.js format
-         * @param {Object} data - API response data
-         * @returns {Array} Formatted choices array
-         */
-        function parseIdentitiesResponse(data) {
+        function buildIdentityChoices(identities) {
             const choices = [];
-            
-            if (data && data.identities && Array.isArray(data.identities)) {
-                data.identities.forEach(identityResult => {
-                    
-                    if (!('_source' in identityResult)) {
-                        return;
-                    }
 
-                    const identity = identityResult._source;
-
+            if (Array.isArray(identities)) {
+                identities.forEach(identity => {
                     const type = identity.user ? 'user' : (identity.group ? 'group' : 'unknown');
-
-                    if (type === 'user') {
-                        var title = identity.user?.email || identity.user?.id;
-                    } else if (type === 'group') {
-                        var title = identity.group?.id;
-                    } else {
-                        var title = identity.id;
+                    let title = identity.id;
+                    
+                    if (type === 'user' && identity.user) {
+                        title = identity.user.email || identity.user.id;
+                    } else if (type === 'group' && identity.group) {
+                        title = identity.group.id;
                     }
 
                     const label = identity.label 
@@ -307,32 +278,6 @@
             }
             
             return choices;
-        }
-
-        /**
-         * Pre-select identities based on URL params or current user
-         * @param {string[]} prefilledIdentities - Identity IDs from URL params
-         */
-        function preselectIdentities(prefilledIdentities) {
-            if (prefilledIdentities.length > 0) {
-                // Pre-select identities from URL params
-                identityChoicesInstance.setChoices(
-                    prefilledIdentities.map(identity => {
-                        return {
-                            value: identity,
-                            label: identity,
-                            selected: true,
-                        };
-                    })
-                , 'value', 'label', false);
-            } else if (CURRENT_USER_IDENTIFIER) {
-                // Fall back to pre-selecting current user
-                identityChoicesInstance.setChoices([{
-                    value: CURRENT_USER_IDENTIFIER,
-                    label: CURRENT_USER_LABEL,
-                    selected: true,
-                }], 'value', 'label', false);
-            }
         }
 
         /**
@@ -376,6 +321,7 @@
                 apiBasePath: API_BASE_PATH,
                 
                 // URL params for pre-filling
+                prefilledIdentities: [],
                 prefilledProviders: [],
                 prefilledRoles: [],
 
@@ -394,7 +340,7 @@
                  * Initialize the Alpine component
                  */
                 init() {
-                    this.parseUrlParams();
+                    this.applyBackendPrefills();
                     this.loadProviders();
                     
                     // Watch for identity selection changes via Choices.js events
@@ -483,27 +429,22 @@
                 },
 
                 /**
-                 * Parse URL query parameters for form pre-filling
+                 * Apply prefilled values from backend
                  */
-                parseUrlParams() {
-                    const urlParams = new URLSearchParams(window.location.search);
+                applyBackendPrefills() {
+                    this.prefilledIdentities = PREFILLED_IDENTITIES;
+                    this.prefilledProviders = PREFILLED_PROVIDERS;
+                    this.prefilledRoles = PREFILLED_ROLES;
                     
-                    this.prefilledProviders = urlParams.getAll('provider');
-                    this.prefilledRoles = urlParams.getAll('role');
-                    
-                    const prefilledReason = urlParams.get('reason');
-                    const prefilledDuration = urlParams.get('duration');
-
-                    if (prefilledReason) {
-                        this.reason = prefilledReason;
+                    if (PREFILLED_REASON) {
+                        this.reason = PREFILLED_REASON;
                     }
 
-                    if (prefilledDuration) {
-                        const isValidDuration = this.durationOptions.some(opt => opt.value === prefilledDuration);
+                    if (PREFILLED_DURATION) {
+                        const isValidDuration = this.durationOptions.some(opt => opt.value === PREFILLED_DURATION);
                         if (isValidDuration) {
-                            // Use $nextTick to ensure options are rendered before setting value
                             this.$nextTick(() => {
-                                this.duration = prefilledDuration;
+                                this.duration = PREFILLED_DURATION;
                             });
                         }
                     }
@@ -524,7 +465,7 @@
                         this.providers = data.providers || {};
 
                         // Pre-select provider from URL params if valid
-                        if (this.prefilledProviders.length > 0) {
+                        if (this.prefilledProviders && this.prefilledProviders.length > 0) {
                             const providerToSelect = this.prefilledProviders[0];
                             if (this.providers[providerToSelect]) {
                                 this.selectedProvider = providerToSelect;
