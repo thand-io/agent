@@ -238,31 +238,88 @@
             });
 
             // Initialize Choices.js with backend identities
-            const identityChoices = buildIdentityChoices(PREFILLED_IDENTITIES);
-            console.log(identityChoices);
+            const identityChoices = buildIdentityChoices(PREFILLED_IDENTITIES, true);
             identityChoicesInstance.setChoices(identityChoices, 'value', 'label', true);
+
+            // Initial fetch of identities to populate the selector
+            fetchIdentities();
+
+            // Set up search event listener using Choices.js event
+            const identityElement = document.getElementById('elevate-identities');
+            let searchTimeout;
+            
+            if (identityElement) {
+                identityElement.addEventListener('search', function(e) {
+                    clearTimeout(searchTimeout);
+                    const query = e.detail.value.trim();
+                    searchTimeout = setTimeout(() => {
+                        fetchIdentities(query);
+                    }, 300);
+                });
+            }
 
             // Set up form validation
             setupFormValidation();
         });
 
         /**
-         * Build identity choices array from backend data
-         * @param {Array} identities - Array of identity objects from backend
-         * @returns {Array} Formatted choices array for Choices.js
+         * Fetch identities from the API and populate the Choices.js selector
+         * @param {string} query - Search query
          */
-        function buildIdentityChoices(identities) {
+        function fetchIdentities(query = '') {
+            const url = query 
+                ? `${API_BASE_PATH}/identities?q=${encodeURIComponent(query)}`
+                : `${API_BASE_PATH}/identities`;
+
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Sort by score descending
+                    if (data.identities) {
+                        data.identities.sort((a, b) => (b._score || 0) - (a._score || 0));
+                    }
+
+                    const newChoices = buildIdentityChoices(data?.identities || []);
+
+                    // Replace choices
+                    // replaceChoices: true (4th arg) - removes existing choices
+                    // replaceItems: false (default/6th arg) - preserves selected items
+                    identityChoicesInstance.setChoices(newChoices, 'value', 'label', true);
+                    
+                })
+                .catch(error => {
+                    console.error('Error loading identities:', error);
+                });
+        }
+
+        /**
+         * Parse the identities API response into Choices.js format
+         * @param {Object} data - API response data
+         * @returns {Array} Formatted choices array
+         */
+        function buildIdentityChoices(identities, selected=false) {
             const choices = [];
 
             if (Array.isArray(identities)) {
                 identities.forEach(identity => {
-                    const type = identity.user ? 'user' : (identity.group ? 'group' : 'unknown');
-                    let title = identity.id;
                     
-                    if (type === 'user' && identity.user) {
-                        title = identity.user.email || identity.user.id;
-                    } else if (type === 'group' && identity.group) {
-                        title = identity.group.id;
+                    if ('_source' in identity) {
+                        identity = identity._source;
+                    }
+
+                    const type = identity.user ? 'user' : (identity.group ? 'group' : 'unknown');
+
+                    if (type === 'user') {
+                        var title = identity.user?.email || identity.user?.id;
+                    } else if (type === 'group') {
+                        var title = identity.group?.id;
+                    } else {
+                        var title = identity.id;
                     }
 
                     const label = identity.label 
@@ -272,11 +329,12 @@
                     choices.push({
                         value: identity.id,
                         label: label,
+                        selected: selected,
                         customProperties: { type },
                     });
                 });
             }
-            
+
             return choices;
         }
 
