@@ -83,6 +83,7 @@ func TestAWSElevationApprovalsWorkflow(t *testing.T) {
 			ID:    "approver1@thand.io",
 			Label: "Approver 1",
 			User: &models.User{
+				ID:       "user-id-001", // Different ID
 				Email:    "approver1@thand.io",
 				Username: "approver1",
 				Name:     "Approver 1",
@@ -92,6 +93,7 @@ func TestAWSElevationApprovalsWorkflow(t *testing.T) {
 			ID:    "approver2@thand.io",
 			Label: "Approver 2",
 			User: &models.User{
+				ID:       "user-id-002", // Different ID
 				Email:    "approver2@thand.io",
 				Username: "approver2",
 				Name:     "Approver 2",
@@ -169,7 +171,7 @@ func TestAWSElevationApprovalsWorkflow(t *testing.T) {
 		// Simulate FIRST approval
 		t.Log("Simulating FIRST approval via Temporal signal...")
 
-		// Create approval event
+		// Create approval event from approver1 with different ID but same email
 		approvalEvent1 := cloudevents.NewEvent()
 		approvalEvent1.SetID(uuid.New().String())
 		approvalEvent1.SetType("com.thand.approval")
@@ -177,7 +179,8 @@ func TestAWSElevationApprovalsWorkflow(t *testing.T) {
 		approvalEvent1.SetData(cloudevents.ApplicationJSON, map[string]any{
 			"approved": true,
 		})
-		approvalEvent1.SetExtension("user", "approver1@thand.io") // Different approver
+		// Approver 1 with ID "user-id-001" but we test they're equal via email
+		approvalEvent1.SetExtension("user", "approver1@thand.io")
 
 		// Signal the workflow with approval
 		temporalClient := infra.TemporalClient
@@ -202,7 +205,7 @@ func TestAWSElevationApprovalsWorkflow(t *testing.T) {
 		// Simulate SECOND approval
 		t.Log("Simulating SECOND approval via Temporal signal...")
 
-		// Create approval event
+		// Create approval event from approver2 with different ID but same email
 		approvalEvent2 := cloudevents.NewEvent()
 		approvalEvent2.SetID(uuid.New().String())
 		approvalEvent2.SetType("com.thand.approval")
@@ -210,7 +213,8 @@ func TestAWSElevationApprovalsWorkflow(t *testing.T) {
 		approvalEvent2.SetData(cloudevents.ApplicationJSON, map[string]any{
 			"approved": true,
 		})
-		approvalEvent2.SetExtension("user", "approver2@thand.io") // Different approver
+		// Approver 2 with ID "user-id-002" but we test they're equal via email
+		approvalEvent2.SetExtension("user", "approver2@thand.io")
 
 		// Signal the workflow with approval
 		err = temporalClient.SignalWorkflow(

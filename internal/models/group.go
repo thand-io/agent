@@ -31,15 +31,28 @@ func (g *Group) Equals(other *Group) bool {
 	if other == nil {
 		return false
 	}
+
+	// Try ID first
 	if len(g.ID) > 0 && len(other.ID) > 0 {
-		return strings.EqualFold(g.ID, other.ID)
+		if strings.EqualFold(g.ID, other.ID) {
+			return true
+		}
 	}
+
+	// Try Name
 	if len(g.Name) > 0 && len(other.Name) > 0 {
-		return strings.EqualFold(g.Name, other.Name)
+		if strings.EqualFold(g.Name, other.Name) {
+			return true
+		}
 	}
+
+	// Try Email
 	if len(g.Email) > 0 && len(other.Email) > 0 {
-		return strings.EqualFold(g.Email, other.Email)
+		if strings.EqualFold(g.Email, other.Email) {
+			return true
+		}
 	}
+
 	return false
 }
 

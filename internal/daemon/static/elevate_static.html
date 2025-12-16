@@ -79,7 +79,7 @@
                             <span x-show="loading">Submitting...</span>
                         </button>
                         <button type="button" @click="copyRequestUrl()" 
-                                style="padding: 0.5rem 1rem; border-radius: 0.375rem; font-size: 0.875rem; font-weight: 500; border: 1px solid; transition: all 0.2s ease; background-color: hsl(var(--secondary)); border-color: hsl(var(--border)); color: hsl(var(--foreground)); cursor: pointer;"
+                                class="button button-secondary"
                                 title="Copy request URL with current form values to clipboard">
                             <span x-text="copyButtonText">Copy Request</span>
                         </button>
@@ -199,7 +199,7 @@
             const identityData = `{{.Identities | toJSON}}`;
             PREFILLED_IDENTITIES = identityData ? JSON.parse(identityData) : [];
         } catch (e) {
-            console.error('Error parsing identitiy data:', e);
+            console.error('Error parsing identity data:', e);
             PREFILLED_IDENTITIES = [];
         }
 

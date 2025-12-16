@@ -59,7 +59,7 @@
                         <!-- Action Buttons -->
                         <div style="display: flex; gap: 0.5rem;">
                             <button @click="copyRequestUrl()" 
-                                    style="padding: 0.5rem 1rem; border-radius: 0.375rem; font-size: 0.875rem; font-weight: 500; border: 1px solid; transition: all 0.2s ease; background-color: hsl(var(--secondary)); border-color: hsl(var(--border)); color: hsl(var(--foreground)); cursor: pointer;"
+                                    class="button button-secondary"
                                     title="Copy request URL to clipboard">
                                 <span x-text="copyButtonText">Copy Request</span>
                             </button>
@@ -240,7 +240,7 @@
                                     <div>
                                         <span style="font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin-bottom: 0.5rem; display: block;">Identities:</span>
                                         <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
-                                            <template x-for="identity in execution.identities" :key="identity">
+                                            <template x-for="(identity, index) in execution.identities" :key="index + '-' + (typeof identity === 'string' ? identity : (identity.email || identity.id || JSON.stringify(identity)))">
                                                 <div class="badge badge-secondary" x-text="renderIdentity(identity)"></div>
                                             </template>
                                         </div>
