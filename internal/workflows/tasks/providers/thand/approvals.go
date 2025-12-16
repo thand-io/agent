@@ -186,7 +186,7 @@ func (t *thandTask) executeApprovalsTask(
 
 		if err != nil {
 			logrus.WithError(err).WithFields(logrus.Fields{
-				"taskName":        taskName,
+				"taskName":         taskName,
 				"approverIdentity": approverIdentityID,
 			}).Warn("Failed to resolve approver identity from event")
 			return &defaultFlowState, nil
@@ -196,7 +196,7 @@ func (t *thandTask) executeApprovalsTask(
 
 		if approverUser == nil {
 			logrus.WithFields(logrus.Fields{
-				"taskName":        taskName,
+				"taskName":     taskName,
 				"approverUser": approverUser.String(),
 			}).Warn("Approver identity is not a user; cannot process approval")
 			return &defaultFlowState, nil
@@ -218,16 +218,24 @@ func (t *thandTask) executeApprovalsTask(
 					"taskName":     taskName,
 					"approverUser": approverUser.String(),
 				}).Warn("Elevation request has no requesting user; cannot check for self-approval")
+
+				// Return to the default flow state to await more approvals
 				return &defaultFlowState, nil
 			}
 
 			// Check if approver is the requester
 			if approverUser.Equals(requestingUser) {
 				logrus.WithFields(logrus.Fields{
-					"taskName":          taskName,
+					"taskName":      taskName,
 					"approverUser":  approverUser.String(),
 					"requesterUser": requestingUser.String(),
 				}).Warn("Self-approval is disabled; ignoring approval from requester")
+
+				// Notify the approver that their action was rejected
+				t.notifyApprovalRejection(
+					workflowTask, taskName,
+					approverUser, &approvalsTask,
+					"Self-approval is disabled. As the requestor you cannot approve your own elevation request.")
 
 				// Return to the default flow state to await more approvals
 				return &defaultFlowState, nil
@@ -251,10 +259,16 @@ func (t *thandTask) executeApprovalsTask(
 				// Check if approver is the identity being elevated
 				if approverUser.Equals(requestedUser) {
 					logrus.WithFields(logrus.Fields{
-						"taskName":     taskName,
+						"taskName":      taskName,
 						"requestedUser": requestedUser.String(),
-						"approverUser": approverUser.String(),
+						"approverUser":  approverUser.String(),
 					}).Warn("Self-approval is disabled; ignoring approval from identity being elevated")
+
+					// Notify the approver that their action was rejected
+					t.notifyApprovalRejection(
+						workflowTask, taskName,
+						approverUser, &approvalsTask,
+						"Self-approval is disabled. As the user to be elevated you cannot approve this elevation request.")
 
 					// Return to the default flow state to await more approvals
 					return &defaultFlowState, nil
@@ -485,4 +499,66 @@ func (t *thandTask) makeApprovalNotifications(
 	}
 
 	return nil
+}
+
+// notifyApprovalRejection sends a notification to the approver when their approval is rejected
+func (t *thandTask) notifyApprovalRejection(
+	workflowTask *models.WorkflowTask,
+	taskName string,
+	approverUser *models.User,
+	approvalsTask *ApprovalsTask,
+	reason string,
+) {
+	logrus.WithFields(logrus.Fields{
+		"taskName":     taskName,
+		"approverUser": approverUser.String(),
+		"reason":       reason,
+	}).Info("Notifying approver of rejection")
+
+	// If there are no notifiers configured, just log the rejection
+	if !approvalsTask.HasNotifiers() {
+		logrus.WithFields(logrus.Fields{
+			"taskName":     taskName,
+			"approverUser": approverUser.String(),
+			"reason":       reason,
+		}).Warn("Approval rejected (no notifiers configured): " + reason)
+		return
+	}
+
+	// Send rejection notification using each configured notifier
+	for providerKey, notifierRequest := range approvalsTask.Notifiers {
+		// Create a generic notifier for rejection with the approver as recipient
+		rejectionRequest := thandFunction.NotifierRequest{
+			Provider: notifierRequest.Provider,
+			To:       []string{approverUser.Email},
+			Message:  reason,
+		}
+
+		notifyImpl := NewDefaultNotifierImpl(rejectionRequest)
+
+		logrus.WithFields(logrus.Fields{
+			"providerKey": providerKey,
+			"reason":      reason,
+		}).Info("Executing approval rejection notification")
+
+		_, err := t.executeNotify(
+			workflowTask,
+			taskName,
+			notifyImpl,
+		)
+
+		if err != nil {
+			logrus.WithError(err).WithFields(logrus.Fields{
+				"taskName":     taskName,
+				"approverUser": approverUser.String(),
+				"providerKey":  providerKey,
+			}).Warn("Failed to execute approval rejection notification")
+		}
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"taskName":     taskName,
+		"approverUser": approverUser.String(),
+		"reason":       reason,
+	}).Info("Approval rejection notification sent")
 }
