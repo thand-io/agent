@@ -72,11 +72,18 @@
                               required 
                               class="form-textarea"></textarea>
 
-                    <!-- Submit Button -->
-                    <button type="submit" class="button button-primary" :disabled="loading">
-                        <span x-show="!loading">Request Elevation</span>
-                        <span x-show="loading">Submitting...</span>
-                    </button>
+                    <!-- Submit Button and Copy Request Button -->
+                    <div style="display: flex; gap: 1rem; justify-content: center;">
+                        <button type="submit" class="button button-primary" :disabled="loading">
+                            <span x-show="!loading">Request Elevation</span>
+                            <span x-show="loading">Submitting...</span>
+                        </button>
+                        <button type="button" @click="copyRequestUrl()" 
+                                style="padding: 0.5rem 1rem; border-radius: 0.375rem; font-size: 0.875rem; font-weight: 500; border: 1px solid; transition: all 0.2s ease; background-color: hsl(var(--secondary)); border-color: hsl(var(--border)); color: hsl(var(--foreground)); cursor: pointer;"
+                                title="Copy request URL with current form values to clipboard">
+                            <span x-text="copyButtonText">Copy Request</span>
+                        </button>
+                    </div>
 
                     <!-- Divider -->
                     <hr x-show="selectedRole && (evaluatedRole || roles[selectedRole])" style="margin: 1.5rem 0; border: none; border-top: 1px solid var(--border-color, #e0e0e0);">
@@ -394,6 +401,9 @@
                     { value: 'PT8H', label: '8 Hours' },
                 ],
 
+                // Copy button state
+                copyButtonText: 'Copy Request',
+
                 /**
                  * Initialize the Alpine component
                  */
@@ -579,7 +589,7 @@
                  * Matches by key first, then by name (case-insensitive)
                  */
                 preselectRole() {
-                    if (this.prefilledRoles.length === 0) return;
+                    if (!this.prefilledRoles || this.prefilledRoles.length === 0) return;
                     
                     const roleToSelect = this.prefilledRoles[0];
                     
@@ -599,6 +609,80 @@
                     if (roleKey) {
                         this.selectedRole = roleKey;
                         this.evaluateRole();
+                    }
+                },
+
+                /**
+                 * Get the request URL with current form values
+                 */
+                getRequestUrl() {
+                    const baseUrl = window.location.origin + '/elevate/static';
+                    const params = new URLSearchParams();
+                    
+                    // Add provider
+                    if (this.selectedProvider) {
+                        params.set('provider', this.selectedProvider);
+                    }
+                    
+                    // Add role
+                    if (this.selectedRole) {
+                        params.set('role', this.selectedRole);
+                    }
+                    
+                    // Add duration
+                    if (this.duration) {
+                        params.set('duration', this.duration);
+                    }
+                    
+                    // Add reason
+                    if (this.reason) {
+                        params.set('reason', this.reason);
+                    }
+                    
+                    // Add selected identities
+                    if (identityChoicesInstance) {
+                        const selectedIdentities = identityChoicesInstance.getValue();
+                        selectedIdentities.forEach(identity => {
+                            params.append('identity', identity.value);
+                        });
+                    }
+                    
+                    const queryString = params.toString();
+                    return queryString ? `${baseUrl}?${queryString}` : baseUrl;
+                },
+
+                /**
+                 * Copy request URL to clipboard
+                 */
+                async copyRequestUrl() {
+                    const url = this.getRequestUrl();
+                    
+                    try {
+                        await navigator.clipboard.writeText(url);
+                        this.copyButtonText = 'Copied!';
+                        setTimeout(() => {
+                            this.copyButtonText = 'Copy Request';
+                        }, 2000);
+                    } catch (err) {
+                        console.error('Failed to copy URL:', err);
+                        // Fallback for older browsers
+                        const textArea = document.createElement('textarea');
+                        textArea.value = url;
+                        document.body.appendChild(textArea);
+                        textArea.select();
+                        try {
+                            document.execCommand('copy');
+                            this.copyButtonText = 'Copied!';
+                            setTimeout(() => {
+                                this.copyButtonText = 'Copy Request';
+                            }, 2000);
+                        } catch (e) {
+                            this.copyButtonText = 'Failed';
+                            setTimeout(() => {
+                                this.copyButtonText = 'Copy Request';
+                            }, 2000);
+                        }
+                        document.body.removeChild(textArea);
                     }
                 }
             };
