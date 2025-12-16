@@ -72,11 +72,18 @@
                               required 
                               class="form-textarea"></textarea>
 
-                    <!-- Submit Button -->
-                    <button type="submit" class="button button-primary" :disabled="loading">
-                        <span x-show="!loading">Request Elevation</span>
-                        <span x-show="loading">Submitting...</span>
-                    </button>
+                    <!-- Submit Button and Copy Request Button -->
+                    <div style="display: flex; gap: 1rem; justify-content: center;">
+                        <button type="submit" class="button button-primary" :disabled="loading">
+                            <span x-show="!loading">Request Elevation</span>
+                            <span x-show="loading">Submitting...</span>
+                        </button>
+                        <button type="button" @click="copyRequestUrl()" 
+                                class="button button-secondary"
+                                title="Copy request URL with current form values to clipboard">
+                            <span x-text="copyButtonText">Copy Request</span>
+                        </button>
+                    </div>
 
                     <!-- Divider -->
                     <hr x-show="selectedRole && (evaluatedRole || roles[selectedRole])" style="margin: 1.5rem 0; border: none; border-top: 1px solid var(--border-color, #e0e0e0);">
@@ -180,9 +187,41 @@
 
         // Constants
         const API_BASE_PATH = '{{.Config.ApiBasePath}}';
-        const CURRENT_USER_IDENTIFIER = '{{if .User}}{{.User.GetIdentity}}{{end}}';
-        const CURRENT_USER_LABEL = '{{if .User}}{{.User.String}}{{end}}';
+        
+        // Parse backend prefill data
+        let PREFILLED_IDENTITIES = [];
+        let PREFILLED_PROVIDERS = [];
+        let PREFILLED_ROLES = [];
+        let PREFILLED_DURATION = '';
+        let PREFILLED_REASON = '';
+        
+        try {
+            const identityData = `{{.Identities | toJSON}}`;
+            PREFILLED_IDENTITIES = identityData ? JSON.parse(identityData) : [];
+        } catch (e) {
+            console.error('Error parsing identity data:', e);
+            PREFILLED_IDENTITIES = [];
+        }
 
+        try {
+            const providersData = `{{.Providers | toJSON}}`;
+            PREFILLED_PROVIDERS = providersData ? JSON.parse(providersData) : [];
+        } catch (e) {
+            console.error('Error parsing providers data:', e);
+            PREFILLED_PROVIDERS = [];
+        }
+        
+        try {
+            const rolesData = `{{.Roles | toJSON}}`;
+            PREFILLED_ROLES = rolesData ? JSON.parse(rolesData) : [];
+        } catch (e) {
+            console.error('Error parsing roles data:', e);
+            PREFILLED_ROLES = [];
+        }
+        
+        PREFILLED_DURATION = '{{.Duration}}' || '';
+        PREFILLED_REASON = '{{.Reason}}' || '';
+        
         // Choices.js instance (kept outside Alpine to avoid reactivity issues)
         let identityChoicesInstance = null;
 
@@ -191,8 +230,6 @@
          * This runs on DOMContentLoaded to ensure it executes before Alpine.js
          */
         document.addEventListener('DOMContentLoaded', function() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const prefilledIdentities = urlParams.getAll('identity');
 
             // Initialize Choices.js for identity multi-select
             identityChoicesInstance = new Choices('#elevate-identities', {
@@ -207,8 +244,9 @@
                 duplicateItemsAllowed: false,
             });
 
-            // Pre-select identities based on URL params or current user
-            preselectIdentities(prefilledIdentities);
+            // Initialize Choices.js with backend identities
+            const identityChoices = buildIdentityChoices(PREFILLED_IDENTITIES, true);
+            identityChoicesInstance.setChoices(identityChoices, 'value', 'label', true);
 
             // Initial fetch of identities to populate the selector
             fetchIdentities();
@@ -233,7 +271,6 @@
 
         /**
          * Fetch identities from the API and populate the Choices.js selector
-         * @param {string[]} prefilledIdentities - Identity IDs to pre-select from URL params
          * @param {string} query - Search query
          */
         function fetchIdentities(query = '') {
@@ -254,7 +291,7 @@
                         data.identities.sort((a, b) => (b._score || 0) - (a._score || 0));
                     }
 
-                    const newChoices = parseIdentitiesResponse(data);
+                    const newChoices = buildIdentityChoices(data?.identities || []);
 
                     // Replace choices
                     // replaceChoices: true (4th arg) - removes existing choices
@@ -272,17 +309,15 @@
          * @param {Object} data - API response data
          * @returns {Array} Formatted choices array
          */
-        function parseIdentitiesResponse(data) {
+        function buildIdentityChoices(identities, selected=false) {
             const choices = [];
-            
-            if (data && data.identities && Array.isArray(data.identities)) {
-                data.identities.forEach(identityResult => {
-                    
-                    if (!('_source' in identityResult)) {
-                        return;
-                    }
 
-                    const identity = identityResult._source;
+            if (Array.isArray(identities)) {
+                identities.forEach(identity => {
+                    
+                    if ('_source' in identity) {
+                        identity = identity._source;
+                    }
 
                     const type = identity.user ? 'user' : (identity.group ? 'group' : 'unknown');
 
@@ -301,38 +336,13 @@
                     choices.push({
                         value: identity.id,
                         label: label,
+                        selected: selected,
                         customProperties: { type },
                     });
                 });
             }
-            
-            return choices;
-        }
 
-        /**
-         * Pre-select identities based on URL params or current user
-         * @param {string[]} prefilledIdentities - Identity IDs from URL params
-         */
-        function preselectIdentities(prefilledIdentities) {
-            if (prefilledIdentities.length > 0) {
-                // Pre-select identities from URL params
-                identityChoicesInstance.setChoices(
-                    prefilledIdentities.map(identity => {
-                        return {
-                            value: identity,
-                            label: identity,
-                            selected: true,
-                        };
-                    })
-                , 'value', 'label', false);
-            } else if (CURRENT_USER_IDENTIFIER) {
-                // Fall back to pre-selecting current user
-                identityChoicesInstance.setChoices([{
-                    value: CURRENT_USER_IDENTIFIER,
-                    label: CURRENT_USER_LABEL,
-                    selected: true,
-                }], 'value', 'label', false);
-            }
+            return choices;
         }
 
         /**
@@ -376,6 +386,7 @@
                 apiBasePath: API_BASE_PATH,
                 
                 // URL params for pre-filling
+                prefilledIdentities: [],
                 prefilledProviders: [],
                 prefilledRoles: [],
 
@@ -390,11 +401,14 @@
                     { value: 'PT8H', label: '8 Hours' },
                 ],
 
+                // Copy button state
+                copyButtonText: 'Copy Request',
+
                 /**
                  * Initialize the Alpine component
                  */
                 init() {
-                    this.parseUrlParams();
+                    this.applyBackendPrefills();
                     this.loadProviders();
                     
                     // Watch for identity selection changes via Choices.js events
@@ -483,27 +497,22 @@
                 },
 
                 /**
-                 * Parse URL query parameters for form pre-filling
+                 * Apply prefilled values from backend
                  */
-                parseUrlParams() {
-                    const urlParams = new URLSearchParams(window.location.search);
+                applyBackendPrefills() {
+                    this.prefilledIdentities = PREFILLED_IDENTITIES;
+                    this.prefilledProviders = PREFILLED_PROVIDERS;
+                    this.prefilledRoles = PREFILLED_ROLES;
                     
-                    this.prefilledProviders = urlParams.getAll('provider');
-                    this.prefilledRoles = urlParams.getAll('role');
-                    
-                    const prefilledReason = urlParams.get('reason');
-                    const prefilledDuration = urlParams.get('duration');
-
-                    if (prefilledReason) {
-                        this.reason = prefilledReason;
+                    if (PREFILLED_REASON) {
+                        this.reason = PREFILLED_REASON;
                     }
 
-                    if (prefilledDuration) {
-                        const isValidDuration = this.durationOptions.some(opt => opt.value === prefilledDuration);
+                    if (PREFILLED_DURATION) {
+                        const isValidDuration = this.durationOptions.some(opt => opt.value === PREFILLED_DURATION);
                         if (isValidDuration) {
-                            // Use $nextTick to ensure options are rendered before setting value
                             this.$nextTick(() => {
-                                this.duration = prefilledDuration;
+                                this.duration = PREFILLED_DURATION;
                             });
                         }
                     }
@@ -524,7 +533,7 @@
                         this.providers = data.providers || {};
 
                         // Pre-select provider from URL params if valid
-                        if (this.prefilledProviders.length > 0) {
+                        if (this.prefilledProviders && this.prefilledProviders.length > 0) {
                             const providerToSelect = this.prefilledProviders[0];
                             if (this.providers[providerToSelect]) {
                                 this.selectedProvider = providerToSelect;
@@ -580,7 +589,7 @@
                  * Matches by key first, then by name (case-insensitive)
                  */
                 preselectRole() {
-                    if (this.prefilledRoles.length === 0) return;
+                    if (!this.prefilledRoles || this.prefilledRoles.length === 0) return;
                     
                     const roleToSelect = this.prefilledRoles[0];
                     
@@ -600,6 +609,80 @@
                     if (roleKey) {
                         this.selectedRole = roleKey;
                         this.evaluateRole();
+                    }
+                },
+
+                /**
+                 * Get the request URL with current form values
+                 */
+                getRequestUrl() {
+                    const baseUrl = window.location.origin + '/elevate/static';
+                    const params = new URLSearchParams();
+                    
+                    // Add provider
+                    if (this.selectedProvider) {
+                        params.set('provider', this.selectedProvider);
+                    }
+                    
+                    // Add role
+                    if (this.selectedRole) {
+                        params.set('role', this.selectedRole);
+                    }
+                    
+                    // Add duration
+                    if (this.duration) {
+                        params.set('duration', this.duration);
+                    }
+                    
+                    // Add reason
+                    if (this.reason) {
+                        params.set('reason', this.reason);
+                    }
+                    
+                    // Add selected identities
+                    if (identityChoicesInstance) {
+                        const selectedIdentities = identityChoicesInstance.getValue();
+                        selectedIdentities.forEach(identity => {
+                            params.append('identity', identity.value);
+                        });
+                    }
+                    
+                    const queryString = params.toString();
+                    return queryString ? `${baseUrl}?${queryString}` : baseUrl;
+                },
+
+                /**
+                 * Copy request URL to clipboard
+                 */
+                async copyRequestUrl() {
+                    const url = this.getRequestUrl();
+                    
+                    try {
+                        await navigator.clipboard.writeText(url);
+                        this.copyButtonText = 'Copied!';
+                        setTimeout(() => {
+                            this.copyButtonText = 'Copy Request';
+                        }, 2000);
+                    } catch (err) {
+                        console.error('Failed to copy URL:', err);
+                        // Fallback for older browsers
+                        const textArea = document.createElement('textarea');
+                        textArea.value = url;
+                        document.body.appendChild(textArea);
+                        textArea.select();
+                        try {
+                            document.execCommand('copy');
+                            this.copyButtonText = 'Copied!';
+                            setTimeout(() => {
+                                this.copyButtonText = 'Copy Request';
+                            }, 2000);
+                        } catch (e) {
+                            this.copyButtonText = 'Failed';
+                            setTimeout(() => {
+                                this.copyButtonText = 'Copy Request';
+                            }, 2000);
+                        }
+                        document.body.removeChild(textArea);
                     }
                 }
             };

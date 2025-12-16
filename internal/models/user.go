@@ -48,15 +48,28 @@ func (u *User) Equals(other *User) bool {
 	if other == nil {
 		return false
 	}
+
+	// Try ID first
 	if len(u.ID) > 0 && len(other.ID) > 0 {
-		return strings.EqualFold(u.ID, other.ID)
+		if strings.EqualFold(u.ID, other.ID) {
+			return true
+		}
 	}
+
+	// Try Email
 	if len(u.Email) > 0 && len(other.Email) > 0 {
-		return strings.EqualFold(u.Email, other.Email)
+		if strings.EqualFold(u.Email, other.Email) {
+			return true
+		}
 	}
+
+	// Try Username
 	if len(u.Username) > 0 && len(other.Username) > 0 {
-		return strings.EqualFold(u.Username, other.Username)
+		if strings.EqualFold(u.Username, other.Username) {
+			return true
+		}
 	}
+
 	return false
 }
 

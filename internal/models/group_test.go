@@ -147,6 +147,58 @@ func TestGroup_Equals(t *testing.T) {
 			expected: true,
 		},
 		{
+			name: "Different IDs but same Name",
+			group1: Group{
+				ID:   "123",
+				Name: "Admins",
+			},
+			group2: &Group{
+				ID:   "456",
+				Name: "Admins",
+			},
+			expected: true,
+		},
+		{
+			name: "Different IDs but same Email",
+			group1: Group{
+				ID:    "123",
+				Email: "admins@example.com",
+			},
+			group2: &Group{
+				ID:    "456",
+				Email: "admins@example.com",
+			},
+			expected: true,
+		},
+		{
+			name: "Different IDs and Names but same Email",
+			group1: Group{
+				ID:    "123",
+				Name:  "Admins",
+				Email: "admins@example.com",
+			},
+			group2: &Group{
+				ID:    "456",
+				Name:  "Users",
+				Email: "admins@example.com",
+			},
+			expected: true,
+		},
+		{
+			name: "All different fields",
+			group1: Group{
+				ID:    "123",
+				Name:  "Admins",
+				Email: "admins@example.com",
+			},
+			group2: &Group{
+				ID:    "456",
+				Name:  "Users",
+				Email: "users@example.com",
+			},
+			expected: false,
+		},
+		{
 			name:     "Nil Other",
 			group1:   Group{},
 			group2:   nil,

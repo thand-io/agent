@@ -162,6 +162,58 @@ func TestUser_Equals(t *testing.T) {
 			expected: true,
 		},
 		{
+			name: "Different IDs but same Email",
+			user1: User{
+				ID:    "123",
+				Email: "john@example.com",
+			},
+			user2: &User{
+				ID:    "456",
+				Email: "john@example.com",
+			},
+			expected: true,
+		},
+		{
+			name: "Different IDs but same Username",
+			user1: User{
+				ID:       "123",
+				Username: "johndoe",
+			},
+			user2: &User{
+				ID:       "456",
+				Username: "johndoe",
+			},
+			expected: true,
+		},
+		{
+			name: "Different IDs and Emails but same Username",
+			user1: User{
+				ID:       "123",
+				Email:    "john@example.com",
+				Username: "johndoe",
+			},
+			user2: &User{
+				ID:       "456",
+				Email:    "jane@example.com",
+				Username: "johndoe",
+			},
+			expected: true,
+		},
+		{
+			name: "All different fields",
+			user1: User{
+				ID:       "123",
+				Email:    "john@example.com",
+				Username: "johndoe",
+			},
+			user2: &User{
+				ID:       "456",
+				Email:    "jane@example.com",
+				Username: "janedoe",
+			},
+			expected: false,
+		},
+		{
 			name:     "Nil Other",
 			user1:    User{},
 			user2:    nil,
