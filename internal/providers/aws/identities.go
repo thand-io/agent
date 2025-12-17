@@ -11,10 +11,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 )
 
-func (p *awsProvider) CanSynchronizeIdentities() bool {
-	return true
-}
-
 func (p *awsProvider) SynchronizeIdentities(ctx context.Context, req *models.SynchronizeIdentitiesRequest) (*models.SynchronizeIdentitiesResponse, error) {
 	startTime := time.Now()
 	defer func() {

@@ -68,10 +68,6 @@ var oktaPredefinedRoles = map[string]models.ProviderRole{
 	},
 }
 
-func (p *oktaProvider) CanSynchronizeRoles() bool {
-	return true
-}
-
 // Also load in user groups as these can have roles assigned too
 
 func (p *oktaProvider) SynchronizeRoles(ctx context.Context, req *models.SynchronizeRolesRequest) (*models.SynchronizeRolesResponse, error) {

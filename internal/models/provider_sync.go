@@ -371,26 +371,3 @@ func getSynchronizationRequests(provider ProviderImpl) []SynchronizeCapability {
 	return requests
 }
 
-func (p *BaseProvider) CanSynchronizeRoles() bool {
-	return false
-}
-
-func (p *BaseProvider) CanSynchronizePermissions() bool {
-	return false
-}
-
-func (p *BaseProvider) CanSynchronizeUsers() bool {
-	return false
-}
-
-func (p *BaseProvider) CanSynchronizeGroups() bool {
-	return false
-}
-
-func (p *BaseProvider) CanSynchronizeIdentities() bool {
-	return false
-}
-
-func (p *BaseProvider) CanSynchronizeResources() bool {
-	return false
-}

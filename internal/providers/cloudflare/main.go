@@ -24,8 +24,13 @@ func (p *cloudflareProvider) Initialize(identifier string, provider models.Provi
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityRBAC,
+		models.ProviderCapabilityRBAC,       // roles, permissions, resources
+		models.ProviderCapabilityIdentities, // users, groups, identities
 	)
+
+	// Disable unsupported capabilities
+	p.DisableCapability(models.ProviderCapabilitySynchronizeGroups)
+	p.DisableCapability(models.ProviderCapabilitySynchronizeIdentities)
 
 	// Get configuration
 	cfConfig := p.GetConfig()

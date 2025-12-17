@@ -25,10 +25,6 @@ type OktaApplication interface {
 	GetStatus() string
 }
 
-func (p *oktaProvider) CanSynchronizeResources() bool {
-	return true
-}
-
 // SynchronizeResources loads Okta resources (applications) from the API
 func (p *oktaProvider) SynchronizeResources(ctx context.Context, req *models.SynchronizeResourcesRequest) (*models.SynchronizeResourcesResponse, error) {
 	startTime := time.Now()

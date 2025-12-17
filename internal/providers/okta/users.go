@@ -10,10 +10,6 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
-func (p *oktaProvider) CanSynchronizeUsers() bool {
-	return true
-}
-
 // SynchronizeUsers fetches and caches user identities from Okta
 func (p *oktaProvider) SynchronizeUsers(ctx context.Context, req *models.SynchronizeUsersRequest) (*models.SynchronizeUsersResponse, error) {
 	startTime := time.Now()

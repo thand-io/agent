@@ -37,9 +37,16 @@ func (p *awsProvider) Initialize(identifier string, provider models.Provider) er
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityRBAC,
-		models.ProviderCapabilityIdentities,
+		models.ProviderCapabilityRBAC,       // roles, permissions, resources
+		models.ProviderCapabilityIdentities, // users, groups, identities
 	)
+
+	// Disable unsupported capabilities
+	p.DisableCapability(models.ProviderCapabilitySynchronizeResources)
+	// No need to sync permissions as they are static in AWS IAM
+	p.DisableCapability(models.ProviderCapabilitySynchronizePermissions)
+	// No need to sync roles as they are static in AWS IAM
+	p.DisableCapability(models.ProviderCapabilitySynchronizeRoles)
 
 	// Right lets figure out how to initialize the AWS SDK
 	awsConfig := p.GetConfig()

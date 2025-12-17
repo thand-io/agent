@@ -1,7 +1,6 @@
 package models
 
 import (
-	"slices"
 	"strings"
 	"sync"
 
@@ -16,7 +15,7 @@ type BaseProvider struct {
 	provider     string
 	config       *BasicConfig
 	role         *Role
-	capabilities []ProviderCapability
+	capabilities *ProviderCapabilties
 
 	// Add other common fields if necessary
 	identity *IdentitySupport
@@ -51,15 +50,20 @@ type RBACSupport struct {
 	resourcesIndex bleve.Index
 }
 
-func NewBaseProvider(identifier string, provider Provider, capabilities ...ProviderCapability) *BaseProvider {
+func NewBaseProvider(identifier string, provider Provider, supportedCapabilities ...ProviderCapability) *BaseProvider {
 	base := BaseProvider{
-		identifier:   identifier,
-		name:         provider.Name,
-		description:  provider.Description,
-		provider:     provider.Provider,
-		config:       provider.Config,
-		role:         provider.Role,
-		capabilities: capabilities,
+		identifier:  identifier,
+		name:        provider.Name,
+		description: provider.Description,
+		provider:    provider.Provider,
+		config:      provider.Config,
+		role:        provider.Role,
+	}
+
+	// Check what capabilities needs to be set. If a top level capability
+	// is set, we add all sub-capabilities as well.
+	for _, cap := range supportedCapabilities {
+		base.EnableCapability(cap)
 	}
 
 	if base.HasCapability(ProviderCapabilityIdentities) {
@@ -410,30 +414,6 @@ func (p *BaseProvider) GetDescription() string {
 
 func (p *BaseProvider) GetProvider() string {
 	return p.provider
-}
-
-func (p *BaseProvider) GetCapabilities() []ProviderCapability {
-	return p.capabilities
-}
-
-func (p *BaseProvider) HasCapability(capability ProviderCapability) bool {
-	return slices.Contains(p.capabilities, capability)
-}
-
-func (p *BaseProvider) HasAnyCapability(capabilities ...ProviderCapability) bool {
-	return slices.ContainsFunc(capabilities, p.HasCapability)
-}
-
-func (p *BaseProvider) EnableCapability(capability ProviderCapability) {
-	if !p.HasCapability(capability) {
-		p.capabilities = append(p.capabilities, capability)
-	}
-}
-
-func (p *BaseProvider) DisableCapability(capability ProviderCapability) {
-	p.capabilities = slices.DeleteFunc(p.capabilities, func(c ProviderCapability) bool {
-		return c == capability
-	})
 }
 
 func (p *BaseProvider) Initialize(identifier string, provider Provider) error {

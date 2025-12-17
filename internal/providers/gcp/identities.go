@@ -11,10 +11,6 @@ import (
 	"google.golang.org/api/cloudresourcemanager/v1"
 )
 
-func (p *gcpProvider) CanSynchronizeIdentities() bool {
-	return true
-}
-
 // SynchronizeIdentities fetches and caches user and group identities from GCP IAM
 func (p *gcpProvider) SynchronizeIdentities(ctx context.Context, req *models.SynchronizeIdentitiesRequest) (*models.SynchronizeIdentitiesResponse, error) {
 	startTime := time.Now()

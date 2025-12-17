@@ -1,8 +1,8 @@
 package github
 
 import (
-	"strings"
 	"context"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
@@ -17,8 +17,8 @@ var GithubProviderName = "github"
 // githubProvider implements the ProviderImpl interface for GitHub
 type githubProvider struct {
 	*models.BaseProvider
-	client      *github.Client
-	oauthClient *oauth2.Config
+	client           *github.Client
+	oauthClient      *oauth2.Config
 	organizationName string
 }
 
@@ -43,14 +43,18 @@ func (p *githubProvider) Initialize(identifier string, provider models.Provider)
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityAuthorizer,
-		models.ProviderCapabilityRBAC,
-		models.ProviderCapabilityIdentities,
+		models.ProviderCapabilityAuthorizer, // OAuth authorization
+		models.ProviderCapabilityRBAC,       // roles, permissions, resources
+		models.ProviderCapabilityIdentities, // users, groups, identities
 	)
+
+	// Disable unsupported capabilities
+	p.DisableCapability(models.ProviderCapabilitySynchronizeResources)
+	p.DisableCapability(models.ProviderCapabilitySynchronizePermissions)
+	p.DisableCapability(models.ProviderCapabilitySynchronizeIdentities)
 
 	// Right lets figure out how to initialize the GitHub SDK
 	githubConfig := p.GetConfig()
-
 
 	githubToken, foundToken := githubConfig.GetString("token")
 
