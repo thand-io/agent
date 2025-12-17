@@ -623,7 +623,7 @@ func (s *Server) handleLargeLanguageModelRequest(c *gin.Context, elevateRequest 
 		return
 	}
 
-	providers := s.Config.GetProvidersByCapabilityWithUser(foundUser.User, models.ProviderCapabilityRBAC)
+	providers := s.Config.GetProvidersByCapabilityWithUser(foundUser.User, models.ProviderCapabilityAuthorizeRole)
 
 	if len(providers) == 0 {
 		s.getErrorPage(c, http.StatusBadRequest, "No providers with RBAC capability are configured")

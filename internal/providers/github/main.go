@@ -43,15 +43,8 @@ func (p *githubProvider) Initialize(identifier string, provider models.Provider)
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityAuthorizer, // OAuth authorization
-		models.ProviderCapabilityRBAC,       // roles, permissions, resources
-		models.ProviderCapabilityIdentities, // users, groups, identities
+		GithubCapabilities...,
 	)
-
-	// Disable unsupported capabilities
-	p.DisableCapability(models.ProviderCapabilitySynchronizeResources)
-	p.DisableCapability(models.ProviderCapabilitySynchronizePermissions)
-	p.DisableCapability(models.ProviderCapabilitySynchronizeIdentities)
 
 	// Right lets figure out how to initialize the GitHub SDK
 	githubConfig := p.GetConfig()
@@ -70,7 +63,8 @@ func (p *githubProvider) Initialize(identifier string, provider models.Provider)
 	} else {
 
 		logrus.Debugln("GitHub token not provided; skipping client setup")
-		p.DisableCapability(models.ProviderCapabilityRBAC)
+		p.DisableCapability(models.ProviderCapabilityAuthorizeRole)
+		p.DisableCapability(models.ProviderCapabilityRevokeRole)
 		p.DisableCapability(models.ProviderCapabilityIdentities)
 	}
 

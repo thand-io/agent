@@ -202,7 +202,11 @@ func (c *Config) InitializeProviders() error {
 		// Check for capabilities for RBAC and Identities
 		if result.provider.GetClient().HasAnyCapability(
 			models.ProviderCapabilityIdentities,
-			models.ProviderCapabilityRBAC,
+			models.ProviderCapabilityUsers,
+			models.ProviderCapabilityGroups,
+			models.ProviderCapabilityResources,
+			models.ProviderCapabilityRoles,
+			models.ProviderCapabilityPermissions,
 		) {
 
 			logrus.Infoln("Provider", result.key, "supports RBAC/Identities capabilities")

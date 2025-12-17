@@ -21,7 +21,8 @@ func (p *terraformProvider) Initialize(identifier string, provider models.Provid
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityRBAC,
+		models.ProviderCapabilityAuthorizeRole,
+		models.ProviderCapabilityRevokeRole,
 	)
 
 	terraformConfig := p.GetConfig()

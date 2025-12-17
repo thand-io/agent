@@ -27,11 +27,9 @@ func (p *gsuiteProvider) Initialize(identifier string, provider models.Provider)
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityIdentities,
+		models.ProviderCapabilityUsers,
+		models.ProviderCapabilityGroups,
 	)
-
-	// Disable unsupported capabilities
-	p.DisableCapability(models.ProviderCapabilitySynchronizeIdentities)
 
 	// Get configuration
 	config := p.GetConfig()

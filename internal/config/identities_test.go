@@ -26,7 +26,10 @@ func NewMockIdentityProvider(name string, identities []models.Identity) *MockIde
 
 	mk := &MockIdentityProvider{
 		BaseProvider: models.NewBaseProvider(
-			name, provider, models.ProviderCapabilityIdentities),
+			name,
+			provider,
+			models.ProviderCapabilityIdentities,
+		),
 	}
 
 	mk.SetIdentities(identities)

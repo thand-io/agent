@@ -24,149 +24,244 @@ type ProviderCapabilitySet struct {
 
 const (
 	// Identity synchronization capabilities
-	ProviderCapabilityPrincipals ProviderCapability = "principals" // Primary capability
 	ProviderCapabilityIdentities ProviderCapability = "identities"
 	ProviderCapabilityUsers      ProviderCapability = "users"
 	ProviderCapabilityGroups     ProviderCapability = "groups"
 
 	// RBAC capabilities
-	ProviderCapabilityRBAC          ProviderCapability = "rbac" // Primary capability
 	ProviderCapabilityRoles         ProviderCapability = "roles"
 	ProviderCapabilityPermissions   ProviderCapability = "permissions"
 	ProviderCapabilityResources     ProviderCapability = "resources"
-	ProviderCapabilityAuthorizeRole ProviderCapability = "authorize_role"
-	ProviderCapabilityRevokeRole    ProviderCapability = "revoke_role"
+	ProviderCapabilityAuthorizeRole ProviderCapability = "authorizeRole"
+	ProviderCapabilityRevokeRole    ProviderCapability = "revokeRole"
 
 	// Authorizer capabilities
-	ProviderCapabilityAuthorizer       ProviderCapability = "authorizer" // Primary capability
-	ProviderCapabilityAuthorizeSession ProviderCapability = "authorize_session"
+	ProviderCapabilityAuthorizer ProviderCapability = "authorizer" // Primary capability
 
 	// Notifier capabilities
-	ProviderCapabilityNotifier          ProviderCapability = "notifier" // Primary capability
-	ProviderCapabilitySendNotifications ProviderCapability = "send_notifications"
+	ProviderCapabilityNotifier ProviderCapability = "notifier" // Primary capability
 )
 
-type RolesConfiguration struct {
-	SynchronizableConfiguration
-}
-
-type PermissionsConfiguration struct {
-	SynchronizableConfiguration
-}
-
-type ResourcesConfiguration struct {
-	SynchronizableConfiguration
-}
-
-type IdentitiesConfiguration struct {
-	SynchronizableConfiguration
-}
-
-type UsersConfiguration struct {
-	SynchronizableConfiguration
-}
-
-type GroupsConfiguration struct {
-	SynchronizableConfiguration
-}
+type RolesConfiguration = SynchronizableConfiguration
+type PermissionsConfiguration = SynchronizableConfiguration
+type ResourcesConfiguration = SynchronizableConfiguration
+type IdentitiesConfiguration = SynchronizableConfiguration
+type UsersConfiguration = SynchronizableConfiguration
+type GroupsConfiguration = SynchronizableConfiguration
 
 type SynchronizableConfiguration struct {
 	Synchronizable bool `json:"synchronizable,omitempty"`
 	Interval       int  `json:"interval,omitempty"` // in minutes
-	Disable        bool `json:"disable,omitempty"`
+	Enabled        bool `json:"enabled,omitempty"`
 }
 
-func (sc *SynchronizableConfiguration) CanSynchronize() bool {
-	return sc.Synchronizable && !sc.Disable
+type SynchronizableConfigurationImpl interface {
+	IsSynchronizable() bool
+	EnableSynchronization()
+	DisableSynchronization()
+
+	GetInterval() int
+	SetInterval(interval int)
+
+	// Methods to enable/disable
+	IsEnabled() bool
+	Enable()
+	Disable()
 }
 
-func (sc *SynchronizableConfiguration) Enable() {
-	sc.Disable = false
+func (sc *SynchronizableConfiguration) IsSynchronizable() bool {
+	return sc.Synchronizable && sc.Enabled
+}
+
+func (sc *SynchronizableConfiguration) EnableSynchronization() {
 	sc.Synchronizable = true
 }
 
-func (sc *SynchronizableConfiguration) DisableConfig() {
-	sc.Disable = true
+func (sc *SynchronizableConfiguration) DisableSynchronization() {
+	sc.Synchronizable = false
 }
 
-type AuthorizeSessionConfiguration struct {
-	DisablableConfiguration
+func (sc *SynchronizableConfiguration) GetInterval() int {
+	return sc.Interval
 }
 
-type SendNotificationsConfiguration struct {
-	DisablableConfiguration
+func (sc *SynchronizableConfiguration) SetInterval(interval int) {
+	sc.Interval = interval
 }
 
-type DisablableConfiguration struct {
-	Disable bool `json:"disable,omitempty"`
+func (sc *SynchronizableConfiguration) IsEnabled() bool {
+	return sc.Enabled
 }
 
-func (dc *DisablableConfiguration) CanSynchronize() bool {
-	return !dc.Disable
+func (sc *SynchronizableConfiguration) Enable() {
+	sc.Enabled = true
 }
 
-func (dc *DisablableConfiguration) Enable() {
-	dc.Disable = false
+func (sc *SynchronizableConfiguration) Disable() {
+	sc.Enabled = false
 }
 
-func (dc *DisablableConfiguration) DisableConfig() {
-	dc.Disable = true
+type AuthorizerConfiguration = ProviderConfiguration
+type NotifierConfiguration = ProviderConfiguration
+type AuthorizeRoleConfiguration = ProviderConfiguration
+type RevokeRoleConfiguration = ProviderConfiguration
+
+type ProviderConfiguration struct {
+	Enabled bool `json:"enabled,omitempty"`
+}
+
+type ProviderConfigurationImpl interface {
+	IsEnabled() bool
+	Enable()
+	Disable()
+}
+
+func (dc *ProviderConfiguration) IsEnabled() bool {
+	return dc.Enabled
+}
+
+func (dc *ProviderConfiguration) Enable() {
+	dc.Enabled = true
+}
+
+func (dc *ProviderConfiguration) Disable() {
+	dc.Enabled = false
 }
 
 type ProviderCapabilties struct {
-	Roles       RolesConfiguration       `json:"roles,omitempty"`
-	Permissions PermissionsConfiguration `json:"permissions,omitempty"`
-	Resources   ResourcesConfiguration   `json:"resources,omitempty"`
 
-	Identities IdentitiesConfiguration `json:"identities,omitempty"`
-	Users      UsersConfiguration      `json:"users,omitempty"`
-	Groups     GroupsConfiguration     `json:"groups,omitempty"`
+	// Identity management capabilities
+	Identities *IdentitiesConfiguration `json:"identities"`
+	Users      *UsersConfiguration      `json:"users"`
+	Groups     *GroupsConfiguration     `json:"groups"`
 
-	AuthorizeSession  AuthorizeSessionConfiguration  `json:"authorize_session,omitempty"`
-	SendNotifications SendNotificationsConfiguration `json:"send_notifications,omitempty"`
+	// SSO Capabilities
+	Authorizer *AuthorizerConfiguration `json:"authorizer"`
+
+	// Notifier
+	Notifier *NotifierConfiguration `json:"notifier"`
+
+	// Rbac capabilities
+	AuthorizeRole *AuthorizeRoleConfiguration `json:"authorize_role"`
+	RevokeRole    *RevokeRoleConfiguration    `json:"revoke_role"`
+	Roles         *RolesConfiguration         `json:"roles"`
+	Permissions   *PermissionsConfiguration   `json:"permissions"`
+	Resources     *ResourcesConfiguration     `json:"resources"`
+}
+
+// getCapabilityConfig returns the configuration for a given capability
+func (pc *ProviderCapabilties) getCapabilityConfig(capability ProviderCapability) ProviderConfigurationImpl {
+	configMap := map[ProviderCapability]ProviderConfigurationImpl{
+		ProviderCapabilityRoles:         pc.Roles,
+		ProviderCapabilityPermissions:   pc.Permissions,
+		ProviderCapabilityResources:     pc.Resources,
+		ProviderCapabilityIdentities:    pc.Identities,
+		ProviderCapabilityUsers:         pc.Users,
+		ProviderCapabilityGroups:        pc.Groups,
+		ProviderCapabilityAuthorizer:    pc.Authorizer,
+		ProviderCapabilityNotifier:      pc.Notifier,
+		ProviderCapabilityAuthorizeRole: pc.AuthorizeRole,
+		ProviderCapabilityRevokeRole:    pc.RevokeRole,
+	}
+	return configMap[capability]
 }
 
 func (pc *ProviderCapabilties) IsCapabilityEnabled(capability ProviderCapability) bool {
-	switch capability {
-	case ProviderCapabilityRoles:
-		return !pc.Roles.Disable
-	case ProviderCapabilityPermissions:
-		return !pc.Permissions.Disable
-	case ProviderCapabilityResources:
-		return !pc.Resources.Disable
-	case ProviderCapabilityIdentities:
-		return !pc.Identities.Disable
-	case ProviderCapabilityUsers:
-		return !pc.Users.Disable
-	case ProviderCapabilityGroups:
-		return !pc.Groups.Disable
-	case ProviderCapabilityAuthorizeSession:
-		return !pc.AuthorizeSession.Disable
-	case ProviderCapabilitySendNotifications:
-		return !pc.SendNotifications.Disable
-	default:
+	config := pc.getCapabilityConfig(capability)
+	if config == nil {
 		return false
+	}
+	// Otherwise, it's a DisablableConfiguration
+	return config.IsEnabled()
+}
+
+func (pc *ProviderCapabilties) AddCapability(capability ProviderCapability) {
+	config := pc.getCapabilityConfig(capability)
+	if config != nil {
+		config.Enable()
+	}
+}
+
+func (pc *ProviderCapabilties) Update(updates ProviderCapabilties) {
+
+	// We first need to get a map of the existing capabilities
+	// and check to see whats enabled. Then if if the incoming
+	// updates have a capability disabled then we need to disable it.
+	// DO NOT enable anything that is already disabled.
+	// We also want to update the existing configuration values
+
+	updateSync := func(
+		curr SynchronizableConfigurationImpl,
+		upd SynchronizableConfigurationImpl,
+	) {
+		if curr == nil || upd == nil {
+			return
+		}
+		if upd.GetInterval() != 0 {
+			curr.SetInterval(upd.GetInterval())
+		}
+	}
+
+	updateDisable := func(
+		curr ProviderConfigurationImpl,
+		upd ProviderConfigurationImpl,
+	) {
+		// No-op for now as we can't distinguish between disabled and default false
+	}
+
+	if pc.Roles != nil && updates.Roles != nil {
+		updateSync(pc.Roles, updates.Roles)
+	}
+	if pc.Permissions != nil && updates.Permissions != nil {
+		updateSync(pc.Permissions, updates.Permissions)
+	}
+	if pc.Resources != nil && updates.Resources != nil {
+		updateSync(pc.Resources, updates.Resources)
+	}
+
+	if pc.Identities != nil && updates.Identities != nil {
+		updateSync(pc.Identities, updates.Identities)
+	}
+	if pc.Users != nil && updates.Users != nil {
+		updateSync(pc.Users, updates.Users)
+	}
+	if pc.Groups != nil && updates.Groups != nil {
+		updateSync(pc.Groups, updates.Groups)
+	}
+
+	if pc.Authorizer != nil && updates.Authorizer != nil {
+		updateDisable(pc.Authorizer, updates.Authorizer)
+	}
+	if pc.Notifier != nil && updates.Notifier != nil {
+		updateDisable(pc.Notifier, updates.Notifier)
+	}
+	if pc.AuthorizeRole != nil && updates.AuthorizeRole != nil {
+		updateDisable(pc.AuthorizeRole, updates.AuthorizeRole)
+	}
+	if pc.RevokeRole != nil && updates.RevokeRole != nil {
+		updateDisable(pc.RevokeRole, updates.RevokeRole)
+	}
+}
+
+func (pc *ProviderCapabilties) RemoveCapability(capability ProviderCapability) {
+	config := pc.getCapabilityConfig(capability)
+	if config != nil {
+		config.Disable()
 	}
 }
 
 func NewCapability() *SynchronizableConfiguration {
 	return &SynchronizableConfiguration{
-		Synchronizable: false,
-		Interval:       60,
-		Disable:        false,
+		Synchronizable: true,
+		Interval:       3600,
+		Enabled:        true,
 	}
 }
 
-func NewSynchronizableCapability() *DisablableConfiguration {
-	return &DisablableConfiguration{
-		Disable: false,
+func NewSynchronizableCapability() *ProviderConfiguration {
+	return &ProviderConfiguration{
+		Enabled: false,
 	}
-}
-
-type ProviderCapabilityImpl interface {
-	CanSynchronize() bool
-	Enable()
-	DisableConfig()
 }
 
 var (
@@ -184,12 +279,12 @@ var (
 	}
 	ProviderCapabilitySetAuthorizer = ProviderCapabilitySet{
 		Capabilities: []CapabilityRequirement{
-			{ProviderCapabilityAuthorizeSession, false, true}, // Required
+			{ProviderCapabilityAuthorizer, false, true}, // Required
 		},
 	}
 	ProviderCapabilitySetNotifier = ProviderCapabilitySet{
 		Capabilities: []CapabilityRequirement{
-			{ProviderCapabilitySendNotifications, false, true}, // Required
+			{ProviderCapabilityNotifier, false, true}, // Required
 		},
 	}
 	ProviderCapabilitySetIdentities = ProviderCapabilitySet{
@@ -201,16 +296,43 @@ var (
 	}
 )
 
+func NewProviderCapabilities() *ProviderCapabilties {
+	return &ProviderCapabilties{
+		Roles:         &RolesConfiguration{},
+		Permissions:   &PermissionsConfiguration{},
+		Resources:     &ResourcesConfiguration{},
+		Identities:    &IdentitiesConfiguration{},
+		Users:         &UsersConfiguration{},
+		Groups:        &GroupsConfiguration{},
+		Authorizer:    &AuthorizerConfiguration{},
+		Notifier:      &NotifierConfiguration{},
+		AuthorizeRole: &AuthorizeRoleConfiguration{},
+		RevokeRole:    &RevokeRoleConfiguration{},
+	}
+}
+
 func GetCapabilityFromString(cap string) (ProviderCapability, error) {
 	switch strings.ToLower(cap) {
-	case string(ProviderCapabilityRBAC):
-		return ProviderCapabilityRBAC, nil
 	case string(ProviderCapabilityAuthorizer):
 		return ProviderCapabilityAuthorizer, nil
 	case string(ProviderCapabilityNotifier):
 		return ProviderCapabilityNotifier, nil
 	case string(ProviderCapabilityIdentities):
 		return ProviderCapabilityIdentities, nil
+	case string(ProviderCapabilityUsers):
+		return ProviderCapabilityUsers, nil
+	case string(ProviderCapabilityGroups):
+		return ProviderCapabilityGroups, nil
+	case string(ProviderCapabilityRoles):
+		return ProviderCapabilityRoles, nil
+	case string(ProviderCapabilityPermissions):
+		return ProviderCapabilityPermissions, nil
+	case string(ProviderCapabilityResources):
+		return ProviderCapabilityResources, nil
+	case string(ProviderCapabilityAuthorizeRole):
+		return ProviderCapabilityAuthorizeRole, nil
+	case string(ProviderCapabilityRevokeRole):
+		return ProviderCapabilityRevokeRole, nil
 	default:
 		return "", fmt.Errorf("unknown capability: %s", cap)
 	}
@@ -226,168 +348,77 @@ func (p *BaseProvider) HasCapability(capability ProviderCapability) bool {
 	if p.GetCapabilities().IsCapabilityEnabled(capability) {
 		return true
 	}
-
-	// Check top-level capabilities by their requirement sets
-	var capabilitySet *ProviderCapabilitySet
-	switch capability {
-	case ProviderCapabilityRBAC:
-		capabilitySet = &ProviderCapabilitySetRBAC
-	case ProviderCapabilityAuthorizer:
-		capabilitySet = &ProviderCapabilitySetAuthorizer
-	case ProviderCapabilityNotifier:
-		capabilitySet = &ProviderCapabilitySetNotifier
-	case ProviderCapabilityIdentities:
-		capabilitySet = &ProviderCapabilitySetIdentities
-	default:
-		return false
-	}
-
-	// Check if all required capabilities are present
-	for _, req := range capabilitySet.Capabilities {
-		if req.Required && !p.GetCapabilities().IsCapabilityEnabled(req.Capability) {
-			return false
-		}
-	}
-
-	// For capabilities with optional requirements, check if at least one is present
-	// This applies to RBAC and Identities which have optional capabilities
-	hasOptional := false
-	hasOptionalCaps := false
-	for _, req := range capabilitySet.Capabilities {
-		if !req.Required {
-			hasOptionalCaps = true
-			if p.GetCapabilities().IsCapabilityEnabled(req.Capability) {
-				hasOptional = true
-				break
-			}
-		}
-	}
-
-	// If capability set has optional capabilities, at least one must be present
-	if hasOptionalCaps {
-		return hasOptional
-	}
-
-	// For capability sets with only required capabilities (Authorizer, Notifier),
-	// having all required capabilities is sufficient
-	return true
+	return false
 }
 
 func (p *BaseProvider) HasAnyCapability(capabilities ...ProviderCapability) bool {
 	return slices.ContainsFunc(capabilities, p.HasCapability)
 }
 
-func (p *BaseProvider) getCapabilityImpl(capability ProviderCapability) ProviderCapabilityImpl {
-	caps := p.GetCapabilities()
-	switch capability {
-	case ProviderCapabilityRoles:
-		return &caps.Roles
-	case ProviderCapabilityPermissions:
-		return &caps.Permissions
-	case ProviderCapabilityResources:
-		return &caps.Resources
-	case ProviderCapabilityIdentities:
-		return &caps.Identities
-	case ProviderCapabilityUsers:
-		return &caps.Users
-	case ProviderCapabilityGroups:
-		return &caps.Groups
-	case ProviderCapabilityAuthorizeSession:
-		return &caps.AuthorizeSession
-	case ProviderCapabilitySendNotifications:
-		return &caps.SendNotifications
-	default:
-		return nil
+func (p *BaseProvider) getCapability(capability ProviderCapability) ProviderConfigurationImpl {
+	return p.GetCapabilities().getCapabilityConfig(capability)
+}
+
+func (p *BaseProvider) getSynchronizableCapability(capability ProviderCapability) SynchronizableConfigurationImpl {
+	config := p.GetCapabilities().getCapabilityConfig(capability)
+	if syncConfig, ok := config.(SynchronizableConfigurationImpl); ok {
+		return syncConfig
 	}
+	return nil
 }
 
 func (p *BaseProvider) EnableCapability(capability ProviderCapability) {
 	// For top-level capabilities, enable all their sub-capabilities
-	switch capability {
-	case ProviderCapabilityRBAC:
-		p.EnableCapability(ProviderCapabilityRoles)
-		p.EnableCapability(ProviderCapabilityPermissions)
-		p.EnableCapability(ProviderCapabilityResources)
-		p.EnableCapability(ProviderCapabilityAuthorizeRole)
-		p.EnableCapability(ProviderCapabilityRevokeRole)
-	case ProviderCapabilityAuthorizer:
-		p.EnableCapability(ProviderCapabilityAuthorizeSession)
-	case ProviderCapabilityNotifier:
-		p.EnableCapability(ProviderCapabilitySendNotifications)
-	case ProviderCapabilityPrincipals:
-		p.EnableCapability(ProviderCapabilityIdentities)
-		p.EnableCapability(ProviderCapabilityUsers)
-		p.EnableCapability(ProviderCapabilityGroups)
-	default:
-		// Use the interface implementation for individual capabilities
-		if impl := p.getCapabilityImpl(capability); impl != nil {
-			impl.Enable()
-		}
+	// Use the interface implementation for individual capabilities
+	if impl := p.getCapability(capability); impl != nil {
+		impl.Enable()
+	}
+}
+
+func (p *BaseProvider) DisableCapabilities(capability ...ProviderCapability) {
+	for _, cap := range capability {
+		p.DisableCapability(cap)
 	}
 }
 
 func (p *BaseProvider) DisableCapability(capability ProviderCapability) {
 	// For top-level capabilities, disable all their sub-capabilities
-	switch capability {
-	case ProviderCapabilityRBAC:
-		p.DisableCapability(ProviderCapabilityRoles)
-		p.DisableCapability(ProviderCapabilityPermissions)
-		p.DisableCapability(ProviderCapabilityResources)
-		p.DisableCapability(ProviderCapabilityAuthorizeRole)
-		p.DisableCapability(ProviderCapabilityRevokeRole)
-	case ProviderCapabilityAuthorizer:
-		p.DisableCapability(ProviderCapabilityAuthorizeSession)
-	case ProviderCapabilityNotifier:
-		p.DisableCapability(ProviderCapabilitySendNotifications)
-	case ProviderCapabilityPrincipals:
-		p.DisableCapability(ProviderCapabilityIdentities)
-		p.DisableCapability(ProviderCapabilityUsers)
-		p.DisableCapability(ProviderCapabilityGroups)
-	default:
-		// Use the interface implementation for individual capabilities
-		if impl := p.getCapabilityImpl(capability); impl != nil {
-			impl.DisableConfig()
-		}
+	if impl := p.getCapability(capability); impl != nil {
+		impl.Disable()
 	}
+}
 
-func (p *BaseProvider) CanSynchronizeRoles() bool {
-	if !p.HasCapability(ProviderCapabilityRoles) {
+func (p *BaseProvider) CanSynchronize(capability ProviderCapability) bool {
+	if !p.HasCapability(capability) {
 		return false
 	}
-	return p.GetCapabilities().Roles.Synchronizable && !p.GetCapabilities().Roles.Disable
+	cap := p.getSynchronizableCapability(capability)
+	if cap == nil {
+		return false
+	}
+	return cap.IsSynchronizable()
+}
+
+func (p *BaseProvider) CanSynchronizeRoles() bool {
+	return p.CanSynchronize(ProviderCapabilityRoles)
 }
 
 func (p *BaseProvider) CanSynchronizePermissions() bool {
-	if !p.HasCapability(ProviderCapabilityPermissions) {
-		return false
-	}
-	return p.GetCapabilities().Permissions.Synchronizable && !p.GetCapabilities().Permissions.Disable
+	return p.CanSynchronize(ProviderCapabilityPermissions)
 }
 
 func (p *BaseProvider) CanSynchronizeUsers() bool {
-	if !p.HasCapability(ProviderCapabilityUsers) {
-		return false
-	}
-	return p.GetCapabilities().Users.Synchronizable && !p.GetCapabilities().Users.Disable
+	return p.CanSynchronize(ProviderCapabilityUsers)
 }
 
 func (p *BaseProvider) CanSynchronizeGroups() bool {
-	if !p.HasCapability(ProviderCapabilityGroups) {
-		return false
-	}
-	return p.GetCapabilities().Groups.Synchronizable && !p.GetCapabilities().Groups.Disable
+	return p.CanSynchronize(ProviderCapabilityGroups)
 }
 
 func (p *BaseProvider) CanSynchronizeIdentities() bool {
-	if !p.HasCapability(ProviderCapabilityIdentities) {
-		return false
-	}
-	return p.GetCapabilities().Identities.Synchronizable && !p.GetCapabilities().Identities.Disable
+	return p.CanSynchronize(ProviderCapabilityIdentities)
 }
 
 func (p *BaseProvider) CanSynchronizeResources() bool {
-	if !p.HasCapability(ProviderCapabilityResources) {
-		return false
-	}
-	return p.GetCapabilities().Resources.Synchronizable && !p.GetCapabilities().Resources.Disable
+	return p.CanSynchronize(ProviderCapabilityResources)
 }

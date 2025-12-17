@@ -27,7 +27,7 @@ func (p *azureProviderMock) Initialize(identifier string, provider models.Provid
 	p.azureProvider.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityRBAC,
+		AzureCapabilities...,
 	)
 
 	// Load Azure Permissions and Roles from shared singleton

@@ -26,14 +26,8 @@ func (p *oktaProvider) Initialize(identifier string, provider models.Provider) e
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityRBAC,       // roles, permissions, resources
-		models.ProviderCapabilityIdentities, // users, groups, identities
+		OktaCapabilities...,
 	)
-
-	// Disable unsupported capabilities
-	p.DisableCapability(models.ProviderCapabilitySynchronizeIdentities)
-	// We have permissions, just no need to sync as they are static and not dynamic
-	p.DisableCapability(models.ProviderCapabilitySynchronizePermissions)
 
 	// Get Okta configuration
 	oktaConfig := p.GetConfig()

@@ -32,7 +32,8 @@ func (p *remoteProviderProxy) Initialize(identifier string, provider models.Prov
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityRBAC,
+		models.ProviderCapabilityRoles,
+		models.ProviderCapabilityPermissions,
 	)
 
 	return nil

@@ -8,554 +8,340 @@ import (
 
 func TestBaseProvider_HasCapability(t *testing.T) {
 	tests := []struct {
-		name         string
-		capabilities []ProviderCapability
-		checkCap     ProviderCapability
-		expected     bool
+		name      string
+		setupCaps func(*ProviderCapabilties)
+		checkCap  ProviderCapability
+		expected  bool
 	}{
-		// Direct capability checks
+		// Roles
 		{
-			name:         "Direct capability present",
-			capabilities: []ProviderCapability{ProviderCapabilitySynchronizeRoles},
-			checkCap:     ProviderCapabilitySynchronizeRoles,
-			expected:     true,
-		},
-		{
-			name:         "Direct capability not present",
-			capabilities: []ProviderCapability{ProviderCapabilitySynchronizeRoles},
-			checkCap:     ProviderCapabilitySynchronizePermissions,
-			expected:     false,
-		},
-
-		// RBAC capability checks (requires AuthorizeRole + RevokeRole + at least one optional)
-		{
-			name: "RBAC with all required and one optional",
-			capabilities: []ProviderCapability{
-				ProviderCapabilityAuthorizeRole,
-				ProviderCapabilityRevokeRole,
-				ProviderCapabilitySynchronizeRoles,
+			name: "Roles enabled",
+			setupCaps: func(pc *ProviderCapabilties) {
+				pc.Roles = &RolesConfiguration{}
+				pc.Roles.Enabled = true
+				pc.Roles.Synchronizable = true
 			},
-			checkCap: ProviderCapabilityRBAC,
+			checkCap: ProviderCapabilityRoles,
 			expected: true,
 		},
 		{
-			name: "RBAC with all required and multiple optional",
-			capabilities: []ProviderCapability{
-				ProviderCapabilityAuthorizeRole,
-				ProviderCapabilityRevokeRole,
-				ProviderCapabilitySynchronizeRoles,
-				ProviderCapabilitySynchronizePermissions,
+			name: "Roles disabled",
+			setupCaps: func(pc *ProviderCapabilties) {
+				pc.Roles = &RolesConfiguration{}
+				pc.Roles.Enabled = false
 			},
-			checkCap: ProviderCapabilityRBAC,
+			checkCap: ProviderCapabilityRoles,
+			expected: false,
+		},
+
+		// Permissions
+		{
+			name: "Permissions enabled",
+			setupCaps: func(pc *ProviderCapabilties) {
+				pc.Permissions = &PermissionsConfiguration{}
+				pc.Permissions.Enabled = true
+				pc.Permissions.Synchronizable = true
+			},
+			checkCap: ProviderCapabilityPermissions,
 			expected: true,
 		},
+
+		// Resources
 		{
-			name: "RBAC missing required authorize_role",
-			capabilities: []ProviderCapability{
-				ProviderCapabilityRevokeRole,
-				ProviderCapabilitySynchronizeRoles,
+			name: "Resources enabled",
+			setupCaps: func(pc *ProviderCapabilties) {
+				pc.Resources = &ResourcesConfiguration{}
+				pc.Resources.Enabled = true
+				pc.Resources.Synchronizable = true
 			},
-			checkCap: ProviderCapabilityRBAC,
-			expected: false,
-		},
-		{
-			name: "RBAC missing required revoke_role",
-			capabilities: []ProviderCapability{
-				ProviderCapabilityAuthorizeRole,
-				ProviderCapabilitySynchronizeRoles,
-			},
-			checkCap: ProviderCapabilityRBAC,
-			expected: false,
-		},
-		{
-			name: "RBAC missing all required but has optional",
-			capabilities: []ProviderCapability{
-				ProviderCapabilitySynchronizeRoles,
-			},
-			checkCap: ProviderCapabilityRBAC,
-			expected: false,
-		},
-		{
-			name: "RBAC has required but missing all optional",
-			capabilities: []ProviderCapability{
-				ProviderCapabilityAuthorizeRole,
-				ProviderCapabilityRevokeRole,
-			},
-			checkCap: ProviderCapabilityRBAC,
-			expected: false,
+			checkCap: ProviderCapabilityResources,
+			expected: true,
 		},
 
-		// Authorizer capability checks (requires AuthorizeSession)
+		// Identities
 		{
-			name:         "Authorizer with required capability",
-			capabilities: []ProviderCapability{ProviderCapabilityAuthorizeSession},
-			checkCap:     ProviderCapabilityAuthorizer,
-			expected:     true,
-		},
-		{
-			name:         "Authorizer missing required capability",
-			capabilities: []ProviderCapability{ProviderCapabilitySendNotifications},
-			checkCap:     ProviderCapabilityAuthorizer,
-			expected:     false,
-		},
-
-		// Notifier capability checks (requires SendNotifications)
-		{
-			name:         "Notifier with required capability",
-			capabilities: []ProviderCapability{ProviderCapabilitySendNotifications},
-			checkCap:     ProviderCapabilityNotifier,
-			expected:     true,
-		},
-		{
-			name:         "Notifier missing required capability",
-			capabilities: []ProviderCapability{ProviderCapabilityAuthorizeSession},
-			checkCap:     ProviderCapabilityNotifier,
-			expected:     false,
-		},
-
-		// Identities capability checks (requires at least one optional)
-		{
-			name:         "Identities with synchronize_identities",
-			capabilities: []ProviderCapability{ProviderCapabilitySynchronizeIdentities},
-			checkCap:     ProviderCapabilityIdentities,
-			expected:     true,
-		},
-		{
-			name:         "Identities with synchronize_users",
-			capabilities: []ProviderCapability{ProviderCapabilitySynchronizeUsers},
-			checkCap:     ProviderCapabilityIdentities,
-			expected:     true,
-		},
-		{
-			name:         "Identities with synchronize_groups",
-			capabilities: []ProviderCapability{ProviderCapabilitySynchronizeGroups},
-			checkCap:     ProviderCapabilityIdentities,
-			expected:     true,
-		},
-		{
-			name: "Identities with all optional capabilities",
-			capabilities: []ProviderCapability{
-				ProviderCapabilitySynchronizeIdentities,
-				ProviderCapabilitySynchronizeUsers,
-				ProviderCapabilitySynchronizeGroups,
+			name: "Identities enabled",
+			setupCaps: func(pc *ProviderCapabilties) {
+				pc.Identities = &IdentitiesConfiguration{}
+				pc.Identities.Enabled = true
+				pc.Identities.Synchronizable = true
 			},
 			checkCap: ProviderCapabilityIdentities,
 			expected: true,
 		},
+
+		// Users
 		{
-			name:         "Identities with no optional capabilities",
-			capabilities: []ProviderCapability{ProviderCapabilityAuthorizeSession},
-			checkCap:     ProviderCapabilityIdentities,
-			expected:     false,
+			name: "Users enabled",
+			setupCaps: func(pc *ProviderCapabilties) {
+				pc.Users = &UsersConfiguration{}
+				pc.Users.Enabled = true
+				pc.Users.Synchronizable = true
+			},
+			checkCap: ProviderCapabilityUsers,
+			expected: true,
+		},
+
+		// Groups
+		{
+			name: "Groups enabled",
+			setupCaps: func(pc *ProviderCapabilties) {
+				pc.Groups = &GroupsConfiguration{}
+				pc.Groups.Enabled = true
+				pc.Groups.Synchronizable = true
+			},
+			checkCap: ProviderCapabilityGroups,
+			expected: true,
+		},
+
+		// Authorizer
+		{
+			name: "Authorizer enabled",
+			setupCaps: func(pc *ProviderCapabilties) {
+				pc.Authorizer = &AuthorizerConfiguration{}
+				pc.Authorizer.Enabled = true
+			},
+			checkCap: ProviderCapabilityAuthorizer,
+			expected: true,
+		},
+
+		// Notifier
+		{
+			name: "Notifier enabled",
+			setupCaps: func(pc *ProviderCapabilties) {
+				pc.Notifier = &NotifierConfiguration{}
+				pc.Notifier.Enabled = true
+			},
+			checkCap: ProviderCapabilityNotifier,
+			expected: true,
+		},
+
+		// AuthorizeRole
+		{
+			name: "AuthorizeRole enabled",
+			setupCaps: func(pc *ProviderCapabilties) {
+				pc.AuthorizeRole = &AuthorizeRoleConfiguration{}
+				pc.AuthorizeRole.Enabled = true
+			},
+			checkCap: ProviderCapabilityAuthorizeRole,
+			expected: true,
+		},
+
+		// RevokeRole
+		{
+			name: "RevokeRole enabled",
+			setupCaps: func(pc *ProviderCapabilties) {
+				pc.RevokeRole = &RevokeRoleConfiguration{}
+				pc.RevokeRole.Enabled = true
+			},
+			checkCap: ProviderCapabilityRevokeRole,
+			expected: true,
 		},
 
 		// Unknown capability
 		{
-			name:         "Unknown capability",
-			capabilities: []ProviderCapability{ProviderCapabilitySynchronizeRoles},
-			checkCap:     ProviderCapability("unknown"),
-			expected:     false,
-		},
-
-		// Empty capabilities
-		{
-			name:         "Empty capabilities list",
-			capabilities: []ProviderCapability{},
-			checkCap:     ProviderCapabilityRBAC,
-			expected:     false,
+			name: "Unknown capability",
+			setupCaps: func(pc *ProviderCapabilties) {
+				pc.Roles = &RolesConfiguration{}
+				pc.Roles.Enabled = true
+			},
+			checkCap: ProviderCapability("unknown"),
+			expected: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			caps := &ProviderCapabilties{}
+			if tt.setupCaps != nil {
+				tt.setupCaps(caps)
+			}
 			p := &BaseProvider{
-				capabilities: tt.capabilities,
+				capabilities: caps,
 			}
 			result := p.HasCapability(tt.checkCap)
 			assert.Equal(t, tt.expected, result, "HasCapability(%s) returned unexpected result", tt.checkCap)
 		})
 	}
 }
-func TestBaseProvider_EnableCapability_TopLevel(t *testing.T) {
-	tests := []struct {
-		name             string
-		capabilityToAdd  ProviderCapability
-		expectedCapNames []ProviderCapability
-		shouldHaveCap    ProviderCapability
-	}{
-		{
-			name:            "Enable RBAC adds all RBAC sub-capabilities",
-			capabilityToAdd: ProviderCapabilityRBAC,
-			expectedCapNames: []ProviderCapability{
-				ProviderCapabilitySynchronizeRoles,
-				ProviderCapabilitySynchronizePermissions,
-				ProviderCapabilitySynchronizeResources,
-				ProviderCapabilityAuthorizeRole,
-				ProviderCapabilityRevokeRole,
-			},
-			shouldHaveCap: ProviderCapabilityRBAC,
-		},
-		{
-			name:            "Enable Authorizer adds all Authorizer sub-capabilities",
-			capabilityToAdd: ProviderCapabilityAuthorizer,
-			expectedCapNames: []ProviderCapability{
-				ProviderCapabilityAuthorizeSession,
-			},
-			shouldHaveCap: ProviderCapabilityAuthorizer,
-		},
-		{
-			name:            "Enable Notifier adds all Notifier sub-capabilities",
-			capabilityToAdd: ProviderCapabilityNotifier,
-			expectedCapNames: []ProviderCapability{
-				ProviderCapabilitySendNotifications,
-			},
-			shouldHaveCap: ProviderCapabilityNotifier,
-		},
-		{
-			name:            "Enable Identities adds all Identities sub-capabilities",
-			capabilityToAdd: ProviderCapabilityIdentities,
-			expectedCapNames: []ProviderCapability{
-				ProviderCapabilitySynchronizeIdentities,
-				ProviderCapabilitySynchronizeUsers,
-				ProviderCapabilitySynchronizeGroups,
-			},
-			shouldHaveCap: ProviderCapabilityIdentities,
-		},
-	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			p := &BaseProvider{
-				capabilities: make([]ProviderCapability, 0),
-			}
-
-			p.EnableCapability(tt.capabilityToAdd)
-
-			// Verify all expected sub-capabilities are present
-			for _, expectedCap := range tt.expectedCapNames {
-				assert.True(t, p.HasCapability(expectedCap),
-					"Expected sub-capability %s to be present after enabling %s",
-					expectedCap, tt.capabilityToAdd)
-			}
-
-			// Verify the top-level capability check works
-			assert.True(t, p.HasCapability(tt.shouldHaveCap),
-				"Expected to have capability %s", tt.shouldHaveCap)
-		})
+// Helper to create fully initialized capabilities for testing Enable/Disable
+func newInitializedCapabilities() *ProviderCapabilties {
+	return &ProviderCapabilties{
+		Roles:         &RolesConfiguration{},
+		Permissions:   &PermissionsConfiguration{},
+		Resources:     &ResourcesConfiguration{},
+		Identities:    &IdentitiesConfiguration{},
+		Users:         &UsersConfiguration{},
+		Groups:        &GroupsConfiguration{},
+		Authorizer:    &AuthorizerConfiguration{},
+		Notifier:      &NotifierConfiguration{},
+		AuthorizeRole: &AuthorizeRoleConfiguration{},
+		RevokeRole:    &RevokeRoleConfiguration{},
 	}
 }
 
-func TestBaseProvider_EnableCapability_SubCapability(t *testing.T) {
+func TestBaseProvider_EnableCapability(t *testing.T) {
 	tests := []struct {
 		name            string
 		capabilityToAdd ProviderCapability
-		shouldHaveCap   ProviderCapability
 	}{
-		{
-			name:            "Enable individual sub-capability",
-			capabilityToAdd: ProviderCapabilitySynchronizeRoles,
-			shouldHaveCap:   ProviderCapabilitySynchronizeRoles,
-		},
-		{
-			name:            "Enable another individual sub-capability",
-			capabilityToAdd: ProviderCapabilityAuthorizeSession,
-			shouldHaveCap:   ProviderCapabilityAuthorizeSession,
-		},
+		{"Roles", ProviderCapabilityRoles},
+		{"Permissions", ProviderCapabilityPermissions},
+		{"Resources", ProviderCapabilityResources},
+		{"Identities", ProviderCapabilityIdentities},
+		{"Users", ProviderCapabilityUsers},
+		{"Groups", ProviderCapabilityGroups},
+		{"Authorizer", ProviderCapabilityAuthorizer},
+		{"Notifier", ProviderCapabilityNotifier},
+		{"AuthorizeRole", ProviderCapabilityAuthorizeRole},
+		{"RevokeRole", ProviderCapabilityRevokeRole},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &BaseProvider{
-				capabilities: make([]ProviderCapability, 0),
+				capabilities: newInitializedCapabilities(),
 			}
+
+			// Ensure it's disabled initially
+			// (default bool is false, so Enabled=false)
 
 			p.EnableCapability(tt.capabilityToAdd)
 
-			assert.True(t, p.HasCapability(tt.shouldHaveCap),
-				"Expected to have capability %s", tt.shouldHaveCap)
-			assert.Len(t, p.capabilities, 1)
+			assert.True(t, p.HasCapability(tt.capabilityToAdd),
+				"Expected to have capability %s after enabling", tt.capabilityToAdd)
 		})
 	}
 }
 
-func TestBaseProvider_EnableCapability_NoDuplicates(t *testing.T) {
-	p := &BaseProvider{
-		capabilities: make([]ProviderCapability, 0),
-	}
-
-	// Enable RBAC first time
-	p.EnableCapability(ProviderCapabilityRBAC)
-	firstCount := len(p.capabilities)
-
-	// Enable RBAC second time
-	p.EnableCapability(ProviderCapabilityRBAC)
-	secondCount := len(p.capabilities)
-
-	assert.Equal(t, firstCount, secondCount, "Enabling same capability twice should not add duplicates")
-	assert.True(t, p.HasCapability(ProviderCapabilityRBAC))
-}
-
-func TestBaseProvider_DisableCapability_TopLevel(t *testing.T) {
+func TestBaseProvider_DisableCapability(t *testing.T) {
 	tests := []struct {
-		name                string
-		capabilityToRemove  ProviderCapability
-		initialCapabilities []ProviderCapability
-		shouldNotHaveCap    ProviderCapability
+		name               string
+		capabilityToRemove ProviderCapability
 	}{
-		{
-			name:               "Disable RBAC removes all RBAC sub-capabilities",
-			capabilityToRemove: ProviderCapabilityRBAC,
-			initialCapabilities: []ProviderCapability{
-				ProviderCapabilitySynchronizeRoles,
-				ProviderCapabilitySynchronizePermissions,
-				ProviderCapabilitySynchronizeResources,
-				ProviderCapabilityAuthorizeRole,
-				ProviderCapabilityRevokeRole,
-			},
-			shouldNotHaveCap: ProviderCapabilityRBAC,
-		},
-		{
-			name:               "Disable Authorizer removes all Authorizer sub-capabilities",
-			capabilityToRemove: ProviderCapabilityAuthorizer,
-			initialCapabilities: []ProviderCapability{
-				ProviderCapabilityAuthorizeSession,
-			},
-			shouldNotHaveCap: ProviderCapabilityAuthorizer,
-		},
-		{
-			name:               "Disable Notifier removes all Notifier sub-capabilities",
-			capabilityToRemove: ProviderCapabilityNotifier,
-			initialCapabilities: []ProviderCapability{
-				ProviderCapabilitySendNotifications,
-			},
-			shouldNotHaveCap: ProviderCapabilityNotifier,
-		},
-		{
-			name:               "Disable Identities removes all Identities sub-capabilities",
-			capabilityToRemove: ProviderCapabilityIdentities,
-			initialCapabilities: []ProviderCapability{
-				ProviderCapabilitySynchronizeIdentities,
-				ProviderCapabilitySynchronizeUsers,
-				ProviderCapabilitySynchronizeGroups,
-			},
-			shouldNotHaveCap: ProviderCapabilityIdentities,
-		},
+		{"Roles", ProviderCapabilityRoles},
+		{"Permissions", ProviderCapabilityPermissions},
+		{"Resources", ProviderCapabilityResources},
+		{"Identities", ProviderCapabilityIdentities},
+		{"Users", ProviderCapabilityUsers},
+		{"Groups", ProviderCapabilityGroups},
+		{"Authorizer", ProviderCapabilityAuthorizer},
+		{"Notifier", ProviderCapabilityNotifier},
+		{"AuthorizeRole", ProviderCapabilityAuthorizeRole},
+		{"RevokeRole", ProviderCapabilityRevokeRole},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &BaseProvider{
-				capabilities: tt.initialCapabilities,
+				capabilities: newInitializedCapabilities(),
 			}
 
-			// Verify the capability is present before disabling
-			assert.True(t, p.HasCapability(tt.shouldNotHaveCap),
-				"Expected to have capability %s before disabling", tt.shouldNotHaveCap)
+			// Enable it first
+			p.EnableCapability(tt.capabilityToRemove)
+			assert.True(t, p.HasCapability(tt.capabilityToRemove), "Setup: failed to enable capability")
 
+			// Disable it
 			p.DisableCapability(tt.capabilityToRemove)
 
-			// Verify the capability is gone after disabling
-			assert.False(t, p.HasCapability(tt.shouldNotHaveCap),
-				"Expected to NOT have capability %s after disabling", tt.shouldNotHaveCap)
+			assert.False(t, p.HasCapability(tt.capabilityToRemove),
+				"Expected to NOT have capability %s after disabling", tt.capabilityToRemove)
 		})
 	}
 }
 
-func TestBaseProvider_DisableCapability_SubCapability(t *testing.T) {
+func TestBaseProvider_EnableDisable_Idempotency(t *testing.T) {
 	p := &BaseProvider{
-		capabilities: []ProviderCapability{
-			ProviderCapabilitySynchronizeRoles,
-			ProviderCapabilityAuthorizeRole,
-			ProviderCapabilityRevokeRole,
+		capabilities: newInitializedCapabilities(),
+	}
+
+	cap := ProviderCapabilityRoles
+
+	// Enable twice
+	p.EnableCapability(cap)
+	p.EnableCapability(cap)
+	assert.True(t, p.HasCapability(cap))
+
+	// Disable twice
+	p.DisableCapability(cap)
+	p.DisableCapability(cap)
+	assert.False(t, p.HasCapability(cap))
+}
+
+func TestBaseProvider_HasAnyCapability(t *testing.T) {
+	tests := []struct {
+		name      string
+		setupCaps func(*ProviderCapabilties)
+		checkCaps []ProviderCapability
+		expected  bool
+	}{
+		{
+			name: "Has one of the capabilities",
+			setupCaps: func(pc *ProviderCapabilties) {
+				pc.Roles = &RolesConfiguration{}
+				pc.Roles.Enabled = true
+				pc.Roles.Synchronizable = true
+
+				pc.Resources = &ResourcesConfiguration{}
+				// Resources disabled by default
+			},
+			checkCaps: []ProviderCapability{ProviderCapabilityRoles, ProviderCapabilityResources},
+			expected:  true,
+		},
+		{
+			name: "Has none of the capabilities",
+			setupCaps: func(pc *ProviderCapabilties) {
+				pc.Roles = &RolesConfiguration{}
+				pc.Roles.Enabled = false
+
+				pc.Resources = &ResourcesConfiguration{}
+				pc.Resources.Enabled = false
+			},
+			checkCaps: []ProviderCapability{ProviderCapabilityRoles, ProviderCapabilityResources},
+			expected:  false,
+		},
+		{
+			name: "Empty capabilities list",
+			setupCaps: func(pc *ProviderCapabilties) {
+				pc.Roles = &RolesConfiguration{}
+				pc.Roles.Enabled = true
+			},
+			checkCaps: []ProviderCapability{},
+			expected:  false,
 		},
 	}
 
-	// Verify initial state - should have RBAC because all required caps + one optional are present
-	assert.True(t, p.HasCapability(ProviderCapabilityRBAC))
-
-	// Disable the only optional sub-capability
-	p.DisableCapability(ProviderCapabilitySynchronizeRoles)
-
-	// Verify the sub-capability is gone
-	assert.False(t, p.HasCapability(ProviderCapabilitySynchronizeRoles))
-
-	// Now RBAC should be gone (has required but no optional)
-	assert.False(t, p.HasCapability(ProviderCapabilityRBAC))
-
-	// But required capabilities should still be present
-	assert.True(t, p.HasCapability(ProviderCapabilityAuthorizeRole))
-	assert.True(t, p.HasCapability(ProviderCapabilityRevokeRole))
-
-	// Add another optional capability back
-	p.EnableCapability(ProviderCapabilitySynchronizePermissions)
-	// Now RBAC should be valid again (has required + one optional)
-	assert.True(t, p.HasCapability(ProviderCapabilityRBAC))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			caps := &ProviderCapabilties{}
+			if tt.setupCaps != nil {
+				tt.setupCaps(caps)
+			}
+			p := &BaseProvider{
+				capabilities: caps,
+			}
+			result := p.HasAnyCapability(tt.checkCaps...)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }
 
-func TestBaseProvider_EnableDisableCapability_Workflow(t *testing.T) {
+func TestBaseProvider_DisableCapabilities(t *testing.T) {
 	p := &BaseProvider{
-		capabilities: make([]ProviderCapability, 0),
+		capabilities: newInitializedCapabilities(),
 	}
 
-	// Start with nothing
-	assert.False(t, p.HasCapability(ProviderCapabilityRBAC))
-	assert.False(t, p.HasCapability(ProviderCapabilityAuthorizer))
+	// Enable multiple capabilities
+	p.EnableCapability(ProviderCapabilityRoles)
+	p.EnableCapability(ProviderCapabilityResources)
 
-	// Enable RBAC
-	p.EnableCapability(ProviderCapabilityRBAC)
-	assert.True(t, p.HasCapability(ProviderCapabilityRBAC))
-	assert.False(t, p.HasCapability(ProviderCapabilityAuthorizer))
+	assert.True(t, p.HasCapability(ProviderCapabilityRoles))
+	assert.True(t, p.HasCapability(ProviderCapabilityResources))
 
-	// Enable Authorizer
-	p.EnableCapability(ProviderCapabilityAuthorizer)
-	assert.True(t, p.HasCapability(ProviderCapabilityRBAC))
-	assert.True(t, p.HasCapability(ProviderCapabilityAuthorizer))
+	// Disable them
+	p.DisableCapabilities(ProviderCapabilityRoles, ProviderCapabilityResources)
 
-	// Disable RBAC
-	p.DisableCapability(ProviderCapabilityRBAC)
-	assert.False(t, p.HasCapability(ProviderCapabilityRBAC))
-	assert.True(t, p.HasCapability(ProviderCapabilityAuthorizer))
-
-	// Disable Authorizer
-	p.DisableCapability(ProviderCapabilityAuthorizer)
-	assert.False(t, p.HasCapability(ProviderCapabilityRBAC))
-	assert.False(t, p.HasCapability(ProviderCapabilityAuthorizer))
-}
-
-func TestBaseProvider_Authorizer_Workflow(t *testing.T) {
-	p := &BaseProvider{
-		capabilities: make([]ProviderCapability, 0),
-	}
-
-	// Start with no Authorizer capability
-	assert.False(t, p.HasCapability(ProviderCapabilityAuthorizer))
-	assert.False(t, p.HasCapability(ProviderCapabilityAuthorizeSession))
-
-	// Enable Authorizer capability
-	p.EnableCapability(ProviderCapabilityAuthorizer)
-	assert.True(t, p.HasCapability(ProviderCapabilityAuthorizer))
-	assert.True(t, p.HasCapability(ProviderCapabilityAuthorizeSession))
-
-	// Disable the sub-capability directly
-	p.DisableCapability(ProviderCapabilityAuthorizeSession)
-	assert.False(t, p.HasCapability(ProviderCapabilityAuthorizer))
-	assert.False(t, p.HasCapability(ProviderCapabilityAuthorizeSession))
-
-	// Enable again and disable via top-level
-	p.EnableCapability(ProviderCapabilityAuthorizer)
-	assert.True(t, p.HasCapability(ProviderCapabilityAuthorizer))
-
-	p.DisableCapability(ProviderCapabilityAuthorizer)
-	assert.False(t, p.HasCapability(ProviderCapabilityAuthorizer))
-}
-
-func TestBaseProvider_Notifier_Workflow(t *testing.T) {
-	p := &BaseProvider{
-		capabilities: make([]ProviderCapability, 0),
-	}
-
-	// Start with no Notifier capability
-	assert.False(t, p.HasCapability(ProviderCapabilityNotifier))
-	assert.False(t, p.HasCapability(ProviderCapabilitySendNotifications))
-
-	// Enable Notifier capability
-	p.EnableCapability(ProviderCapabilityNotifier)
-	assert.True(t, p.HasCapability(ProviderCapabilityNotifier))
-	assert.True(t, p.HasCapability(ProviderCapabilitySendNotifications))
-
-	// Disable the sub-capability directly
-	p.DisableCapability(ProviderCapabilitySendNotifications)
-	assert.False(t, p.HasCapability(ProviderCapabilityNotifier))
-	assert.False(t, p.HasCapability(ProviderCapabilitySendNotifications))
-
-	// Enable again and disable via top-level
-	p.EnableCapability(ProviderCapabilityNotifier)
-	assert.True(t, p.HasCapability(ProviderCapabilityNotifier))
-
-	p.DisableCapability(ProviderCapabilityNotifier)
-	assert.False(t, p.HasCapability(ProviderCapabilityNotifier))
-}
-
-func TestBaseProvider_Identities_Workflow(t *testing.T) {
-	p := &BaseProvider{
-		capabilities: make([]ProviderCapability, 0),
-	}
-
-	// Start with no Identities capability
-	assert.False(t, p.HasCapability(ProviderCapabilityIdentities))
-
-	// Enable Identities capability
-	p.EnableCapability(ProviderCapabilityIdentities)
-	assert.True(t, p.HasCapability(ProviderCapabilityIdentities))
-	// Check that all sub-capabilities are present
-	assert.True(t, p.HasCapability(ProviderCapabilitySynchronizeIdentities))
-	assert.True(t, p.HasCapability(ProviderCapabilitySynchronizeUsers))
-	assert.True(t, p.HasCapability(ProviderCapabilitySynchronizeGroups))
-
-	// Disable one optional sub-capability
-	p.DisableCapability(ProviderCapabilitySynchronizeIdentities)
-	// Identities should still be true (has other optional caps)
-	assert.True(t, p.HasCapability(ProviderCapabilityIdentities))
-	assert.False(t, p.HasCapability(ProviderCapabilitySynchronizeIdentities))
-
-	// Disable all other optional capabilities
-	p.DisableCapability(ProviderCapabilitySynchronizeUsers)
-	p.DisableCapability(ProviderCapabilitySynchronizeGroups)
-
-	// Now Identities should be gone (no optional capabilities)
-	assert.False(t, p.HasCapability(ProviderCapabilityIdentities))
-
-	// Enable again and disable via top-level
-	p.EnableCapability(ProviderCapabilityIdentities)
-	assert.True(t, p.HasCapability(ProviderCapabilityIdentities))
-
-	p.DisableCapability(ProviderCapabilityIdentities)
-	assert.False(t, p.HasCapability(ProviderCapabilityIdentities))
-	assert.False(t, p.HasCapability(ProviderCapabilitySynchronizeIdentities))
-	assert.False(t, p.HasCapability(ProviderCapabilitySynchronizeUsers))
-	assert.False(t, p.HasCapability(ProviderCapabilitySynchronizeGroups))
-}
-
-func TestBaseProvider_RBAC_Workflow(t *testing.T) {
-	p := &BaseProvider{
-		capabilities: make([]ProviderCapability, 0),
-	}
-
-	// Start with no RBAC capability
-	assert.False(t, p.HasCapability(ProviderCapabilityRBAC))
-
-	// Enable RBAC capability (adds required + optional)
-	p.EnableCapability(ProviderCapabilityRBAC)
-	assert.True(t, p.HasCapability(ProviderCapabilityRBAC))
-	// Check that required sub-capabilities are present
-	assert.True(t, p.HasCapability(ProviderCapabilityAuthorizeRole))
-	assert.True(t, p.HasCapability(ProviderCapabilityRevokeRole))
-	// Check that all optional capabilities are present
-	assert.True(t, p.HasCapability(ProviderCapabilitySynchronizeRoles))
-	assert.True(t, p.HasCapability(ProviderCapabilitySynchronizePermissions))
-	assert.True(t, p.HasCapability(ProviderCapabilitySynchronizeResources))
-
-	// Disable one optional sub-capability
-	p.DisableCapability(ProviderCapabilitySynchronizeRoles)
-	// RBAC should still be true (still has required + other optional caps)
-	assert.True(t, p.HasCapability(ProviderCapabilityRBAC))
-
-	// Disable all other optional capabilities
-	p.DisableCapability(ProviderCapabilitySynchronizePermissions)
-	p.DisableCapability(ProviderCapabilitySynchronizeResources)
-
-	// Now RBAC should be gone (has required but no optional)
-	assert.False(t, p.HasCapability(ProviderCapabilityRBAC))
-	assert.False(t, p.HasCapability(ProviderCapabilitySynchronizeRoles))
-	assert.False(t, p.HasCapability(ProviderCapabilitySynchronizePermissions))
-	assert.False(t, p.HasCapability(ProviderCapabilitySynchronizeResources))
-	// But required capabilities should still be there
-	assert.True(t, p.HasCapability(ProviderCapabilityAuthorizeRole))
-	assert.True(t, p.HasCapability(ProviderCapabilityRevokeRole))
-
-	// Disable a required capability to test that requirement
-	p.DisableCapability(ProviderCapabilityAuthorizeRole)
-	assert.False(t, p.HasCapability(ProviderCapabilityRBAC))
-	assert.False(t, p.HasCapability(ProviderCapabilityAuthorizeRole))
-	assert.True(t, p.HasCapability(ProviderCapabilityRevokeRole))
+	assert.False(t, p.HasCapability(ProviderCapabilityRoles))
+	assert.False(t, p.HasCapability(ProviderCapabilityResources))
 }

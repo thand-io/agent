@@ -27,7 +27,7 @@ func (p *gcpProviderMock) Initialize(identifier string, provider models.Provider
 	p.gcpProvider.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityRBAC,
+		GcpCapabilities...,
 	)
 
 	// Load GCP Permissions and Roles from shared singleton

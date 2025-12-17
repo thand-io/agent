@@ -7,6 +7,10 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
+func (p *oktaProvider) CanSynchronizePermissions() bool {
+	return false
+}
+
 // Okta permissions map - complete catalog from Okta Management API
 // Reference: https://developer.okta.com/docs/api/openapi/okta-management/guides/permissions/#permissions-catalog
 // Note: The Okta SDK v2 does not have built-in support for custom admin role permissions.

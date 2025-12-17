@@ -21,7 +21,9 @@ func (p *salesForceProvider) Initialize(identifier string, provider models.Provi
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityRBAC,
+		models.ProviderCapabilityAuthorizeRole,
+		models.ProviderCapabilityRevokeRole, // roles, permissions, resources
+		models.ProviderCapabilityRoles,      // users, groups, identities
 	)
 
 	salesForceConfig := p.GetConfig()

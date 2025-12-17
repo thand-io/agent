@@ -4,13 +4,19 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization"
 	"github.com/google/uuid"
 	msgraphsdk "github.com/microsoftgraph/msgraph-sdk-go"
 	"github.com/sirupsen/logrus"
+	"github.com/thand-io/agent/internal/data"
 	"github.com/thand-io/agent/internal/models"
 )
+
+func (p *azureProvider) CanSynchronizeRoles() bool {
+	return true
+}
 
 // getRoleDefinition retrieves a custom role definition by name
 func (p *azureProvider) getRoleDefinition(ctx context.Context, roleName string) (*armauthorization.RoleDefinition, error) {
@@ -184,4 +190,31 @@ func (p *azureProvider) getScope() string {
 		return fmt.Sprintf("/subscriptions/%s/resourceGroups/%s", p.subscriptionID, p.resourceGroupName)
 	}
 	return fmt.Sprintf("/subscriptions/%s", p.subscriptionID)
+}
+
+func loadRoles() ([]models.ProviderRole, error) {
+
+	startTime := time.Now()
+	defer func() {
+		elapsed := time.Since(startTime)
+		logrus.Debugf("Parsed Azure roles in %s", elapsed)
+	}()
+
+	// Get pre-parsed Azure roles from data package
+	azureRoles, err := data.GetParsedAzureRoles()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get parsed Azure roles: %w", err)
+	}
+
+	var roles []models.ProviderRole
+
+	for _, role := range azureRoles {
+		r := models.ProviderRole{
+			Name:        role.Name,
+			Description: role.Description,
+		}
+		roles = append(roles, r)
+	}
+
+	return roles, nil
 }

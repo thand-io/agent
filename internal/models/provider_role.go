@@ -41,7 +41,7 @@ func (p *BaseProvider) SynchronizeRoles(
 func (p *BaseProvider) GetRole(ctx context.Context, role string) (*ProviderRole, error) {
 
 	if p.rbac == nil || !p.HasCapability(
-		ProviderCapabilityRBAC,
+		ProviderCapabilityRoles,
 	) {
 		logrus.Warningln("provider has no roles")
 		return nil, fmt.Errorf("provider has no roles")
@@ -66,7 +66,7 @@ func (p *BaseProvider) ListRoles(
 ) ([]SearchResult[ProviderRole], error) {
 
 	if p.rbac == nil || !p.HasCapability(
-		ProviderCapabilityRBAC,
+		ProviderCapabilityRoles,
 	) {
 		logrus.Warningln("provider has no roles")
 		return nil, fmt.Errorf("provider has no roles")

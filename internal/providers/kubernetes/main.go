@@ -27,12 +27,8 @@ func (p *kubernetesProvider) Initialize(identifier string, provider models.Provi
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityRBAC,
+		KubernetesCapabilities...,
 	)
-
-	// Disable unsupported capabilities
-	p.DisableCapability(models.ProviderCapabilitySynchronizeResources)
-	p.DisableCapability(models.ProviderCapabilitySynchronizeRoles)
 
 	// Initialize Kubernetes client
 	config, err := p.getKubernetesConfig()

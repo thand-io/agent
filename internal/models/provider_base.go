@@ -51,22 +51,34 @@ type RBACSupport struct {
 }
 
 func NewBaseProvider(identifier string, provider Provider, supportedCapabilities ...ProviderCapability) *BaseProvider {
-	base := BaseProvider{
-		identifier:  identifier,
-		name:        provider.Name,
-		description: provider.Description,
-		provider:    provider.Provider,
-		config:      provider.Config,
-		role:        provider.Role,
-	}
 
-	// Check what capabilities needs to be set. If a top level capability
-	// is set, we add all sub-capabilities as well.
+	// Lets setup the capabilities first
+	capabilities := NewProviderCapabilities()
+
+	// Loop over and enable all capabilities that are supported
 	for _, cap := range supportedCapabilities {
-		base.EnableCapability(cap)
+		capabilities.AddCapability(cap)
 	}
 
-	if base.HasCapability(ProviderCapabilityIdentities) {
+	base := BaseProvider{
+		identifier:   identifier,
+		name:         provider.Name,
+		description:  provider.Description,
+		provider:     provider.Provider,
+		config:       provider.Config,
+		role:         provider.Role,
+		capabilities: capabilities,
+	}
+
+	// Now we our provider has defined capabilities, we now need to take
+	// into account what the user has decided to enable/disable
+	capabilities.Update(provider.Capabilities)
+
+	if base.HasAnyCapability(
+		ProviderCapabilityIdentities,
+		ProviderCapabilityUsers,
+		ProviderCapabilityGroups,
+	) {
 		// Initialize identities map or other structures if needed
 		base.identity = &IdentitySupport{
 			identities:    make([]Identity, 0),
@@ -74,7 +86,11 @@ func NewBaseProvider(identifier string, provider Provider, supportedCapabilities
 		}
 	}
 
-	if base.HasCapability(ProviderCapabilityRBAC) {
+	if base.HasAnyCapability(
+		ProviderCapabilityPermissions,
+		ProviderCapabilityRoles,
+		ProviderCapabilityResources,
+	) {
 		// Initialize RBAC structures if needed
 		base.rbac = &RBACSupport{
 			permissions:    make([]ProviderPermission, 0),
@@ -82,6 +98,9 @@ func NewBaseProvider(identifier string, provider Provider, supportedCapabilities
 
 			roles:    make([]ProviderRole, 0),
 			rolesMap: make(map[string]*ProviderRole),
+
+			resources:    make([]ProviderResource, 0),
+			resourcesMap: make(map[string]*ProviderResource),
 		}
 	}
 
@@ -108,6 +127,7 @@ func (p *BaseProvider) SetPermissionsWithKey(
 	keyFunc func(p *ProviderPermission) string,
 ) {
 	if p.rbac == nil {
+		logrus.Warningln("provider has no permissions support")
 		return
 	}
 
@@ -142,6 +162,7 @@ func (p *BaseProvider) AddPermissions(permissions ...ProviderPermission) {
 	// Take existing permissions and append new ones
 
 	if p.rbac == nil {
+		logrus.Warningln("provider has no permissions support")
 		return
 	}
 
@@ -174,6 +195,7 @@ func (p *BaseProvider) SetRolesWithKey(
 	keyFunc func(r ProviderRole) []string) {
 
 	if p.rbac == nil {
+		logrus.Warningln("provider has no roles support")
 		return
 	}
 
@@ -209,6 +231,7 @@ func (p *BaseProvider) SetRolesWithKey(
 func (p *BaseProvider) AddRoles(roles ...ProviderRole) {
 	// Take existing roles and append new ones
 	if p.rbac == nil {
+		logrus.Warningln("provider has no roles support")
 		return
 	}
 
@@ -240,6 +263,7 @@ func (p *BaseProvider) SetResourcesWithKey(
 ) {
 
 	if p.rbac == nil {
+		logrus.Warningln("provider has no resources support")
 		return
 	}
 
@@ -275,6 +299,7 @@ func (p *BaseProvider) SetResourcesWithKey(
 func (p *BaseProvider) AddResources(resources ...ProviderResource) {
 	// Take existing resources and append new ones
 	if p.rbac == nil {
+		logrus.Warningln("provider has no resources support")
 		return
 	}
 	existing := p.rbac.resources
@@ -347,6 +372,7 @@ func (p *BaseProvider) SetIdentitiesWithKey(
 ) {
 
 	if p.identity == nil {
+		logrus.Warningln("provider has no identity support")
 		return
 	}
 
@@ -384,6 +410,7 @@ func (p *BaseProvider) SetIdentitiesWithKey(
 func (p *BaseProvider) AddIdentities(identities ...Identity) {
 	// Take existing identities and append new ones
 	if p.identity == nil {
+		logrus.Warningln("provider has no identity support")
 		return
 	}
 

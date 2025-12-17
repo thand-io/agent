@@ -38,14 +38,8 @@ func (p *gcpProvider) Initialize(identifier string, provider models.Provider) er
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityRBAC,       // roles, permissions, resources
-		models.ProviderCapabilityIdentities, // users, groups, identities
+		GcpCapabilities...,
 	)
-
-	// Disable unsupported capabilities
-	p.DisableCapability(models.ProviderCapabilitySynchronizeGroups)
-	p.DisableCapability(models.ProviderCapabilitySynchronizeUsers)
-	p.DisableCapability(models.ProviderCapabilitySynchronizeResources)
 
 	ctx := context.Background()
 

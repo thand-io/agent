@@ -18,7 +18,7 @@ func (p *BaseProvider) SynchronizeResources(ctx context.Context, req *Synchroniz
 func (p *BaseProvider) GetResource(ctx context.Context, resource string) (*ProviderResource, error) {
 
 	if p.rbac == nil || !p.HasCapability(
-		ProviderCapabilityRBAC,
+		ProviderCapabilityResources,
 	) {
 		logrus.Warningln("provider has no resources")
 		return nil, fmt.Errorf("provider has no resources")
@@ -39,7 +39,7 @@ func (p *BaseProvider) GetResource(ctx context.Context, resource string) (*Provi
 func (p *BaseProvider) ListResources(ctx context.Context, searchRequest *SearchRequest) ([]SearchResult[ProviderResource], error) {
 
 	if p.rbac == nil || !p.HasCapability(
-		ProviderCapabilityRBAC,
+		ProviderCapabilityResources,
 	) {
 		logrus.Warningln("provider has no resources")
 		return nil, fmt.Errorf("provider has no resources")
