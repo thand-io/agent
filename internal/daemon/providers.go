@@ -262,6 +262,7 @@ func (s *Server) getProvidersAsProviderResponse(
 			Enabled:     true,
 		}
 	}
+
 	return providerResponse
 }
 

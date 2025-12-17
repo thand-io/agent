@@ -11,7 +11,7 @@ import (
 )
 
 // Never synchronize permissions from AWS as they are
-// staticly defined by AWS and cannot be modified
+// statically defined by AWS and cannot be modified
 func (a *awsProvider) CanSynchronizePermissions() bool {
 	return false
 }

@@ -15,7 +15,7 @@ type BaseProvider struct {
 	provider     string
 	config       *BasicConfig
 	role         *Role
-	capabilities *ProviderCapabilties
+	capabilities *ProviderCapabilities
 
 	// Add other common fields if necessary
 	identity *IdentitySupport
@@ -70,7 +70,7 @@ func NewBaseProvider(identifier string, provider Provider, supportedCapabilities
 		capabilities: capabilities,
 	}
 
-	// Now we our provider has defined capabilities, we now need to take
+	// Now that our provider has defined capabilities, we need to take
 	// into account what the user has decided to enable/disable
 	capabilities.Update(provider.Capabilities)
 

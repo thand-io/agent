@@ -10,7 +10,7 @@ import (
 )
 
 // Never synchronize roles from AWS as they are
-// staticly defined by AWS and cannot be modified
+// statically defined by AWS and cannot be modified
 func (a *awsProvider) CanSynchronizeRoles() bool {
 	return false
 }

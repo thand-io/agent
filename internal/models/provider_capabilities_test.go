@@ -9,14 +9,14 @@ import (
 func TestBaseProvider_HasCapability(t *testing.T) {
 	tests := []struct {
 		name      string
-		setupCaps func(*ProviderCapabilties)
+		setupCaps func(*ProviderCapabilities)
 		checkCap  ProviderCapability
 		expected  bool
 	}{
 		// Roles
 		{
 			name: "Roles enabled",
-			setupCaps: func(pc *ProviderCapabilties) {
+			setupCaps: func(pc *ProviderCapabilities) {
 				pc.Roles = &RolesConfiguration{}
 				pc.Roles.Enabled = true
 				pc.Roles.Synchronizable = true
@@ -26,7 +26,7 @@ func TestBaseProvider_HasCapability(t *testing.T) {
 		},
 		{
 			name: "Roles disabled",
-			setupCaps: func(pc *ProviderCapabilties) {
+			setupCaps: func(pc *ProviderCapabilities) {
 				pc.Roles = &RolesConfiguration{}
 				pc.Roles.Enabled = false
 			},
@@ -37,7 +37,7 @@ func TestBaseProvider_HasCapability(t *testing.T) {
 		// Permissions
 		{
 			name: "Permissions enabled",
-			setupCaps: func(pc *ProviderCapabilties) {
+			setupCaps: func(pc *ProviderCapabilities) {
 				pc.Permissions = &PermissionsConfiguration{}
 				pc.Permissions.Enabled = true
 				pc.Permissions.Synchronizable = true
@@ -49,7 +49,7 @@ func TestBaseProvider_HasCapability(t *testing.T) {
 		// Resources
 		{
 			name: "Resources enabled",
-			setupCaps: func(pc *ProviderCapabilties) {
+			setupCaps: func(pc *ProviderCapabilities) {
 				pc.Resources = &ResourcesConfiguration{}
 				pc.Resources.Enabled = true
 				pc.Resources.Synchronizable = true
@@ -61,7 +61,7 @@ func TestBaseProvider_HasCapability(t *testing.T) {
 		// Identities
 		{
 			name: "Identities enabled",
-			setupCaps: func(pc *ProviderCapabilties) {
+			setupCaps: func(pc *ProviderCapabilities) {
 				pc.Identities = &IdentitiesConfiguration{}
 				pc.Identities.Enabled = true
 				pc.Identities.Synchronizable = true
@@ -73,7 +73,7 @@ func TestBaseProvider_HasCapability(t *testing.T) {
 		// Users
 		{
 			name: "Users enabled",
-			setupCaps: func(pc *ProviderCapabilties) {
+			setupCaps: func(pc *ProviderCapabilities) {
 				pc.Users = &UsersConfiguration{}
 				pc.Users.Enabled = true
 				pc.Users.Synchronizable = true
@@ -85,7 +85,7 @@ func TestBaseProvider_HasCapability(t *testing.T) {
 		// Groups
 		{
 			name: "Groups enabled",
-			setupCaps: func(pc *ProviderCapabilties) {
+			setupCaps: func(pc *ProviderCapabilities) {
 				pc.Groups = &GroupsConfiguration{}
 				pc.Groups.Enabled = true
 				pc.Groups.Synchronizable = true
@@ -97,7 +97,7 @@ func TestBaseProvider_HasCapability(t *testing.T) {
 		// Authorizer
 		{
 			name: "Authorizer enabled",
-			setupCaps: func(pc *ProviderCapabilties) {
+			setupCaps: func(pc *ProviderCapabilities) {
 				pc.Authorizer = &AuthorizerConfiguration{}
 				pc.Authorizer.Enabled = true
 			},
@@ -108,7 +108,7 @@ func TestBaseProvider_HasCapability(t *testing.T) {
 		// Notifier
 		{
 			name: "Notifier enabled",
-			setupCaps: func(pc *ProviderCapabilties) {
+			setupCaps: func(pc *ProviderCapabilities) {
 				pc.Notifier = &NotifierConfiguration{}
 				pc.Notifier.Enabled = true
 			},
@@ -119,7 +119,7 @@ func TestBaseProvider_HasCapability(t *testing.T) {
 		// AuthorizeRole
 		{
 			name: "AuthorizeRole enabled",
-			setupCaps: func(pc *ProviderCapabilties) {
+			setupCaps: func(pc *ProviderCapabilities) {
 				pc.AuthorizeRole = &AuthorizeRoleConfiguration{}
 				pc.AuthorizeRole.Enabled = true
 			},
@@ -130,7 +130,7 @@ func TestBaseProvider_HasCapability(t *testing.T) {
 		// RevokeRole
 		{
 			name: "RevokeRole enabled",
-			setupCaps: func(pc *ProviderCapabilties) {
+			setupCaps: func(pc *ProviderCapabilities) {
 				pc.RevokeRole = &RevokeRoleConfiguration{}
 				pc.RevokeRole.Enabled = true
 			},
@@ -141,7 +141,7 @@ func TestBaseProvider_HasCapability(t *testing.T) {
 		// Unknown capability
 		{
 			name: "Unknown capability",
-			setupCaps: func(pc *ProviderCapabilties) {
+			setupCaps: func(pc *ProviderCapabilities) {
 				pc.Roles = &RolesConfiguration{}
 				pc.Roles.Enabled = true
 			},
@@ -152,7 +152,7 @@ func TestBaseProvider_HasCapability(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			caps := &ProviderCapabilties{}
+			caps := &ProviderCapabilities{}
 			if tt.setupCaps != nil {
 				tt.setupCaps(caps)
 			}
@@ -166,8 +166,8 @@ func TestBaseProvider_HasCapability(t *testing.T) {
 }
 
 // Helper to create fully initialized capabilities for testing Enable/Disable
-func newInitializedCapabilities() *ProviderCapabilties {
-	return &ProviderCapabilties{
+func newInitializedCapabilities() *ProviderCapabilities {
+	return &ProviderCapabilities{
 		Roles:         &RolesConfiguration{},
 		Permissions:   &PermissionsConfiguration{},
 		Resources:     &ResourcesConfiguration{},
@@ -272,13 +272,13 @@ func TestBaseProvider_EnableDisable_Idempotency(t *testing.T) {
 func TestBaseProvider_HasAnyCapability(t *testing.T) {
 	tests := []struct {
 		name      string
-		setupCaps func(*ProviderCapabilties)
+		setupCaps func(*ProviderCapabilities)
 		checkCaps []ProviderCapability
 		expected  bool
 	}{
 		{
 			name: "Has one of the capabilities",
-			setupCaps: func(pc *ProviderCapabilties) {
+			setupCaps: func(pc *ProviderCapabilities) {
 				pc.Roles = &RolesConfiguration{}
 				pc.Roles.Enabled = true
 				pc.Roles.Synchronizable = true
@@ -291,7 +291,7 @@ func TestBaseProvider_HasAnyCapability(t *testing.T) {
 		},
 		{
 			name: "Has none of the capabilities",
-			setupCaps: func(pc *ProviderCapabilties) {
+			setupCaps: func(pc *ProviderCapabilities) {
 				pc.Roles = &RolesConfiguration{}
 				pc.Roles.Enabled = false
 
@@ -303,7 +303,7 @@ func TestBaseProvider_HasAnyCapability(t *testing.T) {
 		},
 		{
 			name: "Empty capabilities list",
-			setupCaps: func(pc *ProviderCapabilties) {
+			setupCaps: func(pc *ProviderCapabilities) {
 				pc.Roles = &RolesConfiguration{}
 				pc.Roles.Enabled = true
 			},
@@ -314,7 +314,7 @@ func TestBaseProvider_HasAnyCapability(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			caps := &ProviderCapabilties{}
+			caps := &ProviderCapabilities{}
 			if tt.setupCaps != nil {
 				tt.setupCaps(caps)
 			}

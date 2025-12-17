@@ -44,14 +44,14 @@ var ErrNotImplemented = errors.New("not implemented")
 */
 
 type Provider struct {
-	Version      *version.Version    `json:"version,omitempty"`
-	Name         string              `json:"name"`
-	Description  string              `json:"description"`
-	Provider     string              `json:"provider"`               // e.g. aws, gcp, azure
-	Capabilities ProviderCapabilties `json:"capabilities,omitempty"` // Allows the user to specify what this provider can do
-	Config       *BasicConfig        `json:"config,omitempty"`       // Provider-specific configuration
-	Role         *Role               `json:"role,omitempty"`         // The base role for this provider
-	Enabled      bool                `json:"enabled"`                // Whether this provider is enabled
+	Version      *version.Version     `json:"version,omitempty"`
+	Name         string               `json:"name"`
+	Description  string               `json:"description"`
+	Provider     string               `json:"provider"`               // e.g. aws, gcp, azure
+	Capabilities ProviderCapabilities `json:"capabilities,omitempty"` // Allows the user to specify what this provider can do
+	Config       *BasicConfig         `json:"config,omitempty"`       // Provider-specific configuration
+	Role         *Role                `json:"role,omitempty"`         // The base role for this provider
+	Enabled      bool                 `json:"enabled"`                // Whether this provider is enabled
 
 	client ProviderImpl `json:"-" yaml:"-"`
 }
@@ -157,7 +157,7 @@ type ProviderImpl interface {
 	RegisterWorkflows(temporalClient TemporalImpl) error
 	RegisterActivities(temporalClient TemporalImpl) error
 
-	GetCapabilities() *ProviderCapabilties
+	GetCapabilities() *ProviderCapabilities
 	HasCapability(capability ProviderCapability) bool
 	HasAnyCapability(capabilities ...ProviderCapability) bool
 

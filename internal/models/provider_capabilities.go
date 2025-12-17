@@ -128,7 +128,7 @@ func (dc *ProviderConfiguration) Disable() {
 	dc.Enabled = false
 }
 
-type ProviderCapabilties struct {
+type ProviderCapabilities struct {
 
 	// Identity management capabilities
 	Identities *IdentitiesConfiguration `json:"identities"`
@@ -150,7 +150,7 @@ type ProviderCapabilties struct {
 }
 
 // getCapabilityConfig returns the configuration for a given capability
-func (pc *ProviderCapabilties) getCapabilityConfig(capability ProviderCapability) ProviderConfigurationImpl {
+func (pc *ProviderCapabilities) getCapabilityConfig(capability ProviderCapability) ProviderConfigurationImpl {
 	configMap := map[ProviderCapability]ProviderConfigurationImpl{
 		ProviderCapabilityRoles:         pc.Roles,
 		ProviderCapabilityPermissions:   pc.Permissions,
@@ -166,7 +166,7 @@ func (pc *ProviderCapabilties) getCapabilityConfig(capability ProviderCapability
 	return configMap[capability]
 }
 
-func (pc *ProviderCapabilties) IsCapabilityEnabled(capability ProviderCapability) bool {
+func (pc *ProviderCapabilities) IsCapabilityEnabled(capability ProviderCapability) bool {
 	config := pc.getCapabilityConfig(capability)
 	if config == nil {
 		return false
@@ -175,14 +175,14 @@ func (pc *ProviderCapabilties) IsCapabilityEnabled(capability ProviderCapability
 	return config.IsEnabled()
 }
 
-func (pc *ProviderCapabilties) AddCapability(capability ProviderCapability) {
+func (pc *ProviderCapabilities) AddCapability(capability ProviderCapability) {
 	config := pc.getCapabilityConfig(capability)
 	if config != nil {
 		config.Enable()
 	}
 }
 
-func (pc *ProviderCapabilties) Update(updates ProviderCapabilties) {
+func (pc *ProviderCapabilities) Update(updates ProviderCapabilities) {
 
 	// We first need to get a map of the existing capabilities
 	// and check to see whats enabled. Then if if the incoming
@@ -243,14 +243,15 @@ func (pc *ProviderCapabilties) Update(updates ProviderCapabilties) {
 	}
 }
 
-func (pc *ProviderCapabilties) RemoveCapability(capability ProviderCapability) {
+func (pc *ProviderCapabilities) RemoveCapability(capability ProviderCapability) {
 	config := pc.getCapabilityConfig(capability)
 	if config != nil {
 		config.Disable()
 	}
 }
 
-func NewCapability() *SynchronizableConfiguration {
+// NewSynchronizableCapability creates a new enabled synchronizable capability configuration
+func NewSynchronizableCapability() *SynchronizableConfiguration {
 	return &SynchronizableConfiguration{
 		Synchronizable: true,
 		Interval:       3600,
@@ -258,14 +259,15 @@ func NewCapability() *SynchronizableConfiguration {
 	}
 }
 
-func NewSynchronizableCapability() *ProviderConfiguration {
+// NewCapability creates a new disabled capability configuration
+func NewCapability() *ProviderConfiguration {
 	return &ProviderConfiguration{
 		Enabled: false,
 	}
 }
 
 var (
-	// If a provider has ALL of the capabilites marked as "required"
+	// If a provider has ALL of the capabilities marked as "required"
 	// and ONE of the optional capabilities then it is considered to
 	// have that set of capabilities
 	ProviderCapabilitySetRBAC = ProviderCapabilitySet{
@@ -296,8 +298,8 @@ var (
 	}
 )
 
-func NewProviderCapabilities() *ProviderCapabilties {
-	return &ProviderCapabilties{
+func NewProviderCapabilities() *ProviderCapabilities {
+	return &ProviderCapabilities{
 		Roles:         &RolesConfiguration{},
 		Permissions:   &PermissionsConfiguration{},
 		Resources:     &ResourcesConfiguration{},
@@ -338,7 +340,7 @@ func GetCapabilityFromString(cap string) (ProviderCapability, error) {
 	}
 }
 
-func (p *BaseProvider) GetCapabilities() *ProviderCapabilties {
+func (p *BaseProvider) GetCapabilities() *ProviderCapabilities {
 	return p.capabilities
 }
 

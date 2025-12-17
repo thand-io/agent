@@ -5,8 +5,8 @@ import (
 )
 
 // Never synchronize roles from GitHub as they are
-// staticly defined by GitHub and cannot be modified
-func CanSynchronizeRoles() bool {
+// statically defined by GitHub and cannot be modified
+func (p *githubProvider) CanSynchronizeRoles() bool {
 	return false
 }
 
