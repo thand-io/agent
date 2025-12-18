@@ -354,10 +354,10 @@ func NewSynchronizableCapability() *SynchronizableConfiguration {
 	}
 }
 
-// NewCapability creates a new disabled capability configuration
+// NewCapability creates a new enabled capability configuration
 func NewCapability() *ProviderConfiguration {
 	return &ProviderConfiguration{
-		Enabled: false,
+		Enabled: true,
 	}
 }
 
