@@ -1,13 +1,8 @@
 package azure
 
 import (
-	"fmt"
-	"strings"
 	"sync"
-	"time"
 
-	"github.com/sirupsen/logrus"
-	"github.com/thand-io/agent/internal/data"
 	"github.com/thand-io/agent/internal/models"
 )
 
@@ -45,59 +40,4 @@ func getSharedData() (*azureData, error) {
 
 	})
 	return sharedData, sharedDataErr
-}
-
-func loadPermissions() ([]models.ProviderPermission, error) {
-
-	startTime := time.Now()
-	defer func() {
-		elapsed := time.Since(startTime)
-		logrus.Debugf("Parsed Azure permissions in %s", elapsed)
-	}()
-
-	// Get pre-parsed Azure permissions from data package
-	azureOperations, err := data.GetParsedAzurePermissions()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get parsed Azure permissions: %w", err)
-	}
-
-	var permissions []models.ProviderPermission
-
-	for _, operation := range azureOperations {
-		permission := models.ProviderPermission{
-			ID:          strings.ToLower(operation.Name),
-			Name:        operation.Name,
-			Description: operation.Description,
-		}
-		permissions = append(permissions, permission)
-	}
-
-	return permissions, nil
-}
-
-func loadRoles() ([]models.ProviderRole, error) {
-
-	startTime := time.Now()
-	defer func() {
-		elapsed := time.Since(startTime)
-		logrus.Debugf("Parsed Azure roles in %s", elapsed)
-	}()
-
-	// Get pre-parsed Azure roles from data package
-	azureRoles, err := data.GetParsedAzureRoles()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get parsed Azure roles: %w", err)
-	}
-
-	var roles []models.ProviderRole
-
-	for _, role := range azureRoles {
-		r := models.ProviderRole{
-			Name:        role.Name,
-			Description: role.Description,
-		}
-		roles = append(roles, r)
-	}
-
-	return roles, nil
 }

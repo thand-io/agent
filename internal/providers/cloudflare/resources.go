@@ -13,10 +13,6 @@ import (
 const resourceTypeZone = "zone"
 const resourceTypeAccount = "account"
 
-func (p *cloudflareProvider) CanSynchronizeResources() bool {
-	return true
-}
-
 // SynchronizeResources loads Cloudflare resources (zones, accounts) from the API
 func (p *cloudflareProvider) SynchronizeResources(ctx context.Context, req *models.SynchronizeResourcesRequest) (*models.SynchronizeResourcesResponse, error) {
 	startTime := time.Now()

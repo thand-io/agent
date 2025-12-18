@@ -21,7 +21,7 @@ func (p *salesForceProvider) Initialize(identifier string, provider models.Provi
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityRBAC,
+		SalesforceCapabilities,
 	)
 
 	salesForceConfig := p.GetConfig()

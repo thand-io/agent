@@ -25,7 +25,7 @@ func (p *kubernetesProviderMock) Initialize(identifier string, provider models.P
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityRBAC,
+		KubernetesCapabilities,
 	)
 
 	// Skip initializing Kubernetes client

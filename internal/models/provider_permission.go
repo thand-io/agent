@@ -28,7 +28,7 @@ type ProviderPermission struct {
 func (p *BaseProvider) GetPermission(ctx context.Context, permission string) (*ProviderPermission, error) {
 
 	if p.rbac == nil || !p.HasCapability(
-		ProviderCapabilityRBAC,
+		ProviderCapabilityPermissions,
 	) {
 		logrus.Warningln("provider has no permissions")
 		return nil, fmt.Errorf("provider has no permissions")
@@ -45,7 +45,7 @@ func (p *BaseProvider) GetPermission(ctx context.Context, permission string) (*P
 func (p *BaseProvider) ListPermissions(ctx context.Context, searchReq *SearchRequest) ([]SearchResult[ProviderPermission], error) {
 
 	if p.rbac == nil || !p.HasCapability(
-		ProviderCapabilityRBAC,
+		ProviderCapabilityPermissions,
 	) {
 		logrus.Warningln("provider has no permissions")
 		return nil, fmt.Errorf("provider has no permissions")

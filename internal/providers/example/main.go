@@ -42,7 +42,7 @@ func (p *exampleProvider) Initialize(identifier string, provider models.Provider
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityAuthorizer,
+		ExampleCapabilities,
 	)
 	return nil
 }

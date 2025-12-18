@@ -13,10 +13,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 )
 
-func (p *awsProvider) CanSynchronizeGroups() bool {
-	return true
-}
-
 func (p *awsProvider) SynchronizeGroups(ctx context.Context, req *models.SynchronizeGroupsRequest) (*models.SynchronizeGroupsResponse, error) {
 	startTime := time.Now()
 	defer func() {

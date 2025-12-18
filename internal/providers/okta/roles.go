@@ -8,6 +8,10 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
+func (p *oktaProvider) CanSynchronizeRoles() bool {
+	return false
+}
+
 // Okta predefined administrator roles
 // Reference: https://help.okta.com/en-us/content/topics/security/administrators-admin-comparison.htm
 var oktaPredefinedRoles = map[string]models.ProviderRole{
@@ -66,10 +70,6 @@ var oktaPredefinedRoles = map[string]models.ProviderRole{
 		Name:        "Group Administrator",
 		Description: "Can create, manage, and delete groups. Can manage group membership.",
 	},
-}
-
-func (p *oktaProvider) CanSynchronizeRoles() bool {
-	return true
 }
 
 // Also load in user groups as these can have roles assigned too

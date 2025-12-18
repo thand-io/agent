@@ -35,7 +35,7 @@ func (p *azureProvider) Initialize(identifier string, provider models.Provider) 
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityRBAC,
+		AzureCapabilities,
 	)
 
 	config := p.GetConfig()

@@ -27,7 +27,7 @@ func (p *gcpProviderMock) Initialize(identifier string, provider models.Provider
 	p.gcpProvider.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityRBAC,
+		GcpCapabilities,
 	)
 
 	// Load GCP Permissions and Roles from shared singleton
@@ -44,4 +44,8 @@ func (p *gcpProviderMock) Synchronize(
 	req *models.SynchronizeRequest,
 ) error {
 	return PreSynchronizeActivities(ctx, temporalService, p, req)
+}
+
+func (p *gcpProviderMock) SynchronizeIdentities(ctx context.Context, req *models.SynchronizeIdentitiesRequest) (*models.SynchronizeIdentitiesResponse, error) {
+	return &models.SynchronizeIdentitiesResponse{}, nil
 }

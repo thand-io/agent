@@ -10,10 +10,6 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
-func (p *cloudflareProvider) CanSynchronizePermissions() bool {
-	return true
-}
-
 // SynchronizePermissions fetches and caches permissions from Cloudflare
 func (p *cloudflareProvider) SynchronizePermissions(ctx context.Context, req *models.SynchronizePermissionsRequest) (*models.SynchronizePermissionsResponse, error) {
 	startTime := time.Now()

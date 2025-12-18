@@ -30,8 +30,7 @@ func (p *oauth2Provider) Initialize(identifier string, provider models.Provider)
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityAuthorizer,
-		models.ProviderCapabilityIdentities,
+		GoogleOAuth2Capabilities,
 	)
 
 	// Get client id and secret from the config

@@ -11,10 +11,6 @@ import (
 	"google.golang.org/api/cloudresourcemanager/v1"
 )
 
-func (p *gcpProvider) CanSynchronizeIdentities() bool {
-	return true
-}
-
 // SynchronizeIdentities fetches and caches user and group identities from GCP IAM
 func (p *gcpProvider) SynchronizeIdentities(ctx context.Context, req *models.SynchronizeIdentitiesRequest) (*models.SynchronizeIdentitiesResponse, error) {
 	startTime := time.Now()
@@ -23,7 +19,15 @@ func (p *gcpProvider) SynchronizeIdentities(ctx context.Context, req *models.Syn
 		logrus.Debugf("Refreshed GCP identities in %s", elapsed)
 	}()
 
+	if p.crmClient == nil {
+		return nil, fmt.Errorf("GCP CRM client is not initialized")
+	}
+
 	projectId := p.GetProjectId()
+
+	if len(projectId) == 0 {
+		return nil, fmt.Errorf("GCP project ID is not configured")
+	}
 
 	// Get current IAM policy to extract all members - request version 3 for conditions support
 	policy, err := p.crmClient.Projects.GetIamPolicy(projectId, &cloudresourcemanager.GetIamPolicyRequest{

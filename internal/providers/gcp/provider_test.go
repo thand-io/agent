@@ -32,6 +32,10 @@ func TestGCPProviderPermissions(t *testing.T) {
 
 	ctx := context.Background()
 
+	t.Run("CanSynchronizePermissions", func(t *testing.T) {
+		assert.False(t, provider.CanSynchronizePermissions(), "GCP provider should not support permission synchronization")
+	})
+
 	t.Run("List Permissions", func(t *testing.T) {
 		permissions, err := provider.ListPermissions(ctx, &models.SearchRequest{})
 		assert.NoError(t, err, "Failed to list permissions")
@@ -132,6 +136,10 @@ func TestGCPProviderRoles(t *testing.T) {
 	require.NoError(t, err, "Failed to initialize GCP provider")
 
 	ctx := context.Background()
+
+	t.Run("CanSynchronizeRoles", func(t *testing.T) {
+		assert.False(t, provider.CanSynchronizeRoles(), "GCP provider should not support role synchronization")
+	})
 
 	t.Run("List Roles", func(t *testing.T) {
 		roles, err := provider.ListRoles(ctx, &models.SearchRequest{})

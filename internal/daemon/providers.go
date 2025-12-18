@@ -92,8 +92,8 @@ func (s *Server) getProviderRoles(c *gin.Context) {
 		return
 	}
 
-	if !provider.GetClient().HasCapability(models.ProviderCapabilityRBAC) {
-		s.getErrorPage(c, http.StatusNotImplemented, "The provider does not implement rbac")
+	if !provider.GetClient().HasCapability(models.ProviderCapabilityRoles) {
+		s.getErrorPage(c, http.StatusNotImplemented, "The provider does not implement roles")
 		return
 	}
 
@@ -186,8 +186,8 @@ func (s *Server) getProviderPermissions(c *gin.Context) {
 		return
 	}
 
-	if !provider.GetClient().HasCapability(models.ProviderCapabilityRBAC) {
-		s.getErrorPage(c, http.StatusNotImplemented, "The provider does not implement rbac")
+	if !provider.GetClient().HasCapability(models.ProviderCapabilityPermissions) {
+		s.getErrorPage(c, http.StatusNotImplemented, "The provider does not implement permissions")
 		return
 	}
 
@@ -262,6 +262,7 @@ func (s *Server) getProvidersAsProviderResponse(
 			Enabled:     true,
 		}
 	}
+
 	return providerResponse
 }
 

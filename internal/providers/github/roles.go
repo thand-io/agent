@@ -4,6 +4,12 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
+// Never synchronize roles from GitHub as they are
+// statically defined by GitHub and cannot be modified
+func (p *githubProvider) CanSynchronizeRoles() bool {
+	return false
+}
+
 /*
 All-repository read: Grants read access to all repositories in the organization.
 All-repository write: Grants write access to all repositories in the organization.

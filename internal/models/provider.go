@@ -17,24 +17,41 @@ import (
 var ErrNotImplemented = errors.New("not implemented")
 
 /*
-name: aws-prod
-description: Production AWS environment
-provider: aws
-config:
+	name: aws-prod
+	description: Production AWS environment
+	provider: aws
+	capabilities:
 
-	region: us-east-1
-	account_id: "123456789012"
+	  rbac:
+		can_synchronize_roles: true
+		can_synchronize_permissions: true
+		can_synchronize_resources: false
+	  authorizer:
+		can_authorize_session: true
+	  notifier:
+		can_send_notifications: true
+	  identities:
+		can_synchronize_identities: true
+		can_synchronize_users: true
+		can_synchronize_groups: true
 
-enabled: true
+	config:
+
+		region: us-east-1
+		account_id: "123456789012"
+
+	enabled: true
 */
+
 type Provider struct {
-	Version     *version.Version `json:"version,omitempty"`
-	Name        string           `json:"name"`
-	Description string           `json:"description"`
-	Provider    string           `json:"provider"`         // e.g. aws, gcp, azure
-	Config      *BasicConfig     `json:"config,omitempty"` // Provider-specific configuration
-	Role        *Role            `json:"role,omitempty"`   // The base role for this provider
-	Enabled     bool             `json:"enabled"`          // Whether this provider is enabled
+	Version      *version.Version      `json:"version,omitempty"`
+	Name         string                `json:"name"`
+	Description  string                `json:"description"`
+	Provider     string                `json:"provider"`               // e.g. aws, gcp, azure
+	Capabilities *ProviderCapabilities `json:"capabilities,omitempty"` // Allows the user to specify what this provider can do
+	Config       *BasicConfig          `json:"config,omitempty"`       // Provider-specific configuration
+	Role         *Role                 `json:"role,omitempty"`         // The base role for this provider
+	Enabled      bool                  `json:"enabled"`                // Whether this provider is enabled
 
 	client ProviderImpl `json:"-" yaml:"-"`
 }
@@ -117,28 +134,6 @@ type ProviderResponse struct {
 	Enabled     bool   `json:"enabled"`
 }
 
-type ProviderCapability string
-
-const (
-	ProviderCapabilityRBAC       ProviderCapability = "rbac"
-	ProviderCapabilityAuthorizer ProviderCapability = "authorizor"
-	ProviderCapabilityNotifier   ProviderCapability = "notifier"
-	ProviderCapabilityIdentities ProviderCapability = "identities" // Provider can return users, groups, etc.
-)
-
-func GetCapabilityFromString(cap string) (ProviderCapability, error) {
-	switch strings.ToLower(cap) {
-	case string(ProviderCapabilityRBAC):
-		return ProviderCapabilityRBAC, nil
-	case string(ProviderCapabilityAuthorizer):
-		return ProviderCapabilityAuthorizer, nil
-	case string(ProviderCapabilityNotifier):
-		return ProviderCapabilityNotifier, nil
-	default:
-		return "", fmt.Errorf("unknown capability: %s", cap)
-	}
-}
-
 /*
 A user is assigned a role (e.g., "Manager").
 This role has associated permissions (e.g., "approve reports," "view employee data").
@@ -162,7 +157,7 @@ type ProviderImpl interface {
 	RegisterWorkflows(temporalClient TemporalImpl) error
 	RegisterActivities(temporalClient TemporalImpl) error
 
-	GetCapabilities() []ProviderCapability
+	GetCapabilities() *ProviderCapabilities
 	HasCapability(capability ProviderCapability) bool
 	HasAnyCapability(capabilities ...ProviderCapability) bool
 

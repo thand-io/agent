@@ -171,7 +171,7 @@ func (p *emailProviderMock) Initialize(identifier string, provider models.Provid
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityNotifier,
+		EmailCapabilities,
 	)
 
 	if provider.Config != nil {

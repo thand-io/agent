@@ -12,7 +12,7 @@ func TestBaseProvider_ListIdentities_Search(t *testing.T) {
 
 	p := NewBaseProvider("test", Provider{
 		Name: "Test Provider",
-	}, ProviderCapabilityIdentities)
+	}, NewProviderCapabilities().WithDefaultIdentitiesConfiguration())
 
 	userEmail := "hugh@thand.io"
 	identity := Identity{

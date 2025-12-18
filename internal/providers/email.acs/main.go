@@ -1,4 +1,4 @@
-package emailacs
+package email_acs
 
 import (
 	"bytes"
@@ -30,7 +30,7 @@ func (p *emailAcsProvider) Initialize(identifier string, provider models.Provide
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityNotifier,
+		EmailCapabilities,
 	)
 
 	emailerConfig := p.GetConfig()

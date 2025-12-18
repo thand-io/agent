@@ -43,8 +43,7 @@ func (p *thandProvider) Initialize(identifier string, provider models.Provider) 
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityAuthorizer,
-		models.ProviderCapabilityIdentities,
+		ThandCapabilities,
 	)
 
 	thandConfig := p.GetConfig()
