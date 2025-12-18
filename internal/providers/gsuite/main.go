@@ -27,8 +27,7 @@ func (p *gsuiteProvider) Initialize(identifier string, provider models.Provider)
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityUsers,
-		models.ProviderCapabilityGroups,
+		GsuiteCapabilities,
 	)
 
 	// Get configuration

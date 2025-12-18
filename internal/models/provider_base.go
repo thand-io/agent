@@ -50,14 +50,11 @@ type RBACSupport struct {
 	resourcesIndex bleve.Index
 }
 
-func NewBaseProvider(identifier string, provider Provider, supportedCapabilities ...ProviderCapability) *BaseProvider {
+func NewBaseProvider(identifier string, provider Provider, capabilities *ProviderCapabilities) *BaseProvider {
 
 	// Lets setup the capabilities first
-	capabilities := NewProviderCapabilities()
-
-	// Loop over and enable all capabilities that are supported
-	for _, cap := range supportedCapabilities {
-		capabilities.AddCapability(cap)
+	if capabilities == nil {
+		capabilities = NewProviderCapabilities()
 	}
 
 	base := BaseProvider{

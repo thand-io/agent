@@ -38,7 +38,7 @@ func (p *gcpProvider) Initialize(identifier string, provider models.Provider) er
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		GcpCapabilities...,
+		GcpCapabilities,
 	)
 
 	ctx := context.Background()

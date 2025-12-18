@@ -43,7 +43,7 @@ func (p *githubProvider) Initialize(identifier string, provider models.Provider)
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		GithubCapabilities...,
+		GithubCapabilities,
 	)
 
 	// Right lets figure out how to initialize the GitHub SDK
@@ -63,8 +63,7 @@ func (p *githubProvider) Initialize(identifier string, provider models.Provider)
 	} else {
 
 		logrus.Debugln("GitHub token not provided; skipping client setup")
-		p.DisableCapability(models.ProviderCapabilityAuthorizeRole)
-		p.DisableCapability(models.ProviderCapabilityRevokeRole)
+		p.DisableCapability(models.ProviderCapabilityProvisioning)
 		p.DisableCapability(models.ProviderCapabilityIdentities)
 	}
 

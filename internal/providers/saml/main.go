@@ -42,7 +42,7 @@ func (p *samlProvider) Initialize(identifier string, provider models.Provider) e
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityAuthorizer,
+		SamlCapabilities,
 	)
 
 	// Parse SAML configuration from provider config

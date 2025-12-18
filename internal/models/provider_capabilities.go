@@ -8,20 +8,6 @@ import (
 
 type ProviderCapability string
 
-type CapabilityRequirement struct {
-	Capability     ProviderCapability
-	Synchronizable bool
-	Required       bool
-}
-
-func (c *CapabilityRequirement) CanSynchronize() bool {
-	return c.Synchronizable
-}
-
-type ProviderCapabilitySet struct {
-	Capabilities []CapabilityRequirement
-}
-
 const (
 	// Identity synchronization capabilities
 	ProviderCapabilityIdentities ProviderCapability = "identities"
@@ -29,11 +15,11 @@ const (
 	ProviderCapabilityGroups     ProviderCapability = "groups"
 
 	// RBAC capabilities
-	ProviderCapabilityRoles         ProviderCapability = "roles"
-	ProviderCapabilityPermissions   ProviderCapability = "permissions"
-	ProviderCapabilityResources     ProviderCapability = "resources"
-	ProviderCapabilityAuthorizeRole ProviderCapability = "authorizeRole"
-	ProviderCapabilityRevokeRole    ProviderCapability = "revokeRole"
+	ProviderCapabilityRoles       ProviderCapability = "roles"
+	ProviderCapabilityPermissions ProviderCapability = "permissions"
+	ProviderCapabilityResources   ProviderCapability = "resources"
+	// Provisioning provides authorization and revocation of roles
+	ProviderCapabilityProvisioning ProviderCapability = "provisioning"
 
 	// Authorizer capabilities
 	ProviderCapabilityAuthorizer ProviderCapability = "authorizer" // Primary capability
@@ -103,8 +89,7 @@ func (sc *SynchronizableConfiguration) Disable() {
 
 type AuthorizerConfiguration = ProviderConfiguration
 type NotifierConfiguration = ProviderConfiguration
-type AuthorizeRoleConfiguration = ProviderConfiguration
-type RevokeRoleConfiguration = ProviderConfiguration
+type ProvisioningConfiguration = ProviderConfiguration
 
 type ProviderConfiguration struct {
 	Enabled bool `json:"enabled,omitempty"`
@@ -142,27 +127,120 @@ type ProviderCapabilities struct {
 	Notifier *NotifierConfiguration `json:"notifier"`
 
 	// Rbac capabilities
-	AuthorizeRole *AuthorizeRoleConfiguration `json:"authorize_role"`
-	RevokeRole    *RevokeRoleConfiguration    `json:"revoke_role"`
-	Roles         *RolesConfiguration         `json:"roles"`
-	Permissions   *PermissionsConfiguration   `json:"permissions"`
-	Resources     *ResourcesConfiguration     `json:"resources"`
+	Provisioning *ProvisioningConfiguration `json:"provisioning"`
+	Roles        *RolesConfiguration        `json:"roles"`
+	Permissions  *PermissionsConfiguration  `json:"permissions"`
+	Resources    *ResourcesConfiguration    `json:"resources"`
+}
+
+func (pc *ProviderCapabilities) WithDefaultRolesConfiguration() *ProviderCapabilities {
+	pc.Roles = NewSynchronizableCapability()
+	return pc
+}
+
+func (pc *ProviderCapabilities) WithDefaultPermissionsConfiguration() *ProviderCapabilities {
+	pc.Permissions = NewSynchronizableCapability()
+	return pc
+}
+
+func (pc *ProviderCapabilities) WithDefaultResourcesConfiguration() *ProviderCapabilities {
+	pc.Resources = NewSynchronizableCapability()
+	return pc
+}
+
+func (pc *ProviderCapabilities) WithDefaultIdentitiesConfiguration() *ProviderCapabilities {
+	pc.Identities = NewSynchronizableCapability()
+	return pc
+}
+
+func (pc *ProviderCapabilities) WithDefaultUsersConfiguration() *ProviderCapabilities {
+	pc.Users = NewSynchronizableCapability()
+	return pc
+}
+
+func (pc *ProviderCapabilities) WithDefaultGroupsConfiguration() *ProviderCapabilities {
+	pc.Groups = NewSynchronizableCapability()
+	return pc
+}
+
+func (pc *ProviderCapabilities) WithDefaultAuthorizerConfiguration() *ProviderCapabilities {
+	pc.Authorizer = NewCapability()
+	return pc
+}
+
+func (pc *ProviderCapabilities) WithDefaultNotifierConfiguration() *ProviderCapabilities {
+	pc.Notifier = NewCapability()
+	return pc
+}
+
+func (pc *ProviderCapabilities) WithDefaultProvisioningConfiguration() *ProviderCapabilities {
+	pc.Provisioning = NewCapability()
+	return pc
+}
+
+func (pc *ProviderCapabilities) WithRolesConfiguration(config RolesConfiguration) *ProviderCapabilities {
+	pc.Roles = &config
+	return pc
+}
+
+func (pc *ProviderCapabilities) WithPermissionsConfiguration(config PermissionsConfiguration) *ProviderCapabilities {
+	pc.Permissions = &config
+	return pc
+}
+
+func (pc *ProviderCapabilities) WithResourcesConfiguration(config ResourcesConfiguration) *ProviderCapabilities {
+	pc.Resources = &config
+	return pc
+}
+
+func (pc *ProviderCapabilities) WithIdentitiesConfiguration(config IdentitiesConfiguration) *ProviderCapabilities {
+	pc.Identities = &config
+	return pc
+}
+
+func (pc *ProviderCapabilities) WithUsersConfiguration(config UsersConfiguration) *ProviderCapabilities {
+	pc.Users = &config
+	return pc
+}
+
+func (pc *ProviderCapabilities) WithGroupsConfiguration(config GroupsConfiguration) *ProviderCapabilities {
+	pc.Groups = &config
+	return pc
+}
+
+func (pc *ProviderCapabilities) WithAuthorizerConfiguration(config AuthorizerConfiguration) *ProviderCapabilities {
+	pc.Authorizer = &config
+	return pc
+}
+
+func (pc *ProviderCapabilities) WithNotifierConfiguration(config NotifierConfiguration) *ProviderCapabilities {
+	pc.Notifier = &config
+	return pc
+}
+
+func (pc *ProviderCapabilities) WithProvisioningConfiguration(config ProvisioningConfiguration) *ProviderCapabilities {
+	pc.Provisioning = &config
+	return pc
+}
+
+func (pc *ProviderCapabilities) getCapabilities() map[ProviderCapability]ProviderConfigurationImpl {
+	configMap := map[ProviderCapability]ProviderConfigurationImpl{
+		ProviderCapabilityRoles:        pc.Roles,
+		ProviderCapabilityPermissions:  pc.Permissions,
+		ProviderCapabilityResources:    pc.Resources,
+		ProviderCapabilityIdentities:   pc.Identities,
+		ProviderCapabilityUsers:        pc.Users,
+		ProviderCapabilityGroups:       pc.Groups,
+		ProviderCapabilityAuthorizer:   pc.Authorizer,
+		ProviderCapabilityNotifier:     pc.Notifier,
+		ProviderCapabilityProvisioning: pc.Provisioning,
+	}
+	return configMap
 }
 
 // getCapabilityConfig returns the configuration for a given capability
 func (pc *ProviderCapabilities) getCapabilityConfig(capability ProviderCapability) ProviderConfigurationImpl {
-	configMap := map[ProviderCapability]ProviderConfigurationImpl{
-		ProviderCapabilityRoles:         pc.Roles,
-		ProviderCapabilityPermissions:   pc.Permissions,
-		ProviderCapabilityResources:     pc.Resources,
-		ProviderCapabilityIdentities:    pc.Identities,
-		ProviderCapabilityUsers:         pc.Users,
-		ProviderCapabilityGroups:        pc.Groups,
-		ProviderCapabilityAuthorizer:    pc.Authorizer,
-		ProviderCapabilityNotifier:      pc.Notifier,
-		ProviderCapabilityAuthorizeRole: pc.AuthorizeRole,
-		ProviderCapabilityRevokeRole:    pc.RevokeRole,
-	}
+	configMap := pc.getCapabilities()
 	return configMap[capability]
 }
 
@@ -175,7 +253,7 @@ func (pc *ProviderCapabilities) IsCapabilityEnabled(capability ProviderCapabilit
 	return config.IsEnabled()
 }
 
-func (pc *ProviderCapabilities) AddCapability(capability ProviderCapability) {
+func (pc *ProviderCapabilities) EnableCapability(capability ProviderCapability) {
 	config := pc.getCapabilityConfig(capability)
 	if config != nil {
 		config.Enable()
@@ -235,11 +313,8 @@ func (pc *ProviderCapabilities) Update(updates ProviderCapabilities) {
 	if pc.Notifier != nil && updates.Notifier != nil {
 		updateDisable(pc.Notifier, updates.Notifier)
 	}
-	if pc.AuthorizeRole != nil && updates.AuthorizeRole != nil {
-		updateDisable(pc.AuthorizeRole, updates.AuthorizeRole)
-	}
-	if pc.RevokeRole != nil && updates.RevokeRole != nil {
-		updateDisable(pc.RevokeRole, updates.RevokeRole)
+	if pc.Provisioning != nil && updates.Provisioning != nil {
+		updateDisable(pc.Provisioning, updates.Provisioning)
 	}
 }
 
@@ -266,54 +341,22 @@ func NewCapability() *ProviderConfiguration {
 	}
 }
 
-var (
-	// If a provider has ALL of the capabilities marked as "required"
-	// and ONE of the optional capabilities then it is considered to
-	// have that set of capabilities
-	ProviderCapabilitySetRBAC = ProviderCapabilitySet{
-		Capabilities: []CapabilityRequirement{
-			{ProviderCapabilityRoles, true, false},        // Optional
-			{ProviderCapabilityPermissions, true, false},  // Optional
-			{ProviderCapabilityResources, true, false},    // Optional
-			{ProviderCapabilityAuthorizeRole, true, true}, // Required
-			{ProviderCapabilityRevokeRole, true, true},    // Required
-		},
-	}
-	ProviderCapabilitySetAuthorizer = ProviderCapabilitySet{
-		Capabilities: []CapabilityRequirement{
-			{ProviderCapabilityAuthorizer, false, true}, // Required
-		},
-	}
-	ProviderCapabilitySetNotifier = ProviderCapabilitySet{
-		Capabilities: []CapabilityRequirement{
-			{ProviderCapabilityNotifier, false, true}, // Required
-		},
-	}
-	ProviderCapabilitySetIdentities = ProviderCapabilitySet{
-		Capabilities: []CapabilityRequirement{
-			{ProviderCapabilityIdentities, true, false}, // Optional
-			{ProviderCapabilityUsers, true, false},      // Optional
-			{ProviderCapabilityGroups, true, false},     // Optional
-		},
-	}
-)
-
 func NewProviderCapabilities() *ProviderCapabilities {
 	return &ProviderCapabilities{
-		Roles:         &RolesConfiguration{},
-		Permissions:   &PermissionsConfiguration{},
-		Resources:     &ResourcesConfiguration{},
-		Identities:    &IdentitiesConfiguration{},
-		Users:         &UsersConfiguration{},
-		Groups:        &GroupsConfiguration{},
-		Authorizer:    &AuthorizerConfiguration{},
-		Notifier:      &NotifierConfiguration{},
-		AuthorizeRole: &AuthorizeRoleConfiguration{},
-		RevokeRole:    &RevokeRoleConfiguration{},
+		Roles:        &RolesConfiguration{},
+		Permissions:  &PermissionsConfiguration{},
+		Resources:    &ResourcesConfiguration{},
+		Identities:   &IdentitiesConfiguration{},
+		Users:        &UsersConfiguration{},
+		Groups:       &GroupsConfiguration{},
+		Authorizer:   &AuthorizerConfiguration{},
+		Notifier:     &NotifierConfiguration{},
+		Provisioning: &ProvisioningConfiguration{},
 	}
 }
 
 func GetCapabilityFromString(cap string) (ProviderCapability, error) {
+
 	switch strings.ToLower(cap) {
 	case string(ProviderCapabilityAuthorizer):
 		return ProviderCapabilityAuthorizer, nil
@@ -331,10 +374,8 @@ func GetCapabilityFromString(cap string) (ProviderCapability, error) {
 		return ProviderCapabilityPermissions, nil
 	case string(ProviderCapabilityResources):
 		return ProviderCapabilityResources, nil
-	case string(ProviderCapabilityAuthorizeRole):
-		return ProviderCapabilityAuthorizeRole, nil
-	case string(ProviderCapabilityRevokeRole):
-		return ProviderCapabilityRevokeRole, nil
+	case string(ProviderCapabilityProvisioning):
+		return ProviderCapabilityProvisioning, nil
 	default:
 		return "", fmt.Errorf("unknown capability: %s", cap)
 	}

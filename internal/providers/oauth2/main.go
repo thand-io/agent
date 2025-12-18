@@ -19,7 +19,7 @@ func (p *oauth2Provider) Initialize(identifier string, provider models.Provider)
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityAuthorizer,
+		OAuth2Capabilities,
 	)
 	// TODO: Implement OAuth2 initialization logic
 	return nil

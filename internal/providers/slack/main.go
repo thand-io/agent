@@ -25,7 +25,7 @@ func (p *slackProvider) Initialize(identifier string, provider models.Provider) 
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityNotifier,
+		SlackCapabilities,
 	)
 
 	slackConfig := p.GetConfig()

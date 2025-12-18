@@ -24,7 +24,7 @@ func (p *cloudflareProvider) Initialize(identifier string, provider models.Provi
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		CloudflareCapabilities...,
+		CloudflareCapabilities,
 	)
 
 	// Get configuration

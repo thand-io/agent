@@ -26,7 +26,7 @@ func (p *oktaProvider) Initialize(identifier string, provider models.Provider) e
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		OktaCapabilities...,
+		OktaCapabilities,
 	)
 
 	// Get Okta configuration

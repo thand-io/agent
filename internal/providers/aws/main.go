@@ -37,7 +37,7 @@ func (p *awsProvider) Initialize(identifier string, provider models.Provider) er
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		AwsCapabilities...,
+		AwsCapabilities,
 	)
 
 	// Right lets figure out how to initialize the AWS SDK

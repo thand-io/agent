@@ -2,11 +2,16 @@ package okta
 
 import "github.com/thand-io/agent/internal/models"
 
-var OktaCapabilities = []models.ProviderCapability{
-	models.ProviderCapabilityUsers,         // users.go
-	models.ProviderCapabilityGroups,        // groups.go
-	models.ProviderCapabilityRoles,         // roles.go
-	models.ProviderCapabilityPermissions,   // permissions.go
-	models.ProviderCapabilityAuthorizeRole, // rbac.go
-	models.ProviderCapabilityRevokeRole,    // rbac.go
-}
+var OktaCapabilities = models.NewProviderCapabilities().
+	WithDefaultUsersConfiguration().
+	WithDefaultGroupsConfiguration().
+	WithRolesConfiguration(models.RolesConfiguration{
+		Enabled:        true,
+		Synchronizable: false,
+	}).
+	WithDefaultResourcesConfiguration().
+	WithPermissionsConfiguration(models.PermissionsConfiguration{
+		Enabled:        true,
+		Synchronizable: false,
+	}).
+	WithDefaultProvisioningConfiguration()

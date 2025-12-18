@@ -25,7 +25,7 @@ func (p *awsProviderMock) Initialize(identifier string, provider models.Provider
 	p.awsProvider.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		AwsCapabilities...,
+		AwsCapabilities,
 	)
 
 	// Load AWS Permissions and Roles from shared singleton

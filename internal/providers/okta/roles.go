@@ -8,6 +8,10 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
+func (p *oktaProvider) CanSynchronizeRoles() bool {
+	return false
+}
+
 // Okta predefined administrator roles
 // Reference: https://help.okta.com/en-us/content/topics/security/administrators-admin-comparison.htm
 var oktaPredefinedRoles = map[string]models.ProviderRole{
