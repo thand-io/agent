@@ -5,17 +5,22 @@ import (
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/pem"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/crewjam/saml"
 	"github.com/crewjam/saml/samlsp"
 	"github.com/google/uuid"
+	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
+	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/providers"
 )
@@ -32,12 +37,11 @@ type samlProvider struct {
 
 // SAMLConfig represents the SAML provider configuration
 type SAMLConfig struct {
-	IDPMetadataURL string `yaml:"idp_metadata_url" json:"idp_metadata_url"`
-	EntityID       string `yaml:"entity_id" json:"entity_id"`
-	RootURL        string `yaml:"root_url" json:"root_url"`
-	CertFile       string `yaml:"cert_file" json:"cert_file"`
-	KeyFile        string `yaml:"key_file" json:"key_file"`
-	SignRequests   bool   `yaml:"sign_requests" json:"sign_requests"`
+	IDPMetadataURL string          `yaml:"idp_metadata_url" json:"idp_metadata_url"`
+	EntityID       string          `yaml:"entity_id" json:"entity_id"`
+	RootURL        string          `yaml:"root_url" json:"root_url"`
+	KeyPair        tls.Certificate `yaml:"-" json:"-"`
+	SignRequests   bool            `yaml:"sign_requests" json:"sign_requests"`
 }
 
 func (p *samlProvider) Initialize(identifier string, provider models.Provider) error {
@@ -54,26 +58,41 @@ func (p *samlProvider) Initialize(identifier string, provider models.Provider) e
 	}
 
 	// Load certificate and key for SAML signing
-	keyPair, err := tls.LoadX509KeyPair(config.CertFile, config.KeyFile)
-	if err != nil {
-		return fmt.Errorf("failed to load SAML certificate: %w", err)
-	}
+	keyPair := config.KeyPair
 
-	// Parse the certificate
-	keyPair.Leaf, err = x509.ParseCertificate(keyPair.Certificate[0])
-	if err != nil {
-		return fmt.Errorf("failed to parse SAML certificate: %w", err)
+	var privateKey *rsa.PrivateKey
+	if keyPair.PrivateKey != nil {
+		if pk, ok := keyPair.PrivateKey.(*rsa.PrivateKey); ok {
+			privateKey = pk
+		}
 	}
 
 	// Fetch IdP metadata
-	idpMetadataURL, err := url.Parse(config.IDPMetadataURL)
-	if err != nil {
+	// Validate URL first
+	if _, err := url.Parse(config.IDPMetadataURL); err != nil {
 		return fmt.Errorf("invalid IdP metadata URL: %w", err)
 	}
 
-	idpMetadata, err := samlsp.FetchMetadata(context.Background(), http.DefaultClient, *idpMetadataURL)
+	// Fetch IdP metadata using common.InvokeHttpRequest
+	resp, err := common.InvokeHttpRequest(&model.HTTPArguments{
+		Method: http.MethodGet,
+		Endpoint: &model.Endpoint{
+			EndpointConfig: &model.EndpointConfiguration{
+				URI: &model.LiteralUri{Value: config.IDPMetadataURL},
+			},
+		},
+	})
 	if err != nil {
 		return fmt.Errorf("failed to fetch IdP metadata: %w", err)
+	}
+
+	if resp.StatusCode() != http.StatusOK {
+		return fmt.Errorf("failed to fetch IdP metadata: status code %d", resp.StatusCode())
+	}
+
+	idpMetadata := &saml.EntityDescriptor{}
+	if err := xml.Unmarshal(resp.Body(), idpMetadata); err != nil {
+		return fmt.Errorf("failed to parse IdP metadata: %w", err)
 	}
 
 	// Parse root URL
@@ -91,9 +110,9 @@ func (p *samlProvider) Initialize(identifier string, provider models.Provider) e
 	metadataURL.Path = "/saml/metadata"
 
 	// Create the ServiceProvider directly for more control
-	sp := &saml.ServiceProvider{
+	sp := saml.ServiceProvider{
 		EntityID:          config.EntityID,
-		Key:               keyPair.PrivateKey.(*rsa.PrivateKey),
+		Key:               privateKey,
 		Certificate:       keyPair.Leaf,
 		MetadataURL:       metadataURL,
 		AcsURL:            acsURL,
@@ -101,16 +120,19 @@ func (p *samlProvider) Initialize(identifier string, provider models.Provider) e
 		AuthnNameIDFormat: saml.EmailAddressNameIDFormat,
 		// Allow IDP-initiated flows (Okta can initiate)
 		AllowIDPInitiated: true,
+		// SignAuthnRequests: config.SignRequests,
 	}
 
 	// Create middleware wrapper
 	samlSP := &samlsp.Middleware{
-		ServiceProvider: *sp,
+		ServiceProvider: sp,
 	}
 
 	p.middleware = samlSP
 	p.idpMetadata = idpMetadata
-	p.certificates = []tls.Certificate{keyPair}
+	if keyPair.Certificate != nil {
+		p.certificates = []tls.Certificate{keyPair}
+	}
 
 	logrus.WithFields(logrus.Fields{
 		"provider":    provider.Name,
@@ -142,6 +164,7 @@ func (p *samlProvider) AuthorizeSession(ctx context.Context, authRequest *models
 }
 
 func (p *samlProvider) CreateSession(ctx context.Context, authRequest *models.AuthorizeUser) (*models.Session, error) {
+
 	if p.middleware == nil {
 		return nil, fmt.Errorf("SAML provider not initialized")
 	}
@@ -202,11 +225,11 @@ func (p *samlProvider) CreateSession(ctx context.Context, authRequest *models.Au
 	}
 
 	// Extract user information from SAML assertion
-	username := "saml_user"
-	email := "user@example.com"
-	name := ""
-	userID := ""
-	groups := []string{}
+	var userID string
+	var username string
+	var email string
+	var name string
+	var groups []string
 
 	// Extract attributes from the assertion
 	if assertion != nil {
@@ -251,6 +274,15 @@ func (p *samlProvider) CreateSession(ctx context.Context, authRequest *models.Au
 		}
 	}
 
+	if len(email) == 0 {
+		return nil, fmt.Errorf("missing required user attributes in SAML assertion")
+	}
+
+	if len(userID) == 0 {
+		userID = email
+	}
+
+	// Create user identity
 	user := &models.User{
 		ID:       userID,
 		Username: username,
@@ -262,11 +294,9 @@ func (p *samlProvider) CreateSession(ctx context.Context, authRequest *models.Au
 
 	// Create session
 	session := &models.Session{
-		UUID:         uuid.New(),
-		User:         user,
-		AccessToken:  uuid.New().String(),
-		RefreshToken: uuid.New().String(),
-		Expiry:       time.Now().Add(24 * time.Hour),
+		UUID:   uuid.New(),
+		User:   user,
+		Expiry: time.Now().Add(24 * time.Hour),
 	}
 
 	// Log session creation without PII details
@@ -326,93 +356,6 @@ func (p *samlProvider) RenewSession(ctx context.Context, session *models.Session
 	return newSession, nil
 }
 
-// Authorize grants access for a user to a role
-func (p *samlProvider) AuthorizeRole(
-	ctx context.Context,
-	req *models.AuthorizeRoleRequest,
-) (*models.AuthorizeRoleResponse, error) {
-
-	if !req.IsValid() {
-		return nil, fmt.Errorf("user and role must be provided to authorize azure role")
-	}
-
-	user := req.GetUser()
-	role := req.GetRole()
-
-	// Check if user has permission for the role
-	if !role.HasPermission(user) {
-		return nil, fmt.Errorf("user %s does not have permission for role %s", user.Username, role.Name)
-	}
-
-	logrus.Infof("SAML authorization granted for user %s to role %s", user.Username, role.Name)
-	return nil, nil
-}
-
-// Revoke removes access for a user from a role
-func (p *samlProvider) RevokeRole(
-	ctx context.Context,
-	req *models.RevokeRoleRequest,
-) (*models.RevokeRoleResponse, error) {
-
-	if !req.IsValid() {
-		return nil, fmt.Errorf("user and role must be provided to authorize azure role")
-	}
-
-	user := req.GetUser()
-	role := req.GetRole()
-
-	// In SAML, revocation typically happens at the IdP level
-	// This is a placeholder for any local cleanup
-	logrus.Infof("SAML access revoked for user %s from role %s", user.Username, role.Name)
-	return nil, nil
-}
-
-func (p *samlProvider) GetPermission(ctx context.Context, permission string) (*models.ProviderPermission, error) {
-	// SAML permissions are typically defined at the IdP level
-	// This would require integration with the IdP's permission system
-	return nil, fmt.Errorf("GetPermission not implemented for SAML provider - permissions managed at IdP level")
-}
-
-func (p *samlProvider) ListPermissions(ctx context.Context, searchRequest *models.SearchRequest) ([]models.SearchResult[models.ProviderPermission], error) {
-	// SAML permissions are typically defined at the IdP level
-	return []models.SearchResult[models.ProviderPermission]{}, nil
-}
-
-func (p *samlProvider) GetRole(ctx context.Context, role string) (*models.ProviderRole, error) {
-	// SAML roles are typically defined at the IdP level
-	// This would require integration with the IdP's role system
-	return nil, fmt.Errorf("GetRole not implemented for SAML provider - roles managed at IdP level")
-}
-
-func (p *samlProvider) ListRoles(ctx context.Context, searchRequest *models.SearchRequest) ([]models.SearchResult[models.ProviderRole], error) {
-	// SAML roles are typically defined at the IdP level
-	return []models.SearchResult[models.ProviderRole]{}, nil
-}
-
-// GetResource is required by ProviderRoleBasedAccessControl interface
-func (p *samlProvider) GetResource(ctx context.Context, resource string) (*models.ProviderResource, error) {
-	return nil, fmt.Errorf("GetResource not implemented for SAML provider")
-}
-
-// ListResources is required by ProviderRoleBasedAccessControl interface
-func (p *samlProvider) ListResources(ctx context.Context, searchRequest *models.SearchRequest) ([]models.SearchResult[models.ProviderResource], error) {
-	return []models.SearchResult[models.ProviderResource]{}, nil
-}
-
-// ValidateRole is required by ProviderRoleBasedAccessControl interface
-func (p *samlProvider) ValidateRole(
-	ctx context.Context, user *models.Identity, role *models.Role) (map[string]any, error) {
-	if user == nil || role == nil {
-		return nil, fmt.Errorf("user or role is nil")
-	}
-	return nil, nil
-}
-
-// SendNotification is required by ProviderNotifier interface
-func (p *samlProvider) SendNotification(ctx context.Context, notification models.NotificationRequest) error {
-	return fmt.Errorf("SendNotification not implemented for SAML provider")
-}
-
 // parseSAMLConfig parses the SAML configuration from the provider config
 func (p *samlProvider) parseSAMLConfig(config *models.BasicConfig) (*SAMLConfig, error) {
 	if config == nil {
@@ -422,41 +365,98 @@ func (p *samlProvider) parseSAMLConfig(config *models.BasicConfig) (*SAMLConfig,
 	samlConfig := &SAMLConfig{}
 
 	// Parse required fields
-	if idpURL, ok := (*config)["idp_metadata_url"].(string); ok {
+	if idpURL, ok := config.GetString("idp_metadata_url"); ok {
 		samlConfig.IDPMetadataURL = idpURL
 	} else {
 		return nil, fmt.Errorf("idp_metadata_url is required")
 	}
 
-	if entityID, ok := (*config)["entity_id"].(string); ok {
+	if entityID, ok := config.GetString("entity_id"); ok {
 		samlConfig.EntityID = entityID
 	} else {
 		return nil, fmt.Errorf("entity_id is required")
 	}
 
-	if rootURL, ok := (*config)["root_url"].(string); ok {
+	if rootURL, ok := config.GetString("root_url"); ok {
 		samlConfig.RootURL = rootURL
 	} else {
 		return nil, fmt.Errorf("root_url is required")
 	}
 
-	if certFile, ok := (*config)["cert_file"].(string); ok {
-		samlConfig.CertFile = certFile
-	} else {
-		return nil, fmt.Errorf("cert_file is required")
+	var certFile, cert string
+	if v, ok := config.GetString("cert_file"); ok {
+		certFile = v
+	}
+	if v, ok := config.GetString("cert"); ok {
+		cert = v
 	}
 
-	if keyFile, ok := (*config)["key_file"].(string); ok {
-		samlConfig.KeyFile = keyFile
-	} else {
-		return nil, fmt.Errorf("key_file is required")
+	var keyFile, key string
+	if v, ok := config.GetString("key_file"); ok {
+		keyFile = v
+	}
+	if v, ok := config.GetString("key"); ok {
+		key = v
+	}
+
+	var keyPair tls.Certificate
+	var err error
+
+	if len(cert) != 0 {
+		if len(key) != 0 {
+			keyPair, err = tls.X509KeyPair([]byte(cert), []byte(key))
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse SAML certificate from config: %w", err)
+			}
+		} else {
+			block, _ := pem.Decode([]byte(cert))
+			if block == nil {
+				return nil, fmt.Errorf("failed to parse certificate PEM")
+			}
+			keyPair = tls.Certificate{
+				Certificate: [][]byte{block.Bytes},
+			}
+		}
+	} else if len(certFile) != 0 {
+		if len(keyFile) != 0 {
+			keyPair, err = tls.LoadX509KeyPair(certFile, keyFile)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load SAML certificate: %w", err)
+			}
+		} else {
+			certBytes, err := os.ReadFile(certFile)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read certificate file: %w", err)
+			}
+			block, _ := pem.Decode(certBytes)
+			if block == nil {
+				return nil, fmt.Errorf("failed to parse certificate PEM from file")
+			}
+			keyPair = tls.Certificate{
+				Certificate: [][]byte{block.Bytes},
+			}
+		}
+	}
+
+	if len(keyPair.Certificate) > 0 {
+		// Parse the certificate leaf
+		keyPair.Leaf, err = x509.ParseCertificate(keyPair.Certificate[0])
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse SAML certificate leaf: %w", err)
+		}
+		samlConfig.KeyPair = keyPair
 	}
 
 	// Parse optional fields
-	if signRequests, ok := (*config)["sign_requests"].(bool); ok {
+	if signRequests, ok := config.GetBool("sign_requests"); ok {
 		samlConfig.SignRequests = signRequests
 	} else {
 		samlConfig.SignRequests = false // Default to false
+	}
+
+	// Validation: If signing is enabled, we MUST have a private key
+	if samlConfig.SignRequests && samlConfig.KeyPair.PrivateKey == nil {
+		return nil, fmt.Errorf("sign_requests is set to true, but no private key was provided (cert/key or cert_file/key_file)")
 	}
 
 	return samlConfig, nil

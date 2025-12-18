@@ -26,6 +26,10 @@ import (
 )
 
 func TestSAMLProvider_ParseSAMLConfig(t *testing.T) {
+	certFile, keyFile := generateTempCert(t)
+	defer os.Remove(certFile)
+	defer os.Remove(keyFile)
+
 	tests := []struct {
 		name           string
 		config         *models.BasicConfig
@@ -53,8 +57,8 @@ func TestSAMLProvider_ParseSAMLConfig(t *testing.T) {
 				"idp_metadata_url": "https://example.com/metadata",
 				"entity_id":        "https://myapp.com/saml",
 				"root_url":         "https://myapp.com",
-				"cert_file":        "/path/to/cert.pem",
-				"key_file":         "/path/to/key.pem",
+				"cert_file":        certFile,
+				"key_file":         keyFile,
 				"sign_requests":    true,
 			},
 			expectError: false,
@@ -71,8 +75,8 @@ func TestSAMLProvider_ParseSAMLConfig(t *testing.T) {
 				"idp_metadata_url": "https://example.com/metadata",
 				"entity_id":        "https://myapp.com/saml",
 				"root_url":         "https://myapp.com",
-				"cert_file":        "/path/to/cert.pem",
-				"key_file":         "/path/to/key.pem",
+				"cert_file":        certFile,
+				"key_file":         keyFile,
 			},
 			expectError: false,
 			validateResult: func(t *testing.T, cfg *SAMLConfig) {
@@ -89,7 +93,7 @@ func TestSAMLProvider_ParseSAMLConfig(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
-				if tt.errorContains != "" {
+				if len(tt.errorContains) != 0 {
 					assert.Contains(t, err.Error(), tt.errorContains)
 				}
 			} else {
@@ -169,7 +173,7 @@ func TestSAMLProvider_SessionValidation(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
-				if tt.errorContains != "" {
+				if len(tt.errorContains) != 0 {
 					assert.Contains(t, err.Error(), tt.errorContains)
 				}
 			} else {
@@ -375,7 +379,7 @@ func TestSAMLProvider_CreateSession(t *testing.T) {
 			if tt.expectError {
 				assert.Error(t, err)
 				assert.Nil(t, session)
-				if tt.errorContains != "" {
+				if len(tt.errorContains) != 0 {
 					assert.Contains(t, err.Error(), tt.errorContains)
 				}
 			} else {
@@ -441,7 +445,7 @@ func TestSAMLProvider_AuthorizeSession(t *testing.T) {
 			if tt.expectError {
 				assert.Error(t, err)
 				assert.Nil(t, response)
-				if tt.errorContains != "" {
+				if len(tt.errorContains) != 0 {
 					assert.Contains(t, err.Error(), tt.errorContains)
 				}
 			} else {
@@ -510,7 +514,7 @@ func TestSAMLProvider_RenewSession(t *testing.T) {
 			if tt.expectError {
 				assert.Error(t, err)
 				assert.Nil(t, renewedSession)
-				if tt.errorContains != "" {
+				if len(tt.errorContains) != 0 {
 					assert.Contains(t, err.Error(), tt.errorContains)
 				}
 			} else {
@@ -711,7 +715,7 @@ func TestSAMLProvider_Initialize(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
-				if tt.errorContains != "" {
+				if len(tt.errorContains) != 0 {
 					assert.Contains(t, err.Error(), tt.errorContains)
 				}
 			} else {
