@@ -75,6 +75,9 @@ func (p *gcpProvider) GetIamClient() *iam.Service {
 }
 
 func (p *gcpProvider) GetProjectId() string {
+	if p.client == nil {
+		return ""
+	}
 	return p.client.ProjectID
 }
 

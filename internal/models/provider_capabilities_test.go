@@ -116,25 +116,14 @@ func TestBaseProvider_HasCapability(t *testing.T) {
 			expected: true,
 		},
 
-		// AuthorizeRole
+		// Provisioning
 		{
 			name: "AuthorizeRole enabled",
 			setupCaps: func(pc *ProviderCapabilities) {
-				pc.AuthorizeRole = &AuthorizeRoleConfiguration{}
-				pc.AuthorizeRole.Enabled = true
+				pc.Provisioning = &ProviderConfiguration{}
+				pc.Provisioning.Enabled = true
 			},
-			checkCap: ProviderCapabilityAuthorizeRole,
-			expected: true,
-		},
-
-		// RevokeRole
-		{
-			name: "RevokeRole enabled",
-			setupCaps: func(pc *ProviderCapabilities) {
-				pc.RevokeRole = &RevokeRoleConfiguration{}
-				pc.RevokeRole.Enabled = true
-			},
-			checkCap: ProviderCapabilityRevokeRole,
+			checkCap: ProviderCapabilityProvisioning,
 			expected: true,
 		},
 
@@ -168,16 +157,15 @@ func TestBaseProvider_HasCapability(t *testing.T) {
 // Helper to create fully initialized capabilities for testing Enable/Disable
 func newInitializedCapabilities() *ProviderCapabilities {
 	return &ProviderCapabilities{
-		Roles:         &RolesConfiguration{},
-		Permissions:   &PermissionsConfiguration{},
-		Resources:     &ResourcesConfiguration{},
-		Identities:    &IdentitiesConfiguration{},
-		Users:         &UsersConfiguration{},
-		Groups:        &GroupsConfiguration{},
-		Authorizer:    &AuthorizerConfiguration{},
-		Notifier:      &NotifierConfiguration{},
-		AuthorizeRole: &AuthorizeRoleConfiguration{},
-		RevokeRole:    &RevokeRoleConfiguration{},
+		Roles:        &RolesConfiguration{},
+		Permissions:  &PermissionsConfiguration{},
+		Resources:    &ResourcesConfiguration{},
+		Identities:   &IdentitiesConfiguration{},
+		Users:        &UsersConfiguration{},
+		Groups:       &GroupsConfiguration{},
+		Authorizer:   &AuthorizerConfiguration{},
+		Notifier:     &NotifierConfiguration{},
+		Provisioning: &ProvisioningConfiguration{},
 	}
 }
 
@@ -194,8 +182,7 @@ func TestBaseProvider_EnableCapability(t *testing.T) {
 		{"Groups", ProviderCapabilityGroups},
 		{"Authorizer", ProviderCapabilityAuthorizer},
 		{"Notifier", ProviderCapabilityNotifier},
-		{"AuthorizeRole", ProviderCapabilityAuthorizeRole},
-		{"RevokeRole", ProviderCapabilityRevokeRole},
+		{"Provisioning", ProviderCapabilityProvisioning},
 	}
 
 	for _, tt := range tests {
@@ -228,8 +215,7 @@ func TestBaseProvider_DisableCapability(t *testing.T) {
 		{"Groups", ProviderCapabilityGroups},
 		{"Authorizer", ProviderCapabilityAuthorizer},
 		{"Notifier", ProviderCapabilityNotifier},
-		{"AuthorizeRole", ProviderCapabilityAuthorizeRole},
-		{"RevokeRole", ProviderCapabilityRevokeRole},
+		{"Provisioning", ProviderCapabilityProvisioning},
 	}
 
 	for _, tt := range tests {

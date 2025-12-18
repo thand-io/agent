@@ -20,7 +20,9 @@ func NewMockProvider(name string, identities []Identity) *MockProvider {
 		Enabled:     true,
 	}
 
-	base := NewBaseProvider(name, provider, ProviderCapabilityIdentities)
+	base := NewBaseProvider(name, provider,
+		NewProviderCapabilities().
+			WithDefaultIdentitiesConfiguration())
 	base.SetIdentities(identities)
 
 	return &MockProvider{
