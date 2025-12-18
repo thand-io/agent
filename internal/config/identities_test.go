@@ -470,7 +470,7 @@ func TestGetIdentitiesWithFilter(t *testing.T) {
 
 			// Call GetIdentitiesWithFilter
 			var searchReq *models.SearchRequest
-			if len(tt.filter) > 0 || tt.query != "" {
+			if len(tt.filter) > 0 || len(tt.query) != 0 {
 				searchReq = &models.SearchRequest{
 					Terms: tt.filter,
 					Query: tt.query,

@@ -11,16 +11,30 @@ providers:
       idp_metadata_url: "https://your-idp.example.com/saml/metadata"
       
       # Required: Entity ID for this service provider
-      entity_id: "https://your-app.example.com/saml/metadata"
+      entity_id: "http://your-app.example.com/api/v1/auth/callback/okta-saml"
       
       # Required: Root URL of your application
       root_url: "https://your-app.example.com"
       
       # Required: Path to SAML certificate file
       cert_file: "/path/to/saml.cert"
-      
+    
+      # Or use text or environment variable to
+      # set the SAML public key
+      cert: |
+        -----BEGIN CERTIFICATE-----
+        XYZ
+        -----END CERTIFICATE-----
+
       # Required: Path to SAML private key file
       key_file: "/path/to/saml.key"
+
+      # Or use text or environment variable to
+      # set YOUR signing key.
+      key: |
+        -----BEGIN PRIVATE KEY-----
+        ABC
+        -----END PRIVATE KEY-----
       
       # Optional: Whether to sign SAML requests (default: false)
       sign_requests: true

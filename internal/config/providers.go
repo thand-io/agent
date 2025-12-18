@@ -22,6 +22,7 @@ import (
 	_ "github.com/thand-io/agent/internal/providers/oauth2.google"
 	_ "github.com/thand-io/agent/internal/providers/okta"
 	_ "github.com/thand-io/agent/internal/providers/salesforce"
+	_ "github.com/thand-io/agent/internal/providers/saml"
 	_ "github.com/thand-io/agent/internal/providers/slack"
 	_ "github.com/thand-io/agent/internal/providers/terraform"
 	_ "github.com/thand-io/agent/internal/providers/thand"

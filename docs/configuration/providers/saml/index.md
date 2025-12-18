@@ -37,22 +37,23 @@ The SAML provider enables integration with SAML 2.0 Identity Providers (IdPs), p
 
 | Option | Type | Required | Default | Description |
 |--------|------|----------|---------|-------------|
-| `idp_metadata_url` | string | Yes* | - | URL to fetch IdP metadata |
-| `idp_metadata` | string | Yes* | - | IdP metadata content (alternative to URL) |
+| `idp_metadata_url` | string | Yes | - | URL to fetch IdP metadata |
 | `entity_id` | string | Yes | - | Service Provider entity ID |
 | `root_url` | string | Yes | - | Root URL of the application |
-| `cert_file` | string | Yes | - | Path to SAML certificate file |
-| `key_file` | string | Yes | - | Path to SAML private key file |
+| `cert_file` | string | No* | - | Path to SAML certificate file |
+| `cert` | string | No* | - | Inline SAML certificate content (PEM) |
+| `key_file` | string | No** | - | Path to SAML private key file |
+| `key` | string | No** | - | Inline SAML private key content (PEM) |
 | `sign_requests` | boolean | No | `false` | Whether to sign SAML requests |
-| `encrypt_assertions` | boolean | No | `false` | Whether to encrypt SAML assertions |
 
-*Either `idp_metadata_url` or `idp_metadata` is required.
+\* Either `cert_file` or `cert` is required.
+\** Either `key_file` or `key` is required ONLY if `sign_requests` is `true`.
 
 ## Getting Credentials
 
 ### Certificate Generation
 
-Generate a self-signed certificate for SAML:
+Generate a self-signed certificate for signing SAML:
 
 ```bash
 # Generate private key
@@ -67,30 +68,45 @@ openssl req -new -x509 -key saml.key -out saml.cert -days 365 \
 
 1. **Register Service Provider**: Add your agent as a Service Provider in your IdP
 2. **Configure Entity ID**: Use your chosen entity ID (e.g., `https://your-app.example.com/saml/metadata`)
-3. **Set Assertion Consumer Service**: Configure ACS URL (e.g., `https://your-app.example.com/saml/acs`)
+3. **Set Assertion Consumer Service**: Configure ACS URL (e.g., `https://your-app.example.com/api/v1/auth/callback/company-saml`)
 4. **Upload Certificate**: Upload your public certificate to the IdP
 
 ## Example Configurations
 
-### Basic SAML Configuration
+### Basic SAML Configuration (Certificate Only)
+
+This configuration is suitable when request signing is not required. It uses an inline certificate.
 
 ```yaml
 version: "1.0"
 providers:
-  company-saml:
-    name: Company SAML
+  okta-saml:
     description: Company SAML Identity Provider
     provider: saml
     enabled: true
     config:
-      idp_metadata_url: https://your-idp.example.com/saml/metadata
-      entity_id: https://your-app.example.com/saml/metadata
-      root_url: https://your-app.example.com
-      cert_file: /etc/agent/saml.cert
-      key_file: /etc/agent/saml.key
+      # Required: URL to fetch IdP metadata
+      idp_metadata_url: "https://your-idp.example.com/saml/metadata"
+
+      # Required: Entity ID for this service provider
+      entity_id: "http://localhost:9090/api/v1/auth/callback/okta-saml"
+
+      # Required: Root URL of your application
+      root_url: "http://localhost:9090/"
+
+      # Required: Inline SAML certificate
+      cert: |
+        -----BEGIN CERTIFICATE-----
+        XYZ
+        -----END CERTIFICATE-----
+
+      # Optional: Whether to sign SAML requests (default: false)
+      sign_requests: false
 ```
 
-### SAML with Signing
+### SAML with Signing (Certificate & Key Files)
+
+This configuration enables request signing and uses file paths for the certificate and private key.
 
 ```yaml
 version: "1.0"
@@ -98,6 +114,22 @@ providers:
   secure-saml:
     name: Secure SAML
     description: SAML with request signing
+    provider: saml
+    enabled: true
+    config:
+      idp_metadata_url: https://your-idp.example.com/saml/metadata
+      entity_id: https://your-app.example.com/saml/metadata
+      root_url: https://your-app.example.com
+      
+      # Path to certificate file
+      cert_file: /etc/agent/saml.cert
+      
+      # Path to private key file (Required because sign_requests is true)
+      key_file: /etc/agent/saml.key
+      
+      # Enable request signing
+      sign_requests: true
+```
     provider: saml
     enabled: true
     config:
