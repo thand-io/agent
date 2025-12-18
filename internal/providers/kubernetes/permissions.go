@@ -15,11 +15,7 @@ import (
 	"golang.org/x/text/language"
 )
 
-func (p *kubernetesProvider) CanSynchronizePermissions() bool {
-	return true
-}
-
-func (p *kubernetesProvider) SynchronizePermissions(ctx context.Context, req models.SynchronizePermissionsRequest) (*models.SynchronizePermissionsResponse, error) {
+func (p *kubernetesProvider) SynchronizePermissions(ctx context.Context, req *models.SynchronizePermissionsRequest) (*models.SynchronizePermissionsResponse, error) {
 	// Discover permissions dynamically from Kubernetes API server
 	permissions, err := p.discoverPermissionsFromAPI()
 	if err != nil {
@@ -87,6 +83,7 @@ func (p *kubernetesProvider) discoverPermissionsFromAPI() ([]models.ProviderPerm
 					}
 
 					permissions = append(permissions, models.ProviderPermission{
+						ID:          permissionName,
 						Name:        permissionName,
 						Description: description,
 					})
@@ -97,6 +94,7 @@ func (p *kubernetesProvider) discoverPermissionsFromAPI() ([]models.ProviderPerm
 
 	// Add special permissions
 	permissions = append(permissions, models.ProviderPermission{
+		ID:          "k8s:*:*",
 		Name:        "k8s:*:*",
 		Description: "All permissions (admin access)",
 	})
@@ -197,6 +195,7 @@ func (p *kubernetesProvider) extractPermissionsFromBuiltinRoles() []models.Provi
 	// Convert map to slice
 	for name, desc := range permissionSet {
 		permissions = append(permissions, models.ProviderPermission{
+			ID:          strings.ToLower(name),
 			Name:        name,
 			Description: desc,
 		})
@@ -204,6 +203,7 @@ func (p *kubernetesProvider) extractPermissionsFromBuiltinRoles() []models.Provi
 
 	// Add the wildcard permission
 	permissions = append(permissions, models.ProviderPermission{
+		ID:          "k8s:*:*",
 		Name:        "k8s:*:*",
 		Description: "All permissions (admin access)",
 	})

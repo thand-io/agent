@@ -301,9 +301,9 @@ func (p *cloudflareProvider) getRoleIDsFromInherits(inherits []string) ([]string
 		}
 
 		// Add unique role IDs
-		if !seenIDs[cfRole.Id] {
-			roleIDs = append(roleIDs, cfRole.Id)
-			seenIDs[cfRole.Id] = true
+		if !seenIDs[cfRole.ID] {
+			roleIDs = append(roleIDs, cfRole.ID)
+			seenIDs[cfRole.ID] = true
 		}
 	}
 
@@ -395,17 +395,18 @@ func (p *cloudflareProvider) buildZoneResourceGroups(ctx context.Context, identi
 	if identifier == "*" {
 		// All zones - use cached resources
 		var groups []cloudflare.ResourceGroup
-		resourceList, err := p.ListResources(ctx)
+		resourceList, err := p.ListResources(ctx, &models.SearchRequest{})
 		if err != nil {
 			return nil, fmt.Errorf("failed to list cached resources for zones: %w", err)
 		}
-		for _, res := range resourceList {
+		for _, resResult := range resourceList {
+			res := resResult.Result
 			if res.Type == resourceTypeZone {
 				zone, ok := res.Resource.(cloudflare.Zone)
 				if !ok {
 					logrus.WithFields(logrus.Fields{
 						"zone_name": res.Name,
-						"zone_id":   res.Id,
+						"zone_id":   res.ID,
 					}).Warn("Zone resource does not contain zone details, skipping")
 					continue
 				}
@@ -429,12 +430,13 @@ func (p *cloudflareProvider) buildZoneResourceGroups(ctx context.Context, identi
 // getAccountByID retrieves an account by ID from cache or API
 func (p *cloudflareProvider) getAccountByID(ctx context.Context, accountID string) (*cloudflare.Account, error) {
 	// Check cache first
-	resourceList, err := p.ListResources(ctx)
+	resourceList, err := p.ListResources(ctx, &models.SearchRequest{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list cached resources for account: %w", err)
 	}
-	for _, res := range resourceList {
-		if res.Type == resourceTypeAccount && res.Id == accountID {
+	for _, resResult := range resourceList {
+		res := resResult.Result
+		if res.Type == resourceTypeAccount && res.ID == accountID {
 			if account, ok := res.Resource.(cloudflare.Account); ok {
 				return &account, nil
 			}

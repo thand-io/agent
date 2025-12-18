@@ -17,3 +17,6 @@ type Permissions = internal.Permissions
 // Only the specified users, groups, or users belonging to the specified domains
 // can be assigned this role.
 type RoleScopes = internal.RoleScopes
+
+// Resources defines resource-based access controls with allow and deny lists.
+type Resources = internal.Resources

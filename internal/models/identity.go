@@ -1,5 +1,7 @@
 package models
 
+import "strings"
+
 // Identity represents either a user or a group in the system.
 // It serves as a unified abstraction for access control subjects,
 // allowing policies to reference both users and groups consistently.
@@ -24,6 +26,75 @@ type Identity struct {
 
 func (i *Identity) GetId() string {
 	return i.ID
+}
+
+func (i *Identity) String() string {
+	if i.IsUser() {
+		return i.User.String()
+	} else if i.IsGroup() {
+		return i.Group.String()
+	}
+	return ""
+}
+
+func (i *Identity) GetEmail() string {
+	if i.User != nil {
+		return i.User.Email
+	} else if i.Group != nil {
+		return i.Group.Email
+	}
+	return ""
+}
+
+func (i *Identity) Equals(other *Identity) bool {
+
+	if other == nil {
+		return false
+	}
+
+	if i.IsUser() && other.IsUser() {
+		return i.User.Equals(other.User)
+	} else if i.IsGroup() && other.IsGroup() {
+		return i.Group.Equals(other.Group)
+	}
+
+	return false
+
+}
+
+func (i *Identity) GetMappableIdentifier() string {
+	return strings.ToLower(strings.TrimSpace(i.mapableIdentifier()))
+}
+
+func (i *Identity) mapableIdentifier() string {
+
+	if i.User != nil {
+
+		if len(i.User.Email) > 0 {
+			return i.User.Email
+		}
+
+		if len(i.User.Username) > 0 {
+			return i.User.Username
+		}
+
+		return i.ID
+
+	} else if i.Group != nil {
+
+		if len(i.Group.Email) > 0 {
+			return i.Group.Email
+		}
+
+		if len(i.Group.Name) > 0 {
+			return i.Group.Name
+		}
+
+		return i.ID
+	}
+
+	return i.ID
+
 }
 
 func (i *Identity) GetLabel() string {

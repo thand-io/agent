@@ -44,7 +44,7 @@ func (p *samlProvider) Initialize(identifier string, provider models.Provider) e
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityAuthorizer,
+		SamlCapabilities,
 	)
 
 	// Parse SAML configuration from provider config
@@ -373,9 +373,9 @@ func (p *samlProvider) GetPermission(ctx context.Context, permission string) (*m
 	return nil, fmt.Errorf("GetPermission not implemented for SAML provider - permissions managed at IdP level")
 }
 
-func (p *samlProvider) ListPermissions(ctx context.Context, filters ...string) ([]models.ProviderPermission, error) {
+func (p *samlProvider) ListPermissions(ctx context.Context, searchRequest *models.SearchRequest) ([]models.SearchResult[models.ProviderPermission], error) {
 	// SAML permissions are typically defined at the IdP level
-	return []models.ProviderPermission{}, nil
+	return []models.SearchResult[models.ProviderPermission]{}, nil
 }
 
 func (p *samlProvider) GetRole(ctx context.Context, role string) (*models.ProviderRole, error) {
@@ -384,9 +384,9 @@ func (p *samlProvider) GetRole(ctx context.Context, role string) (*models.Provid
 	return nil, fmt.Errorf("GetRole not implemented for SAML provider - roles managed at IdP level")
 }
 
-func (p *samlProvider) ListRoles(ctx context.Context, filters ...string) ([]models.ProviderRole, error) {
+func (p *samlProvider) ListRoles(ctx context.Context, searchRequest *models.SearchRequest) ([]models.SearchResult[models.ProviderRole], error) {
 	// SAML roles are typically defined at the IdP level
-	return []models.ProviderRole{}, nil
+	return []models.SearchResult[models.ProviderRole]{}, nil
 }
 
 // GetResource is required by ProviderRoleBasedAccessControl interface
@@ -395,8 +395,8 @@ func (p *samlProvider) GetResource(ctx context.Context, resource string) (*model
 }
 
 // ListResources is required by ProviderRoleBasedAccessControl interface
-func (p *samlProvider) ListResources(ctx context.Context, filters ...string) ([]models.ProviderResource, error) {
-	return []models.ProviderResource{}, nil
+func (p *samlProvider) ListResources(ctx context.Context, searchRequest *models.SearchRequest) ([]models.SearchResult[models.ProviderResource], error) {
+	return []models.SearchResult[models.ProviderResource]{}, nil
 }
 
 // ValidateRole is required by ProviderRoleBasedAccessControl interface

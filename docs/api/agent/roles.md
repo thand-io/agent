@@ -16,6 +16,11 @@ Get all available roles with optional provider filtering.
 
 **GET** `/roles`
 
+### Availability
+
+- Server Mode (via `/api/v1/roles`)
+- Agent Mode (via `/roles`)
+
 ### Query Parameters
 
 - `provider` - Filter by provider (comma-separated)

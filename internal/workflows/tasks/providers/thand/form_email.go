@@ -6,11 +6,12 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/slack-go/slack"
+	"github.com/thand-io/agent/internal/models"
 )
 
 // createFormEmailBody creates the email body for form requests
 // For email, we send a link to the HTML form page
-func (f *formNotifier) createFormEmailBody(toIdentity string) (string, string) {
+func (f *formNotifier) createFormEmailBody(toIdentity *models.Identity) (string, string) {
 	workflowTask := f.workflowTask
 
 	// Create the form URL

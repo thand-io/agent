@@ -19,7 +19,7 @@ func (p *oauth2Provider) Initialize(identifier string, provider models.Provider)
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityAuthorizer,
+		OAuth2Capabilities,
 	)
 	// TODO: Implement OAuth2 initialization logic
 	return nil
@@ -72,7 +72,7 @@ func (p *oauth2Provider) GetPermission(ctx context.Context, permission string) (
 	return nil, fmt.Errorf("GetPermission not implemented for OAuth2 provider")
 }
 
-func (p *oauth2Provider) ListPermissions(ctx context.Context, filters ...string) ([]models.ProviderPermission, error) {
+func (p *oauth2Provider) ListPermissions(ctx context.Context, searchRequest *models.SearchRequest) ([]models.SearchResult[models.ProviderPermission], error) {
 	// TODO: Implement OAuth2 ListPermissions logic
 	return nil, fmt.Errorf("ListPermissions not implemented for OAuth2 provider")
 }
@@ -82,7 +82,7 @@ func (p *oauth2Provider) GetRole(ctx context.Context, role string) (*models.Prov
 	return nil, fmt.Errorf("GetRole not implemented for OAuth2 provider")
 }
 
-func (p *oauth2Provider) ListRoles(ctx context.Context, filters ...string) ([]models.ProviderRole, error) {
+func (p *oauth2Provider) ListRoles(ctx context.Context, searchRequest *models.SearchRequest) ([]models.SearchResult[models.ProviderRole], error) {
 	// TODO: Implement OAuth2 ListRoles logic
 	return nil, fmt.Errorf("ListRoles not implemented for OAuth2 provider")
 }

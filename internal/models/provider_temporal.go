@@ -3,6 +3,7 @@ package models
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 	"go.temporal.io/sdk/activity"
@@ -11,9 +12,14 @@ import (
 )
 
 const TemporalSynchronizeWorkflowName = "synchronize"
+const TemporalPatchProviderUpstreamActivityName = "patch-provider-upstream"
 
-func GetTemporalName(identifier, base string) string {
-	return CreateTemporalIdentifier(identifier, base)
+func CreateTemporalProviderWorkflowIdentifier(identifier, base string) string {
+	return CreateTemporalWorkflowIdentifier(fmt.Sprintf("%s-%s", identifier, base))
+}
+
+func CreateTemporalProviderWorkflowName(identifier, base string) string {
+	return strings.ToLower(fmt.Sprintf("%s-%s", identifier, base))
 }
 
 // BaseProvider provides a base implementation of the ProviderImpl interface
@@ -29,10 +35,10 @@ func (b *BaseProvider) RegisterWorkflows(temporalClient TemporalImpl) error {
 		return ErrNotImplemented
 	}
 
-	// Register the Synchronize workflow. This updates roles, permissions,
+	// Register the provider Synchronize workflow. This updates roles, permissions,
 	// resources and identities for RBAC
-	worker.RegisterWorkflowWithOptions(SynchronizeWorkflow, workflow.RegisterOptions{
-		Name:               GetTemporalName(b.GetIdentifier(), TemporalSynchronizeWorkflowName),
+	worker.RegisterWorkflowWithOptions(ProviderSynchronizeWorkflow, workflow.RegisterOptions{
+		Name:               CreateTemporalProviderWorkflowName(b.GetIdentifier(), TemporalSynchronizeWorkflowName),
 		VersioningBehavior: workflow.VersioningBehaviorPinned,
 	})
 
@@ -72,7 +78,7 @@ func RegisterActivities(temporalClient TemporalImpl, providerActivities *Provide
 		}
 
 		p := providerActivities.provider
-		activityName := GetTemporalName(p.GetIdentifier(), name)
+		activityName := CreateTemporalProviderWorkflowName(p.GetIdentifier(), name)
 
 		worker.RegisterActivityWithOptions(
 			methodValue.Interface(),

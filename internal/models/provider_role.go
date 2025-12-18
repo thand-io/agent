@@ -7,23 +7,22 @@ import (
 
 	"github.com/blevesearch/bleve/v2/search"
 	"github.com/sirupsen/logrus"
-	"github.com/thand-io/agent/internal/common"
 )
 
 type ProviderIdentitiesResponse struct {
-	Version    string     `json:"version"`
-	Provider   string     `json:"provider"`
-	Identities []Identity `json:"identities"`
+	Version    string                   `json:"version"`
+	Provider   string                   `json:"provider"`
+	Identities []SearchResult[Identity] `json:"identities"`
 }
 
 type ProviderRolesResponse struct {
-	Version  string         `json:"version"`
-	Provider string         `json:"provider"`
-	Roles    []ProviderRole `json:"roles"`
+	Version  string                       `json:"version"`
+	Provider string                       `json:"provider"`
+	Roles    []SearchResult[ProviderRole] `json:"roles"`
 }
 
 type ProviderRole struct {
-	Id          string `json:"id,omitempty"`
+	ID          string `json:"id,omitempty"`
 	Name        string `json:"name"`
 	Title       string `json:"title,omitempty"`
 	Description string `json:"description,omitempty"`
@@ -34,7 +33,7 @@ type ProviderRole struct {
 
 func (p *BaseProvider) SynchronizeRoles(
 	ctx context.Context,
-	req SynchronizeRolesRequest,
+	req *SynchronizeRolesRequest,
 ) (*SynchronizeRolesResponse, error) {
 	return nil, ErrNotImplemented
 }
@@ -42,7 +41,7 @@ func (p *BaseProvider) SynchronizeRoles(
 func (p *BaseProvider) GetRole(ctx context.Context, role string) (*ProviderRole, error) {
 
 	if p.rbac == nil || !p.HasCapability(
-		ProviderCapabilityRBAC,
+		ProviderCapabilityRoles,
 	) {
 		logrus.Warningln("provider has no roles")
 		return nil, fmt.Errorf("provider has no roles")
@@ -61,18 +60,21 @@ func (p *BaseProvider) GetRole(ctx context.Context, role string) (*ProviderRole,
 	return nil, fmt.Errorf("role not found")
 }
 
-func (p *BaseProvider) ListRoles(ctx context.Context, filters ...string) ([]ProviderRole, error) {
+func (p *BaseProvider) ListRoles(
+	ctx context.Context,
+	searchRequest *SearchRequest,
+) ([]SearchResult[ProviderRole], error) {
 
 	if p.rbac == nil || !p.HasCapability(
-		ProviderCapabilityRBAC,
+		ProviderCapabilityRoles,
 	) {
 		logrus.Warningln("provider has no roles")
 		return nil, fmt.Errorf("provider has no roles")
 	}
 
 	// If no filters, return all roles
-	if len(filters) == 0 {
-		return p.rbac.roles, nil
+	if searchRequest == nil || searchRequest.IsEmpty() {
+		return ReturnSearchResults(p.rbac.roles), nil
 	}
 
 	// Check if search index is ready
@@ -82,14 +84,14 @@ func (p *BaseProvider) ListRoles(ctx context.Context, filters ...string) ([]Prov
 
 	if rolesIndex != nil {
 		// Use Bleve search for better search capabilities
-		return common.BleveListSearch(ctx, rolesIndex, func(a *search.DocumentMatch, b ProviderRole) bool {
+		return BleveListSearch(ctx, rolesIndex, func(a *search.DocumentMatch, b ProviderRole) bool {
 			return strings.Compare(a.ID, b.Name) == 0
-		}, p.rbac.roles, filters...)
+		}, p.rbac.roles, searchRequest)
 	}
 
 	// Fallback to simple substring filtering while index is being built
 	var filtered []ProviderRole
-	filterText := strings.ToLower(strings.Join(filters, " "))
+	filterText := strings.ToLower(strings.Join(searchRequest.Terms, " "))
 
 	for _, role := range p.rbac.roles {
 		// Check if any filter matches the role name
@@ -98,5 +100,5 @@ func (p *BaseProvider) ListRoles(ctx context.Context, filters ...string) ([]Prov
 		}
 	}
 
-	return filtered, nil
+	return ReturnSearchResults(filtered), nil
 }

@@ -513,7 +513,7 @@ thand update --check
 
 ## Environment Variables
 
-Configuration options can be set via environment variables with the `THAND_` prefix. However, CLI-specific flags like `--verbose`, `--config`, `--login-server`, and `--api-key` are **only available as command-line flags** and do not have corresponding environment variables.
+Configuration options can be set via environment variables with the `THAND_` prefix. However, CLI-specific flags like `--verbose`, `--config`, `--login-server` are **only available as command-line flags** and do not have corresponding environment variables.
 
 The following environment variables are available for configuration settings:
 
@@ -588,7 +588,6 @@ The CLI integrates with the configuration system:
 cat > ~/.config/thand/config.yaml << EOF
 login:
   endpoint: "https://auth.company.com"
-  api_key: "your-api-key"
 EOF
 
 # 2. Login and authenticate

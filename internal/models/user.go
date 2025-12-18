@@ -27,6 +27,52 @@ type User struct {
 	Groups []string `json:"groups,omitempty"`
 }
 
+func (u *User) String() string {
+
+	if len(u.Name) > 0 && len(u.Email) > 0 {
+		return u.Name + " (" + u.Email + ")"
+	} else if len(u.Name) > 0 && len(u.Username) > 0 {
+		return u.Name + " (" + u.Username + ")"
+	} else if len(u.Name) > 0 {
+		return u.Name
+	} else if len(u.Email) > 0 {
+		return u.Email
+	} else if len(u.Username) > 0 {
+		return u.Username
+	}
+
+	return ""
+}
+
+func (u *User) Equals(other *User) bool {
+	if other == nil {
+		return false
+	}
+
+	// Try ID first
+	if len(u.ID) > 0 && len(other.ID) > 0 {
+		if strings.EqualFold(u.ID, other.ID) {
+			return true
+		}
+	}
+
+	// Try Email
+	if len(u.Email) > 0 && len(other.Email) > 0 {
+		if strings.EqualFold(u.Email, other.Email) {
+			return true
+		}
+	}
+
+	// Try Username
+	if len(u.Username) > 0 && len(other.Username) > 0 {
+		if strings.EqualFold(u.Username, other.Username) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (u *User) GetName() string {
 	if len(u.Name) > 0 {
 		return u.Name

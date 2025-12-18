@@ -9,7 +9,7 @@
             <p>Create a custom role by selecting providers, permissions, and scopes. Either role inheritance or specific permissions must be selected to proceed to scopes, but both are not required to create a role.</p>
         </div>
             
-        <form action="{{.Config.GetApiBasePath}}/elevate" method="POST" enctype="application/x-www-form-urlencoded" class="mt-2 text-left" id="customRoleForm">
+        <form action="{{.Config.ApiBasePath}}/elevate" method="POST" enctype="application/x-www-form-urlencoded" class="mt-2 text-left" id="customRoleForm">
                 
             <div  style="display: flex; flex-direction: column; gap: 1rem; max-width: 600px;"></div>
 
@@ -189,6 +189,7 @@
                     shouldSort: false,
                     searchResultLimit: 50,
                     searchFields: ['label', 'value'],
+                    duplicateItemsAllowed: false,
                 });
 
                 // Initialize Provider selector
@@ -213,8 +214,35 @@
                     noResultsText: 'No roles found',
                     shouldSort: false,
                     searchResultLimit: 50,
-                    searchFields: ['label', 'value']
+                    searchFields: ['label', 'value'],
+                    duplicateItemsAllowed: false,
                 });
+
+                // Add search event listener for identities
+                const identityElement = document.getElementById('identities');
+                let identitySearchTimeout;
+                if (identityElement) {
+                    identityElement.addEventListener('search', function(e) {
+                        clearTimeout(identitySearchTimeout);
+                        const query = e.detail.value.trim();
+                        identitySearchTimeout = setTimeout(() => {
+                            loadIdentities(query);
+                        }, 300);
+                    });
+                }
+
+                // Add search event listener for inheritance (roles)
+                const inheritanceElement = document.getElementById('inheritanceSelect');
+                let inheritanceSearchTimeout;
+                if (inheritanceElement) {
+                    inheritanceElement.addEventListener('search', function(e) {
+                        clearTimeout(inheritanceSearchTimeout);
+                        const query = e.detail.value.trim();
+                        inheritanceSearchTimeout = setTimeout(() => {
+                            loadInheritanceOptions(query);
+                        }, 300);
+                    });
+                }
 
                 // Add event listeners
                 document.getElementById('providerSelect').addEventListener('change', function() {
@@ -264,7 +292,7 @@
             }
 
             function loadProviders() {
-                fetch('{{.Config.GetApiBasePath}}/providers?capability=rbac')
+                fetch('{{.Config.ApiBasePath}}/providers?capability=rbac')
                     .then(response => response.json())
                     .then(data => {
                         const providers = Object.keys(data.providers).map(key => ({
@@ -280,7 +308,7 @@
             }
 
             function loadWorkflows() {
-                fetch('{{.Config.GetApiBasePath}}/workflows')
+                fetch('{{.Config.ApiBasePath}}/workflows')
                     .then(response => response.json())
                     .then(data => {
                         const workflowSelect = document.getElementById('workflowSelect');
@@ -308,9 +336,13 @@
                     });
             }
 
-            function loadIdentities() {
+            function loadIdentities(query = '') {
                 // Use template value for current user and fetch available identities
-                fetch('{{.Config.GetApiBasePath}}/identities?t=all')
+                const url = query 
+                    ? `{{.Config.ApiBasePath}}/identities?t=all&q=${encodeURIComponent(query)}`
+                    : `{{.Config.ApiBasePath}}/identities?t=all`;
+
+                fetch(url)
                 .then(response => response.json())
                 .then(identitiesData => {
                     const identities = [];
@@ -318,9 +350,17 @@
                                         
                     // Add other available identities from the API
                     if (identitiesData && identitiesData.identities) {
+                        
                         Object.keys(identitiesData.identities).forEach(key => {
-                            const identity = identitiesData.identities[key];
                             
+                            const identityData = identitiesData.identities[key];
+                            
+                            if (!('_source' in identityData)) {
+                                return; // Skip if _source is missing
+                            }
+
+                            const identity = identityData._source;
+
                             const label = identity.label ? 
                                 `${identity.label} (${identity.id})` : 
                                 (identity.label || identity.id);
@@ -342,10 +382,11 @@
                         });
                     }
                     
+                    // Replace choices but preserve selection
                     identityChoices.setChoices(identities, 'value', 'label', true);
 
-                    // Pre-select current user if available
-                    if (currentUserEmail) {
+                    // Pre-select current user if available and no query (initial load)
+                    if (!query && currentUserEmail) {
                         identityChoices.setChoiceByValue(currentUserEmail);
                     }
                 })
@@ -354,26 +395,38 @@
                 });
             }
 
-            function loadInheritanceOptions() {
+            function loadInheritanceOptions(query = '') {
                 if (selectedProviders.length === 0) return;
 
                 let allRoles = [];
                 let loadedCount = 0;
 
                 selectedProviders.forEach(provider => {
-                    fetch(`{{.Config.GetApiBasePath}}/provider/${provider.value}/roles?limit=1000`)
+                    const url = query
+                        ? `{{.Config.ApiBasePath}}/provider/${provider.value}/roles?limit=1000&q=${encodeURIComponent(query)}`
+                        : `{{.Config.ApiBasePath}}/provider/${provider.value}/roles?limit=1000`;
+
+                    fetch(url)
                         .then(response => response.json())
                         .then(data => {
                             // Check if data.roles exists and is an array before calling slice
                             if (data && data.roles && Array.isArray(data.roles)) {
-                                const roles = data.roles.slice(0, 1000).map(role => ({
-                                    value: `${provider.value}:${role.name}`,
-                                    label: `${role.name} (${provider.label || provider.value})`,
-                                    customProperties: {
-                                        description: role.description || '',
-                                        provider: provider.value
+                                const roles = [];
+                                data.roles.slice(0, 1000).forEach(roleData => {
+                                    let role = roleData;
+                                    if ('_source' in roleData) {
+                                        role = roleData._source;
                                     }
-                                }));
+
+                                    roles.push({
+                                        value: `${provider.value}:${role.name}`,
+                                        label: `${role.name} (${provider.label || provider.value})`,
+                                        customProperties: {
+                                            description: role.description || '',
+                                            provider: provider.value
+                                        }
+                                    });
+                                });
                                 allRoles = allRoles.concat(roles);
                             } else {
                                 console.warn(`No roles found for provider ${provider.value}:`, data);
@@ -383,12 +436,13 @@
                         .finally(() => {
                             loadedCount++;
                             if (loadedCount === selectedProviders.length) {
+                                // Replace choices but preserve selection
                                 inheritanceChoices.setChoices(allRoles, 'value', 'label', true);
                                 
-                                // Hide inheritance section if no roles are available
-                                if (allRoles.length === 0) {
+                                // Hide inheritance section if no roles are available and not searching
+                                if (!query && allRoles.length === 0) {
                                     hideSection('inheritanceSection');
-                                } else {
+                                } else if (!query) {
                                     showNextSection('inheritanceSection');
                                 }
                                 
@@ -406,7 +460,7 @@
                 let loadedCount = 0;
 
                 selectedProviders.forEach(provider => {
-                    fetch(`{{.Config.GetApiBasePath}}/provider/${provider.value}/permissions?limit=5000`)
+                    fetch(`{{.Config.ApiBasePath}}/provider/${provider.value}/permissions?limit=5000`)
                         .then(response => response.json())
                         .then(data => {
                             // Check if data.permissions exists and is an array before calling slice
@@ -414,7 +468,14 @@
                                 // Optimize permission data structure for better performance
                                 // Split comma-separated permission names into individual permissions
                                 const permissions = [];
-                                data.permissions.slice(0, 5000).forEach(perm => {
+                                data.permissions.slice(0, 5000).forEach(permData => {
+
+                                    if (!('_source' in permData)) {
+                                        return; // Skip if _source is missing
+                                    }
+
+                                    const perm = permData._source;
+
                                     // Check if permission name contains commas (multiple permissions bundled)
                                     const permNames = perm.name.split(',').map(p => p.trim()).filter(p => p.length > 0);
                                     permNames.forEach(permName => {
@@ -678,7 +739,8 @@
                     noResultsText: 'No groups found',
                     shouldSort: false,
                     searchResultLimit: 50,
-                    searchFields: ['label', 'value']
+                    searchFields: ['label', 'value'],
+                    duplicateItemsAllowed: false,
                 });
 
                 // Initialize Users selector with live search
@@ -690,7 +752,8 @@
                     noResultsText: 'No users found',
                     shouldSort: false,
                     searchResultLimit: 50,
-                    searchFields: ['label', 'value']
+                    searchFields: ['label', 'value'],
+                    duplicateItemsAllowed: false,
                 });
 
                 // Load initial groups
@@ -700,26 +763,26 @@
                 loadScopeData('user', scopes.users);
 
                 // Set up search event listeners for live filtering
-                const scopesGroupsInput = document.querySelector('#scopesGroups + .choices .choices__input');
-                const scopesUsersInput = document.querySelector('#scopesUsers + .choices .choices__input');
+                const scopesGroupsElement = document.getElementById('scopesGroups');
+                const scopesUsersElement = document.getElementById('scopesUsers');
 
                 let scopesGroupsSearchTimeout;
                 let scopesUsersSearchTimeout;
 
-                if (scopesGroupsInput) {
-                    scopesGroupsInput.addEventListener('input', function(e) {
+                if (scopesGroupsElement) {
+                    scopesGroupsElement.addEventListener('search', function(e) {
                         clearTimeout(scopesGroupsSearchTimeout);
-                        const query = e.target.value.trim();
+                        const query = e.detail.value.trim();
                         scopesGroupsSearchTimeout = setTimeout(() => {
                             loadScopeData('group', scopes.groups, query);
                         }, 300);
                     });
                 }
 
-                if (scopesUsersInput) {
-                    scopesUsersInput.addEventListener('input', function(e) {
+                if (scopesUsersElement) {
+                    scopesUsersElement.addEventListener('search', function(e) {
                         clearTimeout(scopesUsersSearchTimeout);
-                        const query = e.target.value.trim();
+                        const query = e.detail.value.trim();
                         scopesUsersSearchTimeout = setTimeout(() => {
                             loadScopeData('user', scopes.users, query);
                         }, 300);
@@ -730,8 +793,8 @@
             // Function to load scope data (groups or users) from API
             function loadScopeData(type, choicesInstance, query = '') {
                 const apiUrl = query 
-                    ? `{{.Config.GetApiBasePath}}/identities?t=${type}&q=${encodeURIComponent(query)}`
-                    : `{{.Config.GetApiBasePath}}/identities?t=${type}`;
+                    ? `{{.Config.ApiBasePath}}/identities?t=${type}&q=${encodeURIComponent(query)}`
+                    : `{{.Config.ApiBasePath}}/identities?t=${type}`;
 
                 fetch(apiUrl)
                     .then(response => response.json())
@@ -740,8 +803,14 @@
                         
                         if (data && data.identities) {
                             Object.keys(data.identities).forEach(key => {
-                                const identity = data.identities[key];
+                                const identityData = data.identities[key];
                                 
+                                if (!('_source' in identityData)) {
+                                    return; // Skip if _source is missing
+                                }
+
+                                const identity = identityData._source;
+
                                 const label = identity.label ? 
                                     `${identity.label} (${identity.id})` : 
                                     identity.id;
@@ -756,8 +825,7 @@
                             });
                         }
                         
-                        // Clear existing choices and set new ones
-                        choicesInstance.clearChoices();
+                        // Replace choices but preserve selection
                         choicesInstance.setChoices(choices, 'value', 'label', true);
                     })
                     .catch(error => {

@@ -12,6 +12,10 @@ func (b *kubernetesProvider) RegisterActivities(temporalClient models.TemporalIm
 
 // Kubernetes uses static roles and permissions so we don't need to fetch them.
 // Instead we will just return these in the synchronize call.
-func (p *kubernetesProvider) Synchronize(ctx context.Context, temporalService models.TemporalImpl) error {
-	return models.Synchronize(ctx, temporalService, p)
+func (p *kubernetesProvider) Synchronize(
+	ctx context.Context,
+	temporalService models.TemporalImpl,
+	req *models.SynchronizeRequest,
+) error {
+	return models.Synchronize(ctx, temporalService, p, req)
 }

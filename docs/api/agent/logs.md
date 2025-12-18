@@ -16,6 +16,12 @@ Get system logs and audit events.
 
 **GET** `/logs`
 
+### Availability
+
+- Server Mode
+- Agent Mode
+- Client Mode
+
 ### Response
 
 ```json
@@ -39,3 +45,17 @@ Get system logs and audit events.
 - Returns up to 500 recent log entries
 - Includes system events, user actions, and audit trail
 - Available in both JSON and HTML formats
+
+## Submit Logs
+
+Submit logs to the server.
+
+**POST** `/logs`
+
+### Availability
+
+- Server Mode Only
+
+### Notes
+
+- Currently a stub endpoint.

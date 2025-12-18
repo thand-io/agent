@@ -34,10 +34,10 @@ Display authentication page with available providers.
 
 ```bash
 # Show auth page with all providers
-curl http://localhost:8080/api/v1/auth
+curl http://localhost:8080/auth
 
 # Direct authentication with specific provider
-curl http://localhost:8080/api/v1/auth?provider=aws&callback=http://localhost:8080
+curl "http://localhost:8080/auth?provider=aws&callback=http://localhost:8080"
 ```
 
 ### Notes
@@ -51,6 +51,10 @@ curl http://localhost:8080/api/v1/auth?provider=aws&callback=http://localhost:80
 Initiate OAuth2 authentication flow for a provider.
 
 **GET** `/auth/request/{provider}`
+
+### Availability
+
+- Server Mode Only
 
 ### Query Parameters
 
@@ -66,6 +70,10 @@ Handle OAuth2 callback from provider.
 
 **GET** `/auth/callback/{provider}`
 
+### Availability
+
+- Server Mode Only
+
 ### Query Parameters
 
 - `code` - Authorization code from provider
@@ -80,5 +88,9 @@ Redirects to callback URL or shows success page.
 Clear authentication session.
 
 **GET** `/auth/logout/{provider}` or `/auth/logout`
+
+### Availability
+
+- Server Mode Only
 
 Clears authentication session for specific provider or all providers.

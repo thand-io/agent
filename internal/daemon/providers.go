@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 )
 
@@ -47,7 +46,11 @@ func (s *Server) getProviderIdentities(c *gin.Context) {
 
 	filter := c.Query("q")
 
-	identities, err := provider.GetClient().ListIdentities(context.Background(), filter)
+	identities, err := provider.GetClient().ListIdentities(
+		context.Background(), &models.SearchRequest{
+			Terms: []string{filter},
+		})
+
 	if err != nil {
 		s.getErrorPage(c, http.StatusInternalServerError, "Failed to list identities", err)
 		return
@@ -89,14 +92,28 @@ func (s *Server) getProviderRoles(c *gin.Context) {
 		return
 	}
 
-	if !provider.GetClient().HasCapability(models.ProviderCapabilityRBAC) {
-		s.getErrorPage(c, http.StatusNotImplemented, "The provider does not implement rbac")
+	if !provider.GetClient().HasCapability(models.ProviderCapabilityRoles) {
+		s.getErrorPage(c, http.StatusNotImplemented, "The provider does not implement roles")
 		return
 	}
 
-	filter := c.Query("q")
+	query := c.Query("q")
 
-	roles, err := provider.GetClient().ListRoles(context.Background(), filter)
+	searchRequest := &models.SearchRequest{
+		Limit: 10,
+	}
+
+	if len(query) > 0 {
+		searchRequest.Terms = []string{query}
+		if !strings.HasSuffix(query, "*") {
+			searchRequest.Query = query + "*"
+		} else {
+			searchRequest.Query = query
+		}
+	}
+
+	roles, err := provider.GetClient().ListRoles(context.Background(), searchRequest)
+
 	if err != nil {
 		s.getErrorPage(c, http.StatusInternalServerError, "Failed to list roles")
 		return
@@ -169,14 +186,28 @@ func (s *Server) getProviderPermissions(c *gin.Context) {
 		return
 	}
 
-	if !provider.GetClient().HasCapability(models.ProviderCapabilityRBAC) {
-		s.getErrorPage(c, http.StatusNotImplemented, "The provider does not implement rbac")
+	if !provider.GetClient().HasCapability(models.ProviderCapabilityPermissions) {
+		s.getErrorPage(c, http.StatusNotImplemented, "The provider does not implement permissions")
 		return
 	}
 
-	filter := c.Query("q")
+	query := c.Query("q")
 
-	permissions, err := provider.GetClient().ListPermissions(context.Background(), filter)
+	searchRequest := &models.SearchRequest{
+		Limit: 10,
+	}
+
+	if len(query) > 0 {
+		searchRequest.Terms = []string{query}
+		if !strings.HasSuffix(query, "*") {
+			searchRequest.Query = query + "*"
+		} else {
+			searchRequest.Query = query
+		}
+	}
+
+	permissions, err := provider.GetClient().ListPermissions(context.Background(), searchRequest)
+
 	if err != nil {
 		s.getErrorPage(c, http.StatusInternalServerError, "Failed to list permissions", err)
 		return
@@ -224,12 +255,14 @@ func (s *Server) getProvidersAsProviderResponse(
 		}
 
 		providerResponse[providerKey] = models.ProviderResponse{
+			ID:          providerKey,
 			Name:        providerName,
 			Description: provider.Description,
 			Provider:    provider.Provider,
 			Enabled:     true,
 		}
 	}
+
 	return providerResponse
 }
 
@@ -283,7 +316,7 @@ func (s *Server) getProviders(c *gin.Context) {
 	if s.canAcceptHtml(c) {
 
 		data := struct {
-			TemplateData config.TemplateData
+			TemplateData TemplateData
 			Response     models.ProvidersResponse
 		}{
 			TemplateData: s.GetTemplateData(c),

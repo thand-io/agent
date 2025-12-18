@@ -13,12 +13,8 @@ import (
 const resourceTypeZone = "zone"
 const resourceTypeAccount = "account"
 
-func (p *cloudflareProvider) CanSynchronizeResources() bool {
-	return true
-}
-
 // SynchronizeResources loads Cloudflare resources (zones, accounts) from the API
-func (p *cloudflareProvider) SynchronizeResources(ctx context.Context, req models.SynchronizeResourcesRequest) (*models.SynchronizeResourcesResponse, error) {
+func (p *cloudflareProvider) SynchronizeResources(ctx context.Context, req *models.SynchronizeResourcesRequest) (*models.SynchronizeResourcesResponse, error) {
 	startTime := time.Now()
 	defer func() {
 		elapsed := time.Since(startTime)
@@ -63,7 +59,7 @@ func (p *cloudflareProvider) loadZoneResources(ctx context.Context) ([]models.Pr
 	var resources []models.ProviderResource
 	for _, zone := range zones {
 		resource := models.ProviderResource{
-			Id:          zone.ID,
+			ID:          zone.ID,
 			Type:        resourceTypeZone,
 			Name:        zone.Name,
 			Description: fmt.Sprintf("Zone: %s (Status: %s)", zone.Name, zone.Status),
@@ -86,7 +82,7 @@ func (p *cloudflareProvider) loadAccountResources(ctx context.Context) ([]models
 	var resources []models.ProviderResource
 	for _, account := range accounts {
 		resource := models.ProviderResource{
-			Id:          account.ID,
+			ID:          account.ID,
 			Type:        resourceTypeAccount,
 			Name:        account.Name,
 			Description: fmt.Sprintf("Account: %s (Type: %s)", account.Name, account.Type),

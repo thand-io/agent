@@ -51,11 +51,11 @@ func (a *authorizerNotifier) GetRecipients() []string {
 	return a.req.To
 }
 
-func (a *authorizerNotifier) GetCallFunction(toIdentity string) model.CallFunction {
+func (a *authorizerNotifier) GetCallFunction(toIdentity *models.Identity) model.CallFunction {
 
 	callMap := (&thandFunction.NotifierRequest{
 		Provider: a.req.Provider,
-		To:       []string{toIdentity},
+		To:       []string{toIdentity.GetEmail()},
 	}).AsMap()
 
 	return model.CallFunction{
@@ -68,16 +68,17 @@ func (a *authorizerNotifier) GetProviderName() string {
 	return a.req.Provider
 }
 
-func (a *authorizerNotifier) GetPayload(toIdentity string) models.NotificationRequest {
+func (a *authorizerNotifier) GetPayload(toIdentity *models.Identity) models.NotificationRequest {
 
 	elevationReq := a.elevationReq
 	var notificationPayload models.NotificationRequest
 
 	if strings.Compare(a.GetProviderName(), slackProvider.SlackProviderName) == 0 {
 
-		blocks := a.createAuthorizeSlackBlocks()
+		blocks := a.createAuthorizeSlackBlocks(toIdentity)
+
 		slackReq := slackProvider.SlackNotificationRequest{
-			To: toIdentity,
+			To: toIdentity.GetEmail(),
 			Text: fmt.Sprintf("Your access request for role %s has been approved", func() string {
 				if elevationReq.Role != nil {
 					return elevationReq.Role.Name
@@ -96,7 +97,7 @@ func (a *authorizerNotifier) GetPayload(toIdentity string) models.NotificationRe
 	} else if strings.HasPrefix(a.GetProviderName(), emailProvider.EmailProviderName) {
 		plainText, html := a.createAuthorizeEmailBody()
 		emailReq := models.EmailNotificationRequest{
-			To:      []string{toIdentity},
+			To:      []string{toIdentity.GetEmail()},
 			Subject: "Access Request Approved",
 			Body: models.EmailNotificationBody{
 				Text: plainText,

@@ -34,6 +34,14 @@ This will run the web service that handles authentication and authorization requ
 			logrus.WithError(err).Errorln("Failed to sync configuration with agent")
 		}
 
+		// Initialize providers
+		err = cfg.InitializeProviders()
+
+		if err != nil {
+			logrus.WithError(err).Errorln("Failed to initialize providers")
+			return err
+		}
+
 		return nil
 	},
 	Run: func(cmd *cobra.Command, args []string) {

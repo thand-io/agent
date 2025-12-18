@@ -183,6 +183,9 @@ func (l *TestCaseLoader) CreateConfigFromTestCase(tc *TestCase) (*config.Config,
 	// Set up workflows
 	cfg.Workflows.Definitions = tc.Workflows
 
+	// Set up providers
+	cfg.Providers.Definitions = tc.Providers
+
 	// Configure Temporal connection - parse host:port from endpoint
 	host, portStr, err := net.SplitHostPort(l.infra.TemporalEndpoint)
 	if err != nil {
@@ -204,11 +207,10 @@ func (l *TestCaseLoader) CreateConfigFromTestCase(tc *TestCase) (*config.Config,
 
 	// Initialize providers (this creates the actual provider implementations)
 	// This must be done after setting mode so the correct implementation is used
-	initializedProviders, err := cfg.InitializeProviders(tc.Providers)
+	err = cfg.InitializeProviders()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize providers: %w", err)
 	}
-	cfg.Providers.Definitions = initializedProviders
 
 	return cfg, nil
 }

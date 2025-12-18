@@ -78,15 +78,6 @@ func preRunConfigE(cmd *cobra.Command, mode config.Mode) error {
 			}
 		}
 
-		// Get the API key override from the flag
-		apiKey, err := cmd.Flags().GetString("api-key")
-		if err == nil && len(apiKey) > 0 {
-			err := cfg.SetAPIKey(apiKey)
-			if err != nil {
-				return fmt.Errorf("failed to set API key: %w", err)
-			}
-		}
-
 		// Generate a global secret if one hasn't been set
 		if strings.EqualFold(cfg.Secret, common.DefaultServerSecret) {
 			generatedSecret, err := common.GenerateSecureRandomString(32)
@@ -101,10 +92,26 @@ func preRunConfigE(cmd *cobra.Command, mode config.Mode) error {
 
 	case config.ModeServer:
 
+		// Load local config first before registering with the thand server.
+		// So we can figure out whats missing.
 		err = cfg.ReloadConfig()
 
 		if err != nil {
 			logrus.WithError(err).Errorln("Failed to sync configuration with login server")
+		}
+
+		// Sync with thand server if configured to do so
+		err = cfg.RegisterWithThandServer()
+
+		if err != nil {
+			logrus.WithError(err).Errorln("Failed to register with Thand server")
+		}
+
+		// Now we can initalize our providers
+		err = cfg.InitializeProviders()
+		if err != nil {
+			logrus.WithError(err).Errorln("Failed to initialize providers")
+			return fmt.Errorf("failed to initialize providers: %w", err)
 		}
 
 	}
@@ -284,7 +291,6 @@ func init() {
 	rootCmd.PersistentFlags().String("config", "", "Config file (default is $HOME/.thand/config.yaml)")
 	// Add the login-server flag
 	rootCmd.PersistentFlags().String("login-server", "", "Override the default login server URL (e.g., http://localhost:8080)")
-	rootCmd.PersistentFlags().String("api-key", "", "Provide an API key for authentication with the login server")
 
 }
 

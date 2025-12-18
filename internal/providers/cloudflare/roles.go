@@ -10,12 +10,8 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
-func (p *cloudflareProvider) CanSynchronizeRoles() bool {
-	return true
-}
-
 // SynchronizeRoles fetches and caches roles from Cloudflare
-func (p *cloudflareProvider) SynchronizeRoles(ctx context.Context, req models.SynchronizeRolesRequest) (*models.SynchronizeRolesResponse, error) {
+func (p *cloudflareProvider) SynchronizeRoles(ctx context.Context, req *models.SynchronizeRolesRequest) (*models.SynchronizeRolesResponse, error) {
 	startTime := time.Now()
 	defer func() {
 		elapsed := time.Since(startTime)
@@ -47,7 +43,7 @@ func (p *cloudflareProvider) SynchronizeRoles(ctx context.Context, req models.Sy
 
 	for _, role := range roles {
 		providerRoles = append(providerRoles, models.ProviderRole{
-			Id:   role.ID,
+			ID:   role.ID,
 			Name: role.Name,
 			Role: role,
 		})

@@ -1,6 +1,7 @@
 package models
 
 import (
+	"context"
 	"net/url"
 	"strings"
 	"time"
@@ -91,6 +92,53 @@ func (e *ElevateRequest) GetWorkflow() string {
 		return e.Role.Workflows[0]
 	}
 	return ""
+}
+
+// ResolveIdentities resolves and returns the list of identities for elevation
+func (e *ElevateRequest) ResolveIdentities(ctx context.Context, providers map[string]Provider) map[string]*Identity {
+
+	resolved := make(map[string]*Identity)
+
+	if len(e.Identities) == 0 {
+		return resolved
+	}
+
+	// Loop through identities and resolve them
+	for _, identityName := range e.Identities {
+
+		// If prefixed with provider, split it
+		parts := strings.SplitN(identityName, ":", 2)
+		if len(parts) == 2 {
+			providerName := parts[0]
+			unprefixedIdentity := parts[1]
+			if provider, ok := providers[providerName]; ok {
+				providerClient := provider.GetClient()
+				if providerClient == nil {
+					continue
+				}
+				identity, err := providerClient.GetIdentity(ctx, unprefixedIdentity)
+				if err == nil && identity != nil {
+					resolved[unprefixedIdentity] = identity
+				}
+			}
+		}
+		// Also fallback to unprefixed identity
+		// Try to resolve across all providers
+		fallbackIdentityName := parts[0]
+		for _, provider := range providers {
+			providerClient := provider.GetClient()
+			if providerClient == nil {
+				continue
+			}
+			identity, err := providerClient.GetIdentity(ctx, fallbackIdentityName)
+			if err == nil && identity != nil {
+				resolved[fallbackIdentityName] = identity
+				break // Stop after first match
+			}
+		}
+	}
+
+	return resolved
 }
 
 type ElevateRequestInternal struct {

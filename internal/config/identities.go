@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"github.com/sirupsen/logrus"
-	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 )
 
@@ -60,21 +59,7 @@ func (c *Config) GetIdentity(identity string) (*models.Identity, error) {
 	providerMap := c.GetProvidersByCapability(models.ProviderCapabilityIdentities)
 
 	if len(providerMap) == 0 {
-		// No identity providers, create a basic identity from the string
-		// Extract username from email if possible
-		username := ""
-		if atIdx := strings.Index(identity, "@"); atIdx > 0 {
-			username = identity[:atIdx]
-		}
-		return &models.Identity{
-			ID:    identity,
-			Label: identity,
-			User: &models.User{
-				Email:    identity,
-				Username: username,
-				Source:   "", // Empty source means use traditional IAM, not Identity Center
-			},
-		}, nil
+		return nil, fmt.Errorf("identity not found: %s (no identity providers configured)", identity)
 	}
 
 	// Query all providers in parallel and return the first match
@@ -122,68 +107,43 @@ func (c *Config) GetIdentity(identity string) (*models.Identity, error) {
 	}
 
 	// All goroutines finished without finding a result
-	// Return a basic identity
-	// Extract username from email if possible
-	username := ""
-	if atIdx := strings.Index(identityKey, "@"); atIdx > 0 {
-		username = identityKey[:atIdx]
-	}
-	return &models.Identity{
-		ID:    identity,
-		Label: identity,
-		User: &models.User{
-			Email:    identity,
-			Username: username,
-			Source:   "", // Empty source means use traditional IAM, not Identity Center
-		},
-	}, nil
+	return nil, fmt.Errorf("identity not found: %s", identityKey)
 }
 
 // GetIdentitiesWithFilter retrieves identities from all identity providers that support identity listing.
 // It applies an optional filter to narrow down the results.
 // If no identity providers are found, it returns the current user as the only identity.
 // The identityType parameter can be used to filter results by type (user, group, or all).
-func (c *Config) GetIdentitiesWithFilter(user *models.User, identityType IdentityType, filter ...string) ([]models.Identity, error) {
+// the user can be nil here if there is no authenticated user context
+func (c *Config) GetIdentitiesWithFilter(
+	user *models.User,
+	identityType IdentityType,
+	searchRequest *models.SearchRequest,
+) ([]models.SearchResult[models.Identity], error) {
 
-	// the user can be nil here if there is no authenticated user context
-
-	// Filter out empty strings from the filter
-	filter = common.FilterEmpty(filter...)
+	// Create our slice to hold identities
+	identities := []models.SearchResult[models.Identity]{}
 
 	// Find providers with identity capabilities
 	providerMap := c.GetProvidersByCapabilityWithUser(user, models.ProviderCapabilityIdentities)
 
-	var identities []models.Identity
-
 	// If no identity providers found, return just the current user
 	if len(providerMap) == 0 {
 		// Apply filter to current user if specified
-		if len(filter) > 0 {
+		if searchRequest != nil && len(searchRequest.Terms) > 0 {
 			userFields := []string{strings.ToLower(user.Name), strings.ToLower(user.Email)}
 			matchesFilter := slices.ContainsFunc(userFields, func(field string) bool {
-				return strings.Contains(field, strings.ToLower(filter[0]))
+				return strings.Contains(field, strings.ToLower(searchRequest.Terms[0]))
 			})
-			if !matchesFilter {
-				// User doesn't match filter, return empty list
-				identities = []models.Identity{}
-			} else if user != nil {
+			if matchesFilter && user != nil {
 				// The default user matches the filter
-				identities = []models.Identity{
-					{
+				identities = []models.SearchResult[models.Identity]{{
+					Result: models.Identity{
 						ID:    user.Email,
 						Label: user.Name,
 						User:  user,
 					},
-				}
-			} // No user context, return empty list
-		} else if user != nil {
-			// No filter, return the default user
-			identities = []models.Identity{
-				{
-					ID:    user.Email,
-					Label: user.Name,
-					User:  user,
-				},
+				}}
 			}
 		}
 
@@ -195,7 +155,7 @@ func (c *Config) GetIdentitiesWithFilter(user *models.User, identityType Identit
 		var mu sync.Mutex
 
 		// Map to aggregate identities by name (to avoid duplicates across providers)
-		identityMap := make(map[string]models.Identity)
+		identityMap := make(map[string]models.SearchResult[models.Identity])
 
 		// Channel to collect errors
 		errorChan := make(chan error, len(providerMap))
@@ -206,10 +166,10 @@ func (c *Config) GetIdentitiesWithFilter(user *models.User, identityType Identit
 				defer wg.Done()
 
 				// Query identities from this provider with filter
-				var identities []models.Identity
+				var identities []models.SearchResult[models.Identity]
 				var err error
 
-				identities, err = p.GetClient().ListIdentities(ctx, filter...)
+				identities, err = p.GetClient().ListIdentities(ctx, searchRequest)
 
 				if err != nil {
 					logrus.WithError(err).
@@ -221,7 +181,9 @@ func (c *Config) GetIdentitiesWithFilter(user *models.User, identityType Identit
 
 				// Add identities to the map (thread-safe)
 				mu.Lock()
-				for _, identity := range identities {
+				for _, identityResult := range identities {
+
+					identity := identityResult.Result
 
 					if identityType == IdentityTypeUser && identity.User == nil {
 						continue
@@ -230,27 +192,42 @@ func (c *Config) GetIdentitiesWithFilter(user *models.User, identityType Identit
 						continue
 					}
 
+					identity.AddProvider(&p)
+
+					mappableIdentifier := identity.GetMappableIdentifier()
+
+					var applyResult models.Identity
+
 					// Use identity ID as key to avoid duplicates
 					// If the same identity exists from multiple providers, keep the first one
-					if foundIdentity, exists := identityMap[identity.GetId()]; !exists {
-						identity.AddProvider(&p)
-						identityMap[identity.GetId()] = identity
+					if foundIdentity, exists := identityMap[mappableIdentifier]; !exists {
+
+						applyResult = identity
+
 					} else {
-						// Add provider to identity
-						foundIdentity.AddProvider(&p)
 
 						// Also check if we need to update User or Group info
 						// with any missing details
-						if identity.User != nil && foundIdentity.User == nil {
-							foundIdentity.User = identity.User
+						if identity.User != nil && foundIdentity.Result.User == nil {
+							foundIdentity.Result.User = identity.User
 						}
-						if identity.Group != nil && foundIdentity.Group == nil {
-							foundIdentity.Group = identity.Group
+						if identity.Group != nil && foundIdentity.Result.Group == nil {
+							foundIdentity.Result.Group = identity.Group
 						}
-						identityMap[identity.GetId()] = foundIdentity
+
+						applyResult = foundIdentity.Result
+					}
+
+					identityMap[mappableIdentifier] = models.SearchResult[models.Identity]{
+						Result: applyResult,
+						Score:  identityResult.Score,
+						ID:     identityResult.ID,
+						Reason: identityResult.Reason,
 					}
 				}
+
 				mu.Unlock()
+
 			}(provider)
 		}
 
@@ -273,20 +250,24 @@ func (c *Config) GetIdentitiesWithFilter(user *models.User, identityType Identit
 		}
 
 		// Convert map to slice
-		identities = make([]models.Identity, 0, len(identityMap))
 		for _, identity := range identityMap {
 			identities = append(identities, identity)
 		}
+	}
 
-		// If no results, no filter, and the identity type includes users,
-		// return the current user as the only result
-		if len(identities) == 0 && len(filter) == 0 && user != nil && (identityType == IdentityTypeUser || identityType == IdentityTypeAll) {
-			identities = append(identities, models.Identity{
+	// If no results, no filter, and the identity type includes users,
+	// return the current user as the only result
+	if len(identities) == 0 &&
+		(searchRequest == nil || searchRequest.IsEmpty()) &&
+		user != nil &&
+		(identityType == IdentityTypeUser || identityType == IdentityTypeAll) {
+		identities = append(identities, models.SearchResult[models.Identity]{
+			Result: models.Identity{
 				ID:    user.Email,
 				Label: user.Name,
 				User:  user,
-			})
-		}
+			},
+		})
 	}
 
 	return identities, nil

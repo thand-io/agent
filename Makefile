@@ -56,6 +56,14 @@ run: submodules
 test: submodules
 	go test ./...
 
+# Run functional tests
+test-functional: submodules
+	cd test && go test -v ./functional/...
+
+# Run integration tests
+test-integration: submodules
+	cd test && go test -v ./integration/...
+
 # Generate FlatBuffers from JSON data
 generate-data:
 	@echo "Generating FlatBuffer schemas..."
@@ -79,4 +87,4 @@ swagger:
 		exit 1; \
 	fi
 
-.PHONY: all build build-all clean install run test submodules update-submodules compress generate-data swagger
+.PHONY: all build build-all clean install run test test-functional test-integration submodules update-submodules compress generate-data swagger

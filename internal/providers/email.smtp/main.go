@@ -27,7 +27,7 @@ func (p *emailSmtpProvider) Initialize(identifier string, provider models.Provid
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityNotifier,
+		EmailCapabilities,
 	)
 
 	// Depending on the provider configuration, setup the email dialer

@@ -26,11 +26,10 @@ func newTestConfig(t *testing.T, roles map[string]models.Role, providers map[str
 
 	// Initialize providers - will use mock implementations registered in internal/testing/mocks
 	if len(providers) > 0 {
-		loadedProviders, err := config.InitializeProviders(providers)
+		err := config.InitializeProviders()
 		if err != nil {
 			t.Fatalf("Failed to initialize mock providers: %v", err)
 		}
-		config.Providers.Definitions = loadedProviders
 	}
 
 	return config

@@ -141,6 +141,11 @@ func setupHomeConfigPath(v *viper.Viper) error {
 // bindEnvironmentVariables binds all environment variables to viper
 func bindEnvironmentVariables(v *viper.Viper) {
 
+	// Thand environment variables
+	v.BindEnv("thand.endpoint", "THAND_ENDPOINT")
+	v.BindEnv("thand.base", "THAND_BASE_PATH")
+	v.BindEnv("thand.api_key", "THAND_API_KEY")
+
 	// Set base environment variables
 	v.BindEnv("login.endpoint", "THAND_LOGIN_ENDPOINT")
 	v.BindEnv("login.endpoint", "THAND_BASE_URL")
@@ -269,7 +274,6 @@ func setupLogging(config *Config, v *viper.Viper) error {
 
 func (c *Config) ReloadConfig() error {
 	var wg sync.WaitGroup
-	var mu sync.Mutex
 	var foundErrors []error
 
 	// Load roles in parallel
@@ -277,14 +281,14 @@ func (c *Config) ReloadConfig() error {
 		roles, err := c.LoadRoles()
 		if err != nil {
 			logrus.WithError(err).Errorln("Error loading roles")
-			mu.Lock()
+			c.mu.Lock()
 			foundErrors = append(foundErrors, fmt.Errorf("loading roles: %w", err))
-			mu.Unlock()
+			c.mu.Unlock()
 		} else if len(roles) > 0 {
 			logrus.Infoln("Loaded roles from external source:", len(roles))
-			mu.Lock()
+			c.mu.Lock()
 			c.Roles.Definitions = roles
-			mu.Unlock()
+			c.mu.Unlock()
 		} else {
 			logrus.Warningln("No roles loaded from external source")
 		}
@@ -295,14 +299,14 @@ func (c *Config) ReloadConfig() error {
 		workflows, err := c.LoadWorkflows()
 		if err != nil {
 			logrus.WithError(err).Errorln("Error loading workflows")
-			mu.Lock()
+			c.mu.Lock()
 			foundErrors = append(foundErrors, fmt.Errorf("loading workflows: %w", err))
-			mu.Unlock()
+			c.mu.Unlock()
 		} else if len(workflows) > 0 {
 			logrus.Infoln("Loaded workflows from external source:", len(workflows))
-			mu.Lock()
+			c.mu.Lock()
 			c.Workflows.Definitions = workflows
-			mu.Unlock()
+			c.mu.Unlock()
 		} else {
 			logrus.Warningln("No workflows loaded from external source")
 		}
@@ -313,14 +317,14 @@ func (c *Config) ReloadConfig() error {
 		providers, err := c.LoadProviders()
 		if err != nil {
 			logrus.WithError(err).Errorln("Error loading providers")
-			mu.Lock()
+			c.mu.Lock()
 			foundErrors = append(foundErrors, fmt.Errorf("loading providers: %w", err))
-			mu.Unlock()
+			c.mu.Unlock()
 		} else if len(providers) > 0 {
 			logrus.Infoln("Loaded providers from external source:", len(providers))
-			mu.Lock()
+			c.mu.Lock()
 			c.Providers.Definitions = providers
-			mu.Unlock()
+			c.mu.Unlock()
 		} else {
 			logrus.Warningln("No providers loaded from external source")
 		}
@@ -332,6 +336,17 @@ func (c *Config) ReloadConfig() error {
 	// Return first error if any occurred
 	if len(foundErrors) > 0 {
 		return errors.Join(foundErrors...)
+	}
+
+	if c.GetServices() != nil && c.GetServices().GetTemporal() != nil {
+
+		logrus.Infoln("Setting up temporal services...")
+		err := c.setupTemporalServices()
+
+		if err != nil {
+			return fmt.Errorf("setting up temporal services: %w", err)
+		}
+
 	}
 
 	return nil
@@ -457,9 +472,64 @@ func (c *Config) SyncWithLoginServer() error {
 		logrus.WithError(err).Errorln("Failed to sync configuration with login server")
 	}
 
-	// Update all providers, roles and workflows to be enabled
+	// Now lets initialize our providers
+	err = c.InitializeProviders()
 
-	// TODO Reload environment?
+	if err != nil {
+		logrus.WithError(err).Errorln("Failed to initialize providers after login server sync")
+	}
+
+	return nil
+
+}
+
+// RegisterWithThandServer registers the agent with the thand.io server
+func (c *Config) RegisterWithThandServer() error {
+
+	if !c.IsServer() {
+		return fmt.Errorf("thand services can only be set up in server mode")
+	}
+
+	if !c.HasThandService() {
+		logrus.Debugln("Thand endpoint not configured, skipping registration with thand server")
+		return nil
+	}
+
+	/*
+
+		1. Discover thand server API URL
+		2. Register with thand server
+		3. Setup temporal services if enabled
+		4. Get back the roles, providers and workflow definitions
+		5. Check this incoming config version against local version
+		6. If remote version is newer then update local config
+		6.1. Commit the new config version to memory
+		7. If local version is newer then push local config to server
+		8. Check for provider roles, users, permissions etc. If these
+		   do not exist on the server then create them.
+		9. Reload config afterwards. This will start to pull down all,
+		   provider, users, permisions roles etc.
+		10. Upload all these provider roles, permissions etc to the server
+		11. Return
+
+	*/
+
+	thandLoginUrl := c.DiscoverThandServerApiUrl()
+	registration, err := c.syncWithEndpoint(thandLoginUrl, c.Thand.ApiKey)
+
+	if err != nil {
+		return fmt.Errorf("failed to register with thand server: %w", err)
+	}
+
+	// Now that we are registered and configured. We need to compare our local config
+	// with the remote config and update if needed. We need to compare the version
+	// numbers
+
+	err = c.MergeConfiguration(registration)
+
+	if err != nil {
+		logrus.WithError(err).Errorln("Failed to merge configuration from thand server")
+	}
 
 	return nil
 
@@ -471,10 +541,16 @@ func (c *Config) RegisterWithLoginServer(localToken string) (*RegistrationRespon
 		c.GetLoginServerUrl(),
 	)
 
+	return c.syncWithEndpoint(loginUrl, localToken)
+
+}
+
+func (c *Config) syncWithEndpoint(loginUrl, localToken string) (*RegistrationResponse, error) {
+
 	version, commit, _ := common.GetModuleBuildInfo()
 
 	preflightBody, err := json.Marshal(PreflightRequest{
-		Mode:	    c.GetMode(),
+		Mode:       c.GetMode(),
 		Version:    version,
 		Commit:     commit,
 		Identifier: common.GetClientIdentifier(),
@@ -513,7 +589,7 @@ func (c *Config) RegisterWithLoginServer(localToken string) (*RegistrationRespon
 	}
 
 	reqBody, err := json.Marshal(RegistrationRequest{
-		Mode: 	   c.GetMode(),
+		Mode:        c.GetMode(),
 		Environment: &c.Environment,
 		Version:     version,
 		Commit:      commit,
@@ -611,6 +687,11 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("environment.config.timeout", "5s")                    // Timeout for any config fetch operations
 	v.SetDefault("environment.config.key", common.DefaultServerSecret)  // Default encryption key name
 	v.SetDefault("environment.config.salt", common.DefaultServerSecret) // Default encryption salt
+
+	// Thand upstream service defaults
+	v.SetDefault("thand.endpoint", common.DefaultThandEndpoint)
+	v.SetDefault("thand.base", "/")
+	v.SetDefault("thand.api_key", "")
 
 	// Login server defaults
 	v.SetDefault("login.endpoint", common.DefaultLoginServerEndpoint)

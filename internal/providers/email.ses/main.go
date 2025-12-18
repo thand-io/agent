@@ -27,7 +27,7 @@ func (p *emailSesProvider) Initialize(identifier string, provider models.Provide
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityNotifier,
+		EmailCapabilities,
 	)
 
 	emailerConfig := p.GetConfig()

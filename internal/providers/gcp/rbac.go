@@ -249,6 +249,7 @@ func (p *gcpProvider) createRole(projectID, name, title, description, stage stri
 
 	request := &iam.CreateRoleRequest{
 		Role: &iam.Role{
+			Name:                name,
 			Title:               title,
 			Description:         description,
 			IncludedPermissions: permissions,

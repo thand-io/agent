@@ -16,8 +16,8 @@ import (
 type NotifierImpl interface {
 	GetProviderName() string
 	GetRecipients() []string
-	GetCallFunction(toIdentity string) model.CallFunction
-	GetPayload(toIdentity string) models.NotificationRequest
+	GetCallFunction(toIdentity *models.Identity) model.CallFunction
+	GetPayload(toIdentity *models.Identity) models.NotificationRequest
 }
 
 type defaultNotifierImpl struct {
@@ -34,11 +34,11 @@ func (d *defaultNotifierImpl) GetRecipients() []string {
 	return d.req.To
 }
 
-func (d *defaultNotifierImpl) GetCallFunction(toIdentity string) model.CallFunction {
+func (d *defaultNotifierImpl) GetCallFunction(toIdentity *models.Identity) model.CallFunction {
 
 	callMap := (&thandFunction.NotifierRequest{
 		Provider: d.req.Provider,
-		To:       []string{toIdentity},
+		To:       []string{toIdentity.GetEmail()},
 	}).AsMap()
 
 	return model.CallFunction{
@@ -51,7 +51,7 @@ func (d *defaultNotifierImpl) GetProviderName() string {
 	return d.req.Provider
 }
 
-func (d *defaultNotifierImpl) GetPayload(toIdentity string) models.NotificationRequest {
+func (d *defaultNotifierImpl) GetPayload(toIdentity *models.Identity) models.NotificationRequest {
 
 	if strings.Compare(d.GetProviderName(), slackProvider.SlackProviderName) == 0 {
 		return d.GetSlackPayload(toIdentity)
@@ -63,7 +63,7 @@ func (d *defaultNotifierImpl) GetPayload(toIdentity string) models.NotificationR
 
 }
 
-func (d *defaultNotifierImpl) GetEmailPayload(toIdentity string) models.NotificationRequest {
+func (d *defaultNotifierImpl) GetEmailPayload(toIdentity *models.Identity) models.NotificationRequest {
 
 	notificationReq := d.req
 
@@ -77,7 +77,7 @@ func (d *defaultNotifierImpl) GetEmailPayload(toIdentity string) models.Notifica
 	}
 
 	emailReq := models.EmailNotificationRequest{
-		To:      []string{toIdentity},
+		To:      []string{toIdentity.GetEmail()},
 		Subject: "Workflow Notification",
 		Body: models.EmailNotificationBody{
 			Text: notificationReq.Message,
@@ -96,12 +96,12 @@ func (d *defaultNotifierImpl) GetEmailPayload(toIdentity string) models.Notifica
 	return notificationPayload
 }
 
-func (d *defaultNotifierImpl) GetSlackPayload(toIdentity string) models.NotificationRequest {
+func (d *defaultNotifierImpl) GetSlackPayload(toIdentity *models.Identity) models.NotificationRequest {
 
 	notificationReq := d.req
 
 	slackReq := slackProvider.SlackNotificationRequest{
-		To:   toIdentity,
+		To:   toIdentity.GetEmail(),
 		Text: notificationReq.Message,
 		Blocks: slack.Blocks{
 			BlockSet: []slack.Block{

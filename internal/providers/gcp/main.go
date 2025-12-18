@@ -38,8 +38,7 @@ func (p *gcpProvider) Initialize(identifier string, provider models.Provider) er
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityRBAC,
-		models.ProviderCapabilityIdentities,
+		GcpCapabilities,
 	)
 
 	ctx := context.Background()
@@ -76,6 +75,9 @@ func (p *gcpProvider) GetIamClient() *iam.Service {
 }
 
 func (p *gcpProvider) GetProjectId() string {
+	if p.client == nil {
+		return ""
+	}
 	return p.client.ProjectID
 }
 

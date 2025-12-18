@@ -32,7 +32,15 @@ func (p *remoteProviderProxy) Initialize(identifier string, provider models.Prov
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityRBAC,
+		models.NewProviderCapabilities().
+			WithRolesConfiguration(models.RolesConfiguration{
+				Enabled:        true,
+				Synchronizable: false,
+			}).
+			WithPermissionsConfiguration(models.PermissionsConfiguration{
+				Enabled:        true,
+				Synchronizable: false,
+			}),
 	)
 
 	return nil

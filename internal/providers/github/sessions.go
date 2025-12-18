@@ -19,23 +19,32 @@ func (p *githubProvider) CreateSession(ctx context.Context, authRequest *models.
 	}
 
 	// Get user information using the access token
-	user, err := p.getUserInfo(ctx, accessToken)
+	githubUser, err := p.getUserInfo(ctx, accessToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user info: %w", err)
 	}
 
+	user := &models.User{
+		ID:     fmt.Sprintf("%d", githubUser.ID),
+		Email:  githubUser.Email,
+		Name:   githubUser.Name,
+		Source: GithubProviderName,
+	}
+
 	// Create session
 	session := &models.Session{
-		UUID: uuid.New(),
-		User: &models.User{
-			ID:     fmt.Sprintf("%d", user.ID),
-			Email:  user.Email,
-			Name:   user.Name,
-			Source: GithubProviderName,
-		},
+		UUID:        uuid.New(),
+		User:        user,
 		AccessToken: accessToken,
 		Expiry:      time.Now().Add(24 * time.Hour), // GitHub tokens don't expire, but we set session expiry
 	}
+
+	// Add session to identities pool
+	p.AddIdentities(models.Identity{
+		ID:    user.ID,
+		Label: user.Name,
+		User:  user,
+	})
 
 	return session, nil
 }

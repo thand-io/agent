@@ -25,12 +25,8 @@ type OktaApplication interface {
 	GetStatus() string
 }
 
-func (p *oktaProvider) CanSynchronizeResources() bool {
-	return true
-}
-
 // SynchronizeResources loads Okta resources (applications) from the API
-func (p *oktaProvider) SynchronizeResources(ctx context.Context, req models.SynchronizeResourcesRequest) (*models.SynchronizeResourcesResponse, error) {
+func (p *oktaProvider) SynchronizeResources(ctx context.Context, req *models.SynchronizeResourcesRequest) (*models.SynchronizeResourcesResponse, error) {
 	startTime := time.Now()
 	defer func() {
 		elapsed := time.Since(startTime)
@@ -62,7 +58,7 @@ func (p *oktaProvider) SynchronizeResources(ctx context.Context, req models.Sync
 		// The App interface wraps different application types
 		if appImpl, ok := app.(*okta.Application); ok {
 			resource := models.ProviderResource{
-				Id:       appImpl.Id,
+				ID:       appImpl.Id,
 				Type:     resourceTypeApplication,
 				Name:     appImpl.Label,
 				Resource: app, // In-memory only: stores the full app object to avoid GetApplication API calls later; not persisted due to json:"-" tag

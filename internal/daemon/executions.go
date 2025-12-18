@@ -11,7 +11,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
-	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 
 	"go.temporal.io/api/enums/v1"
@@ -23,7 +22,7 @@ import (
 )
 
 type ExecutionsPageData struct {
-	config.TemplateData
+	TemplateData
 	Executions []*models.WorkflowExecutionInfo `json:"executions"`
 }
 
@@ -112,21 +111,27 @@ func (s *Server) listRunningWorkflows(c *gin.Context) {
 
 	for _, exec := range resp.Executions {
 		runningWorkflows = append(
-			runningWorkflows, workflowExecutionInfo(exec))
-	}
-
-	response := ExecutionsPageData{
-		TemplateData: s.GetTemplateData(c),
-		Executions:   runningWorkflows,
+			runningWorkflows, s.workflowExecutionInfo(exec))
 	}
 
 	if s.canAcceptHtml(c) {
+
+		response := ExecutionsPageData{
+			TemplateData: s.GetTemplateData(c),
+			Executions:   runningWorkflows,
+		}
 
 		s.renderHtml(c, "executions.html", response)
 
 	} else {
 
-		c.JSON(http.StatusOK, response)
+		data := struct {
+			Executions []*models.WorkflowExecutionInfo `json:"executions"`
+		}{
+			Executions: runningWorkflows,
+		}
+
+		c.JSON(http.StatusOK, data)
 	}
 
 }
@@ -203,7 +208,7 @@ func (s *Server) getRunningWorkflow(c *gin.Context) {
 
 	} else {
 
-		c.JSON(http.StatusOK, data)
+		c.JSON(http.StatusOK, data.ExecutionStatePageResponse)
 	}
 }
 
@@ -237,7 +242,7 @@ func (s *Server) getWorkflowExecutionState(c *gin.Context, workflowID string) (*
 		return nil, fmt.Errorf("workflow execution not found")
 	}
 
-	workflowExecInfo := workflowExecutionInfo(wklwInfo)
+	workflowExecInfo := s.workflowExecutionInfo(wklwInfo)
 
 	var workflowTask models.WorkflowTask
 
@@ -359,14 +364,16 @@ func (s *Server) getWorkflowExecutionState(c *gin.Context, workflowID string) (*
 
 	data := &ExecutionStatePageData{
 		TemplateData: s.GetTemplateData(c),
-		Execution:    workflowExecInfo,
-		Workflow:     workflowTask.Workflow,
+		ExecutionStatePageResponse: ExecutionStatePageResponse{
+			Execution: workflowExecInfo,
+			Workflow:  workflowTask.Workflow,
+		},
 	}
 
 	return data, nil
 }
 
-func workflowExecutionInfo(
+func (s *Server) workflowExecutionInfo(
 	workflowInfo *workflow.WorkflowExecutionInfo,
 ) *models.WorkflowExecutionInfo {
 
@@ -379,7 +386,7 @@ func workflowExecutionInfo(
 		RunID:      exec.GetRunId(),
 		StartTime:  workflowInfo.GetStartTime().AsTime(),
 		Status:     strings.ToUpper(workflowInfo.GetStatus().String()),
-		Identities: []string{},
+		Identities: []*models.Identity{},
 		History:    []string{},
 	}
 
@@ -452,7 +459,20 @@ func workflowExecutionInfo(
 	if identitiesAttr, exists := searchAttributes["identities"]; exists && identitiesAttr != nil {
 		var identitiesValue []string
 		if err := dataConverter.FromPayload(identitiesAttr, &identitiesValue); err == nil {
-			response.Identities = identitiesValue
+
+			// We have identities. Lets lookup the identity information
+			for _, identityId := range identitiesValue {
+				identity, err := s.Config.GetIdentity(identityId)
+				if err != nil {
+					logrus.WithError(err).WithField("identityId", identityId).
+						Warn("failed to lookup identity for workflow execution")
+					identity = &models.Identity{
+						ID: identityId,
+					}
+				}
+				response.Identities = append(response.Identities, identity)
+			}
+
 		}
 	}
 
@@ -578,7 +598,7 @@ func (s *Server) signalRunningWorkflow(c *gin.Context) {
 
 	} else {
 
-		c.JSON(http.StatusOK, data)
+		c.JSON(http.StatusOK, data.ExecutionStatePageResponse)
 	}
 
 }

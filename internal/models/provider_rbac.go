@@ -93,29 +93,66 @@ type PaginationOptions struct {
 	Token    string `json:"token,omitempty"`
 }
 
+type SynchronizeRequestImpl interface {
+	SetPagination(p *PaginationOptions)
+}
+
+type SynchronizeResponseImpl interface {
+	GetPagination() *PaginationOptions
+}
+
+func (r *SynchronizeRolesRequest) SetPagination(p *PaginationOptions) { r.Pagination = p }
+func (r SynchronizeRolesResponse) GetPagination() *PaginationOptions  { return r.Pagination }
+
+func (r *SynchronizePermissionsRequest) SetPagination(p *PaginationOptions) { r.Pagination = p }
+func (r SynchronizePermissionsResponse) GetPagination() *PaginationOptions  { return r.Pagination }
+
+func (r *SynchronizeUsersRequest) SetPagination(p *PaginationOptions) { r.Pagination = p }
+func (r SynchronizeUsersResponse) GetPagination() *PaginationOptions  { return r.Pagination }
+
+func (r *SynchronizeGroupsRequest) SetPagination(p *PaginationOptions) { r.Pagination = p }
+func (r SynchronizeGroupsResponse) GetPagination() *PaginationOptions  { return r.Pagination }
+
+func (r *SynchronizeResourcesRequest) SetPagination(p *PaginationOptions) { r.Pagination = p }
+func (r SynchronizeResourcesResponse) GetPagination() *PaginationOptions  { return r.Pagination }
+
+func (r *SynchronizeIdentitiesRequest) SetPagination(p *PaginationOptions) { r.Pagination = p }
+func (r SynchronizeIdentitiesResponse) GetPagination() *PaginationOptions  { return r.Pagination }
+
 // ProviderRoleBasedAccessControl defines the interface for providers that support RBAC
 type ProviderRoleBasedAccessControl interface {
 
 	// Sync or Async load the roles, permissions, resources and identities
-	SynchronizeRoles(ctx context.Context, req SynchronizeRolesRequest) (*SynchronizeRolesResponse, error)
-	SynchronizePermissions(ctx context.Context, req SynchronizePermissionsRequest) (*SynchronizePermissionsResponse, error)
-	SynchronizeResources(ctx context.Context, req SynchronizeResourcesRequest) (*SynchronizeResourcesResponse, error)
+	SynchronizeRoles(ctx context.Context, req *SynchronizeRolesRequest) (*SynchronizeRolesResponse, error)
+	SynchronizePermissions(ctx context.Context, req *SynchronizePermissionsRequest) (*SynchronizePermissionsResponse, error)
+	SynchronizeResources(ctx context.Context, req *SynchronizeResourcesRequest) (*SynchronizeResourcesResponse, error)
 
+	// Overrides all existing roles, with the provided list
 	SetRoles(roles []ProviderRole)
+	// Appends new roles to the existing list
+	AddRoles(role ...ProviderRole)
+
+	// Overrides all existing permissions with the provided list
 	SetPermissions(permissions []ProviderPermission)
+	// Appends new permissions to the existing list
+	AddPermissions(permission ...ProviderPermission)
+
+	// Overrides all existing resources with the provided list
 	SetResources(resources []ProviderResource)
+	// Appends new resources to the existing list
+	AddResources(resource ...ProviderResource)
 
 	// Permissions are individual accesses. Used as part of a role
 	GetPermission(ctx context.Context, permission string) (*ProviderPermission, error)
-	ListPermissions(ctx context.Context, filters ...string) ([]ProviderPermission, error)
+	ListPermissions(ctx context.Context, searchRequest *SearchRequest) ([]SearchResult[ProviderPermission], error)
 
 	// Resources are things that permissions can be applied to
 	GetResource(ctx context.Context, resource string) (*ProviderResource, error)
-	ListResources(ctx context.Context, filters ...string) ([]ProviderResource, error)
+	ListResources(ctx context.Context, searchRequest *SearchRequest) ([]SearchResult[ProviderResource], error)
 
-	// Role
+	// Role is a collection of permissions or whatever the provider defines as a role
 	GetRole(ctx context.Context, role string) (*ProviderRole, error)
-	ListRoles(ctx context.Context, filters ...string) ([]ProviderRole, error)
+	ListRoles(ctx context.Context, searchRequest *SearchRequest) ([]SearchResult[ProviderRole], error)
 
 	// Validate a role for a user
 	ValidateRole(ctx context.Context, identity *Identity, role *Role) (map[string]any, error)
@@ -261,7 +298,7 @@ func validateRoleInheritance(provider ProviderImpl, role *Role) error {
 		return nil
 	}
 
-	providerRoles, err := provider.ListRoles(context.TODO())
+	providerRoles, err := provider.ListRoles(context.TODO(), &SearchRequest{})
 	if err != nil {
 		return err
 	}
@@ -275,8 +312,7 @@ func validateRoleInheritance(provider ProviderImpl, role *Role) error {
 }
 
 // validateInheritedRolesExist checks that all inherited roles exist in the provider
-func validateInheritedRolesExist(provider ProviderImpl, role *Role, providerRoles []ProviderRole) error {
-
+func validateInheritedRolesExist(provider ProviderImpl, role *Role, providerRoles []SearchResult[ProviderRole]) error {
 	if provider == nil {
 		return fmt.Errorf("provider implementation is nil. Ensure the provider is initialized")
 	}
@@ -287,8 +323,8 @@ func validateInheritedRolesExist(provider ProviderImpl, role *Role, providerRole
 			continue
 		}
 
-		roleExists := slices.ContainsFunc(providerRoles, func(r ProviderRole) bool {
-			return strings.Compare(r.Name, inherit) == 0
+		roleExists := slices.ContainsFunc(providerRoles, func(r SearchResult[ProviderRole]) bool {
+			return strings.Compare(r.Result.Name, inherit) == 0
 		})
 
 		if !roleExists {
@@ -309,7 +345,7 @@ func validateRolePermissions(provider ProviderImpl, role *Role) error {
 		return nil
 	}
 
-	providerPermissions, err := provider.ListPermissions(context.TODO())
+	providerPermissions, err := provider.ListPermissions(context.TODO(), &SearchRequest{})
 	if err != nil {
 		return err
 	}
@@ -323,8 +359,7 @@ func validateRolePermissions(provider ProviderImpl, role *Role) error {
 }
 
 // validateRolePermissionLists validates both allow and deny permission lists
-func validateRolePermissionLists(role *Role, providerPermissions []ProviderPermission) error {
-
+func validateRolePermissionLists(role *Role, providerPermissions []SearchResult[ProviderPermission]) error {
 	if role == nil {
 		return fmt.Errorf("role is nil")
 	}
@@ -344,7 +379,7 @@ func validateRolePermissionLists(role *Role, providerPermissions []ProviderPermi
 	return nil
 }
 
-func validatePermissions(providerPermissions []ProviderPermission, permissions []string) ([]string, error) {
+func validatePermissions(providerPermissions []SearchResult[ProviderPermission], permissions []string) ([]string, error) {
 
 	validatedPermissions := []string{}
 
@@ -366,10 +401,10 @@ func validatePermissions(providerPermissions []ProviderPermission, permissions [
 			validatedPermissions = append(validatedPermissions, permission...)
 			// We have a match, now expand it
 
-		} else if !slices.ContainsFunc(providerPermissions, func(p ProviderPermission) bool {
-			found := strings.Compare(p.Name, perm) == 0
+		} else if !slices.ContainsFunc(providerPermissions, func(p SearchResult[ProviderPermission]) bool {
+			found := strings.Compare(p.Result.Name, perm) == 0
 			if found {
-				validatedPermissions = append(validatedPermissions, p.Name)
+				validatedPermissions = append(validatedPermissions, p.Result.Name)
 			}
 			return found
 		}) {
@@ -380,7 +415,7 @@ func validatePermissions(providerPermissions []ProviderPermission, permissions [
 	return validatedPermissions, nil
 }
 
-func expandPermissionsWildcard(providerPermissions []ProviderPermission, permission string) []string {
+func expandPermissionsWildcard(providerPermissions []SearchResult[ProviderPermission], permission string) []string {
 
 	if strings.HasSuffix(permission, ":*") {
 		permission = strings.TrimSuffix(permission, ":*")
@@ -391,8 +426,8 @@ func expandPermissionsWildcard(providerPermissions []ProviderPermission, permiss
 	expandedPermissions := []string{}
 
 	for _, providerPerm := range providerPermissions {
-		if strings.HasPrefix(providerPerm.Name, permission) {
-			expandedPermissions = append(expandedPermissions, providerPerm.Name)
+		if strings.HasPrefix(providerPerm.Result.Name, permission) {
+			expandedPermissions = append(expandedPermissions, providerPerm.Result.Name)
 		}
 	}
 
@@ -473,6 +508,22 @@ func (p *BaseProvider) buildRoleIndices() error {
 	}()
 
 	rolesMapping := bleve.NewIndexMapping()
+
+	// Create a document mapping for the Role
+	roleDocMapping := bleve.NewDocumentMapping()
+
+	// Field: Name (Exact match or case-insensitive keyword is usually best for Role Names)
+	nameFieldMapping := bleve.NewTextFieldMapping()
+	nameFieldMapping.Analyzer = "keyword"
+	roleDocMapping.AddFieldMappingsAt("Name", nameFieldMapping)
+
+	// Field: Description (Full text search is usually best here)
+	descFieldMapping := bleve.NewTextFieldMapping()
+	descFieldMapping.Analyzer = "en"
+	roleDocMapping.AddFieldMappingsAt("Description", descFieldMapping)
+
+	rolesMapping.DefaultMapping = roleDocMapping
+
 	rolesIndex, err := bleve.NewMemOnly(rolesMapping)
 	if err != nil {
 		return fmt.Errorf("failed to create roles search index: %v", err)

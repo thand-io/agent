@@ -22,7 +22,7 @@ func (p *exampleProvider) Initialize(provider models.Provider) error {
 	p.BaseProvider = models.NewBaseProvider(
 		provider,
 		models.ProviderCapabilityAuthorizer,
-        models.ProviderCapabilityRBAC,
+        models.ProviderCapabilityProvisioning,
 	)
 	// TODO: Implement Example initialization logic
 	return nil

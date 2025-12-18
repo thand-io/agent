@@ -228,7 +228,18 @@ func (m tuiModel) renderStatusSection() string {
 
 	// User info
 	if len(m.execution.Identities) > 0 {
-		section.WriteString(fmt.Sprintf("Identity:      %s", strings.Join(m.execution.Identities, ", ")))
+		identities := m.execution.Identities
+		displayStr := ""
+		if len(identities) > 2 {
+			displayStr = fmt.Sprintf("%s, %s + (%d more)", identities[0].String(), identities[1].String(), len(identities)-2)
+		} else {
+			strs := make([]string, len(identities))
+			for i, id := range identities {
+				strs[i] = id.String()
+			}
+			displayStr = strings.Join(strs, ", ")
+		}
+		section.WriteString(fmt.Sprintf("Identity:      %s", displayStr))
 		section.WriteString("\n")
 	} else {
 		section.WriteString(fmt.Sprintf("Identity:      self (%s)", m.execution.User))

@@ -16,6 +16,11 @@ Get all available providers with optional capability filtering.
 
 **GET** `/providers`
 
+### Availability
+
+- Server Mode (via `/api/v1/providers`)
+- Agent Mode (via `/providers`)
+
 ### Query Parameters
 
 - `capability` - Filter by capability (comma-separated): `authenticator`, `authorizer`, `identities`, `notifications`
@@ -112,6 +117,10 @@ List permissions available through a provider.
 
 **GET** `/provider/{provider}/permissions`
 
+### Availability
+
+- Server Mode Only
+
 ### Query Parameters
 
 - `q` - Filter permissions by search term
@@ -130,6 +139,36 @@ List permissions available through a provider.
     {
       "name": "s3:GetObject",
       "description": "Grants permission to retrieve objects from S3"
+    }
+  ]
+}
+```
+
+## Get Provider Identities
+
+List identities available through a provider.
+
+**GET** `/provider/{provider}/identities`
+
+### Availability
+
+- Server Mode Only
+
+### Query Parameters
+
+- `q` - Filter identities by search term
+
+### Response
+
+```json
+{
+  "version": "1.0",
+  "provider": "aws",
+  "identities": [
+    {
+      "id": "user_123",
+      "name": "Alice Smith",
+      "email": "alice@example.com"
     }
   ]
 }

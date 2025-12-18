@@ -13,11 +13,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 )
 
-func (p *awsProvider) CanSynchronizeUsers() bool {
-	return true
-}
-
-func (p *awsProvider) SynchronizeUsers(ctx context.Context, req models.SynchronizeUsersRequest) (*models.SynchronizeUsersResponse, error) {
+func (p *awsProvider) SynchronizeUsers(ctx context.Context, req *models.SynchronizeUsersRequest) (*models.SynchronizeUsersResponse, error) {
 	startTime := time.Now()
 	defer func() {
 		elapsed := time.Since(startTime)

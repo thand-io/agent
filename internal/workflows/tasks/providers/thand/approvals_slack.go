@@ -1,6 +1,7 @@
 package thand
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -259,7 +260,20 @@ func (a *approvalsNotifier) addIdentitiesSection(blocks *[]slack.Block, elevateR
 		var identitiesText strings.Builder
 		identitiesText.WriteString("*Target Identities:*\n")
 
+		// Resolve all identities to get nice display names
+		resolvedIdentities := elevateRequest.ResolveIdentities(
+			context.Background(),
+			a.config.GetProvidersByCapability(
+				models.ProviderCapabilityIdentities,
+			))
+
 		for _, identity := range elevateRequest.Identities {
+
+			if resolved, ok := resolvedIdentities[identity]; ok {
+				identitiesText.WriteString(fmt.Sprintf("- %s\n", resolved.String()))
+				continue
+			}
+
 			identitiesText.WriteString(fmt.Sprintf("- %s\n", identity))
 		}
 
@@ -332,7 +346,12 @@ func (a *approvalsNotifier) addActionSection(
 			*blocks = append(*blocks, slack.NewActionBlock(
 				"",
 				slack.NewButtonBlockElement(
-					"approve",
+					fmt.Sprintf(
+						"%s-%s-%s",
+						a.workflowTask.WorkflowID,
+						a.workflowTask.GetTaskName(),
+						"approve",
+					),
 					"Approve",
 					slack.NewTextBlockObject(
 						slack.PlainTextType,
@@ -342,7 +361,12 @@ func (a *approvalsNotifier) addActionSection(
 					),
 				).WithURL(a.createCallbackUrl(workflowTask, approvalNotifier, true)).WithStyle(slack.StylePrimary),
 				slack.NewButtonBlockElement(
-					"deny",
+					fmt.Sprintf(
+						"%s-%s-%s",
+						a.workflowTask.WorkflowID,
+						a.workflowTask.GetTaskName(),
+						"deny",
+					),
 					"Deny",
 					slack.NewTextBlockObject(
 						slack.PlainTextType,
@@ -352,7 +376,12 @@ func (a *approvalsNotifier) addActionSection(
 					),
 				).WithURL(a.createCallbackUrl(workflowTask, approvalNotifier, false)).WithStyle(slack.StyleDanger),
 				slack.NewButtonBlockElement(
-					"view_request",
+					fmt.Sprintf(
+						"%s-%s-%s",
+						a.workflowTask.WorkflowID,
+						a.workflowTask.GetTaskName(),
+						"view_request",
+					),
 					"View Request",
 					slack.NewTextBlockObject(
 						slack.PlainTextType,

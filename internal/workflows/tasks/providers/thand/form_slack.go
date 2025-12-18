@@ -153,7 +153,12 @@ func (f *formNotifier) addFormActionSection(blocks *[]slack.Block, workflowTask 
 	*blocks = append(*blocks, slack.NewActionBlock(
 		"form_action",
 		slack.NewButtonBlockElement(
-			"open_form",
+			fmt.Sprintf(
+				"%s-%s-%s",
+				f.workflowTask.WorkflowID,
+				f.workflowTask.GetTaskName(),
+				"open_form",
+			),
 			"open_form",
 			slack.NewTextBlockObject(
 				slack.PlainTextType,

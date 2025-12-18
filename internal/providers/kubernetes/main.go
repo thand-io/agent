@@ -27,7 +27,7 @@ func (p *kubernetesProvider) Initialize(identifier string, provider models.Provi
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityRBAC,
+		KubernetesCapabilities,
 	)
 
 	// Initialize Kubernetes client

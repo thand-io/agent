@@ -5,13 +5,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/thand-io/agent/internal/common"
-	"github.com/thand-io/agent/internal/config"
 )
 
 // show a setup page - should only be accessible if no configuration is provided
 
 type SetupPageData struct {
-	config.TemplateData
+	TemplateData
 	Configuration map[string]bool
 }
 

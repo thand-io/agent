@@ -59,7 +59,7 @@
                         <!-- Action Buttons -->
                         <div style="display: flex; gap: 0.5rem;">
                             <button @click="copyRequestUrl()" 
-                                    style="padding: 0.5rem 1rem; border-radius: 0.375rem; font-size: 0.875rem; font-weight: 500; border: 1px solid; transition: all 0.2s ease; background-color: hsl(var(--secondary)); border-color: hsl(var(--border)); color: hsl(var(--foreground)); cursor: pointer;"
+                                    class="button button-secondary"
                                     title="Copy request URL to clipboard">
                                 <span x-text="copyButtonText">Copy Request</span>
                             </button>
@@ -240,8 +240,8 @@
                                     <div>
                                         <span style="font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin-bottom: 0.5rem; display: block;">Identities:</span>
                                         <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
-                                            <template x-for="identity in execution.identities" :key="identity">
-                                                <div class="badge badge-secondary" x-text="identity"></div>
+                                            <template x-for="(identity, index) in execution.identities" :key="index + '-' + (typeof identity === 'string' ? identity : (identity.email || identity.id || JSON.stringify(identity)))">
+                                                <div class="badge badge-secondary" x-text="renderIdentity(identity)"></div>
                                             </template>
                                         </div>
                                     </div>
@@ -418,8 +418,8 @@
             return {
                 // Initial data from server
                 workflowId: '{{.Execution.WorkflowID}}',
-                apiBasePath: '{{.Config.GetApiBasePath}}',
-                temporalAvailable: {{.Config.GetServices.HasTemporal}},
+                apiBasePath: '{{.Config.ApiBasePath}}',
+                temporalAvailable: {{.Config.Services.HasTemporal}},
                 
                 // Reactive state
                 loading: true,
@@ -545,6 +545,35 @@
                         clearInterval(this.refreshInterval);
                         this.refreshInterval = null;
                     }
+                },
+
+                // Render identity object to string
+                renderIdentity(identity) {
+                    if (!identity) return '';
+                    
+                    // Handle string identity (legacy)
+                    if (typeof identity === 'string') return identity;
+
+                    // Handle object identity
+                    if (identity.user) {
+                        const u = identity.user;
+                        if (u.name && u.email) return `${u.name} (${u.email})`;
+                        if (u.name && u.username) return `${u.name} (${u.username})`;
+                        if (u.name) return u.name;
+                        if (u.email) return u.email;
+                        if (u.username) return u.username;
+                    } else if (identity.group) {
+                        const g = identity.group;
+                        if (g.name && g.email) return `${g.name} (${g.email})`;
+                        if (g.name) return g.name;
+                        if (g.email) return g.email;
+                    }
+                    
+                    // Fallback to label or ID if available
+                    if (identity.label) return identity.label;
+                    if (identity.id) return identity.id;
+                    
+                    return '';
                 },
                 
                 // Task helper methods
@@ -879,7 +908,7 @@
                     // Get identity from execution
                     if (this.execution?.identities && this.execution.identities.length > 0) {
                         this.execution.identities.forEach(identity => {
-                            params.append('identity', identity);
+                            params.append('identity', identity.email || identity.id);
                         });
                     }
                     

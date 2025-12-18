@@ -38,8 +38,23 @@ func (c *Config) LoadWorkflows() (map[string]models.Workflow, error) {
 
 	}
 
+	if len(foundWorkflows) == 0 {
+		logrus.Warningln("No workflows found from any source, loading defaults")
+		foundWorkflows, err = environment.GetDefaultWorkflows(c.Environment.Platform)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load default workflows: %w", err)
+		}
+		logrus.Infoln("Loaded default workflows:", len(foundWorkflows))
+	}
+
+	return c.ApplyWorkflows(foundWorkflows)
+}
+
+func (c *Config) ApplyWorkflows(foundWorkflows []*models.WorkflowDefinitions) (map[string]models.Workflow, error) {
+
+	// Add workflows defined directly in config
 	if len(c.Workflows.Definitions) > 0 {
-		// Add workflows defined directly in config
+
 		logrus.Debugln("Adding workflows defined directly in config: ", len(c.Workflows.Definitions))
 
 		defaultVersion := version.Must(version.NewVersion("1.0"))
@@ -54,15 +69,6 @@ func (c *Config) LoadWorkflows() (map[string]models.Workflow, error) {
 		}
 	}
 
-	if len(foundWorkflows) == 0 {
-		logrus.Warningln("No workflows found from any source, loading defaults")
-		foundWorkflows, err = environment.GetDefaultWorkflows(c.Environment.Platform)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load default workflows: %w", err)
-		}
-		logrus.Infoln("Loaded default workflows:", len(foundWorkflows))
-	}
-
 	defs := make(map[string]models.Workflow)
 
 	logrus.Debugln("Processing loaded workflows: ", len(foundWorkflows))
@@ -73,6 +79,14 @@ func (c *Config) LoadWorkflows() (map[string]models.Workflow, error) {
 			if !p.Enabled {
 				logrus.Infoln("Workflow disabled:", workflowKey)
 				continue
+			}
+
+			if p.Version == nil {
+				p.Version = workflow.Version
+			}
+
+			if len(p.Name) == 0 {
+				p.Name = workflowKey
 			}
 
 			if _, exists := defs[workflowKey]; exists {

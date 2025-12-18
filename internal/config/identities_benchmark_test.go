@@ -40,7 +40,9 @@ func setupBenchmarkConfig(b *testing.B, numProviders int, identitiesPerProvider 
 		}
 		providerModel.SetClient(mockProvider)
 
+		c.mu.Lock()
 		c.Providers.Definitions[name] = providerModel
+		c.mu.Unlock()
 	}
 	return c
 }
@@ -52,7 +54,7 @@ func BenchmarkGetIdentitiesWithFilter_NoProviders(b *testing.B) {
 	b.ResetTimer()
 	// Do not change for b.Loop() - needs to be a valid benchmark
 	for i := 0; i < b.N; i++ {
-		_, _ = c.GetIdentitiesWithFilter(user, IdentityTypeUser)
+		_, _ = c.GetIdentitiesWithFilter(user, IdentityTypeUser, nil)
 	}
 }
 
@@ -63,7 +65,7 @@ func BenchmarkGetIdentitiesWithFilter_SingleProvider_Small(b *testing.B) {
 	b.ResetTimer()
 	// Do not change for b.Loop() - needs to be a valid benchmark
 	for i := 0; i < b.N; i++ {
-		_, _ = c.GetIdentitiesWithFilter(user, IdentityTypeUser)
+		_, _ = c.GetIdentitiesWithFilter(user, IdentityTypeUser, nil)
 	}
 }
 
@@ -74,7 +76,7 @@ func BenchmarkGetIdentitiesWithFilter_SingleProvider_Large(b *testing.B) {
 	b.ResetTimer()
 	// Do not change for b.Loop() - needs to be a valid benchmark
 	for i := 0; i < b.N; i++ {
-		_, _ = c.GetIdentitiesWithFilter(user, IdentityTypeUser)
+		_, _ = c.GetIdentitiesWithFilter(user, IdentityTypeUser, nil)
 	}
 }
 
@@ -85,7 +87,7 @@ func BenchmarkGetIdentitiesWithFilter_ManyProviders_Small(b *testing.B) {
 	b.ResetTimer()
 	// Do not change for b.Loop() - needs to be a valid benchmark
 	for i := 0; i < b.N; i++ {
-		_, _ = c.GetIdentitiesWithFilter(user, IdentityTypeUser)
+		_, _ = c.GetIdentitiesWithFilter(user, IdentityTypeUser, nil)
 	}
 }
 
@@ -96,7 +98,7 @@ func BenchmarkGetIdentitiesWithFilter_ManyProviders_Large(b *testing.B) {
 	b.ResetTimer()
 	// Do not change for b.Loop() - needs to be a valid benchmark
 	for i := 0; i < b.N; i++ {
-		_, _ = c.GetIdentitiesWithFilter(user, IdentityTypeUser)
+		_, _ = c.GetIdentitiesWithFilter(user, IdentityTypeUser, nil)
 	}
 }
 
@@ -108,6 +110,6 @@ func BenchmarkGetIdentitiesWithFilter_WithFilter(b *testing.B) {
 	b.ResetTimer()
 	// Do not change for b.Loop() - needs to be a valid benchmark
 	for i := 0; i < b.N; i++ {
-		_, _ = c.GetIdentitiesWithFilter(user, IdentityTypeUser, filter)
+		_, _ = c.GetIdentitiesWithFilter(user, IdentityTypeUser, &models.SearchRequest{Terms: []string{filter}})
 	}
 }

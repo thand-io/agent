@@ -10,10 +10,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/go-resty/resty/v2"
+	"github.com/blevesearch/bleve/v2"
 	"github.com/google/uuid"
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
+	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/config/services"
 	"github.com/thand-io/agent/internal/models"
 )
@@ -55,9 +56,14 @@ type Config struct {
 	Workflows WorkflowConfig `mapstructure:"workflows"` // These are workflows to run for role associated workflows
 	Providers ProviderConfig `mapstructure:"providers"` // These are integration providers like AWS, GCP, etc.
 
+	// This is ONLY if the agent is running in server mode
+	// and you want to use https://www.thand.io hosted services
+	Thand models.ThandConfig `mapstructure:"thand"`
+
 	// Internal mode of operation
 	mode   Mode
 	logger thandLogger
+	mu     sync.RWMutex
 
 	// Cached services client
 	initializeServiceClientOnce sync.Once
@@ -163,10 +169,8 @@ func (c *Config) GetProvidersByCapabilityWithUser(user *models.User, capability 
 			continue
 		}
 
-		for _, cap := range capability {
-			if slices.Contains(client.GetCapabilities(), cap) {
-				providers[name] = provider
-			}
+		if client.HasAnyCapability(capability...) {
+			providers[name] = provider
 		}
 	}
 	return providers
@@ -212,12 +216,15 @@ func (c *Config) HasLargeLanguageModel() bool {
 }
 
 type RoleConfig struct {
-	Path  string          `mapstructure:"path"`
-	URL   *model.Endpoint `mapstructure:"url"`
-	Vault string          `mapstructure:"vault"` // vault secret / path to use
+	Path  string          `mapstructure:"path" json:"path"`
+	URL   *model.Endpoint `mapstructure:"url" json:"url"`
+	Vault string          `mapstructure:"vault" json:"vault"` // vault secret / path to use
 
 	// Store everything in memory
-	Definitions map[string]models.Role `mapstructure:",remain"`
+	Definitions map[string]models.Role `mapstructure:",remain" json:"definitions"`
+
+	// Search indexes
+	rolesIndex bleve.Index
 }
 
 func (r *RoleConfig) GetRoleByName(name string) (*models.Role, error) {
@@ -232,15 +239,15 @@ func (r *RoleConfig) GetRoleByName(name string) (*models.Role, error) {
 }
 
 type WorkflowConfig struct {
-	Path  string          `mapstructure:"path"`
-	URL   *model.Endpoint `mapstructure:"url"`
-	Vault string          `mapstructure:"vault"` // vault secret / path to use
+	Path  string          `mapstructure:"path" json:"path"`
+	URL   *model.Endpoint `mapstructure:"url" json:"url"`
+	Vault string          `mapstructure:"vault" json:"vault"` // vault secret / path to use
 
 	// Load dynamic plugin registry for custom call tools
-	Plugins WorkflowPluginConfig `mapstructure:"plugins"`
+	Plugins WorkflowPluginConfig `mapstructure:"plugins" json:"plugins"`
 
 	// Store everything in memory
-	Definitions map[string]models.Workflow `mapstructure:",remain"`
+	Definitions map[string]models.Workflow `mapstructure:",remain" json:"definitions"`
 }
 
 func (p *WorkflowConfig) GetWorkflowByName(name string) (*models.Workflow, error) {
@@ -266,15 +273,19 @@ type WorkflowPlugin struct {
 }
 
 type ProviderConfig struct {
-	Path  string          `mapstructure:"path"`
-	URL   *model.Endpoint `mapstructure:"url"`
-	Vault string          `mapstructure:"vault"` // vault secret / path to use
+	Path  string          `mapstructure:"path" json:"path"`
+	URL   *model.Endpoint `mapstructure:"url" json:"url"`
+	Vault string          `mapstructure:"vault" json:"vault"` // vault secret / path to use
 
 	// Load dynamic provider configs
-	Plugins ProviderPluginConfig `mapstructure:"plugins"`
+	Plugins ProviderPluginConfig `mapstructure:"plugins" json:"plugins"`
 
 	// Load providers directly from config using mapstructure:",remain"
-	Definitions map[string]models.Provider `mapstructure:",remain"`
+	Definitions map[string]models.Provider `mapstructure:",remain" json:"definitions"`
+}
+
+func (p *ProviderConfig) GetDefinitions() map[string]models.Provider {
+	return p.Definitions
 }
 
 func (p *ProviderConfig) GetProviderByName(name string) (*models.Provider, error) {
@@ -314,11 +325,36 @@ func (c *Config) GetLoginServerUrl() string {
 	return strings.TrimSuffix(fmt.Sprintf(
 		"%s/%s",
 		strings.TrimSuffix(c.Login.Endpoint, "/"),
-		strings.TrimSuffix(c.Login.Base, "/")),
+		strings.TrimPrefix(strings.TrimSuffix(c.Login.Base, "/"), "/")),
 		"/")
 }
 
+func (c *Config) GetThandServerUrl() string {
+	return strings.TrimSuffix(fmt.Sprintf(
+		"%s/%s",
+		strings.TrimSuffix(c.Thand.Endpoint, "/"),
+		strings.TrimPrefix(strings.TrimSuffix(c.Thand.Base, "/"), "/")),
+		"/")
+}
+
+func (c *Config) DiscoverThandServerApiUrl() string {
+	return c.discoverServerApiUrl(c.Thand.Endpoint, &model.ReferenceableAuthenticationPolicy{
+		AuthenticationPolicy: &model.AuthenticationPolicy{
+			Bearer: &model.BearerAuthenticationPolicy{
+				Token: c.Thand.ApiKey,
+			},
+		},
+	})
+}
+
 func (c *Config) DiscoverLoginServerApiUrl(loginServer string) string {
+	return c.discoverServerApiUrl(loginServer, nil)
+}
+
+func (c *Config) discoverServerApiUrl(
+	loginServer string,
+	auth *model.ReferenceableAuthenticationPolicy,
+) string {
 
 	// Make request to the login server to get the
 	// /.well-known/api-configuration endpoint
@@ -327,30 +363,41 @@ func (c *Config) DiscoverLoginServerApiUrl(loginServer string) string {
 	discoveryCheckUrl := fmt.Sprintf("%s/.well-known/api-configuration", loginServer)
 	defaultUrl := fmt.Sprintf("%s/api/v1", loginServer)
 
-	client := resty.New()
-	res, err := client.R().
-		EnableTrace().
-		Get(discoveryCheckUrl)
+	resp, err := common.InvokeHttpRequest(&model.HTTPArguments{
+		Endpoint: &model.Endpoint{
+			EndpointConfig: &model.EndpointConfiguration{
+				URI:            &model.LiteralUri{Value: discoveryCheckUrl},
+				Authentication: auth,
+			},
+		},
+		Method: http.MethodGet,
+	})
 
 	if err != nil {
 		return defaultUrl
 	}
 
-	if res.StatusCode() != http.StatusOK {
+	if resp.StatusCode() != http.StatusOK {
 		return defaultUrl
 	}
 
 	// Get the path field in the JSON response this is our API path
 	var discoveryCheckResponse struct {
+		BaseUrl     string `json:"baseUrl"`
 		ApiBasePath string `json:"apiBasePath"`
 	}
 
-	if err := json.Unmarshal(res.Body(), &discoveryCheckResponse); err != nil {
+	if err := json.Unmarshal(resp.Body(), &discoveryCheckResponse); err != nil {
 		return defaultUrl
 	}
 
+	if len(discoveryCheckResponse.BaseUrl) > 0 {
+		logrus.Debugf("Discovered login server base URL: %s", discoveryCheckResponse.BaseUrl)
+		loginServer = strings.TrimSuffix(discoveryCheckResponse.BaseUrl, "/")
+	}
+
 	trimPath := strings.TrimSuffix(strings.TrimPrefix(discoveryCheckResponse.ApiBasePath, "/"), "/")
-	return fmt.Sprintf("%s/%s", c.GetLoginServerUrl(), trimPath)
+	return fmt.Sprintf("%s/%s", loginServer, trimPath)
 }
 
 func (c *Config) GetLoginServerHostname() string {
@@ -373,19 +420,19 @@ func (c *Config) SetLoginServer(loginServer string) error {
 }
 
 func (c *Config) GetAPIKey() string {
-	return c.Login.ApiKey
+	return c.Thand.ApiKey
 }
 
 func (c *Config) SetAPIKey(apiKey string) error {
 	if len(apiKey) == 0 {
 		return fmt.Errorf("API key cannot be empty")
 	}
-	c.Login.ApiKey = apiKey
+	c.Thand.ApiKey = apiKey
 	return nil
 }
 
 func (c *Config) HasAPIKey() bool {
-	return len(c.Login.ApiKey) > 0
+	return len(c.Thand.ApiKey) > 0
 }
 
 func (c *Config) GetApiBasePath() string {
@@ -444,40 +491,6 @@ func (c *Config) GetSignalCallbackUrl(workflowTask *models.WorkflowTask) string 
 		workflowTask.WorkflowID,
 		queryParams.Encode(),
 	)
-}
-
-/*
-GetSecret retrieves a secret from the provider configuration
-If the provider is not found, it returns an empty string.
-
-A jq expression must be provided to extract the secret from the provider's configuration.
-
-Node is the incoming yaml/json node that contains the jq expression.
-*/
-func (c *Config) TraverseAndEvaluateProviderSecrets(providerName string, node map[string]any) (any, error) {
-
-	if len(c.Providers.Definitions) == 0 {
-		return nil, fmt.Errorf("no providers defined in configuration")
-	}
-
-	// Check if the provider exists
-	/*
-		if provider, exists := c.Providers.Definitions[providerName]; exists {
-
-			variables := map[string]any{
-				fmt.Sprintf("$%s", providerName): provider.GetConfig(),
-			}
-			input := map[string]any{}
-
-			// Create interpolator and use it for string interpolation
-			interpolator := configExpr.NewStringInterpolator()
-			result, err := interpolator.InterpolateAndEvaluate(node, input, variables, context.TODO())
-
-			return result, err
-		}
-	*/
-
-	return nil, fmt.Errorf("provider '%s' not found", providerName)
 }
 
 func (c *Config) GetEventsWithFilter(filter LogFilter) []*models.LogEntry {
@@ -615,15 +628,8 @@ func (r *Config) GetProviderPermission(permissionName string, providers ...strin
 	return nil
 }
 
-// TemplateData represents data passed to HTML templates
-type TemplateData struct {
-	Config      *Config
-	ServiceName string
-	Environment models.EnvironmentConfig
-	Provider    string `json:"provider,omitempty" yaml:"provider,omitempty"`
-	User        *models.User
-	Version     string
-	Status      string
+func (r *Config) HasThandService() bool {
+	return len(r.Thand.Endpoint) != 0 && len(r.Thand.ApiKey) != 0
 }
 
 type PreflightRequest struct {

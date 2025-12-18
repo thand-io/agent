@@ -25,17 +25,46 @@ func (p *awsProviderMock) Initialize(identifier string, provider models.Provider
 	p.awsProvider.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityRBAC,
+		AwsCapabilities,
 	)
 
 	// Load AWS Permissions and Roles from shared singleton
-	if err := p.Synchronize(context.Background(), nil); err != nil {
+	if err := p.Synchronize(context.Background(), nil, nil); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (p *awsProviderMock) Synchronize(ctx context.Context, temporalService models.TemporalImpl) error {
+func (p *awsProviderMock) Synchronize(
+	ctx context.Context,
+	temporalService models.TemporalImpl,
+	req *models.SynchronizeRequest,
+) error {
 	return PreSynchronizeActivities(ctx, temporalService, p)
+}
+
+// This inherits the awsProvider methods but overrides the synchronization methods to return empty results
+func (p *awsProviderMock) SynchronizeGroups(ctx context.Context, req *models.SynchronizeGroupsRequest) (*models.SynchronizeGroupsResponse, error) {
+	return &models.SynchronizeGroupsResponse{}, nil
+}
+
+func (p *awsProviderMock) SynchronizeUsers(ctx context.Context, req *models.SynchronizeUsersRequest) (*models.SynchronizeUsersResponse, error) {
+	return &models.SynchronizeUsersResponse{}, nil
+}
+
+func (p *awsProviderMock) SynchronizeIdentities(ctx context.Context, req *models.SynchronizeIdentitiesRequest) (*models.SynchronizeIdentitiesResponse, error) {
+	return &models.SynchronizeIdentitiesResponse{}, nil
+}
+
+func (p *awsProviderMock) SynchronizeRoles(ctx context.Context, req *models.SynchronizeRolesRequest) (*models.SynchronizeRolesResponse, error) {
+	return &models.SynchronizeRolesResponse{}, nil
+}
+
+func (p *awsProviderMock) SynchronizePermissions(ctx context.Context, req *models.SynchronizePermissionsRequest) (*models.SynchronizePermissionsResponse, error) {
+	return &models.SynchronizePermissionsResponse{}, nil
+}
+
+func (p *awsProviderMock) SynchronizeResources(ctx context.Context, req *models.SynchronizeResourcesRequest) (*models.SynchronizeResourcesResponse, error) {
+	return &models.SynchronizeResourcesResponse{}, nil
 }

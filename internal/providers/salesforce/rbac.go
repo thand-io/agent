@@ -67,7 +67,7 @@ func (p *salesForceProvider) AuthorizeRole(
 	var primaryUser *simpleforce.SObject
 
 	if len(userResult.Records) == 0 {
-		newUserObj, err := p.createUser(user, profileResult.Id)
+		newUserObj, err := p.createUser(user, profileResult.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -80,16 +80,16 @@ func (p *salesForceProvider) AuthorizeRole(
 	currentProfileId := primaryUser.StringField("ProfileId")
 
 	// Check if user already has the target profile
-	if currentProfileId == profileResult.Id {
+	if currentProfileId == profileResult.ID {
 		logrus.WithFields(logrus.Fields{
 			"user_id":    salesforceUserId,
 			"user_email": user.Email,
-			"profile_id": profileResult.Id,
+			"profile_id": profileResult.ID,
 		}).Info("User already has the target profile in Salesforce, skipping assignment")
 
 		return &models.AuthorizeRoleResponse{
 			UserId: salesforceUserId,
-			Roles:  []string{profileResult.Id},
+			Roles:  []string{profileResult.ID},
 			Metadata: map[string]any{
 				MetadataPriorProfileKey: currentProfileId,
 			},
@@ -99,7 +99,7 @@ func (p *salesForceProvider) AuthorizeRole(
 	// Update user's profile
 	userObj := client.SObject("User")
 	userObj.Set("Id", salesforceUserId)
-	userObj.Set("ProfileId", profileResult.Id)
+	userObj.Set("ProfileId", profileResult.ID)
 
 	result := userObj.Update()
 	if result == nil {
@@ -115,13 +115,13 @@ func (p *salesForceProvider) AuthorizeRole(
 	logrus.WithFields(logrus.Fields{
 		"user_id":               salesforceUserId,
 		"user_email":            user.Email,
-		"profile_id":            profileResult.Id,
+		"profile_id":            profileResult.ID,
 		MetadataPriorProfileKey: currentProfileId,
 	}).Info("Successfully updated user profile in Salesforce")
 
 	return &models.AuthorizeRoleResponse{
 		UserId: salesforceUserId,
-		Roles:  []string{profileResult.Id},
+		Roles:  []string{profileResult.ID},
 		Metadata: map[string]any{
 			MetadataPriorProfileKey: currentProfileId,
 		},

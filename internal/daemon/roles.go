@@ -63,7 +63,7 @@ func (s *Server) getRoles(c *gin.Context) {
 
 	// Filter out roles that are not in the requested providers
 	filteredRoles := make(map[string]models.RoleResponse)
-	for roleName, role := range s.Config.Roles.Definitions {
+	for roleName, role := range s.Config.GetRoles().Definitions {
 		if len(providers) > 0 && !hasAnyProvider(role.Providers, providers) {
 			continue
 		}
@@ -75,6 +75,13 @@ func (s *Server) getRoles(c *gin.Context) {
 		}
 	}
 
+	// Now if a query param is provided. We need to filter through the roles,
+	// this gets more interesting as a user might be search for a partial inheritance
+	// match or permission match.
+
+	// Given we support wildcards the first thing we need to do is resolve and create a
+	// composite role for the user to match against.
+
 	response := models.RolesResponse{
 		Version: "1.0",
 		Roles:   filteredRoles,
@@ -83,7 +90,7 @@ func (s *Server) getRoles(c *gin.Context) {
 	if s.canAcceptHtml(c) {
 
 		data := struct {
-			TemplateData config.TemplateData
+			TemplateData TemplateData
 			Response     models.RolesResponse
 		}{
 			TemplateData: s.GetTemplateData(c),
@@ -179,14 +186,14 @@ func (s *Server) postEvaluateRole(c *gin.Context) {
 	}
 
 	// Look up the identity from available identities
-	identity, err := s.findIdentityByID(session.User, request.Identity)
+	identityResult, err := s.findIdentityByID(session.User, request.Identity)
 	if err != nil {
 		s.getErrorPage(c, http.StatusNotFound, "Identity not found", err)
 		return
 	}
 
 	// Evaluate the composite role
-	compositeRole, err := s.Config.GetCompositeRole(identity, baseRole)
+	compositeRole, err := s.Config.GetCompositeRole(&identityResult.Result, baseRole)
 	if err != nil {
 		s.getErrorPage(c, http.StatusInternalServerError, "Failed to evaluate composite role", err)
 		return
@@ -198,9 +205,9 @@ func (s *Server) postEvaluateRole(c *gin.Context) {
 }
 
 // findIdentityByID looks up an identity by its ID from available identity sources
-func (s *Server) findIdentityByID(user *models.User, identityID string) (*models.Identity, error) {
+func (s *Server) findIdentityByID(user *models.User, identityID string) (*models.SearchResult[models.Identity], error) {
 	// Get identities from all providers for this user
-	identities, err := s.Config.GetIdentitiesWithFilter(user, config.IdentityTypeAll)
+	identities, err := s.Config.GetIdentitiesWithFilter(user, config.IdentityTypeAll, &models.SearchRequest{})
 	if err != nil {
 		return nil, err
 	}
@@ -213,8 +220,10 @@ func (s *Server) findIdentityByID(user *models.User, identityID string) (*models
 
 	// If no exact match found, create a basic identity with just the ID
 	// This allows evaluation for identities that may not be in the system yet
-	return &models.Identity{
-		ID:    identityID,
-		Label: identityID,
+	return &models.SearchResult[models.Identity]{
+		Result: models.Identity{
+			ID:    identityID,
+			Label: identityID,
+		},
 	}, nil
 }

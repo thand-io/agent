@@ -1,0 +1,18 @@
+version: "1.0"
+roles:
+  # Simple AWS admin role for testing
+  aws_test_admin:
+    name: Test Admin
+    description: Test admin role for integration testing
+    enabled: true
+    workflows:
+      - aws_multi_approval
+    # Inherit AdministratorAccess policy - this is what grants the permissions
+    inherits:
+      - arn:aws:iam::aws:policy/AdministratorAccess
+    # No explicit permissions needed - using inherits for the policy
+    providers:
+      - aws-localstack
+    scopes:
+      users:
+        - testuser@thand.io

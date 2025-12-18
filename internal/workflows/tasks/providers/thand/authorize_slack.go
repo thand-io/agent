@@ -12,7 +12,9 @@ import (
 )
 
 // createAuthorizeSlackBlocks creates the Slack Block Kit blocks for the approval notification
-func (a *authorizerNotifier) createAuthorizeSlackBlocks() []slack.Block {
+func (a *authorizerNotifier) createAuthorizeSlackBlocks(
+	toIdentity *models.Identity,
+) []slack.Block {
 
 	notifyReq := a.req
 	elevateRequest := a.elevationReq
@@ -32,7 +34,7 @@ func (a *authorizerNotifier) createAuthorizeSlackBlocks() []slack.Block {
 	a.addAuthorizePermissionsSection(&blocks, elevateRequest)
 
 	// Add access button if single provider
-	a.addProviderAccessButton(&blocks, elevateRequest)
+	a.addProviderAccessButton(&blocks, elevateRequest, toIdentity)
 
 	// Add divider before closing message
 	blocks = append(blocks, slack.NewDividerBlock())
@@ -119,16 +121,13 @@ func (a *authorizerNotifier) addAuthorizePermissionsSection(blocks *[]slack.Bloc
 }
 
 // addProviderAccessButton adds a button for each provider
-func (a *authorizerNotifier) addProviderAccessButton(blocks *[]slack.Block, elevateRequest *models.ElevateRequestInternal) {
+func (a *authorizerNotifier) addProviderAccessButton(
+	blocks *[]slack.Block,
+	elevateRequest *models.ElevateRequestInternal,
+	toIdentity *models.Identity,
+) {
 
 	if len(elevateRequest.Providers) == 0 || len(a.authRequests) == 0 || len(a.authResponses) == 0 {
-		return
-	}
-
-	identities := a.req.To
-
-	if len(identities) == 0 {
-		logrus.Error("No identity found for access URL generation")
 		return
 	}
 
@@ -150,39 +149,48 @@ func (a *authorizerNotifier) addProviderAccessButton(blocks *[]slack.Block, elev
 			continue
 		}
 
-		for _, identity := range identities {
+		// See if the user ids or emails match in the auth requests/responses
 
-			authRequest, foundReq := a.authRequests[identity]
-			authResponse, foundAuth := a.authResponses[identity]
+		authRequest, foundReq := a.authRequests[toIdentity.GetId()]
+		authResponse, foundAuth := a.authResponses[toIdentity.GetId()]
 
-			if !foundAuth || !foundReq {
-				logrus.Errorf("No authorization found for identity '%s' and provider '%s'", identity, providerName)
-				continue
-			}
-
-			accessUrl := providerClient.GetAuthorizedAccessUrl(
-				context.TODO(),
-				authRequest,
-				authResponse,
-			)
-
-			buttonElement := slack.NewButtonBlockElement(
-				fmt.Sprintf("access_provider_%s", providerName),
-				fmt.Sprintf("access_provider_button_%s", providerName),
-				slack.NewTextBlockObject(slack.PlainTextType, fmt.Sprintf("Access %s", providerName), false, false),
-			)
-			buttonElement.URL = accessUrl
-			buttonElement.Style = slack.StylePrimary
-
-			buttonElements = append(buttonElements, buttonElement)
-
+		if !foundAuth || !foundReq {
+			logrus.Errorf("No authorization found for identity '%s' and provider '%s'", toIdentity.GetId(), providerName)
+			continue
 		}
+
+		accessUrl := providerClient.GetAuthorizedAccessUrl(
+			context.TODO(),
+			authRequest,
+			authResponse,
+		)
+
+		buttonElement := slack.NewButtonBlockElement(
+			fmt.Sprintf(
+				"%s-%s-%s-%s",
+				a.workflowTask.WorkflowID,
+				a.workflowTask.GetTaskName(),
+				"access_provider",
+				toIdentity.GetId(),
+			),
+			fmt.Sprintf("access_provider_button_%s_%s", providerName, toIdentity.GetId()),
+			slack.NewTextBlockObject(slack.PlainTextType, fmt.Sprintf("Access %s", providerName), false, false),
+		)
+		buttonElement.URL = accessUrl
+		buttonElement.Style = slack.StylePrimary
+
+		buttonElements = append(buttonElements, buttonElement)
+
 	}
 
-	*blocks = append(*blocks, slack.NewActionBlock(
-		"provider_access_actions",
-		buttonElements...,
-	))
+	if len(buttonElements) > 0 {
+
+		*blocks = append(*blocks, slack.NewActionBlock(
+			"provider_access_actions",
+			buttonElements...,
+		))
+
+	}
 }
 
 // addClosingMessageSection adds a closing message

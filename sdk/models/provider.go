@@ -25,3 +25,6 @@ type ProviderRoleBasedAccessControl = internal.ProviderRoleBasedAccessControl
 // ProviderIdentities defines the interface for providers that can manage identities,
 // including retrieving, listing, and refreshing identity information.
 type ProviderIdentities = internal.ProviderIdentities
+
+// ProviderPatchRequest represents a request to patch provider data.
+type ProviderPatchRequest = internal.ProviderPatchRequest

@@ -158,7 +158,9 @@ func buildQueryResponseMap(ctx context.Context, providerClient models.ProviderIm
 	}
 
 	if len(queryResponse.Roles) > 0 {
-		foundRoles, err := providerClient.ListRoles(ctx, queryResponse.Roles...)
+		foundRoles, err := providerClient.ListRoles(ctx, &models.SearchRequest{
+			Terms: queryResponse.Roles,
+		})
 		if err != nil {
 			logrus.WithError(err).Warn("failed to list roles, continuing without role validation")
 		}
@@ -166,7 +168,9 @@ func buildQueryResponseMap(ctx context.Context, providerClient models.ProviderIm
 	}
 
 	if len(queryResponse.Permissions) > 0 {
-		foundPermissions, err := providerClient.ListPermissions(ctx, queryResponse.Permissions...)
+		foundPermissions, err := providerClient.ListPermissions(ctx, &models.SearchRequest{
+			Terms: queryResponse.Permissions,
+		})
 		if err != nil {
 			logrus.WithError(err).Warn("failed to list permissions, continuing without permission validation")
 		}
@@ -174,7 +178,9 @@ func buildQueryResponseMap(ctx context.Context, providerClient models.ProviderIm
 	}
 
 	if len(queryResponse.Resources) > 0 {
-		foundResources, err := providerClient.ListResources(ctx, queryResponse.Resources...)
+		foundResources, err := providerClient.ListResources(ctx, &models.SearchRequest{
+			Terms: queryResponse.Resources,
+		})
 		if err != nil {
 			logrus.WithError(err).Warn("failed to list resources, continuing without resource validation")
 		}

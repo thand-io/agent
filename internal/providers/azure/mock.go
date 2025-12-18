@@ -27,17 +27,21 @@ func (p *azureProviderMock) Initialize(identifier string, provider models.Provid
 	p.azureProvider.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityRBAC,
+		AzureCapabilities,
 	)
 
 	// Load Azure Permissions and Roles from shared singleton
-	if err := p.Synchronize(context.Background(), nil); err != nil {
+	if err := p.Synchronize(context.Background(), nil, nil); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (p *azureProviderMock) Synchronize(ctx context.Context, temporalService models.TemporalImpl) error {
-	return PreSynchronizeActivities(ctx, temporalService, p)
+func (p *azureProviderMock) Synchronize(
+	ctx context.Context,
+	temporalService models.TemporalImpl,
+	req *models.SynchronizeRequest,
+) error {
+	return PreSynchronizeActivities(ctx, temporalService, p, req)
 }

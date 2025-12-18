@@ -8,12 +8,8 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
-func (p *salesForceProvider) CanSynchronizeRoles() bool {
-	return true
-}
-
 // SynchronizeRoles fetches and caches roles from Salesforce
-func (p *salesForceProvider) SynchronizeRoles(ctx context.Context, req models.SynchronizeRolesRequest) (*models.SynchronizeRolesResponse, error) {
+func (p *salesForceProvider) SynchronizeRoles(ctx context.Context, req *models.SynchronizeRolesRequest) (*models.SynchronizeRolesResponse, error) {
 	if req.Pagination == nil {
 		req.Pagination = &models.PaginationOptions{
 			Page:     1,
@@ -37,7 +33,7 @@ func (p *salesForceProvider) SynchronizeRoles(ctx context.Context, req models.Sy
 	// Process query results
 	for _, record := range result.Records {
 		role := models.ProviderRole{
-			Id:          record.StringField("Id"),
+			ID:          record.StringField("Id"),
 			Name:        record.StringField("Name"),
 			Description: record.StringField("Description"),
 			Role:        record,

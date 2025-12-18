@@ -223,7 +223,7 @@ func (p *oktaProvider) AuthorizeRole(
 					Id: oktaUser.Id,
 				}
 
-				_, _, err = p.client.Application.AssignUserToApplication(ctx, appResource.Id, appUser)
+				_, _, err = p.client.Application.AssignUserToApplication(ctx, appResource.ID, appUser)
 
 				if err != nil {
 					return nil, temporal.NewApplicationErrorWithOptions(
@@ -239,11 +239,11 @@ func (p *oktaProvider) AuthorizeRole(
 				logrus.WithFields(logrus.Fields{
 					"user_id":    oktaUser.Id,
 					"user_email": user.Email,
-					"app_id":     appResource.Id,
+					"app_id":     appResource.ID,
 					"app_name":   appResource.Name,
 				}).Info("Successfully assigned user to application in Okta")
 
-				assignedResources = append(assignedResources, fmt.Sprintf("application:%s", appResource.Id))
+				assignedResources = append(assignedResources, fmt.Sprintf("application:%s", appResource.ID))
 			} else {
 				logrus.WithFields(logrus.Fields{
 					"role_name": role.Name,

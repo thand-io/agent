@@ -16,6 +16,10 @@ Request elevated access using predefined roles.
 
 **GET** `/elevate`
 
+### Availability
+
+- Server Mode Only
+
 ### Query Parameters
 
 - `role` - Role name (required)
@@ -43,6 +47,10 @@ Request elevated access using predefined roles.
 Submit elevation request via JSON or form data.
 
 **POST** `/elevate`
+
+### Availability
+
+- Server Mode Only
 
 ### Request Body (JSON - Static Request)
 

@@ -39,12 +39,13 @@ Core environment settings that define the runtime context and platform.
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `environment.name` | string | Auto-detected | Name of the environment or hostname |
-| `environment.platform` | string | `aws` | Platform type: `aws`, `gcp`, `azure`, `kubernetes`, `local` |
-| `environment.os` | string | Auto-detected | Operating system: `windows`, `darwin`, `linux` |
-| `environment.os_version` | string | Auto-detected | Operating system version |
-| `environment.arch` | string | Auto-detected | System architecture: `amd64`, `arm64` |
-| `environment.ephemeral` | boolean | `false` | Whether running in ephemeral environment |
+| `environment.name` | string | Automatic | Name of the environment or hostname. Will be automatically set if not provided |
+| `environment.hostname` | string | Automatic | Hostname of the machine. Will be automatically set if not provided |
+| `environment.platform` | string | Automatic | Platform type: `aws`, `gcp`, `azure`, `kubernetes`, `local`. Will be automatically set if not provided |
+| `environment.os` | string | Automatic | Operating system: `windows`, `darwin`, `linux`. Will be automatically set if not provided |
+| `environment.os_version` | string | Automatic | Operating system version. Will be automatically set if not provided |
+| `environment.arch` | string | Automatic | System architecture: `amd64`, `arm64`. Will be automatically set if not provided |
+| `environment.ephemeral` | boolean | `false` | Whether running in ephemeral environment. Will be automatically set if not provided |
 
 ### Local Environment Config
 
@@ -128,6 +129,8 @@ Settings for the Thand server when running in server mode.
 | `server.security.cors.allowed_origins` | []string | `["https://thand.io", "https://*.thand.io"]` | Allowed CORS origins |
 | `server.security.cors.allowed_methods` | []string | `["GET", "POST", "PUT", "DELETE", "OPTIONS"]` | Allowed HTTP methods |
 | `server.security.cors.allowed_headers` | []string | `["Authorization", "Content-Type", "X-Requested-With"]` | Allowed headers |
+| `server.security.cors.expose_headers` | []string | - | Exposed headers |
+| `server.security.cors.allow_credentials` | boolean | `false` | Allow credentials |
 | `server.security.cors.max_age` | integer | `86400` | CORS preflight cache duration (seconds) |
 
 ---
@@ -138,9 +141,22 @@ Settings for connecting to the Thand login server.
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `login.endpoint` | string | `https://login.thand.io` | Login server endpoint URL |
+| `login.endpoint` | string | `https://auth.thand.io/` | Login server endpoint URL |
 | `login.base` | string | `/` | Base path for login endpoints |
 | `login.api_key` | string | - | API key for login server authentication |
+
+---
+
+## Thand Cloud Configuration
+
+Settings for connecting to Thand Cloud services (thand.io).
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `thand.endpoint` | string | `https://app.thand.io/` | Thand Cloud endpoint URL |
+| `thand.base` | string | `/` | Base path for Thand Cloud endpoints |
+| `thand.api_key` | string | - | API key for authenticating with Thand Cloud |
+| `thand.sync` | boolean | `true` | Enable synchronization with Thand Cloud |
 
 ---
 
@@ -150,7 +166,7 @@ Settings for the REST API.
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `api.version` | string | `v1` | API version |
+| `api.version` | string | `/api/v1` | API version |
 | `api.rate_limit.requests_per_minute` | integer | - | API-specific rate limit |
 | `api.rate_limit.burst` | integer | - | API-specific burst limit |
 
@@ -165,6 +181,8 @@ Control logging behavior and output format.
 | `logging.level` | string | `info` | Log level: `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `panic` |
 | `logging.format` | string | `json` | Log format: `json`, `text` |
 | `logging.output` | string | `stdout` | Log output destination |
+| `logging.open_telemetry.enabled` | boolean | `false` | Enable OpenTelemetry logging |
+| `logging.open_telemetry.endpoint` | [Endpoint](#endpoint-configuration) | - | OpenTelemetry endpoint configuration |
 
 ---
 
@@ -203,6 +221,7 @@ External service integrations and configurations.
 | `services.temporal.api_key` | string | - | Temporal Cloud API key |
 | `services.temporal.mtls_cert` | string | - | mTLS certificate content |
 | `services.temporal.mtls_cert_path` | string | - | Path to mTLS certificate file |
+| `services.temporal.disable_versioning` | boolean | `false` | Disable worker versioning |
 
 ### Large Language Model (LLM) Configuration
 
@@ -222,7 +241,7 @@ Define and load role definitions.
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `roles.path` | string | `./examples/roles` | Local directory for role files |
-| `roles.url` | object | - | Remote URL endpoint for roles |
+| `roles.url` | [Endpoint](#endpoint-configuration) | - | Remote URL endpoint for roles |
 | `roles.vault` | string | - | Vault secret path for roles |
 | `roles.*` | map | - | Inline role definitions |
 
@@ -257,7 +276,7 @@ Define and load workflow definitions.
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `workflows.path` | string | `./examples/workflows` | Local directory for workflow files |
-| `workflows.url` | object | - | Remote URL endpoint for workflows |
+| `workflows.url` | [Endpoint](#endpoint-configuration) | - | Remote URL endpoint for workflows |
 | `workflows.vault` | string | - | Vault secret path for workflows |
 | `workflows.plugins.path` | string | - | Local directory for workflow plugins |
 | `workflows.plugins.url` | string | - | Remote URL for workflow plugins |
@@ -272,7 +291,7 @@ Define and load provider configurations.
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `providers.path` | string | `./examples/providers` | Local directory for provider files |
-| `providers.url` | object | - | Remote URL endpoint for providers |
+| `providers.url` | [Endpoint](#endpoint-configuration) | - | Remote URL endpoint for providers |
 | `providers.vault` | string | - | Vault secret path for providers |
 | `providers.plugins.path` | string | - | Local directory for provider plugins |
 | `providers.plugins.url` | string | - | Remote URL for provider plugins |
@@ -285,6 +304,44 @@ Define and load provider configurations.
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `secret` | string | `changeme` | Secret key for signing cookies and tokens |
+
+---
+
+## Endpoint Configuration
+
+The `Endpoint` object is used to configure remote connections, such as fetching configuration files or sending telemetry data. It follows the [Serverless Workflow Specification](https://github.com/serverlessworkflow/specification/blob/main/dsl-reference.md#endpoint) for endpoint definitions.
+
+### Structure
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `uri` | string | The URI of the endpoint |
+| `authentication` | object | Authentication configuration (optional) |
+
+### Authentication
+
+The `authentication` object supports various authentication methods, including Basic Auth and Bearer Token. For more details on how to configure authentication, refer to the [HTTP Authentication](https://github.com/serverlessworkflow/specification/blob/main/dsl-reference.md#authentication).
+
+#### Basic Authentication
+
+```yaml
+endpoint:
+  uri: "https://api.example.com/v1/resource"
+  authentication:
+    basic:
+      username: "myuser"
+      password: "mypassword"
+```
+
+#### Bearer Token Authentication
+
+```yaml
+endpoint:
+  uri: "https://api.example.com/v1/resource"
+  authentication:
+    bearer:
+      token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
 
 ---
 

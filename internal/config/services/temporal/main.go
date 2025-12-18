@@ -81,30 +81,25 @@ func (a *TemporalClient) Initialize() error {
 	// Get agent version for Worker Build ID
 	buildID := common.GetBuildIdentifier()
 
-	var workerOptions worker.Options
+	workerOptions := worker.Options{
+		Identity:                         a.GetIdentity(),
+		MaxConcurrentActivityTaskPollers: 5,
+	}
 
-	if a.config.DisableVersioning {
-		logrus.Info("Configuring Worker WITHOUT versioning (DisableVersioning=true)")
-		workerOptions = worker.Options{
-			Identity: a.GetIdentity(),
-		}
-	} else {
+	if !a.config.DisableVersioning {
 		logrus.WithFields(logrus.Fields{
 			"BuildID":        buildID,
 			"DeploymentName": models.TemporalDeploymentName,
 		}).Info("Configuring Worker with versioning")
 
-		workerOptions = worker.Options{
-			Identity: a.GetIdentity(),
-			DeploymentOptions: worker.DeploymentOptions{
-				UseVersioning: true,
-				Version: worker.WorkerDeploymentVersion{
-					DeploymentName: models.TemporalDeploymentName,
-					BuildID:        buildID,
-				},
-				// Default workflows to Pinned behavior
-				DefaultVersioningBehavior: workflow.VersioningBehaviorPinned,
+		workerOptions.DeploymentOptions = worker.DeploymentOptions{
+			UseVersioning: true,
+			Version: worker.WorkerDeploymentVersion{
+				DeploymentName: models.TemporalDeploymentName,
+				BuildID:        buildID,
 			},
+			// Default workflows to Pinned behavior
+			DefaultVersioningBehavior: workflow.VersioningBehaviorPinned,
 		}
 	}
 

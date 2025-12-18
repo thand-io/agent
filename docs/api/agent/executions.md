@@ -16,6 +16,10 @@ Get all running workflow executions for the authenticated user.
 
 **GET** `/executions`
 
+### Availability
+
+- Server Mode Only
+
 ### Response
 
 ```json
@@ -40,6 +44,10 @@ Get all running workflow executions for the authenticated user.
 ## Create Workflow Execution
 
 **POST** `/execution`
+
+### Availability
+
+- Server Mode Only
 
 ### Request Body
 

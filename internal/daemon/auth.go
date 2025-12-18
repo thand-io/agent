@@ -11,7 +11,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
-	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 )
 
@@ -269,7 +268,7 @@ func (s *Server) processDecodedState(c *gin.Context, decoded models.EncodingWrap
 }
 
 type AuthPageData struct {
-	config.TemplateData
+	TemplateData
 	Providers map[string]models.ProviderResponse
 	Callback  string
 	Code      string
@@ -349,7 +348,7 @@ func (s *Server) getAuthPage(c *gin.Context) {
 }
 
 type AuthCallbackPageData struct {
-	config.TemplateData
+	TemplateData
 	Auth        models.AuthWrapper
 	Session     *models.LocalSession
 	LoginServer string

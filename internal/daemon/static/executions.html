@@ -166,8 +166,8 @@
                                 <span x-show="!execution.role" class="text-muted">-</span>
                             </td>
                             <td>
-                                <span x-show="execution.identities && execution.identities.length === 1" x-text="execution.identities ? execution.identities[0] : ''"></span>
-                                <span x-show="execution.identities && execution.identities.length > 1" x-text="execution.identities ? (execution.identities.length + ' Identities') : ''"></span>
+                                <span x-show="execution.identities && execution.identities.length === 1" x-text="renderIdentity(execution.identities[0])"></span>
+                                <span x-show="execution.identities && execution.identities.length > 1" x-text="execution.identities ? (execution.identities.length + ' Identities') : ''" :title="execution.identities ? execution.identities.map(i => renderIdentity(i)).join(', ') : ''"></span>
                                 <span x-show="!execution.identities || execution.identities.length === 0" class="text-muted">-</span>
                             </td>
                             <td>
@@ -254,7 +254,7 @@
                     {{end}}
 
                     // Start auto-refresh if temporal is available
-                    {{if .Config.GetServices.HasTemporal}}
+                    {{if .Config.Services.HasTemporal}}
                     this.autoRefresh = true;
                     this.startAutoRefresh();
                     {{end}}
@@ -266,7 +266,7 @@
                     this.error = null;
 
                     try {
-                        const response = await fetch('{{.Config.GetApiBasePath}}/executions');
+                        const response = await fetch('{{.Config.ApiBasePath}}/executions');
                         
                         if (!response.ok) {
                             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -359,6 +359,35 @@
                     if (this.autoRefresh) {
                         this.startAutoRefresh();
                     }
+                },
+
+                // Render identity object to string
+                renderIdentity(identity) {
+                    if (!identity) return '';
+                    
+                    // Handle string identity (legacy)
+                    if (typeof identity === 'string') return identity;
+
+                    // Handle object identity
+                    if (identity.user) {
+                        const u = identity.user;
+                        if (u.name && u.email) return `${u.name} (${u.email})`;
+                        if (u.name && u.username) return `${u.name} (${u.username})`;
+                        if (u.name) return u.name;
+                        if (u.email) return u.email;
+                        if (u.username) return u.username;
+                    } else if (identity.group) {
+                        const g = identity.group;
+                        if (g.name && g.email) return `${g.name} (${g.email})`;
+                        if (g.name) return g.name;
+                        if (g.email) return g.email;
+                    }
+                    
+                    // Fallback to label or ID if available
+                    if (identity.label) return identity.label;
+                    if (identity.id) return identity.id;
+                    
+                    return '';
                 },
 
                 // Status badge classes

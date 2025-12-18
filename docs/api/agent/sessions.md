@@ -16,6 +16,12 @@ Get all active sessions for the authenticated user.
 
 **GET** `/sessions`
 
+### Availability
+
+- Server Mode
+- Agent Mode
+- Client Mode
+
 ### Response (Server Mode)
 
 ```json
@@ -57,6 +63,11 @@ Get session details for a specific provider.
 
 **GET** `/session/{provider}`
 
+### Availability
+
+- Agent Mode
+- Client Mode
+
 ### Response
 
 ```json
@@ -75,10 +86,16 @@ Create a new session from an encoded session token.
 
 **POST** `/sessions`
 
+### Availability
+
+- Agent Mode
+- Client Mode
+
 ### Request Body
 
 ```json
 {
+  "code": "encrypted_verification_code",
   "provider": "aws",
   "session": "encoded_session_token"
 }
@@ -98,6 +115,11 @@ Create a new session from an encoded session token.
 Delete a session for a specific provider.
 
 **DELETE** `/session/{provider}`
+
+### Availability
+
+- Agent Mode
+- Client Mode
 
 ### Response
 

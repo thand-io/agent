@@ -10,17 +10,8 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
-func (p *githubProvider) CanSynchronizeUsers() bool {
-
-	if p.client == nil {
-		return false
-	}
-
-	return true
-}
-
 // Sync fetches and caches user and team identities from GitHub
-func (p *githubProvider) SynchronizeUsers(ctx context.Context, req models.SynchronizeUsersRequest) (*models.SynchronizeUsersResponse, error) {
+func (p *githubProvider) SynchronizeUsers(ctx context.Context, req *models.SynchronizeUsersRequest) (*models.SynchronizeUsersResponse, error) {
 	startTime := time.Now()
 	defer func() {
 		elapsed := time.Since(startTime)

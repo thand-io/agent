@@ -10,10 +10,11 @@ import (
 )
 
 type Workflow struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Workflow    *model.Workflow `json:"workflow,omitempty"`
-	Enabled     bool            `json:"enabled" default:"true"` // By default enable the workflow
+	Version     *version.Version `json:"version,omitempty"`
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
+	Workflow    *model.Workflow  `json:"workflow,omitempty"`
+	Enabled     bool             `json:"enabled" default:"true"` // By default enable the workflow
 }
 
 func (r *Workflow) HasPermission(user *User) bool {
@@ -103,8 +104,8 @@ type WorkflowExecutionInfo struct {
 	Duration int64  `json:"duration,omitempty"` // Duration in seconds
 	Approved *bool  `json:"approved"`           // nil = pending approval, true = approved, false = denied
 
-	Providers  []string `json:"providers,omitempty"`
-	Identities []string `json:"identities,omitempty"`
+	Providers  []string    `json:"providers,omitempty"`
+	Identities []*Identity `json:"identities,omitempty"`
 
 	// Context
 	Input   any `json:"input,omitempty"`

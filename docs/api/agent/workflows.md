@@ -16,6 +16,11 @@ Get all available workflows.
 
 **GET** `/workflows`
 
+### Availability
+
+- Server Mode (via `/api/v1/workflows`)
+- Agent Mode (via `/workflows`)
+
 ### Response
 
 ```json
@@ -38,7 +43,6 @@ Get all available workflows.
 
 ### Notes
 
-- Only available in server mode
 - Requires authentication in server mode
 - Returns only enabled workflows
 - Filters workflows based on user permissions

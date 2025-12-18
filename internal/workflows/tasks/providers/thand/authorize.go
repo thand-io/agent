@@ -150,12 +150,24 @@ func (t *thandTask) executeAuthorization(
 
 		maps.Copy(modelOutput, validateOutput)
 
-		for _, identity := range elevateRequest.Identities {
-			user := t.resolveUserFromIdentity(identity)
+		for _, identityId := range elevateRequest.Identities {
 
+			identityObj := t.resolveIdentity(identityId)
+
+			if identityObj == nil {
+				logrus.Warnf("failed to resolve identity: %s", identityId)
+				continue
+			}
+
+			if identityObj.GetUser() == nil {
+				logrus.Warnf("resolved identity has no user: %s", identityId)
+				continue
+			}
+
+			identityObj.ID = identityId
 			authReq := models.AuthorizeRoleRequest{
 				RoleRequest: &models.RoleRequest{
-					User:     user,
+					User:     identityObj.GetUser(),
 					Role:     elevateRequest.Role,
 					Duration: &duration,
 				},
@@ -168,7 +180,7 @@ func (t *thandTask) executeAuthorization(
 
 			authTasks = append(authTasks, authTask{
 				ProviderName: providerName,
-				Identity:     identity,
+				Identity:     identityId,
 				AuthRequest:  authReq,
 				ThandAuthReq: thandAuthReq,
 			})
@@ -293,6 +305,7 @@ func (t *thandTask) executeTemporalParallel(
 			var authOut models.AuthorizeRoleResponse
 			err := workflow.ExecuteActivity(
 				aoctx,
+				// TODO(hugh): Replace with direct call to AuthorizeActivity
 				thandFunction.ThandAuthorizeFunction,
 				workflowTask,
 				taskName,
@@ -543,19 +556,28 @@ func (t *thandTask) makeAuthorizationNotifications(
 		recipients := authorizeNotifier.GetRecipients()
 
 		// Build notification tasks for each recipient
-		for _, recipient := range recipients {
+		for _, recipientId := range recipients {
 
-			recipientPayload := authorizeNotifier.GetPayload(recipient)
+			recipientIdentity := t.resolveIdentity(recipientId)
+
+			if recipientIdentity == nil {
+				log.WithField("recipient", recipientId).
+					Error("Failed to resolve recipient identity")
+				continue
+			}
+
+			recipientIdentity.ID = recipientId
+			recipientPayload := authorizeNotifier.GetPayload(recipientIdentity)
 
 			notifyTasks = append(notifyTasks, notifyTask{
-				Recipient: recipient,
-				CallFunc:  authorizeNotifier.GetCallFunction(recipient),
+				Recipient: recipientId,
+				CallFunc:  authorizeNotifier.GetCallFunction(recipientIdentity),
 				Payload:   recipientPayload,
 				Provider:  authorizeNotifier.GetProviderName(),
 			})
 
 			log.WithFields(models.Fields{
-				"recipient":   recipient,
+				"recipient":   recipientId,
 				"provider":    authorizeNotifier.GetProviderName(),
 				"providerKey": providerKey,
 			}).Debug("Prepared authorization notification task")

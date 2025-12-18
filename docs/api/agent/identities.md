@@ -16,6 +16,10 @@ Get available identities (users/groups) from identity providers.
 
 **GET** `/identities`
 
+### Availability
+
+- Server Mode Only
+
 ### Query Parameters
 
 - `q` - Search filter for identity name or email
@@ -31,13 +35,16 @@ Get available identities (users/groups) from identity providers.
       "user": {
         "email": "alice@example.com",
         "name": "Alice Smith",
-        "id": "user_123"
+        "id": "alice@example.com"
       }
     },
     {
       "id": "developers",
       "label": "Development Team",
-      "type": "group"
+      "group": {
+        "name": "Development Team",
+        "id": "developers"
+      }
     }
   ],
   "providers": 2
@@ -46,7 +53,6 @@ Get available identities (users/groups) from identity providers.
 
 ### Notes
 
-- Only available in server mode
 - Requires authentication
 - Aggregates identities from all configured identity providers
 - Removes duplicates across providers

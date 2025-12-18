@@ -30,7 +30,7 @@ func (p *oauth2Provider) Initialize(identifier string, provider models.Provider)
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityAuthorizer,
+		GoogleOAuth2Capabilities,
 	)
 
 	// Get client id and secret from the config
@@ -140,19 +140,28 @@ func (p *oauth2Provider) CreateSession(ctx context.Context, authRequest *models.
 		return nil, err
 	}
 
+	user := &models.User{
+		ID:       userInfo.Id,
+		Email:    userInfo.Email,
+		Name:     userInfo.Name,
+		Verified: userInfo.VerifiedEmail,
+		Source:   "google",
+	}
+
 	session := models.Session{
-		UUID: uuid.New(),
-		User: &models.User{
-			ID:       userInfo.Id,
-			Email:    userInfo.Email,
-			Name:     userInfo.Name,
-			Verified: userInfo.VerifiedEmail,
-			Source:   "google",
-		},
+		UUID:         uuid.New(),
+		User:         user,
 		AccessToken:  token.AccessToken,
 		RefreshToken: token.RefreshToken,
 		Expiry:       token.Expiry,
 	}
+
+	// Add session to identities pool
+	p.AddIdentities(models.Identity{
+		ID:    user.ID,
+		Label: user.Name,
+		User:  user,
+	})
 
 	return &session, nil
 }

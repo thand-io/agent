@@ -20,13 +20,14 @@ var ExampleSession = models.Session{
 }
 
 var ExamplePermission = models.ProviderPermission{
+	ID:          "1",
 	Name:        "example",
 	Title:       "Example",
 	Description: "Example Permission",
 }
 
 var ExampleRole = models.ProviderRole{
-	Id:          "1",
+	ID:          "1",
 	Name:        "example",
 	Title:       "Example",
 	Description: "Example Role",
@@ -41,7 +42,7 @@ func (p *exampleProvider) Initialize(identifier string, provider models.Provider
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityAuthorizer,
+		ExampleCapabilities,
 	)
 	return nil
 }
@@ -84,16 +85,24 @@ func (p *exampleProvider) GetPermission(ctx context.Context, permission string) 
 	return &ExamplePermission, nil
 }
 
-func (p *exampleProvider) ListPermissions(ctx context.Context, filters ...string) ([]models.ProviderPermission, error) {
-	return []models.ProviderPermission{ExamplePermission}, nil
+func (p *exampleProvider) ListPermissions(ctx context.Context, searchRequest *models.SearchRequest) ([]models.SearchResult[models.ProviderPermission], error) {
+	return []models.SearchResult[models.ProviderPermission]{
+		{
+			Result: ExamplePermission,
+		},
+	}, nil
 }
 
 func (p *exampleProvider) GetRole(ctx context.Context, role string) (*models.ProviderRole, error) {
 	return &ExampleRole, nil
 }
 
-func (p *exampleProvider) ListRoles(ctx context.Context, filters ...string) ([]models.ProviderRole, error) {
-	return []models.ProviderRole{ExampleRole}, nil
+func (p *exampleProvider) ListRoles(ctx context.Context, searchRequest *models.SearchRequest) ([]models.SearchResult[models.ProviderRole], error) {
+	return []models.SearchResult[models.ProviderRole]{
+		{
+			Result: ExampleRole,
+		},
+	}, nil
 }
 
 func init() {

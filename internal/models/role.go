@@ -10,17 +10,18 @@ import (
 )
 
 type Role struct {
-	Name           string      `json:"name"`
-	Description    string      `json:"description"`
-	Authenticators []string    `json:"authenticators"`         // All the auth providers that the role can use. If empty then any provider can be used
-	Workflows      []string    `json:"workflows,omitempty"`    // The workflows to execute
-	Inherits       []string    `json:"inherits,omitempty"`     // roles to inherit from or provider specific roles/policies etc
-	Groups         Groups      `json:"groups,omitempty"`       // groups to add the user to
-	Permissions    Permissions `json:"permissions,omitempty"`  // granular permissions for the role
-	Resources      Resources   `json:"resources,omitempty"`    // resource access rules, apis, files, systems etc
-	Scopes         *RoleScopes `json:"scopes,omitempty"`       // scope of who can be assigned this role
-	Providers      []string    `json:"providers"`              // providers that can assign this role
-	Enabled        bool        `json:"enabled" default:"true"` // By default enable the role
+	Version        *version.Version `json:"version,omitempty"`
+	Name           string           `json:"name"`
+	Description    string           `json:"description"`
+	Authenticators []string         `json:"authenticators"`         // All the auth providers that the role can use. If empty then any provider can be used
+	Workflows      []string         `json:"workflows,omitempty"`    // The workflows to execute
+	Inherits       []string         `json:"inherits,omitempty"`     // roles to inherit from or provider specific roles/policies etc
+	Groups         Groups           `json:"groups,omitempty"`       // groups to add the user to
+	Permissions    Permissions      `json:"permissions,omitempty"`  // granular permissions for the role
+	Resources      Resources        `json:"resources,omitempty"`    // resource access rules, apis, files, systems etc
+	Scopes         *RoleScopes      `json:"scopes,omitempty"`       // scope of who can be assigned this role
+	Providers      []string         `json:"providers"`              // providers that can assign this role
+	Enabled        bool             `json:"enabled" default:"true"` // By default enable the role
 }
 
 func (r *Role) HasPermission(user *User) bool {

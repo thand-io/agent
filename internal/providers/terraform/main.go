@@ -21,7 +21,7 @@ func (p *terraformProvider) Initialize(identifier string, provider models.Provid
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.ProviderCapabilityRBAC,
+		TerraformCapabilities,
 	)
 
 	terraformConfig := p.GetConfig()
@@ -45,18 +45,23 @@ func (p *terraformProvider) Initialize(identifier string, provider models.Provid
 	p.client = client
 
 	p.permissions = []models.ProviderPermission{{
+		ID:          string(tfe.AccessAdmin),
 		Name:        string(tfe.AccessAdmin),
 		Description: "Admin access",
 	}, {
+		ID:          string(tfe.AccessRead),
 		Name:        string(tfe.AccessRead),
 		Description: "Read access",
 	}, {
+		ID:          string(tfe.AccessWrite),
 		Name:        string(tfe.AccessWrite),
 		Description: "Write access",
 	}, {
+		ID:          string(tfe.AccessPlan),
 		Name:        string(tfe.AccessPlan),
 		Description: "Plan access",
 	}, {
+		ID:          string(tfe.AccessCustom),
 		Name:        string(tfe.AccessCustom),
 		Description: "Custom access",
 	}}

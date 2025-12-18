@@ -1,7 +1,6 @@
 package config
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -58,11 +57,25 @@ func (c *Config) LoadProviders() (map[string]models.Provider, error) {
 
 	}
 
+	if len(foundProviders) == 0 {
+		logrus.Warningln("No providers found from any source, loading defaults")
+		foundProviders, err = environment.GetDefaultProviders(c.Environment.Platform)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load default providers: %w", err)
+		}
+		logrus.Infoln("Loaded default providers:", len(foundProviders))
+	}
+
+	return c.ApplyProviders(foundProviders)
+}
+
+func (c *Config) ApplyProviders(foundProviders []*models.ProviderDefinitions) (map[string]models.Provider, error) {
+
 	if len(c.Providers.Definitions) > 0 {
 		// Add providers defined directly in config
 		logrus.Debugln("Adding providers defined directly in config: ", len(c.Providers.Definitions))
 
-		defaultVersion := version.Must(version.NewVersion("1.0"))
+		defaultVersion := version.Must(version.NewVersion("1.0.0"))
 
 		for providerKey, provider := range c.Providers.Definitions {
 			foundProviders = append(foundProviders, &models.ProviderDefinitions{
@@ -74,17 +87,8 @@ func (c *Config) LoadProviders() (map[string]models.Provider, error) {
 		}
 	}
 
-	if len(foundProviders) == 0 {
-		logrus.Warningln("No providers found from any source, loading defaults")
-		foundProviders, err = environment.GetDefaultProviders(c.Environment.Platform)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load default providers: %w", err)
-		}
-		logrus.Infoln("Loaded default providers:", len(foundProviders))
-	}
+	return c.processProviderDefinitions(foundProviders), nil
 
-	defs := c.processProviderDefinitions(foundProviders)
-	return c.InitializeProviders(defs)
 }
 
 // loadProviderVaultData loads provider data from vault if configured
@@ -122,7 +126,9 @@ func (c *Config) processProviderDefinitions(foundProviders []*models.ProviderDef
 			if !c.shouldIncludeProvider(providerKey, p, defs) {
 				continue
 			}
-
+			if p.Version == nil {
+				p.Version = provider.Version
+			}
 			if len(p.Name) == 0 {
 				p.Name = providerKey
 			}
@@ -158,7 +164,12 @@ type initResult struct {
 }
 
 // InitializeProviders initializes all providers in parallel using channels
-func (c *Config) InitializeProviders(defs map[string]models.Provider) (map[string]models.Provider, error) {
+func (c *Config) InitializeProviders() error {
+
+	defs := c.GetProviders().Definitions
+
+	logrus.Debugln("Initializing providers: ", len(defs))
+
 	resultChan := make(chan initResult, len(defs))
 
 	// Start goroutines for each provider
@@ -192,7 +203,11 @@ func (c *Config) InitializeProviders(defs map[string]models.Provider) (map[strin
 		// Check for capabilities for RBAC and Identities
 		if result.provider.GetClient().HasAnyCapability(
 			models.ProviderCapabilityIdentities,
-			models.ProviderCapabilityRBAC,
+			models.ProviderCapabilityUsers,
+			models.ProviderCapabilityGroups,
+			models.ProviderCapabilityResources,
+			models.ProviderCapabilityRoles,
+			models.ProviderCapabilityPermissions,
 		) {
 
 			logrus.Infoln("Provider", result.key, "supports RBAC/Identities capabilities")
@@ -202,7 +217,7 @@ func (c *Config) InitializeProviders(defs map[string]models.Provider) (map[strin
 
 				logrus.Warningln("Temporal service is not initialized, cannot register workflows/activities for provider:", result.key)
 
-			} else {
+			} else if c.IsServer() {
 
 				temporalService := c.GetServices().GetTemporal()
 
@@ -218,11 +233,12 @@ func (c *Config) InitializeProviders(defs map[string]models.Provider) (map[strin
 					logrus.WithError(err).Errorln("Failed to register activities for provider:", result.key)
 					continue
 				}
+
+				c.synchronizeProvider(result.provider)
+
+			} else {
+				logrus.Infoln("Skipping Temporal registration for provider", result.key, "in non-server mode")
 			}
-
-			// Synchronize the provider in the background
-			c.synchronizeProvider(result.provider)
-
 		}
 
 		// The provider returned from the goroutine already has the client set
@@ -230,8 +246,12 @@ func (c *Config) InitializeProviders(defs map[string]models.Provider) (map[strin
 
 	}
 
+	c.mu.Lock()
+	c.Providers.Definitions = results
+	c.mu.Unlock()
+
 	logrus.Debugln("All providers initialized successfully")
-	return results, nil
+	return nil
 }
 
 // initializeSingleProvider initializes a single provider
@@ -263,6 +283,7 @@ func (c *Config) initializeSingleProvider(providerKey string, p *models.Provider
 
 // getProviderImplementation returns the appropriate provider implementation based on config mode
 func (c *Config) getProviderImplementation(providerKey string, providerName string) (models.ProviderImpl, error) {
+
 	if c.IsServer() || c.IsAgent() {
 		return providers.CreateInstance(strings.ToLower(providerName))
 	}
@@ -277,40 +298,4 @@ func (c *Config) getProviderImplementation(providerKey string, providerName stri
 	}
 
 	return nil, fmt.Errorf("unknown config mode, cannot load providers")
-}
-
-func (c *Config) synchronizeProvider(p *models.Provider) {
-
-	impl := p.GetClient()
-
-	if impl == nil {
-		logrus.Warningln("Provider client is nil, cannot synchronize:", p.Name)
-		return
-	}
-
-	var temporalClient models.TemporalImpl
-
-	// First check if we have temporal capabilities
-	services := c.GetServices()
-
-	if services != nil {
-		temporalClient = services.GetTemporal()
-	}
-
-	go func() {
-
-		err := p.GetClient().Synchronize(
-			context.Background(),
-			temporalClient,
-		)
-
-		if err != nil {
-			logrus.WithError(err).Errorln("Failed to synchronize provider:", p.Name)
-			return
-		}
-
-		logrus.Infoln("Synchronized provider successfully:", p.Name)
-
-	}()
-
 }

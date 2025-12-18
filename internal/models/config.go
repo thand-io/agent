@@ -26,7 +26,6 @@ type ServerLimitsConfig struct {
 
 type LoginConfig struct {
 	Endpoint string `json:"endpoint" yaml:"endpoint" mapstructure:"endpoint" default:"https://auth.thand.io/"`
-	ApiKey   string `json:"api_key" yaml:"api_key" mapstructure:"api_key"`    // API key for authenticating with the login server
 	Base     string `json:"base" yaml:"base" mapstructure:"base" default:"/"` // Base path for login endpoint e.g. /
 }
 

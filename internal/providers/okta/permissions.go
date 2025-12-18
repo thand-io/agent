@@ -1,9 +1,15 @@
 package okta
 
 import (
+	"strings"
+
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
 )
+
+func (p *oktaProvider) CanSynchronizePermissions() bool {
+	return false
+}
 
 // Okta permissions map - complete catalog from Okta Management API
 // Reference: https://developer.okta.com/docs/api/openapi/okta-management/guides/permissions/#permissions-catalog
@@ -137,6 +143,7 @@ func (p *oktaProvider) getStaticPermissions() []models.ProviderPermission {
 	// Convert to slice
 	for name, description := range oktaPermissions {
 		perm := models.ProviderPermission{
+			ID:          strings.ToLower(name),
 			Name:        name,
 			Description: description,
 		}

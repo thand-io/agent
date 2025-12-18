@@ -51,10 +51,10 @@ func (f *formNotifier) GetRecipients() []string {
 	return f.req.Notifier.To
 }
 
-func (f *formNotifier) GetCallFunction(toIdentity string) model.CallFunction {
+func (f *formNotifier) GetCallFunction(toIdentity *models.Identity) model.CallFunction {
 	callMap := (&thandFunction.NotifierRequest{
 		Provider: f.req.Notifier.Provider,
-		To:       []string{toIdentity},
+		To:       []string{toIdentity.GetEmail()},
 	}).AsMap()
 
 	return model.CallFunction{
@@ -67,14 +67,14 @@ func (f *formNotifier) GetProviderName() string {
 	return f.req.Notifier.Provider
 }
 
-func (f *formNotifier) GetPayload(toIdentity string) models.NotificationRequest {
+func (f *formNotifier) GetPayload(toIdentity *models.Identity) models.NotificationRequest {
 	var notificationPayload models.NotificationRequest
 
 	if strings.Compare(f.GetProviderName(), slackProvider.SlackProviderName) == 0 {
 		// For Slack: Send blocks directly as an interactive message
 		blocks := f.createFormSlackBlocks()
 		slackReq := slackProvider.SlackNotificationRequest{
-			To: toIdentity,
+			To: toIdentity.GetEmail(),
 			Text: fmt.Sprintf("Form: %s", func() string {
 				if len(f.req.Title) > 0 {
 					return f.req.Title
@@ -94,7 +94,7 @@ func (f *formNotifier) GetPayload(toIdentity string) models.NotificationRequest 
 		// For Email: Send a link to the HTML form page
 		plainText, html := f.createFormEmailBody(toIdentity)
 		emailReq := models.EmailNotificationRequest{
-			To:      []string{toIdentity},
+			To:      []string{toIdentity.GetEmail()},
 			Subject: f.getEmailSubject(),
 			Body: models.EmailNotificationBody{
 				Text: plainText,

@@ -10,12 +10,8 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
-func (p *gsuiteProvider) CanSynchronizeUsers() bool {
-	return true
-}
-
 // SynchronizeUsers fetches and caches user identities from GSuite
-func (p *gsuiteProvider) SynchronizeUsers(ctx context.Context, req models.SynchronizeUsersRequest) (*models.SynchronizeUsersResponse, error) {
+func (p *gsuiteProvider) SynchronizeUsers(ctx context.Context, req *models.SynchronizeUsersRequest) (*models.SynchronizeUsersResponse, error) {
 	startTime := time.Now()
 	defer func() {
 		elapsed := time.Since(startTime)

@@ -53,19 +53,23 @@ func (f *thandTask) GetDescription() string {
 // This handles provider-prefixed identities like "aws-prod:username"
 // and queries identity providers to get the full user object.
 // If the lookup fails, it returns a basic user with the identity as the email.
-func (t *thandTask) resolveUserFromIdentity(identity string) *models.User {
+func (t *thandTask) resolveIdentity(identity string) *models.Identity {
+
 	identityResult, err := t.config.GetIdentity(identity)
+
 	if err != nil {
-		logrus.WithError(err).WithField("identity", identity).Warn("Failed to lookup identity, using basic user")
+		logrus.WithError(err).WithField("identity", identity).Warn("Failed to lookup identity, creating fallback identity")
 	}
 
 	// Use the looked up user or create a basic one
 	if identityResult != nil && identityResult.User != nil {
-		return identityResult.User
+		return identityResult
 	}
 
-	return &models.User{
-		Email: identity,
+	return &models.Identity{
+		User: &models.User{
+			Email: identity,
+		},
 	}
 }
 

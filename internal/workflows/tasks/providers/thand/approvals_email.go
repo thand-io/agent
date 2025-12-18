@@ -1,10 +1,12 @@
 package thand
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/sirupsen/logrus"
+	"github.com/thand-io/agent/internal/models"
 )
 
 // createApprovalEmailBody creates the email body for approval requests
@@ -45,8 +47,23 @@ func (a *approvalsNotifier) createApprovalEmailBody() (string, string) {
 	}
 
 	if len(elevationReq.Identities) > 0 {
+
 		plainText.WriteString("\nTarget Identities:\n")
+
+		// Resolve all identities to get nice display names
+		resolvedIdentities := elevationReq.ResolveIdentities(
+			context.Background(),
+			a.config.GetProvidersByCapability(
+				models.ProviderCapabilityIdentities,
+			))
+
 		for _, identity := range elevationReq.Identities {
+
+			if resolved, ok := resolvedIdentities[identity]; ok {
+				plainText.WriteString(fmt.Sprintf("- %s\n", resolved.String()))
+				continue
+			}
+
 			plainText.WriteString(fmt.Sprintf("- %s\n", identity))
 		}
 	}

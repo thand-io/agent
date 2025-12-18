@@ -37,7 +37,7 @@
                     <span class="info-value">{{.User.Name}}</span>
                 </div>
                 <div class="info-item">
-                    <span class="form-label">Provider</span>
+                    <span class="form-label">Source</span>
                     <span class="info-value">{{.User.Source}}</span>
                 </div>
                 <div class="info-item">
@@ -263,7 +263,7 @@
                     this.error = null;
 
                     try {
-                        const response = await fetch('{{.Config.GetApiBasePath}}/sessions', {
+                        const response = await fetch('{{.Config.ApiBasePath}}/sessions', {
                             credentials: 'include'
                         });
                         
@@ -303,7 +303,7 @@
                 async renewSession(provider) {
                     if (confirm(`Are you sure you want to renew the session for ${provider}?`)) {
                         try {
-                            window.location.href = `{{.Config.GetApiBasePath}}/auth/request/${provider}`;
+                            window.location.href = `{{.Config.ApiBasePath}}/auth/request/${provider}`;
                         } catch (error) {
                             console.error('Error renewing session:', error);
                             alert('Error renewing session. Please try again.');
@@ -314,7 +314,7 @@
                 async deleteSession(provider) {
                     if (confirm(`Are you sure you want to delete the session for ${provider}? This will log you out of ${provider}.`)) {
                         try {
-                            const response = await fetch(`{{.Config.GetApiBasePath}}/auth/logout/${provider}`, {
+                            const response = await fetch(`{{.Config.ApiBasePath}}/auth/logout/${provider}`, {
                                 method: 'GET',
                                 credentials: 'include'
                             });
@@ -336,7 +336,7 @@
                 async logout() {
                     if (confirm('Are you sure you want to logout?')) {
                         try {
-                            const response = await fetch('{{.Config.GetApiBasePath}}/auth/logout', {
+                            const response = await fetch('{{.Config.ApiBasePath}}/auth/logout', {
                                 method: 'GET',
                             });
                             

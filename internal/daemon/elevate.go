@@ -517,10 +517,12 @@ func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.WorkflowTask) {
 
 		data := ExecutionStatePageData{
 			TemplateData: s.GetTemplateData(c),
-			Execution: &models.WorkflowExecutionInfo{
-				WorkflowID: workflowTask.WorkflowID,
+			ExecutionStatePageResponse: ExecutionStatePageResponse{
+				Execution: &models.WorkflowExecutionInfo{
+					WorkflowID: workflowTask.WorkflowID,
+				},
+				Workflow: workflowTask.GetWorkflowDef(),
 			},
-			Workflow: workflowTask.GetWorkflowDef(),
 		}
 
 		s.renderHtml(c, "execution.html", data)
@@ -621,7 +623,7 @@ func (s *Server) handleLargeLanguageModelRequest(c *gin.Context, elevateRequest 
 		return
 	}
 
-	providers := s.Config.GetProvidersByCapabilityWithUser(foundUser.User, models.ProviderCapabilityRBAC)
+	providers := s.Config.GetProvidersByCapabilityWithUser(foundUser.User, models.ProviderCapabilityProvisioning)
 
 	if len(providers) == 0 {
 		s.getErrorPage(c, http.StatusBadRequest, "No providers with RBAC capability are configured")
@@ -658,17 +660,86 @@ func (s *Server) getElevatePage(c *gin.Context) {
 	s.renderHtml(c, "elevate.html", data)
 }
 
+type ElevateStaticPageData struct {
+	TemplateData
+	Identities []models.Identity `json:"identities"`
+	Providers  []string          `json:"providers"`
+	Roles      []string          `json:"roles"`
+	Duration   string            `json:"duration"`
+	Reason     string            `json:"reason"`
+}
+
+func (s *Server) getElevationPagePrefill(c *gin.Context) ElevateStaticPageData {
+	data := ElevateStaticPageData{
+		TemplateData: s.GetTemplateData(c),
+	}
+
+	// Add pre-selected identities from query parameters
+	prefilledIdentities := c.QueryArray("identity")
+
+	// Loop over and validate identities
+	validIdentities := []models.Identity{}
+	for _, identityID := range prefilledIdentities {
+		identity, err := s.Config.GetIdentity(identityID)
+		if err == nil && identity != nil {
+			validIdentities = append(validIdentities, *identity)
+		}
+	}
+
+	if len(validIdentities) == 0 {
+		// Set the current user as the default identity if none are valid
+		_, session, err := s.getUser(c)
+		if err == nil && session != nil {
+			user := session.User
+			if user != nil {
+				validIdentities = append(validIdentities, models.Identity{
+					ID:    user.GetIdentity(),
+					Label: user.GetName(),
+					User:  user,
+				})
+			}
+		}
+	}
+
+	data.Identities = validIdentities
+
+	// Get all the providers from the query parameters
+	providers := c.QueryArray("provider")
+	if len(providers) > 0 {
+		// If providers are specified, use them
+		data.Providers = providers
+	}
+
+	// Get all the roles from the query parameters
+	roles := c.QueryArray("role")
+	if len(roles) > 0 {
+		// If roles are specified, use them
+		data.Roles = roles
+	}
+
+	// Get duration from query parameters
+	duration := c.Query("duration")
+	if len(duration) > 0 {
+		data.Duration = duration
+	}
+
+	// Get reason from query parameters
+	reason := c.Query("reason")
+	if len(reason) > 0 {
+		data.Reason = reason
+	}
+
+	return data
+}
+
 func (s *Server) getElevateStaticPage(c *gin.Context) {
-	data := s.GetTemplateData(c)
-	s.renderHtml(c, "elevate_static.html", data)
+	s.renderHtml(c, "elevate_static.html", s.getElevationPagePrefill(c))
 }
 
 func (s *Server) getElevateDynamicPage(c *gin.Context) {
-	data := s.GetTemplateData(c)
-	s.renderHtml(c, "elevate_dynamic.html", data)
+	s.renderHtml(c, "elevate_dynamic.html", s.getElevationPagePrefill(c))
 }
 
 func (s *Server) getElevateLLMPage(c *gin.Context) {
-	data := s.GetTemplateData(c)
-	s.renderHtml(c, "elevate_llm.html", data)
+	s.renderHtml(c, "elevate_llm.html", s.getElevationPagePrefill(c))
 }

@@ -48,11 +48,11 @@ func (r *revokeNotifier) GetRecipients() []string {
 	return r.req.To
 }
 
-func (r *revokeNotifier) GetCallFunction(toIdentity string) model.CallFunction {
+func (r *revokeNotifier) GetCallFunction(toIdentity *models.Identity) model.CallFunction {
 
 	callMap := (&thandFunction.NotifierRequest{
 		Provider: r.req.Provider,
-		To:       []string{toIdentity},
+		To:       []string{toIdentity.GetEmail()},
 	}).AsMap()
 
 	return model.CallFunction{
@@ -65,7 +65,7 @@ func (r *revokeNotifier) GetProviderName() string {
 	return r.req.Provider
 }
 
-func (r *revokeNotifier) GetPayload(toIdentity string) models.NotificationRequest {
+func (r *revokeNotifier) GetPayload(toIdentity *models.Identity) models.NotificationRequest {
 
 	elevationReq := r.elevationReq
 	var notificationPayload models.NotificationRequest
@@ -75,7 +75,7 @@ func (r *revokeNotifier) GetPayload(toIdentity string) models.NotificationReques
 		blocks := r.createRevokeSlackBlocks()
 
 		slackReq := slackProvider.SlackNotificationRequest{
-			To: toIdentity,
+			To: toIdentity.GetEmail(),
 			Text: fmt.Sprintf("Your access for role %s has been revoked", func() string {
 				if elevationReq.Role != nil {
 					return elevationReq.Role.Name
@@ -95,7 +95,7 @@ func (r *revokeNotifier) GetPayload(toIdentity string) models.NotificationReques
 
 		plainText, html := r.createRevokeEmailBody()
 		emailReq := models.EmailNotificationRequest{
-			To:      []string{toIdentity},
+			To:      []string{toIdentity.GetEmail()},
 			Subject: "Access Revoked",
 			Body: models.EmailNotificationBody{
 				Text: plainText,
