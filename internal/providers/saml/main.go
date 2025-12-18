@@ -318,11 +318,6 @@ func (p *samlProvider) ValidateSession(ctx context.Context, session *models.Sess
 		return fmt.Errorf("session has expired")
 	}
 
-	// Validate access token (in a real implementation, you might validate against IdP)
-	if len(session.AccessToken) == 0 {
-		return fmt.Errorf("invalid access token")
-	}
-
 	// Validate user information
 	if session.User == nil {
 		return fmt.Errorf("session user is nil")
@@ -347,8 +342,6 @@ func (p *samlProvider) RenewSession(ctx context.Context, session *models.Session
 	newSession := &models.Session{
 		UUID:         uuid.New(),
 		User:         session.User,
-		AccessToken:  uuid.New().String(),
-		RefreshToken: uuid.New().String(),
 		Expiry:       time.Now().Add(24 * time.Hour),
 	}
 
@@ -409,6 +402,8 @@ func (p *samlProvider) parseSAMLConfig(config *models.BasicConfig) (*SAMLConfig,
 				return nil, fmt.Errorf("failed to parse SAML certificate from config: %w", err)
 			}
 		} else {
+			// Certificate provided without a key. This is valid only for cases where signing and decryption are not required.
+			logrus.Warn("SAML certificate provided without a private key. Signing and decryption will be unavailable.")
 			block, _ := pem.Decode([]byte(cert))
 			if block == nil {
 				return nil, fmt.Errorf("failed to parse certificate PEM")
@@ -424,6 +419,8 @@ func (p *samlProvider) parseSAMLConfig(config *models.BasicConfig) (*SAMLConfig,
 				return nil, fmt.Errorf("failed to load SAML certificate: %w", err)
 			}
 		} else {
+			// Certificate provided without a key. This is valid only for cases where signing and decryption are not required.
+			logrus.Warn("SAML certificate provided without a private key. Signing and decryption will be unavailable.")
 			certBytes, err := os.ReadFile(certFile)
 			if err != nil {
 				return nil, fmt.Errorf("failed to read certificate file: %w", err)

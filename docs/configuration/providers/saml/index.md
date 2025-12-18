@@ -67,7 +67,7 @@ openssl req -new -x509 -key saml.key -out saml.cert -days 365 \
 
 1. **Register Service Provider**: Add your agent as a Service Provider in your IdP
 2. **Configure Entity ID**: Use your chosen entity ID (e.g., `https://your-app.example.com/saml/metadata`)
-3. **Set Assertion Consumer Service**: Configure ACS URL (e.g., `https://your-app.example.com/saml/sp`)
+3. **Set Assertion Consumer Service**: Configure ACS URL (e.g., `https://your-app.example.com/api/v1/auth/callback/company-saml`)
 4. **Upload Certificate**: Upload your public certificate to the IdP
 
 ## Example Configurations

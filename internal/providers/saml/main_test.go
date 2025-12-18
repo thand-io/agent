@@ -28,9 +28,6 @@ import (
 func TestSAMLProvider_ParseSAMLConfig(t *testing.T) {
 	cert, key := createTestCert(t)
 	certFile, keyFile := writeCertAndKeyToFiles(t, cert, key)
-	// defer os.Remove(certFile) // writeCertAndKeyToFiles uses t.TempDir() or similar? Let's check.
-	// If it uses t.TempDir, cleanup is automatic. If it uses os.CreateTemp, we might need cleanup.
-	// But let's assume it's fine or I'll check implementation.
 
 	tests := []struct {
 		name           string
@@ -82,6 +79,21 @@ func TestSAMLProvider_ParseSAMLConfig(t *testing.T) {
 			},
 			expectError: false,
 			validateResult: func(t *testing.T, cfg *SAMLConfig) {
+				assert.False(t, cfg.SignRequests)
+			},
+		},
+		{
+			name: "Valid config with cert only (no key)",
+			config: &models.BasicConfig{
+				"idp_metadata_url": "https://example.com/metadata",
+				"entity_id":        "https://myapp.com/saml",
+				"root_url":         "https://myapp.com",
+				"cert_file":        certFile,
+			},
+			expectError: false,
+			validateResult: func(t *testing.T, cfg *SAMLConfig) {
+				assert.NotNil(t, cfg.KeyPair.Certificate)
+				assert.Nil(t, cfg.KeyPair.PrivateKey)
 				assert.False(t, cfg.SignRequests)
 			},
 		},
@@ -142,17 +154,6 @@ func TestSAMLProvider_SessionValidation(t *testing.T) {
 			},
 			expectError:   true,
 			errorContains: "expired",
-		},
-		{
-			name: "Session without access token",
-			session: &models.Session{
-				UUID:        uuid.New(),
-				User:        &models.User{Username: "testuser"},
-				AccessToken: "",
-				Expiry:      time.Now().Add(1 * time.Hour),
-			},
-			expectError:   true,
-			errorContains: "invalid access token",
 		},
 		{
 			name: "Valid session",
