@@ -118,6 +118,38 @@ providers:
 - **enabled**: Whether the provider is active
 - **config**: Provider-specific configuration parameters
 
+### Capabilities Configuration
+
+Providers can optionally configure specific capabilities to control which features are enabled and how they behave. This is useful for disabling specific features of a provider or tuning synchronization intervals.
+
+```yaml
+providers:
+  my-provider:
+    # ... basic config ...
+    capabilities:
+      roles:
+        enabled: true
+        synchronizable: true
+        interval: 60
+      users:
+        enabled: true
+        synchronizable: false
+      notifier:
+        enabled: false
+```
+
+#### Configuration Options
+
+For synchronizable capabilities (Roles, Permissions, Resources, Identities, Users, Groups):
+
+- **enabled** (bool): Whether the capability is active. You cannot enable a capability that is not supported by the provider.
+- **synchronizable** (bool): Whether the agent should periodically synchronize data for this capability.
+- **interval** (int): Synchronization interval in minutes. Default is typically 360 minutes (6 hours).
+
+For other capabilities (Authorizer, Notifier, Provisioning):
+
+- **enabled** (bool): Whether the capability is active.
+
 ## Dynamic Configuration with Environment Variables
 
 Provider configurations support dynamic value resolution using [jq](https://jqlang.github.io/jq/) expressions. This allows you to:
@@ -276,6 +308,10 @@ The configuration resolver supports standard jq syntax including:
 | Feature | Example | Description |
 |---------|---------|-------------|
 | Field access | `.FIELD_NAME` | Access a field value |
+
+## Developing New Providers
+
+If you need to integrate with a service that is not currently supported, you can create a custom provider. See the [Creating a New Provider](../../development/providers) guide for detailed instructions on implementing the provider interface and capabilities.
 | Nested access | `.parent.child` | Access nested fields |
 | Alternative | `.VAR // "default"` | Provide default if null |
 | Conditionals | `if .X == "y" then "a" else "b" end` | Conditional logic |
