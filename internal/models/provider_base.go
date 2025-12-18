@@ -69,7 +69,9 @@ func NewBaseProvider(identifier string, provider Provider, capabilities *Provide
 
 	// Now that our provider has defined capabilities, we need to take
 	// into account what the user has decided to enable/disable
-	capabilities.Update(provider.Capabilities)
+	if provider.Capabilities != nil {
+		capabilities.Update(provider.Capabilities)
+	}
 
 	if base.HasAnyCapability(
 		ProviderCapabilityIdentities,

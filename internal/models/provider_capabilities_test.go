@@ -377,3 +377,129 @@ func TestBaseProvider_CapabilityConfigurationOverrides(t *testing.T) {
 		assert.False(t, p.HasCapability(ProviderCapabilityRoles))
 	})
 }
+
+func TestProviderCapabilities_Update(t *testing.T) {
+	t.Run("Update enabled capability", func(t *testing.T) {
+		pc := NewProviderCapabilities()
+		pc.Roles.Enabled = true
+		pc.Roles.Synchronizable = true
+		pc.Roles.Interval = 60
+
+		updates := &ProviderCapabilities{
+			Roles: &RolesConfiguration{
+				Enabled:        false, // Disable it
+				Synchronizable: false, // Disable sync
+				Interval:       30,    // Change interval
+			},
+		}
+
+		pc.Update(updates)
+
+		assert.False(t, pc.Roles.Enabled)
+		assert.False(t, pc.Roles.Synchronizable)
+		assert.Equal(t, 30, pc.Roles.Interval)
+	})
+
+	t.Run("Cannot enable disabled capability", func(t *testing.T) {
+		pc := NewProviderCapabilities()
+		pc.Roles.Enabled = false
+
+		updates := &ProviderCapabilities{
+			Roles: &RolesConfiguration{
+				Enabled: true,
+			},
+		}
+
+		pc.Update(updates)
+
+		assert.False(t, pc.Roles.Enabled, "Should not be able to enable a disabled capability")
+	})
+
+	t.Run("Update interval only (disables because enabled=false default)", func(t *testing.T) {
+		pc := NewProviderCapabilities()
+		pc.Roles.Enabled = true
+
+		updates := &ProviderCapabilities{
+			Roles: &RolesConfiguration{
+				Interval: 30,
+			},
+		}
+
+		pc.Update(updates)
+
+		assert.Equal(t, 30, pc.Roles.Interval)
+		assert.False(t, pc.Roles.Enabled, "Implicitly disabled because enabled was missing/false in update")
+	})
+
+	t.Run("Update non-synchronizable capability", func(t *testing.T) {
+		pc := NewProviderCapabilities()
+		pc.Authorizer.Enabled = true
+
+		updates := &ProviderCapabilities{
+			Authorizer: &AuthorizerConfiguration{
+				Enabled: false,
+			},
+		}
+
+		pc.Update(updates)
+		assert.False(t, pc.Authorizer.Enabled)
+	})
+
+	t.Run("Ignore update for nil capability in base", func(t *testing.T) {
+		pc := NewProviderCapabilities()
+		pc.Roles = nil // Simulate unsupported capability
+
+		updates := &ProviderCapabilities{
+			Roles: &RolesConfiguration{
+				Enabled: true,
+			},
+		}
+
+		pc.Update(updates)
+		assert.Nil(t, pc.Roles)
+	})
+
+	t.Run("Update multiple capabilities", func(t *testing.T) {
+		pc := NewProviderCapabilities()
+		pc.Roles.Enabled = true
+		pc.Users.Enabled = true
+		pc.Users.Interval = 60
+
+		updates := &ProviderCapabilities{
+			Roles: &RolesConfiguration{Enabled: false},
+			Users: &UsersConfiguration{Interval: 120, Enabled: true},
+		}
+
+		pc.Update(updates)
+		assert.False(t, pc.Roles.Enabled)
+		assert.True(t, pc.Users.Enabled)
+		assert.Equal(t, 120, pc.Users.Interval)
+	})
+
+	t.Run("Update synchronization state", func(t *testing.T) {
+		pc := NewProviderCapabilities()
+		pc.Roles.Enabled = true
+		pc.Roles.Synchronizable = true
+
+		// Disable sync
+		updates := &ProviderCapabilities{
+			Roles: &RolesConfiguration{
+				Enabled:        true,
+				Synchronizable: false,
+			},
+		}
+		pc.Update(updates)
+		assert.False(t, pc.Roles.Synchronizable)
+		assert.True(t, pc.Roles.Enabled)
+
+		// Enable sync
+		updates2 := &ProviderCapabilities{
+			Roles: &RolesConfiguration{
+				Enabled:        true,
+				Synchronizable: true,
+			},
+		}
+		pc.Update(updates2)
+		assert.True(t, pc.Roles.Synchronizable)
+	})
+}

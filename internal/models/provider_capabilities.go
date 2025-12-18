@@ -43,6 +43,7 @@ type SynchronizableConfiguration struct {
 
 type SynchronizableConfigurationImpl interface {
 	IsSynchronizable() bool
+	GetSynchronizable() bool
 	EnableSynchronization()
 	DisableSynchronization()
 
@@ -57,6 +58,10 @@ type SynchronizableConfigurationImpl interface {
 
 func (sc *SynchronizableConfiguration) IsSynchronizable() bool {
 	return sc.Synchronizable && sc.Enabled
+}
+
+func (sc *SynchronizableConfiguration) GetSynchronizable() bool {
+	return sc.Synchronizable
 }
 
 func (sc *SynchronizableConfiguration) EnableSynchronization() {
@@ -116,21 +121,21 @@ func (dc *ProviderConfiguration) Disable() {
 type ProviderCapabilities struct {
 
 	// Identity management capabilities
-	Identities *IdentitiesConfiguration `json:"identities"`
-	Users      *UsersConfiguration      `json:"users"`
-	Groups     *GroupsConfiguration     `json:"groups"`
+	Identities *IdentitiesConfiguration `json:"identities,omitempty"`
+	Users      *UsersConfiguration      `json:"users,omitempty"`
+	Groups     *GroupsConfiguration     `json:"groups,omitempty"`
 
 	// SSO Capabilities
-	Authorizer *AuthorizerConfiguration `json:"authorizer"`
+	Authorizer *AuthorizerConfiguration `json:"authorizer,omitempty"`
 
 	// Notifier
-	Notifier *NotifierConfiguration `json:"notifier"`
+	Notifier *NotifierConfiguration `json:"notifier,omitempty"`
 
 	// Rbac capabilities
-	Provisioning *ProvisioningConfiguration `json:"provisioning"`
-	Roles        *RolesConfiguration        `json:"roles"`
-	Permissions  *PermissionsConfiguration  `json:"permissions"`
-	Resources    *ResourcesConfiguration    `json:"resources"`
+	Provisioning *ProvisioningConfiguration `json:"provisioning,omitempty"`
+	Roles        *RolesConfiguration        `json:"roles,omitempty"`
+	Permissions  *PermissionsConfiguration  `json:"permissions,omitempty"`
+	Resources    *ResourcesConfiguration    `json:"resources,omitempty"`
 }
 
 func (pc *ProviderCapabilities) WithDefaultRolesConfiguration() *ProviderCapabilities {
@@ -279,7 +284,11 @@ func (pc *ProviderCapabilities) EnableCapability(capability ProviderCapability) 
 	}
 }
 
-func (pc *ProviderCapabilities) Update(updates ProviderCapabilities) {
+func (pc *ProviderCapabilities) Update(updates *ProviderCapabilities) {
+
+	if updates == nil {
+		return
+	}
 
 	// We first need to get a map of the existing capabilities
 	// and check to see whats enabled. Then if the incoming
@@ -294,8 +303,24 @@ func (pc *ProviderCapabilities) Update(updates ProviderCapabilities) {
 		if curr == nil || upd == nil {
 			return
 		}
+
+		// If the capability is disabled by the provider, we cannot enable it
+		if !curr.IsEnabled() {
+			return
+		}
+
 		if upd.GetInterval() != 0 {
 			curr.SetInterval(upd.GetInterval())
+		}
+
+		if upd.GetSynchronizable() {
+			curr.EnableSynchronization()
+		} else {
+			curr.DisableSynchronization()
+		}
+
+		if !upd.IsEnabled() {
+			curr.Disable()
 		}
 	}
 
@@ -303,7 +328,18 @@ func (pc *ProviderCapabilities) Update(updates ProviderCapabilities) {
 		curr ProviderConfigurationImpl,
 		upd ProviderConfigurationImpl,
 	) {
-		// No-op for now as we can't distinguish between disabled and default false
+		if curr == nil || upd == nil {
+			return
+		}
+
+		// If the capability is disabled by the provider, we cannot enable it
+		if !curr.IsEnabled() {
+			return
+		}
+
+		if !upd.IsEnabled() {
+			curr.Disable()
+		}
 	}
 
 	if pc.Roles != nil && updates.Roles != nil {
