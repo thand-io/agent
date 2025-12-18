@@ -331,3 +331,49 @@ func TestBaseProvider_DisableCapabilities(t *testing.T) {
 	assert.False(t, p.HasCapability(ProviderCapabilityRoles))
 	assert.False(t, p.HasCapability(ProviderCapabilityResources))
 }
+
+func TestBaseProvider_CapabilityConfigurationOverrides(t *testing.T) {
+	t.Run("Cannot enable capability unsupported by provider", func(t *testing.T) {
+		// Simulate a provider that does not support Roles (struct is nil)
+		caps := &ProviderCapabilities{
+			Roles: nil,
+			Permissions: &PermissionsConfiguration{
+				Enabled: true,
+			},
+		}
+		p := &BaseProvider{capabilities: caps}
+
+		// Attempt to enable an unsupported capability
+		p.EnableCapability(ProviderCapabilityRoles)
+
+		assert.False(t, p.HasCapability(ProviderCapabilityRoles),
+			"Should not be able to enable a capability that the provider does not support (nil config)")
+	})
+
+	t.Run("Override synchronization settings", func(t *testing.T) {
+		caps := &ProviderCapabilities{
+			Roles: &RolesConfiguration{
+				Enabled:        true,
+				Synchronizable: true,
+				Interval:       1,
+			},
+		}
+		p := &BaseProvider{capabilities: caps}
+
+		// Verify initial state
+		assert.True(t, p.HasCapability(ProviderCapabilityRoles))
+		assert.True(t, caps.Roles.Synchronizable)
+
+		// Change interval for synchronizable task
+		caps.Roles.Interval = 10
+		assert.Equal(t, 10, caps.Roles.Interval)
+
+		// Disable synchronization for the task
+		caps.Roles.Synchronizable = false
+		assert.False(t, caps.Roles.Synchronizable)
+
+		// Disable the capability entirely (override enabled -> disabled)
+		p.DisableCapability(ProviderCapabilityRoles)
+		assert.False(t, p.HasCapability(ProviderCapabilityRoles))
+	})
+}

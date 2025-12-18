@@ -10,8 +10,10 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
+// Never synchronize permissions from Azure as they are
+// statically defined by Azure and cannot be modified
 func (p *azureProvider) CanSynchronizePermissions() bool {
-	return true
+	return false
 }
 
 func loadPermissions() ([]models.ProviderPermission, error) {

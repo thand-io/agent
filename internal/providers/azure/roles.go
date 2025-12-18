@@ -14,8 +14,10 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
+// Never synchronize roles from Azure as they are
+// statically defined by Azure and cannot be modified
 func (p *azureProvider) CanSynchronizeRoles() bool {
-	return true
+	return false
 }
 
 // getRoleDefinition retrieves a custom role definition by name

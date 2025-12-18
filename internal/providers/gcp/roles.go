@@ -10,6 +10,8 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
+// Never synchronize roles from GCP as they are
+// statically defined by GCP and cannot be modified
 func (p *gcpProvider) CanSynchronizeRoles() bool {
 	return false
 }

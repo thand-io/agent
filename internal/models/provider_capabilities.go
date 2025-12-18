@@ -224,17 +224,36 @@ func (pc *ProviderCapabilities) WithProvisioningConfiguration(config Provisionin
 }
 
 func (pc *ProviderCapabilities) getCapabilities() map[ProviderCapability]ProviderConfigurationImpl {
-	configMap := map[ProviderCapability]ProviderConfigurationImpl{
-		ProviderCapabilityRoles:        pc.Roles,
-		ProviderCapabilityPermissions:  pc.Permissions,
-		ProviderCapabilityResources:    pc.Resources,
-		ProviderCapabilityIdentities:   pc.Identities,
-		ProviderCapabilityUsers:        pc.Users,
-		ProviderCapabilityGroups:       pc.Groups,
-		ProviderCapabilityAuthorizer:   pc.Authorizer,
-		ProviderCapabilityNotifier:     pc.Notifier,
-		ProviderCapabilityProvisioning: pc.Provisioning,
+	configMap := make(map[ProviderCapability]ProviderConfigurationImpl)
+
+	if pc.Roles != nil {
+		configMap[ProviderCapabilityRoles] = pc.Roles
 	}
+	if pc.Permissions != nil {
+		configMap[ProviderCapabilityPermissions] = pc.Permissions
+	}
+	if pc.Resources != nil {
+		configMap[ProviderCapabilityResources] = pc.Resources
+	}
+	if pc.Identities != nil {
+		configMap[ProviderCapabilityIdentities] = pc.Identities
+	}
+	if pc.Users != nil {
+		configMap[ProviderCapabilityUsers] = pc.Users
+	}
+	if pc.Groups != nil {
+		configMap[ProviderCapabilityGroups] = pc.Groups
+	}
+	if pc.Authorizer != nil {
+		configMap[ProviderCapabilityAuthorizer] = pc.Authorizer
+	}
+	if pc.Notifier != nil {
+		configMap[ProviderCapabilityNotifier] = pc.Notifier
+	}
+	if pc.Provisioning != nil {
+		configMap[ProviderCapabilityProvisioning] = pc.Provisioning
+	}
+
 	return configMap
 }
 
@@ -263,7 +282,7 @@ func (pc *ProviderCapabilities) EnableCapability(capability ProviderCapability) 
 func (pc *ProviderCapabilities) Update(updates ProviderCapabilities) {
 
 	// We first need to get a map of the existing capabilities
-	// and check to see whats enabled. Then if if the incoming
+	// and check to see whats enabled. Then if the incoming
 	// updates have a capability disabled then we need to disable it.
 	// DO NOT enable anything that is already disabled.
 	// We also want to update the existing configuration values
@@ -329,8 +348,9 @@ func (pc *ProviderCapabilities) RemoveCapability(capability ProviderCapability) 
 func NewSynchronizableCapability() *SynchronizableConfiguration {
 	return &SynchronizableConfiguration{
 		Synchronizable: true,
-		Interval:       3600,
-		Enabled:        true,
+		// Every 6 hours by default. Interval is in minutes
+		Interval: 6 * 60,
+		Enabled:  true,
 	}
 }
 
