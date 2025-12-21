@@ -48,3 +48,17 @@ type ProviderConfig = internal.ProviderConfig
 // WorkflowConfig defines a workflow configuration that specifies the
 // approval process and steps for handling access requests.
 type WorkflowConfig = internal.WorkflowConfig
+
+const (
+
+	// Runs in cloud environment as a login server
+	// allows agents to sync roles and policies and get tasking
+	ModeServer Mode = "server"
+
+	// Runs as a background agent to store session data and
+	// exec platform specific elevations
+	ModeAgent Mode = "agent"
+
+	// Just the CLI mode - used to connect to login-servers
+	ModeClient Mode = "client"
+)
