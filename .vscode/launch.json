@@ -13,6 +13,17 @@
             "showLog": true
         },
         {
+            "name": "Launch Blind Client",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceFolder}/main.go",
+            "cwd": "/tmp",
+            "args": ["login"],
+            "env": {},
+            "showLog": true
+        },
+        {
             "name": "Launch CLI sessions",
             "type": "go",
             "request": "launch",
