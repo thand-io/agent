@@ -44,14 +44,15 @@ var ErrNotImplemented = errors.New("not implemented")
 */
 
 type Provider struct {
-	Version      *version.Version      `json:"version,omitempty"`
-	Name         string                `json:"name"`
-	Description  string                `json:"description"`
-	Provider     string                `json:"provider"`               // e.g. aws, gcp, azure
-	Capabilities *ProviderCapabilities `json:"capabilities,omitempty"` // Allows the user to specify what this provider can do
-	Config       *BasicConfig          `json:"config,omitempty"`       // Provider-specific configuration
-	Role         *Role                 `json:"role,omitempty"`         // The base role for this provider
-	Enabled      bool                  `json:"enabled"`                // Whether this provider is enabled
+	Version         *version.Version      `json:"version,omitempty"`
+	Name            string                `json:"name"`
+	Description     string                `json:"description"`
+	Provider        string                `json:"provider"`                                                     // e.g. aws, gcp, azure
+	Capabilities    *ProviderCapabilities `json:"capabilities,omitempty"`                                       // Allows the user to specify what this provider can do
+	Config          *BasicConfig          `json:"config,omitempty"`                                             // Provider-specific configuration
+	Role            *Role                 `json:"role,omitempty"`                                               // The base role for this provider
+	Enabled         bool                  `json:"enabled"`                                                      // Whether this provider is enabled
+	EnableElevation *bool                 `json:"enable_elevation,omitempty" yaml:"enable_elevation,omitempty"` // Whether this provider can be used for elevation (nil defaults to true for backward compatibility)
 
 	client ProviderImpl `json:"-" yaml:"-"`
 }
@@ -81,6 +82,20 @@ func (p *Provider) HasPermission(user *User) bool {
 
 	// Otherwise, if we have a role defined then check the user has that role
 	return p.Role.HasPermission(user)
+}
+
+// CanElevate checks if this provider can be used for elevation/role assignment.
+// Returns false if:
+// - The provider is disabled (Enabled = false), OR
+// - EnableElevation is explicitly set to false
+// Returns true if:
+// - EnableElevation is nil (not set) and provider is enabled (backward compatibility), OR
+// - EnableElevation is explicitly set to true and provider is enabled
+func (p *Provider) CanElevate() bool {
+	if p.EnableElevation == nil {
+		return p.Enabled // Default behavior when not set
+	}
+	return p.Enabled && *p.EnableElevation
 }
 
 func (p *Provider) SetClient(client ProviderImpl) {

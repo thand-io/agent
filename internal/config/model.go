@@ -534,6 +534,15 @@ func (r *Config) GetWorkflowFromElevationRequest(
 		return nil, fmt.Errorf("provider '%s' not allowed for role '%s', roles: %v", providerName, roleName, role.Providers)
 	}
 
+	// Validate that the provider is enabled for elevation
+	provider, err := r.GetProviderByName(primaryProvider)
+	if err != nil {
+		return nil, fmt.Errorf("provider '%s' not found: %w", providerName, err)
+	}
+	if !provider.CanElevate() {
+		return nil, fmt.Errorf("provider '%s' is not enabled for elevation", providerName)
+	}
+
 	if !slices.Contains(role.Workflows, workflowName) {
 		return nil, fmt.Errorf("workflow '%s' not allowed for role '%s', workflows: %v", workflowName, roleName, role.Workflows)
 	}

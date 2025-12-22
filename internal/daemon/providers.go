@@ -223,11 +223,13 @@ func (s *Server) getProviderPermissions(c *gin.Context) {
 func (s *Server) getAuthProvidersAsProviderResponse(authenticatedUser *models.Session) map[string]models.ProviderResponse {
 	return s.getProvidersAsProviderResponse(
 		authenticatedUser,
+		false, // Authentication providers don't need elevation capability
 		models.ProviderCapabilityAuthorizer)
 }
 
 func (s *Server) getProvidersAsProviderResponse(
 	authenticatedUser *models.Session,
+	forElevation bool,
 	capabilities ...models.ProviderCapability,
 ) map[string]models.ProviderResponse {
 
@@ -251,6 +253,11 @@ func (s *Server) getProvidersAsProviderResponse(
 		}
 
 		if authenticatedUser != nil && !provider.HasPermission(authenticatedUser.User) {
+			continue
+		}
+
+		// Skip providers not enabled for elevation when forElevation is true
+		if forElevation && !provider.CanElevate() {
 			continue
 		}
 
@@ -308,9 +315,26 @@ func (s *Server) getProviders(c *gin.Context) {
 		}
 	}
 
+	// Detect if this request is for elevation purposes
+	// Check both the raw capability string and parsed capabilities
+	// The UI sends "rbac" which doesn't parse to a valid capability enum
+	forElevation := false
+	if strings.Contains(strings.ToLower(capability), "rbac") {
+		forElevation = true
+	}
+	// Also check parsed capabilities for provisioning/roles/permissions
+	for _, cap := range capabilities {
+		if cap == models.ProviderCapabilityProvisioning ||
+			cap == models.ProviderCapabilityRoles ||
+			cap == models.ProviderCapabilityPermissions {
+			forElevation = true
+			break
+		}
+	}
+
 	response := models.ProvidersResponse{
 		Version:   "1.0",
-		Providers: s.getProvidersAsProviderResponse(authenticatedUser, capabilities...),
+		Providers: s.getProvidersAsProviderResponse(authenticatedUser, forElevation, capabilities...),
 	}
 
 	if s.canAcceptHtml(c) {

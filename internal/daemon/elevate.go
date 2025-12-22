@@ -160,6 +160,12 @@ func (s *Server) handleDynamicRequest(c *gin.Context, dynamicRequest models.Elev
 		return
 	}
 
+	// Validate that all providers in the request are enabled for elevation
+	if err := s.validateProviderElevationEnabled(dynamicRequest.Providers); err != nil {
+		s.getErrorPage(c, http.StatusBadRequest, "Invalid provider for elevation request", err)
+		return
+	}
+
 	// Check that either permissions or inherits is provided
 	if len(dynamicRequest.Permissions) == 0 && len(dynamicRequest.Inherits) == 0 {
 		s.getErrorPage(c, http.StatusBadRequest, "Either permissions or role inheritance must be specified")
@@ -226,6 +232,12 @@ func (s *Server) elevate(c *gin.Context, request models.ElevateRequest) {
 		return
 	}
 
+	// Validate that all providers in the request are enabled for elevation
+	if err := s.validateProviderElevationEnabled(request.Providers); err != nil {
+		s.getErrorPage(c, http.StatusBadRequest, "Invalid provider for elevation request", err)
+		return
+	}
+
 	authProvider, foundUser, err := s.getUserFromElevationRequest(c, request)
 
 	if err != nil {
@@ -261,6 +273,19 @@ func (s *Server) elevate(c *gin.Context, request models.ElevateRequest) {
 	c.Redirect(http.StatusTemporaryRedirect,
 		workflowTask.GetRedirectURL(),
 	)
+}
+
+func (s *Server) validateProviderElevationEnabled(providerNames []string) error {
+	for _, providerName := range providerNames {
+		provider, err := s.Config.GetProviderByName(providerName)
+		if err != nil {
+			return fmt.Errorf("provider '%s' not found: %w", providerName, err)
+		}
+		if !provider.CanElevate() {
+			return fmt.Errorf("provider '%s' is not enabled for elevation", providerName)
+		}
+	}
+	return nil
 }
 
 // getElevateResume resumes a workflow from a saved state
@@ -625,10 +650,21 @@ func (s *Server) handleLargeLanguageModelRequest(c *gin.Context, elevateRequest 
 
 	providers := s.Config.GetProvidersByCapabilityWithUser(foundUser.User, models.ProviderCapabilityProvisioning)
 
-	if len(providers) == 0 {
-		s.getErrorPage(c, http.StatusBadRequest, "No providers with RBAC capability are configured")
+	// Filter providers to only include those enabled for elevation
+	elevationProviders := make(map[string]models.Provider)
+	for name, provider := range providers {
+		if provider.CanElevate() {
+			elevationProviders[name] = provider
+		}
+	}
+
+	if len(elevationProviders) == 0 {
+		s.getErrorPage(c, http.StatusBadRequest, "No providers enabled for elevation are configured")
 		return
 	}
+
+	// Use elevationProviders instead of providers for LLM
+	providers = elevationProviders
 
 	workflows := s.Config.GetWorkflows().Definitions
 
