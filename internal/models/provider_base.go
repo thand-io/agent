@@ -1,6 +1,7 @@
 package models
 
 import (
+	"context"
 	"strings"
 	"sync"
 
@@ -9,13 +10,14 @@ import (
 )
 
 type BaseProvider struct {
-	identifier   string
-	name         string
-	description  string
-	provider     string
-	config       *BasicConfig
-	role         *Role
-	capabilities *ProviderCapabilities
+	identifier      string
+	name            string
+	description     string
+	provider        string
+	config          *BasicConfig
+	role            *Role
+	capabilities    *ProviderCapabilities
+	providerWrapper *Provider // Reference back to the Provider wrapper
 
 	// Add other common fields if necessary
 	identity *IdentitySupport
@@ -442,7 +444,36 @@ func (p *BaseProvider) GetProvider() string {
 	return p.provider
 }
 
+func (p *BaseProvider) SetProviderWrapper(wrapper *Provider) {
+	p.providerWrapper = wrapper
+}
+
+func (p *BaseProvider) GetProviderWrapper() *Provider {
+	return p.providerWrapper
+}
+
 func (p *BaseProvider) Initialize(identifier string, provider Provider) error {
 	// Initialize the provider
 	return nil
+}
+
+// Default ProviderAccountDiscovery implementation (no-op)
+// Providers that support account discovery should override these methods
+
+func (p *BaseProvider) DiscoverAccounts(ctx context.Context, req *DiscoverAccountsRequest) (*DiscoverAccountsResponse, error) {
+	// Default implementation returns empty list
+	// Providers implementing account discovery should override this
+	return &DiscoverAccountsResponse{Accounts: []Account{}}, nil
+}
+
+func (p *BaseProvider) GetDiscoveredAccounts() []Account {
+	// Default implementation returns empty list
+	// Providers implementing account discovery should override this
+	return []Account{}
+}
+
+func (p *BaseProvider) RefreshAccounts(ctx context.Context) error {
+	// Default implementation returns not implemented error
+	// Providers implementing account discovery should override this
+	return ErrNotImplemented
 }

@@ -29,16 +29,38 @@
                      x-init="init()">
                     
                     <!-- Provider Select -->
-                    <select name="provider" 
-                            x-model="selectedProvider" 
-                            @change="onProviderChange()" 
-                            required 
+                    <select name="provider"
+                            x-model="selectedProvider"
+                            @change="onProviderChange()"
+                            required
                             class="form-select">
                         <option value="">Select a Provider</option>
                         <template x-for="(provider, key) in providers" :key="key">
                             <option :value="key" x-text="provider.name || key"></option>
                         </template>
                     </select>
+
+                    <!-- Account Select (only shown for providers with account discovery) -->
+                    <div x-show="hasAccountDiscovery && Object.keys(accounts).length > 0" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                        <label for="account_id" style="font-weight: 500; margin-bottom: 0.25rem;">Account</label>
+                        <select name="account_id"
+                                id="elevate-accounts"
+                                x-model="selectedAccount"
+                                class="form-select"
+                                :required="hasAccountDiscovery && Object.keys(accounts).length > 0">
+                            <option value="">Select Account</option>
+                        </select>
+                        <div style="font-size: 0.8rem; color: var(--text-muted, #666); display: flex; align-items: center; justify-content: space-between;">
+                            <span>Select the account to elevate into</span>
+                            <button type="button"
+                                    @click="refreshAccounts()"
+                                    class="button button-secondary"
+                                    style="font-size: 0.8rem; padding: 0.25rem 0.5rem;"
+                                    :disabled="loadingAccounts">
+                                <span x-text="loadingAccounts ? 'Refreshing...' : 'Refresh Accounts'"></span>
+                            </button>
+                        </div>
+                    </div>
 
                     <!-- Role Select -->
                     <select name="role" 
@@ -194,6 +216,7 @@
         let PREFILLED_ROLES = [];
         let PREFILLED_DURATION = '';
         let PREFILLED_REASON = '';
+        let PREFILLED_ACCOUNT_ID = '';
         
         try {
             const identityData = `{{.Identities | toJSON}}`;
@@ -221,9 +244,11 @@
         
         PREFILLED_DURATION = '{{.Duration}}' || '';
         PREFILLED_REASON = '{{.Reason}}' || '';
-        
+        PREFILLED_ACCOUNT_ID = '{{.AccountID}}' || '';
+
         // Choices.js instance (kept outside Alpine to avoid reactivity issues)
         let identityChoicesInstance = null;
+        let accountChoicesInstance = null;
 
         /**
          * Initialize the identity selector using Choices.js
@@ -250,6 +275,9 @@
 
             // Initial fetch of identities to populate the selector
             fetchIdentities();
+
+            // Note: accountChoicesInstance is initialized lazily in loadAccounts()
+            // when accounts are first loaded, to avoid initializing on a hidden element
 
             // Set up search event listener using Choices.js event
             const identityElement = document.getElementById('elevate-identities');
@@ -373,22 +401,27 @@
                 // Reactive state
                 providers: {},
                 roles: {},
+                accounts: {},
                 selectedProvider: '',
                 selectedRole: '',
+                selectedAccount: '',
                 evaluatedRole: null,
                 loadingEvaluatedRole: false,
                 duration: 'PT1M',
                 reason: '',
                 loading: false,
                 loadingRoles: false,
-                
+                loadingAccounts: false,
+                hasAccountDiscovery: false,
+
                 // Configuration
                 apiBasePath: API_BASE_PATH,
-                
+
                 // URL params for pre-filling
                 prefilledIdentities: [],
                 prefilledProviders: [],
                 prefilledRoles: [],
+                prefilledAccountID: '',
 
                 // Duration options
                 durationOptions: [
@@ -503,7 +536,7 @@
                     this.prefilledIdentities = PREFILLED_IDENTITIES;
                     this.prefilledProviders = PREFILLED_PROVIDERS;
                     this.prefilledRoles = PREFILLED_ROLES;
-                    
+
                     if (PREFILLED_REASON) {
                         this.reason = PREFILLED_REASON;
                     }
@@ -515,6 +548,10 @@
                                 this.duration = PREFILLED_DURATION;
                             });
                         }
+                    }
+
+                    if (PREFILLED_ACCOUNT_ID) {
+                        this.prefilledAccountID = PREFILLED_ACCOUNT_ID;
                     }
                 },
 
@@ -550,11 +587,18 @@
                  */
                 async onProviderChange() {
                     this.selectedRole = '';
+                    this.selectedAccount = '';
+                    this.prefilledAccountID = '';
                     this.evaluatedRole = null;
                     this.roles = {};
-                    
+                    this.accounts = {};
+                    this.hasAccountDiscovery = false;
+
                     if (this.selectedProvider) {
-                        await this.loadRoles();
+                        await Promise.all([
+                            this.loadRoles(),
+                            this.loadAccounts()
+                        ]);
                     }
                 },
 
@@ -563,16 +607,16 @@
                  */
                 async loadRoles() {
                     if (!this.selectedProvider) return;
-                    
+
                     this.loadingRoles = true;
-                    
+
                     try {
                         const response = await fetch(`${this.apiBasePath}/roles?provider=${encodeURIComponent(this.selectedProvider)}`);
-                        
+
                         if (!response.ok) {
                             throw new Error(`HTTP error! status: ${response.status}`);
                         }
-                        
+
                         const data = await response.json();
                         this.roles = data.roles || {};
 
@@ -581,6 +625,131 @@
                         console.error('Error fetching roles:', error);
                     } finally {
                         this.loadingRoles = false;
+                    }
+                },
+
+                /**
+                 * Load accounts for the selected provider
+                 */
+                async loadAccounts() {
+                    if (!this.selectedProvider) return;
+
+                    this.loadingAccounts = true;
+                    this.accounts = {};
+                    this.hasAccountDiscovery = false;
+
+                    try {
+                        const response = await fetch(`${this.apiBasePath}/accounts?provider=${encodeURIComponent(this.selectedProvider)}`);
+
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+
+                        const data = await response.json();
+
+                        if (data.accounts && Object.keys(data.accounts).length > 0) {
+                            this.accounts = data.accounts;
+                            this.hasAccountDiscovery = true;
+
+                            // Initialize Choices.js on first use (lazy initialization)
+                            if (!accountChoicesInstance) {
+                                accountChoicesInstance = new Choices('#elevate-accounts', {
+                                    searchEnabled: true,
+                                    placeholder: true,
+                                    placeholderValue: 'Search accounts...',
+                                    noResultsText: 'No accounts found',
+                                    shouldSort: false,
+                                    searchResultLimit: 100,
+                                    searchFields: ['label', 'customProperties.id'],
+                                    itemSelectText: '',
+                                });
+
+                                // Set up change event listener to sync Choices.js selection to Alpine state
+                                const accountSelect = document.getElementById('elevate-accounts');
+                                if (accountSelect) {
+                                    accountSelect.addEventListener('change', () => {
+                                        const selectedValue = accountChoicesInstance.getValue(true);
+                                        console.log('[DEBUG] Account changed, getValue(true):', selectedValue);
+                                        this.selectedAccount = selectedValue || '';
+                                        console.log('[DEBUG] Alpine selectedAccount set to:', this.selectedAccount);
+                                    });
+                                }
+                            }
+
+                            // Populate Choices.js with sorted accounts
+                            const accountChoices = this.buildAccountChoices(data.accounts);
+                            accountChoicesInstance.clearStore();
+                            accountChoicesInstance.setChoices(accountChoices, 'value', 'label', true);
+
+                            // Apply prefilled account if it exists and is valid
+                            if (this.prefilledAccountID && accountChoices.some(a => a.value === this.prefilledAccountID)) {
+                                this.selectedAccount = this.prefilledAccountID;
+                                accountChoicesInstance.setChoiceByValue(this.prefilledAccountID);
+                                this.prefilledAccountID = ''; // Clear after applying
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error fetching accounts:', error);
+                    } finally {
+                        this.loadingAccounts = false;
+                    }
+                },
+
+                /**
+                 * Build sorted account choices for Choices.js
+                 * @param {Object} accounts - Accounts object with ID as key
+                 * @returns {Array} Sorted choices array
+                 */
+                buildAccountChoices(accounts) {
+                    // Convert object to array and sort alphabetically by name
+                    const accountArray = Object.entries(accounts).map(([id, account]) => ({
+                        id,
+                        name: account.name,
+                    }));
+
+                    // Sort alphabetically by name (case-insensitive)
+                    accountArray.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+
+                    // Build Choices.js format
+                    return accountArray.map(account => ({
+                        value: account.id,
+                        label: `${account.name} (${account.id})`,
+                        customProperties: {
+                            id: account.id,
+                            name: account.name,
+                        },
+                    }));
+                },
+
+                /**
+                 * Refresh accounts from the provider (forces re-discovery)
+                 */
+                async refreshAccounts() {
+                    if (!this.selectedProvider) return;
+
+                    this.loadingAccounts = true;
+
+                    try {
+                        const response = await fetch(`${this.apiBasePath}/accounts?provider=${encodeURIComponent(this.selectedProvider)}&refresh=true`);
+
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+
+                        const data = await response.json();
+                        this.accounts = data.accounts || {};
+
+                        // Update Choices.js with refreshed sorted accounts
+                        if (accountChoicesInstance && data.accounts && Object.keys(data.accounts).length > 0) {
+                            const accountChoices = this.buildAccountChoices(data.accounts);
+                            accountChoicesInstance.clearStore();
+                            accountChoicesInstance.setChoices(accountChoices, 'value', 'label', true);
+                        }
+                    } catch (error) {
+                        console.error('Error refreshing accounts:', error);
+                        alert('Failed to refresh accounts. Please try again.');
+                    } finally {
+                        this.loadingAccounts = false;
                     }
                 },
 
@@ -616,6 +785,7 @@
                  * Get the request URL with current form values
                  */
                 getRequestUrl() {
+                    console.log('[DEBUG] getRequestUrl called');
                     const baseUrl = window.location.origin + '/elevate/static';
                     const params = new URLSearchParams();
                     
@@ -646,7 +816,13 @@
                             params.append('identity', identity.value);
                         });
                     }
-                    
+
+                    // Add selected account (synced from Choices.js via event listener)
+                    console.log('[DEBUG] selectedAccount value:', this.selectedAccount);
+                    if (this.selectedAccount) {
+                        params.set('account_id', this.selectedAccount);
+                    }
+
                     const queryString = params.toString();
                     return queryString ? `${baseUrl}?${queryString}` : baseUrl;
                 },
@@ -655,7 +831,9 @@
                  * Copy request URL to clipboard
                  */
                 async copyRequestUrl() {
+                    console.log('[DEBUG] copyRequestUrl called');
                     const url = this.getRequestUrl();
+                    console.log('[DEBUG] URL generated:', url);
                     
                     try {
                         await navigator.clipboard.writeText(url);

@@ -42,6 +42,12 @@ func (s *Server) getElevate(c *gin.Context) {
 		return
 	}
 
+	logrus.WithFields(logrus.Fields{
+		"provider":   request.Provider,
+		"role":       request.Role,
+		"account_id": request.AccountID,
+	}).Debug("getElevate: Received elevation request")
+
 	role, err := s.Config.GetRoleByName(request.Role)
 
 	if err != nil {
@@ -67,6 +73,7 @@ func (s *Server) getElevate(c *gin.Context) {
 		Reason:     request.Reason,
 		Duration:   request.Duration,
 		Session:    request.Session,
+		AccountID:  request.AccountID,
 	})
 }
 
@@ -703,6 +710,7 @@ type ElevateStaticPageData struct {
 	Roles      []string          `json:"roles"`
 	Duration   string            `json:"duration"`
 	Reason     string            `json:"reason"`
+	AccountID  string            `json:"account_id"`
 }
 
 func (s *Server) getElevationPagePrefill(c *gin.Context) ElevateStaticPageData {
@@ -763,6 +771,12 @@ func (s *Server) getElevationPagePrefill(c *gin.Context) ElevateStaticPageData {
 	reason := c.Query("reason")
 	if len(reason) > 0 {
 		data.Reason = reason
+	}
+
+	// Get account_id from query parameters
+	accountID := c.Query("account_id")
+	if len(accountID) > 0 {
+		data.AccountID = accountID
 	}
 
 	return data

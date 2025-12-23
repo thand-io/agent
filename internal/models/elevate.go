@@ -20,6 +20,7 @@ type ElevateStaticRequest struct {
 	Reason     string   `json:"reason" form:"reason" binding:"required"`
 	Duration   string   `json:"duration,omitempty" form:"duration,omitempty"`     // Duration in ISO 8601 format
 	Identities []string `json:"identities,omitempty" form:"identities,omitempty"` // Optional identities to elevate, if empty the requesting user is used
+	AccountID  string   `json:"account_id,omitempty" form:"account_id,omitempty"` // Optional account ID for multi-account providers
 
 	// Protected session
 	Session *LocalSession `json:"session,omitempty" form:"session,omitempty"`
@@ -61,6 +62,7 @@ type ElevateRequest struct {
 	Reason        string        `json:"reason"`
 	Duration      string        `json:"duration,omitempty"`   // Duration in ISO 8601 format
 	Identities    []string      `json:"identities,omitempty"` // Optional identities to elevate, if empty the requesting user is used
+	AccountID     string        `json:"account_id,omitempty"` // Optional account ID for multi-account providers
 	Session       *LocalSession `json:"session,omitempty"`
 }
 
@@ -81,6 +83,7 @@ func (e *ElevateRequest) AsMap() map[string]any {
 		"reason":        e.Reason,
 		"duration":      e.Duration,
 		"identities":    e.Identities,
+		"account_id":    e.AccountID, // NEW: Include AccountID in workflow context
 	}
 }
 

@@ -104,6 +104,12 @@ func (t *authorizeFunction) validateAndParseRequests(
 		return nil, fmt.Errorf("failed to convert call request: %w", err)
 	}
 
+	// Ensure AccountID flows through from the original elevation request
+	if authRequest.RoleRequest == nil {
+		authRequest.RoleRequest = &models.RoleRequest{}
+	}
+	authRequest.RoleRequest.AccountID = elevationRequest.AccountID
+
 	if !authRequest.IsValid() {
 		logrus.Infoln("No revocation state provided. Just handling via the cleanup state")
 	}

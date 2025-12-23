@@ -167,11 +167,19 @@ func (t *thandTask) executeAuthorization(
 			identityObj.ID = identityId
 			authReq := models.AuthorizeRoleRequest{
 				RoleRequest: &models.RoleRequest{
-					User:     identityObj.GetUser(),
-					Role:     elevateRequest.Role,
-					Duration: &duration,
+					User:      identityObj.GetUser(),
+					Role:      elevateRequest.Role,
+					Duration:  &duration,
+					AccountID: elevateRequest.AccountID,
 				},
 			}
+
+			log.WithFields(models.Fields{
+				"identity_id": identityId,
+				"provider":    providerName,
+				"account_id":  elevateRequest.AccountID,
+				"role":        elevateRequest.Role.Name,
+			}).Debug("authorize.go: Creating AuthorizeRoleRequest with AccountID")
 
 			thandAuthReq := thandFunction.ThandAuthorizeRequest{
 				AuthorizeRoleRequest: authReq,

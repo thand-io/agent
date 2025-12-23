@@ -3,6 +3,8 @@ package aws
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -16,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/identitystore"
+	"github.com/aws/aws-sdk-go-v2/service/organizations"
 	"github.com/aws/aws-sdk-go-v2/service/ssoadmin"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
@@ -31,6 +34,12 @@ type awsProvider struct {
 	stsService          *sts.Client
 	ssoAdminService     *ssoadmin.Client
 	identityStoreClient *identitystore.Client
+	organizationsClient *organizations.Client // For account discovery
+
+	// Account discovery cache
+	mu                 sync.RWMutex
+	discoveredAccounts []models.Account
+	lastAccountSync    time.Time
 }
 
 func (p *awsProvider) Initialize(identifier string, provider models.Provider) error {

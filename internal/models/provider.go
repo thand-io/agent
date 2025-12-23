@@ -44,15 +44,16 @@ var ErrNotImplemented = errors.New("not implemented")
 */
 
 type Provider struct {
-	Version         *version.Version      `json:"version,omitempty"`
-	Name            string                `json:"name"`
-	Description     string                `json:"description"`
-	Provider        string                `json:"provider"`                                                     // e.g. aws, gcp, azure
-	Capabilities    *ProviderCapabilities `json:"capabilities,omitempty"`                                       // Allows the user to specify what this provider can do
-	Config          *BasicConfig          `json:"config,omitempty"`                                             // Provider-specific configuration
-	Role            *Role                 `json:"role,omitempty"`                                               // The base role for this provider
-	Enabled         bool                  `json:"enabled"`                                                      // Whether this provider is enabled
-	EnableElevation *bool                 `json:"enable_elevation,omitempty" yaml:"enable_elevation,omitempty"` // Whether this provider can be used for elevation (nil defaults to true for backward compatibility)
+	Version          *version.Version      `json:"version,omitempty"`
+	Name             string                `json:"name"`
+	Description      string                `json:"description"`
+	Provider         string                `json:"provider"`                                                       // e.g. aws, gcp, azure
+	Capabilities     *ProviderCapabilities `json:"capabilities,omitempty"`                                         // Allows the user to specify what this provider can do
+	Config           *BasicConfig          `json:"config,omitempty"`                                               // Provider-specific configuration
+	Role             *Role                 `json:"role,omitempty"`                                                 // The base role for this provider
+	Enabled          bool                  `json:"enabled"`                                                        // Whether this provider is enabled
+	EnableElevation  *bool                 `json:"enable_elevation,omitempty" yaml:"enable_elevation,omitempty"`   // Whether this provider can be used for elevation (nil defaults to true for backward compatibility)
+	DiscoverAccounts *bool                 `json:"discover_accounts,omitempty" yaml:"discover_accounts,omitempty"` // Whether to enable multi-account discovery (opt-in)
 
 	client ProviderImpl `json:"-" yaml:"-"`
 }
@@ -96,6 +97,21 @@ func (p *Provider) CanElevate() bool {
 		return p.Enabled // Default behavior when not set
 	}
 	return p.Enabled && *p.EnableElevation
+}
+
+// ShouldDiscoverAccounts checks if multi-account discovery is enabled for this provider.
+// Returns true ONLY if:
+// - DiscoverAccounts is explicitly set to true AND
+// - Provider client implements ProviderAccountDiscovery AND
+// - Provider has the accounts capability
+// This is an opt-in feature - if DiscoverAccounts is nil or false, returns false
+func (p *Provider) ShouldDiscoverAccounts() bool {
+	// Must be explicitly enabled
+	if p.DiscoverAccounts == nil || !*p.DiscoverAccounts {
+		return false
+	}
+	// Provider must have the capability
+	return p.client != nil && p.client.HasCapability(ProviderCapabilityAccounts)
 }
 
 func (p *Provider) SetClient(client ProviderImpl) {
@@ -165,6 +181,8 @@ type ProviderImpl interface {
 	GetName() string
 	GetDescription() string
 	GetProvider() string
+	SetProviderWrapper(wrapper *Provider) // Set bidirectional reference to Provider config
+	GetProviderWrapper() *Provider        // Get the Provider config wrapper
 
 	Synchronize(ctx context.Context, temporalClient TemporalImpl, req *SynchronizeRequest) error
 
@@ -189,6 +207,7 @@ type ProviderImpl interface {
 	ProviderAuthorizor
 	ProviderRoleBasedAccessControl
 	ProviderIdentities
+	ProviderAccountDiscovery
 }
 
 type AuthorizeSessionResponse struct {
@@ -196,9 +215,10 @@ type AuthorizeSessionResponse struct {
 }
 
 type RoleRequest struct {
-	User     *User          `json:"user"`
-	Role     *Role          `json:"role"`
-	Duration *time.Duration `json:"duration,omitempty"` // Optional duration for temporary access
+	User      *User          `json:"user"`
+	Role      *Role          `json:"role"`
+	Duration  *time.Duration `json:"duration,omitempty"`   // Optional duration for temporary access
+	AccountID string         `json:"account_id,omitempty"` // Optional account ID for multi-account providers
 }
 
 // IsValid checks if any of the fields are nil

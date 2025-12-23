@@ -14,4 +14,5 @@ var AwsCapabilities = models.NewProviderCapabilities().
 		Enabled:        true,
 		Synchronizable: false, // permissions are derived from AWS IAM roles
 	}).
-	WithDefaultProvisioningConfiguration()
+	WithDefaultProvisioningConfiguration().
+	WithDefaultAccountsConfiguration()
