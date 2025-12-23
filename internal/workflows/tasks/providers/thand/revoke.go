@@ -92,6 +92,8 @@ func (t *thandTask) executeRevocationTask(
 		return nil, fmt.Errorf("failed to get duration: %w", err)
 	}
 
+	_ = workflow.Sleep(workflowTask.GetTemporalContext(), duration)
+
 	revokedAt := time.Now().UTC()
 
 	modelOutput := map[string]any{
