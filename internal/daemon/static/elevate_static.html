@@ -603,7 +603,8 @@
                     this.loadingRoles = true;
                     
                     try {
-                        const response = await fetch(`${this.apiBasePath}/provider/${encodeURIComponent(this.selectedProvider)}/roles`);
+                        // Get all composite roles for a given provider
+                        const response = await fetch(`${this.apiBasePath}/roles?provider=${encodeURIComponent(this.selectedProvider)}`);
                         
                         if (!response.ok) {
                             throw new Error(`HTTP error! status: ${response.status}`);
@@ -629,6 +630,7 @@
                     this.loadingTenants = true;
                     
                     try {
+                        // Get a list of tenants for the selected provider
                         const response = await fetch(`${this.apiBasePath}/provider/${encodeURIComponent(this.selectedProvider)}/tenants`);
                         
                         if (!response.ok) {
