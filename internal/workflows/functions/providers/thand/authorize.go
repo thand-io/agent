@@ -104,11 +104,6 @@ func (t *authorizeFunction) validateAndParseRequests(
 		return nil, fmt.Errorf("failed to convert call request: %w", err)
 	}
 
-	// Ensure AccountID flows through from the original elevation request
-	if authRequest.RoleRequest == nil {
-		authRequest.RoleRequest = &models.RoleRequest{}
-	}
-
 	// Set tenant if available
 	// TODO(hugh): Only a single tenant is supported for now
 	// later we can expand this to support multiple tenants

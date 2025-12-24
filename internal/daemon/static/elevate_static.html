@@ -41,7 +41,7 @@
                     </select>
 
                     <!-- Tenant Select -->
-                    <select name="tenant" 
+                    <select name="tenants" 
                             x-model="selectedTenant" 
                             x-show="tenants && Object.keys(tenants).length > 0"
                             class="form-select" 
@@ -640,7 +640,18 @@
                         }
                         
                         const data = await response.json();
-                        this.tenants = data.tenants || {};
+                        let tenantsData = data.tenants || {};
+                        // Normalize tenants: API may return an array, but the UI expects an object/map.
+                        if (Array.isArray(tenantsData)) {
+                            const tenantsMap = {};
+                            tenantsData.forEach((tenant, index) => {
+                                // Prefer stable identifiers as keys; fall back to index if needed.
+                                const key = tenant.id || tenant.key || tenant.name || String(index);
+                                tenantsMap[key] = tenant;
+                            });
+                            tenantsData = tenantsMap;
+                        }
+                        this.tenants = tenantsData;
 
                         this.preselectTenant();
                     } catch (error) {

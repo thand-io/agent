@@ -674,7 +674,7 @@ type ElevateStaticPageData struct {
 	Roles      []string          `json:"roles"`
 	Duration   string            `json:"duration"`
 	Reason     string            `json:"reason"`
-	Tenants    string            `json:"tenants"`
+	Tenants    []string          `json:"tenants"`
 }
 
 func (s *Server) getElevationPagePrefill(c *gin.Context) ElevateStaticPageData {
