@@ -16,7 +16,6 @@ type BaseProvider struct {
 	config          *BasicConfig
 	role            *Role
 	capabilities    *ProviderCapabilities
-	providerWrapper *Provider // Reference back to the Provider wrapper
 
 	// Add other common fields if necessary
 	identity *IdentitySupport

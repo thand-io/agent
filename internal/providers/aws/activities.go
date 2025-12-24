@@ -19,11 +19,7 @@ func (p *awsProvider) Synchronize(
 ) error {
 
 	// Before we kick off the synchronize lets update the static roles and permissions
-	if err := PreSynchronizeActivities(ctx, temporalService, p); err != nil {
-		return err
-	}
-
-	return nil
+	return PreSynchronizeActivities(ctx, temporalService, p)
 }
 
 func PreSynchronizeActivities(ctx context.Context, temporalService models.TemporalImpl, provider models.ProviderImpl) error {

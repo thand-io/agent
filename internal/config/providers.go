@@ -278,7 +278,6 @@ func (c *Config) initializeSingleProvider(providerKey string, p *models.Provider
 	}
 
 	p.SetClient(impl)
-
 	return nil
 }
 

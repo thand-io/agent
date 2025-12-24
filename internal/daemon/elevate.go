@@ -632,6 +632,11 @@ func (s *Server) handleLargeLanguageModelRequest(c *gin.Context, elevateRequest 
 
 	providers := s.Config.GetProvidersByCapabilityWithUser(foundUser.User, models.ProviderCapabilityProvisioning)
 
+	if len(providers) == 0 {
+		s.getErrorPage(c, http.StatusBadRequest, "No providers with RBAC capability are configured")
+		return
+	}
+
 	workflows := s.Config.GetWorkflows().Definitions
 
 	if len(workflows) == 0 {
@@ -669,12 +674,21 @@ type ElevateStaticPageData struct {
 	Roles      []string          `json:"roles"`
 	Duration   string            `json:"duration"`
 	Reason     string            `json:"reason"`
-	AccountID  string            `json:"account_id"`
+	Tenants    string            `json:"tenants"`
 }
 
 func (s *Server) getElevationPagePrefill(c *gin.Context) ElevateStaticPageData {
 	data := ElevateStaticPageData{
 		TemplateData: s.GetTemplateData(c),
+	}
+
+	preFilledTenants := c.QueryArray("tenants")
+	validTenants := []string{}
+	for _, tenantID := range preFilledTenants {
+		tenant, err := s.Config.GetTenant(tenantID)
+		if err == nil && tenant != nil {
+			validTenants = append(validTenants, tenant.ID)
+		}
 	}
 
 	// Add pre-selected identities from query parameters
@@ -730,12 +744,6 @@ func (s *Server) getElevationPagePrefill(c *gin.Context) ElevateStaticPageData {
 	reason := c.Query("reason")
 	if len(reason) > 0 {
 		data.Reason = reason
-	}
-
-	// Get account_id from query parameters
-	accountID := c.Query("account_id")
-	if len(accountID) > 0 {
-		data.AccountID = accountID
 	}
 
 	return data

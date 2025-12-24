@@ -11,13 +11,7 @@ import (
 )
 
 func NewTraverse(node any, input any, variables map[string]any) (any, error) {
-	// Normalize input and variables to convert Go-specific types to JSON-compatible types
-	normalizedInput := normalizeValue(input)
-	normalizedVars := make(map[string]any, len(variables))
-	for k, v := range variables {
-		normalizedVars[k] = normalizeValue(v)
-	}
-	return traverseAndEvaluate(node, normalizedInput, normalizedVars)
+	return traverseAndEvaluate(node, input, variables)
 }
 
 func traverseAndEvaluate(node any, input any, variables map[string]any) (any, error) {
@@ -71,30 +65,6 @@ func traverseAndEvaluate(node any, input any, variables map[string]any) (any, er
 		}
 		return v, nil
 
-	// Convert Go-specific integer types to int
-	case int32:
-		return int(v), nil
-	case int64:
-		return int(v), nil
-	case int8:
-		return int(v), nil
-	case int16:
-		return int(v), nil
-	case uint:
-		return int(v), nil
-	case uint8:
-		return int(v), nil
-	case uint16:
-		return int(v), nil
-	case uint32:
-		return int(v), nil
-	case uint64:
-		return int(v), nil
-
-	// Convert float32 to float64
-	case float32:
-		return float64(v), nil
-
 	default:
 		// Return other types as-is
 		return v, nil
@@ -140,75 +110,4 @@ func getVariableNamesAndValues(vars map[string]any) ([]string, []any) {
 		values = append(values, v)
 	}
 	return names, values
-}
-
-// normalizeValue recursively converts Go-specific types to JSON-compatible types
-func normalizeValue(v any) any {
-	if v == nil {
-		return nil
-	}
-
-	switch val := v.(type) {
-	case int32, int64, int8, int16:
-		// Convert to int using reflection-free type assertion
-		switch typed := v.(type) {
-		case int32:
-			return int(typed)
-		case int64:
-			return int(typed)
-		case int8:
-			return int(typed)
-		case int16:
-			return int(typed)
-		}
-	case uint, uint8, uint16, uint32, uint64:
-		switch typed := v.(type) {
-		case uint:
-			return int(typed)
-		case uint8:
-			return int(typed)
-		case uint16:
-			return int(typed)
-		case uint32:
-			return int(typed)
-		case uint64:
-			return int(typed)
-		}
-	case float32:
-		return float64(val)
-	case []any:
-		// Recursively normalize array elements
-		result := make([]any, len(val))
-		for i, item := range val {
-			result[i] = normalizeValue(item)
-		}
-		return result
-	case []int32:
-		result := make([]any, len(val))
-		for i, item := range val {
-			result[i] = int(item)
-		}
-		return result
-	case []int64:
-		result := make([]any, len(val))
-		for i, item := range val {
-			result[i] = int(item)
-		}
-		return result
-	case []float32:
-		result := make([]any, len(val))
-		for i, item := range val {
-			result[i] = float64(item)
-		}
-		return result
-	case map[string]any:
-		// Recursively normalize map values
-		result := make(map[string]any, len(val))
-		for k, item := range val {
-			result[k] = normalizeValue(item)
-		}
-		return result
-	}
-
-	return v
 }
