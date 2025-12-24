@@ -454,9 +454,9 @@ func (s *Server) setupRoutes(router *gin.Engine) {
 			api.GET("/provider/:provider/identities", s.getProviderIdentities)
 			api.GET("/provider/:provider/resources", s.getProviderResources)
 			api.GET("/provider/:provider/tenants", s.getProviderTenants)
-			api.POST("/provider/:provider/authorizeSession", s.postProviderAuthorizeSession)
 
-			api.GET("/identities", s.getIdentities)
+			// Proxied provider calls
+			api.POST("/provider/:provider/authorizeSession", s.postProviderAuthorizeSession)
 
 			// Sync endpoints
 			api.GET("/sync", s.getSync)

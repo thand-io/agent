@@ -40,6 +40,20 @@
                         </template>
                     </select>
 
+                    <!-- Tenant Select -->
+                    <select name="tenant" 
+                            x-model="selectedTenant" 
+                            x-show="tenants && Object.keys(tenants).length > 0"
+                            class="form-select" 
+                            :disabled="!selectedProvider || loadingTenants" 
+                            :style="{ opacity: (!selectedProvider || loadingTenants) ? '0.5' : '1' }">
+                        <option value="" x-show="loadingTenants">Loading tenants...</option>
+                        <option value="" x-show="!loadingTenants">Select a Tenant (optional)</option>
+                        <template x-for="(tenant, key) in tenants" :key="key">
+                            <option :value="key" x-text="tenant.name || key"></option>
+                        </template>
+                    </select>
+
                     <!-- Role Select -->
                     <select name="role" 
                             x-model="selectedRole" 
@@ -191,6 +205,7 @@
         // Parse backend prefill data
         let PREFILLED_IDENTITIES = [];
         let PREFILLED_PROVIDERS = [];
+        let PREFILLED_TENANTS = [];
         let PREFILLED_ROLES = [];
         let PREFILLED_DURATION = '';
         let PREFILLED_REASON = '';
@@ -209,6 +224,14 @@
         } catch (e) {
             console.error('Error parsing providers data:', e);
             PREFILLED_PROVIDERS = [];
+        }
+        
+        try {
+            const tenantsData = `{{.Tenants | toJSON}}`;
+            PREFILLED_TENANTS = tenantsData ? JSON.parse(tenantsData) : [];
+        } catch (e) {
+            console.error('Error parsing tenants data:', e);
+            PREFILLED_TENANTS = [];
         }
         
         try {
@@ -372,8 +395,10 @@
             return {
                 // Reactive state
                 providers: {},
+                tenants: {},
                 roles: {},
                 selectedProvider: '',
+                selectedTenant: '',
                 selectedRole: '',
                 evaluatedRole: null,
                 loadingEvaluatedRole: false,
@@ -381,6 +406,7 @@
                 reason: '',
                 loading: false,
                 loadingRoles: false,
+                loadingTenants: false,
                 
                 // Configuration
                 apiBasePath: API_BASE_PATH,
@@ -388,6 +414,7 @@
                 // URL params for pre-filling
                 prefilledIdentities: [],
                 prefilledProviders: [],
+                prefilledTenants: [],
                 prefilledRoles: [],
 
                 // Duration options
@@ -502,6 +529,7 @@
                 applyBackendPrefills() {
                     this.prefilledIdentities = PREFILLED_IDENTITIES;
                     this.prefilledProviders = PREFILLED_PROVIDERS;
+                    this.prefilledTenants = PREFILLED_TENANTS;
                     this.prefilledRoles = PREFILLED_ROLES;
                     
                     if (PREFILLED_REASON) {
@@ -537,7 +565,10 @@
                             const providerToSelect = this.prefilledProviders[0];
                             if (this.providers[providerToSelect]) {
                                 this.selectedProvider = providerToSelect;
-                                await this.loadRoles();
+                                await Promise.all([
+                                    this.loadTenants(),
+                                    this.loadRoles()
+                                ]);
                             }
                         }
                     } catch (error) {
@@ -550,11 +581,16 @@
                  */
                 async onProviderChange() {
                     this.selectedRole = '';
+                    this.selectedTenant = '';
                     this.evaluatedRole = null;
                     this.roles = {};
+                    this.tenants = {};
                     
                     if (this.selectedProvider) {
-                        await this.loadRoles();
+                        await Promise.all([
+                            this.loadTenants(),
+                            this.loadRoles()
+                        ]);
                     }
                 },
 
@@ -567,7 +603,7 @@
                     this.loadingRoles = true;
                     
                     try {
-                        const response = await fetch(`${this.apiBasePath}/roles?provider=${encodeURIComponent(this.selectedProvider)}`);
+                        const response = await fetch(`${this.apiBasePath}/provider/${encodeURIComponent(this.selectedProvider)}/roles`);
                         
                         if (!response.ok) {
                             throw new Error(`HTTP error! status: ${response.status}`);
@@ -581,6 +617,63 @@
                         console.error('Error fetching roles:', error);
                     } finally {
                         this.loadingRoles = false;
+                    }
+                },
+
+                /**
+                 * Load tenants for the selected provider
+                 */
+                async loadTenants() {
+                    if (!this.selectedProvider) return;
+                    
+                    this.loadingTenants = true;
+                    
+                    try {
+                        const response = await fetch(`${this.apiBasePath}/provider/${encodeURIComponent(this.selectedProvider)}/tenants`);
+                        
+                        if (!response.ok) {
+                            // If the endpoint returns 404 or error, just skip tenant loading
+                            // Some providers may not support tenants
+                            console.log('No tenants available for this provider');
+                            this.tenants = {};
+                            return;
+                        }
+                        
+                        const data = await response.json();
+                        this.tenants = data.tenants || {};
+
+                        this.preselectTenant();
+                    } catch (error) {
+                        console.error('Error fetching tenants:', error);
+                        this.tenants = {};
+                    } finally {
+                        this.loadingTenants = false;
+                    }
+                },
+
+                /**
+                 * Pre-select tenant from URL params
+                 * Matches by key first, then by name (case-insensitive)
+                 */
+                preselectTenant() {
+                    if (!this.prefilledTenants || this.prefilledTenants.length === 0) return;
+                    
+                    const tenantToSelect = this.prefilledTenants[0];
+                    
+                    // Try exact key match first
+                    if (this.tenants[tenantToSelect]) {
+                        this.selectedTenant = tenantToSelect;
+                        return;
+                    }
+                    
+                    // Try case-insensitive name match
+                    const tenantKey = Object.keys(this.tenants).find(key => {
+                        const tenant = this.tenants[key];
+                        return tenant.name && tenant.name.toLowerCase() === tenantToSelect.toLowerCase();
+                    });
+                    
+                    if (tenantKey) {
+                        this.selectedTenant = tenantKey;
                     }
                 },
 
@@ -622,6 +715,11 @@
                     // Add provider
                     if (this.selectedProvider) {
                         params.set('provider', this.selectedProvider);
+                    }
+                    
+                    // Add tenant
+                    if (this.selectedTenant) {
+                        params.set('tenant', this.selectedTenant);
                     }
                     
                     // Add role
