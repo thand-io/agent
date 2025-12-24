@@ -57,6 +57,7 @@ func (p *awsProvider) Initialize(identifier string, provider models.Provider) er
 	p.stsService = sts.NewFromConfig(sdkConfig.Config)
 	p.ssoAdminService = ssoadmin.NewFromConfig(sdkConfig.Config)
 	p.identityStoreClient = identitystore.NewFromConfig(sdkConfig.Config)
+	p.organizationsClient = organizations.NewFromConfig(sdkConfig.Config)
 
 	// Set the account ID from config or retrieve it via STS
 	err = p.GetAccountId(awsConfig)

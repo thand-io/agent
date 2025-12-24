@@ -35,11 +35,11 @@ type ProviderTenants interface {
 
 func (p *BaseProvider) GetTenant(ctx context.Context, tenant string) (*ProviderTenant, error) {
 
-	if p.rbac == nil || !p.HasCapability(
-		ProviderCapabilityPermissions,
+	if p.tenants == nil || !p.HasCapability(
+		ProviderCapabilityTenants,
 	) {
-		logrus.Warningln("provider has no permissions")
-		return nil, fmt.Errorf("provider has no permissions")
+		logrus.Warningln("provider has no tenants support")
+		return nil, fmt.Errorf("provider has no tenants support")
 	}
 
 	tenant = strings.ToLower(tenant)
@@ -52,14 +52,14 @@ func (p *BaseProvider) GetTenant(ctx context.Context, tenant string) (*ProviderT
 
 func (p *BaseProvider) ListTenants(ctx context.Context, searchReq *SearchRequest) ([]SearchResult[ProviderTenant], error) {
 
-	if p.rbac == nil || !p.HasCapability(
+	if p.tenants == nil || !p.HasCapability(
 		ProviderCapabilityTenants,
 	) {
-		logrus.Warningln("provider has no permissions")
-		return nil, fmt.Errorf("provider has no permissions")
+		logrus.Warningln("provider has no tenants support")
+		return nil, fmt.Errorf("provider has no tenants support")
 	}
 
-	// If no filters, return all permissions
+	// If no filters, return all tenants
 	if searchReq == nil || searchReq.IsEmpty() {
 		return ReturnSearchResults(p.tenants.tenants), nil
 	}
@@ -67,7 +67,7 @@ func (p *BaseProvider) ListTenants(ctx context.Context, searchReq *SearchRequest
 	// Check if search index is ready
 	p.tenants.mu.RLock()
 	tenantsIndex := p.tenants.tenantsIndex
-	p.rbac.mu.RUnlock()
+	p.tenants.mu.RUnlock()
 
 	if tenantsIndex != nil {
 		// Use Bleve search for better search capabilities
