@@ -128,6 +128,9 @@ func (r SynchronizeResourcesResponse) GetPagination() *PaginationOptions  { retu
 func (r *SynchronizeIdentitiesRequest) SetPagination(p *PaginationOptions) { r.Pagination = p }
 func (r SynchronizeIdentitiesResponse) GetPagination() *PaginationOptions  { return r.Pagination }
 
+func (r *SynchronizeTenantsRequest) SetPagination(p *PaginationOptions) { r.Pagination = p }
+func (r SynchronizeTenantsResponse) GetPagination() *PaginationOptions  { return r.Pagination }
+
 // ProviderRoleBasedAccessControl defines the interface for providers that support RBAC
 type ProviderRoleBasedAccessControl interface {
 
@@ -553,6 +556,54 @@ func (p *BaseProvider) buildRoleIndices() error {
 		"permissions": len(p.rbac.permissions),
 		"roles":       len(p.rbac.roles),
 	}).Debug("RBAC search indices ready")
+
+	return nil
+}
+
+func (p *BaseProvider) buildTenantIndices() error {
+	// Placeholder for building tenant indices
+	startTime := time.Now()
+	defer func() {
+		elapsed := time.Since(startTime)
+		logrus.Debugf("Built tenant search indices in %s", elapsed)
+	}()
+
+	tenantsMapping := bleve.NewIndexMapping()
+
+	// Create a document mapping for the Tenant
+	tenantDocMapping := bleve.NewDocumentMapping()
+
+	// Field: ID (Exact match or case-insensitive keyword)
+	idFieldMapping := bleve.NewTextFieldMapping()
+	idFieldMapping.Analyzer = "keyword"
+	tenantDocMapping.AddFieldMappingsAt("ID", idFieldMapping)
+
+	// Field: Name (Exact match or case-insensitive keyword)
+	nameFieldMapping := bleve.NewTextFieldMapping()
+	nameFieldMapping.Analyzer = "keyword"
+	tenantDocMapping.AddFieldMappingsAt("Name", nameFieldMapping)
+
+	tenantsMapping.DefaultMapping = tenantDocMapping
+
+	tenantsIndex, err := bleve.NewMemOnly(tenantsMapping)
+	if err != nil {
+		return fmt.Errorf("failed to create tenants search index: %v", err)
+	}
+
+	// Index tenants
+	for _, tenant := range p.tenants.tenants {
+		if err := tenantsIndex.Index(tenant.Name, tenant); err != nil {
+			return fmt.Errorf("failed to index tenant %s: %v", tenant.Name, err)
+		}
+	}
+
+	p.tenants.mu.Lock()
+	p.tenants.tenantsIndex = tenantsIndex
+	p.tenants.mu.Unlock()
+
+	logrus.WithFields(logrus.Fields{
+		"tenants": len(p.tenants.tenants),
+	}).Debug("Tenant search indices ready")
 
 	return nil
 }

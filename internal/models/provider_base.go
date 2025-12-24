@@ -9,13 +9,13 @@ import (
 )
 
 type BaseProvider struct {
-	identifier      string
-	name            string
-	description     string
-	provider        string
-	config          *BasicConfig
-	role            *Role
-	capabilities    *ProviderCapabilities
+	identifier   string
+	name         string
+	description  string
+	provider     string
+	config       *BasicConfig
+	role         *Role
+	capabilities *ProviderCapabilities
 
 	// Add other common fields if necessary
 	identity *IdentitySupport

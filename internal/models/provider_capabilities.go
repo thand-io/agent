@@ -541,6 +541,10 @@ func (p *BaseProvider) CanSynchronizeIdentities() bool {
 	return p.CanSynchronize(ProviderCapabilityIdentities)
 }
 
+func (p *BaseProvider) CanSynchronizeTenants() bool {
+	return p.CanSynchronize(ProviderCapabilityTenants)
+}
+
 func (p *BaseProvider) CanSynchronizeResources() bool {
 	return p.CanSynchronize(ProviderCapabilityResources)
 }

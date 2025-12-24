@@ -20,6 +20,7 @@ const (
 	SynchronizeIdentities  SynchronizeCapability = "SynchronizeIdentities"
 	SynchronizeUsers       SynchronizeCapability = "SynchronizeUsers"
 	SynchronizeGroups      SynchronizeCapability = "SynchronizeGroups"
+	SynchronizeTenants     SynchronizeCapability = "SynchronizeTenants"
 )
 
 type SynchronizeRequest struct {
@@ -117,6 +118,19 @@ func ProviderSynchronizeWorkflow(ctx workflow.Context, syncReq SynchronizeReques
 			return true
 		}
 		return slices.Contains(syncReq.Requests, cap)
+	}
+
+	if shouldSync(SynchronizeTenants) {
+		syncCount++
+		workflow.Go(ctx, func(ctx workflow.Context) {
+			err := runSyncLoop[*SynchronizeTenantsRequest, SynchronizeTenantsResponse](
+				ctx,
+				syncReq.ProviderIdentifier,
+				SynchronizeTenants,
+				&SynchronizeTenantsRequest{},
+			)
+			errChan.Send(ctx, err)
+		})
 	}
 
 	// Synchronize Identities

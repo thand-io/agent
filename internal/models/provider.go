@@ -166,6 +166,7 @@ type ProviderImpl interface {
 	CanSynchronizePermissions() bool
 	CanSynchronizeResources() bool
 	CanSynchronizeIdentities() bool
+	CanSynchronizeTenants() bool
 	CanSynchronizeUsers() bool
 	CanSynchronizeGroups() bool
 

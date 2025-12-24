@@ -132,6 +132,17 @@ func Synchronize(
 	var mu sync.Mutex
 	var errs []error
 
+	if provider.CanSynchronizeTenants() {
+		// Synchronize Tenants
+		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeTenants, &SynchronizeTenantsRequest{},
+			func(ctx context.Context, req *SynchronizeTenantsRequest) (*SynchronizeTenantsResponse, error) {
+				return provider.SynchronizeTenants(ctx, req)
+			},
+			func(resp *SynchronizeTenantsResponse) {
+				provider.AddTenants(resp.Tenants...)
+			})
+	}
+
 	if provider.CanSynchronizeIdentities() {
 		// Synchronize Identities
 		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeIdentities, &SynchronizeIdentitiesRequest{},
