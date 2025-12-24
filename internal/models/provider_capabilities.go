@@ -27,8 +27,8 @@ const (
 	// Notifier capabilities
 	ProviderCapabilityNotifier ProviderCapability = "notifier" // Primary capability
 
-	// Account discovery capability
-	ProviderCapabilityAccounts ProviderCapability = "accounts"
+	// Tenant discovery capability
+	ProviderCapabilityTenants ProviderCapability = "tenants"
 )
 
 type RolesConfiguration = SynchronizableConfiguration
@@ -37,7 +37,7 @@ type ResourcesConfiguration = SynchronizableConfiguration
 type IdentitiesConfiguration = SynchronizableConfiguration
 type UsersConfiguration = SynchronizableConfiguration
 type GroupsConfiguration = SynchronizableConfiguration
-type AccountsConfiguration = SynchronizableConfiguration
+type TenantsConfiguration = SynchronizableConfiguration
 
 type SynchronizableConfiguration struct {
 	Synchronizable bool `json:"synchronizable,omitempty"`
@@ -141,8 +141,8 @@ type ProviderCapabilities struct {
 	Permissions  *PermissionsConfiguration  `json:"permissions,omitempty"`
 	Resources    *ResourcesConfiguration    `json:"resources,omitempty"`
 
-	// Account discovery capability
-	Accounts *AccountsConfiguration `json:"accounts,omitempty"`
+	// Tenant discovery capability
+	Tenants *TenantsConfiguration `json:"tenants,omitempty"`
 }
 
 func (pc *ProviderCapabilities) WithDefaultRolesConfiguration() *ProviderCapabilities {
@@ -190,8 +190,8 @@ func (pc *ProviderCapabilities) WithDefaultProvisioningConfiguration() *Provider
 	return pc
 }
 
-func (pc *ProviderCapabilities) WithDefaultAccountsConfiguration() *ProviderCapabilities {
-	pc.Accounts = NewSynchronizableCapability()
+func (pc *ProviderCapabilities) WithDefaultTenantsConfiguration() *ProviderCapabilities {
+	pc.Tenants = NewSynchronizableCapability()
 	return pc
 }
 
@@ -240,8 +240,8 @@ func (pc *ProviderCapabilities) WithProvisioningConfiguration(config Provisionin
 	return pc
 }
 
-func (pc *ProviderCapabilities) WithAccountsConfiguration(config AccountsConfiguration) *ProviderCapabilities {
-	pc.Accounts = &config
+func (pc *ProviderCapabilities) WithTenantsConfiguration(config TenantsConfiguration) *ProviderCapabilities {
+	pc.Tenants = &config
 	return pc
 }
 
@@ -275,8 +275,8 @@ func (pc *ProviderCapabilities) getCapabilities() map[ProviderCapability]Provide
 	if pc.Provisioning != nil {
 		configMap[ProviderCapabilityProvisioning] = pc.Provisioning
 	}
-	if pc.Accounts != nil {
-		configMap[ProviderCapabilityAccounts] = pc.Accounts
+	if pc.Tenants != nil {
+		configMap[ProviderCapabilityTenants] = pc.Tenants
 	}
 
 	return configMap
@@ -391,8 +391,8 @@ func (pc *ProviderCapabilities) Update(updates *ProviderCapabilities) {
 	if pc.Provisioning != nil && updates.Provisioning != nil {
 		updateDisable(pc.Provisioning, updates.Provisioning)
 	}
-	if pc.Accounts != nil && updates.Accounts != nil {
-		updateSync(pc.Accounts, updates.Accounts)
+	if pc.Tenants != nil && updates.Tenants != nil {
+		updateSync(pc.Tenants, updates.Tenants)
 	}
 }
 

@@ -3,8 +3,6 @@ package aws
 import (
 	"context"
 	"fmt"
-	"sync"
-	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -36,10 +34,6 @@ type awsProvider struct {
 	identityStoreClient *identitystore.Client
 	organizationsClient *organizations.Client // For account discovery
 
-	// Account discovery cache
-	mu                 sync.RWMutex
-	discoveredAccounts []models.Account
-	lastAccountSync    time.Time
 }
 
 func (p *awsProvider) Initialize(identifier string, provider models.Provider) error {

@@ -55,6 +55,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.15 // indirect
 	github.com/aws/aws-sdk-go-v2/service/kms v1.49.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/organizations v1.50.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.40.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.58.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/signin v1.0.3 // indirect

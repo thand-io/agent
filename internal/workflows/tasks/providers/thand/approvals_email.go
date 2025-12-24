@@ -46,6 +46,10 @@ func (a *approvalsNotifier) createApprovalEmailBody() (string, string) {
 		plainText.WriteString(fmt.Sprintf("Reason: %s\n", elevationReq.Reason))
 	}
 
+	if len(elevationReq.Tenants) > 0 {
+		plainText.WriteString(fmt.Sprintf("Tenants: %s\n", strings.Join(elevationReq.Tenants, ", ")))
+	}
+
 	if len(elevationReq.Identities) > 0 {
 
 		plainText.WriteString("\nTarget Identities:\n")
@@ -122,6 +126,10 @@ func (a *approvalsNotifier) createApprovalEmailBody() (string, string) {
 		"Duration":   elevationReq.Duration,
 		"Reason":     elevationReq.Reason,
 		"Identities": elevationReq.Identities,
+	}
+
+	if len(elevationReq.Tenants) > 0 {
+		data["Tenants"] = strings.Join(elevationReq.Tenants, ", ")
 	}
 
 	if len(notifyReq.Notifier.Message) > 0 {

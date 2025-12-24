@@ -85,6 +85,10 @@ func (a *authorizerNotifier) addAuthorizeRequestDetailsSection(blocks *[]slack.B
 		requestDetailsText.WriteString(fmt.Sprintf("- *Duration:* %s\n", elevateRequest.Duration))
 	}
 
+	if len(elevateRequest.Tenants) > 0 {
+		requestDetailsText.WriteString(fmt.Sprintf("- *Tenants:* %s\n", strings.Join(elevateRequest.Tenants, ", ")))
+	}
+
 	*blocks = append(*blocks, slack.NewSectionBlock(
 		slack.NewTextBlockObject(
 			slack.MarkdownType,

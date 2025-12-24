@@ -33,6 +33,15 @@ type RevokeRoleRequest struct {
 type RevokeRoleResponse struct {
 }
 
+type SynchronizeTenantsRequest struct {
+	Pagination *PaginationOptions `json:"pagination,omitempty"`
+}
+
+type SynchronizeTenantsResponse struct {
+	Pagination *PaginationOptions `json:"pagination,omitempty"`
+	Tenants    []ProviderTenant   `json:"tenants,omitempty"`
+}
+
 type SynchronizeRolesRequest struct {
 	Pagination *PaginationOptions `json:"pagination,omitempty"`
 }

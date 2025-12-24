@@ -220,6 +220,134 @@ func (s *Server) getProviderPermissions(c *gin.Context) {
 	})
 }
 
+// getProviderResources lists resources available in a provider
+//
+//	@Summary		List provider resources
+//	@Description	Get a list of resources available in a specific provider
+//	@Tags			providers
+//	@Accept			json
+//	@Produce		json
+//	@Param			provider	path		string								true	"Provider name"
+//	@Param			q			query		string								false	"Filter query"
+//	@Success		200			{object}	models.ProviderResourcesResponse		"Provider resources"
+//	@Failure		404			{object}	map[string]any				"Provider not found"
+//	@Failure		500			{object}	map[string]any				"Internal server error"
+//	@Router			/provider/{provider}/resources [get]
+//	@Security		BearerAuth
+func (s *Server) getProviderResources(c *gin.Context) {
+
+	providerName := c.Param("provider")
+
+	provider, foundProvider := s.Config.Providers.Definitions[providerName]
+
+	if !foundProvider {
+		s.getErrorPage(c, http.StatusNotFound, "Provider not found")
+		return
+	}
+
+	if provider.GetClient() == nil {
+		s.getErrorPage(c, http.StatusNotFound, "Provider has no client defined")
+		return
+	}
+
+	if !provider.GetClient().HasCapability(models.ProviderCapabilityResources) {
+		s.getErrorPage(c, http.StatusNotImplemented, "The provider does not implement resources")
+		return
+	}
+
+	query := c.Query("q")
+
+	searchRequest := &models.SearchRequest{
+		Limit: 10,
+	}
+
+	if len(query) > 0 {
+		searchRequest.Terms = []string{query}
+		if !strings.HasSuffix(query, "*") {
+			searchRequest.Query = query + "*"
+		} else {
+			searchRequest.Query = query
+		}
+	}
+
+	resources, err := provider.GetClient().ListResources(context.Background(), searchRequest)
+
+	if err != nil {
+		s.getErrorPage(c, http.StatusInternalServerError, "Failed to list resources", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, models.ProviderResourcesResponse{
+		Version:   "1.0",
+		Provider:  providerName,
+		Resources: resources,
+	})
+}
+
+// getProviderTenants lists tenants available in a provider
+//
+//	@Summary		List provider tenants
+//	@Description	Get a list of tenants available in a specific provider
+//	@Tags			providers
+//	@Accept			json
+//	@Produce		json
+//	@Param			provider	path		string								true	"Provider name"
+//	@Param			q			query		string								false	"Filter query"
+//	@Success		200			{object}	models.ProviderTenantsResponse		"Provider tenants"
+//	@Failure		404			{object}	map[string]any				"Provider not found"
+//	@Failure		500			{object}	map[string]any				"Internal server error"
+//	@Router			/provider/{provider}/tenants [get]
+//	@Security		BearerAuth
+func (s *Server) getProviderTenants(c *gin.Context) {
+
+	providerName := c.Param("provider")
+
+	provider, foundProvider := s.Config.Providers.Definitions[providerName]
+
+	if !foundProvider {
+		s.getErrorPage(c, http.StatusNotFound, "Provider not found")
+		return
+	}
+
+	if provider.GetClient() == nil {
+		s.getErrorPage(c, http.StatusNotFound, "Provider has no client defined")
+		return
+	}
+
+	if !provider.GetClient().HasCapability(models.ProviderCapabilityTenants) {
+		s.getErrorPage(c, http.StatusNotImplemented, "The provider does not implement tenants")
+		return
+	}
+
+	query := c.Query("q")
+
+	searchRequest := &models.SearchRequest{
+		Limit: 10,
+	}
+
+	if len(query) > 0 {
+		searchRequest.Terms = []string{query}
+		if !strings.HasSuffix(query, "*") {
+			searchRequest.Query = query + "*"
+		} else {
+			searchRequest.Query = query
+		}
+	}
+
+	tenants, err := provider.GetClient().ListTenants(context.Background(), searchRequest)
+
+	if err != nil {
+		s.getErrorPage(c, http.StatusInternalServerError, "Failed to list tenants", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, models.ProviderTenantsResponse{
+		Version:  "1.0",
+		Provider: providerName,
+		Tenants:  tenants,
+	})
+}
+
 func (s *Server) getAuthProvidersAsProviderResponse(authenticatedUser *models.Session) map[string]models.ProviderResponse {
 	return s.getProvidersAsProviderResponse(
 		authenticatedUser,
@@ -253,11 +381,6 @@ func (s *Server) getProvidersAsProviderResponse(
 		}
 
 		if authenticatedUser != nil && !provider.HasPermission(authenticatedUser.User) {
-			continue
-		}
-
-		// Skip providers not enabled for elevation when forElevation is true
-		if forElevation && !provider.CanElevate() {
 			continue
 		}
 

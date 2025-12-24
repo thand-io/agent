@@ -20,7 +20,7 @@ type ElevateStaticRequest struct {
 	Reason     string   `json:"reason" form:"reason" binding:"required"`
 	Duration   string   `json:"duration,omitempty" form:"duration,omitempty"`     // Duration in ISO 8601 format
 	Identities []string `json:"identities,omitempty" form:"identities,omitempty"` // Optional identities to elevate, if empty the requesting user is used
-	AccountID  string   `json:"account_id,omitempty" form:"account_id,omitempty"` // Optional account ID for multi-account providers
+	Tenants    []string `json:"tenants,omitempty" form:"tenants,omitempty"`       // Optional tenant IDs for multi-account providers
 
 	// Protected session
 	Session *LocalSession `json:"session,omitempty" form:"session,omitempty"`
@@ -34,6 +34,7 @@ func (r *ElevateStaticRequest) GetUrlParams() url.Values {
 		"duration":   {r.Duration},
 		"provider":   {r.Provider},
 		"identities": {strings.Join(r.Identities, ",")},
+		"tenants":    {strings.Join(r.Tenants, ",")},
 		"session":    {r.GetEncodedSession()}, // TODO provide the current auth session
 	}
 	return params
@@ -62,7 +63,7 @@ type ElevateRequest struct {
 	Reason        string        `json:"reason"`
 	Duration      string        `json:"duration,omitempty"`   // Duration in ISO 8601 format
 	Identities    []string      `json:"identities,omitempty"` // Optional identities to elevate, if empty the requesting user is used
-	AccountID     string        `json:"account_id,omitempty"` // Optional account ID for multi-account providers
+	Tenants       []string      `json:"tenants,omitempty"`    // Optional tenant IDs for multi-account providers
 	Session       *LocalSession `json:"session,omitempty"`
 }
 
@@ -83,7 +84,7 @@ func (e *ElevateRequest) AsMap() map[string]any {
 		"reason":        e.Reason,
 		"duration":      e.Duration,
 		"identities":    e.Identities,
-		"account_id":    e.AccountID, // NEW: Include AccountID in workflow context
+		"tenants":       e.Tenants,
 	}
 }
 

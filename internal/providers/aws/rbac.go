@@ -19,38 +19,20 @@ func (p *awsProvider) AuthorizeRole(
 		return nil, fmt.Errorf("user and role must be provided to authorize aws role")
 	}
 
+	// Determine target account: selected account or configured default
+	targetAccountID := p.GetAccountID()
+
+	if len(req.Tenant) > 0 {
+		// If a tenant is specified, use it as the target account ID
+		targetAccountID = req.Tenant
+	}
+
 	logrus.WithFields(logrus.Fields{
 		"req_user_email":    req.User.Email,
 		"req_user_source":   req.User.Source,
 		"req_user_username": req.User.Username,
-		"req_account_id":    req.AccountID,
-		"configured_acct":   p.GetAccountID(),
+		"account_id":        targetAccountID,
 	}).Info("AWS AuthorizeRole called")
-
-	// Determine target account: selected account or configured default
-	targetAccountID := p.GetAccountID()
-
-	if req.AccountID != "" {
-		targetAccountID = req.AccountID
-
-		// Validate account exists if discovery is enabled
-		if p.HasCapability(models.ProviderCapabilityAccounts) {
-			found := false
-			for _, account := range p.GetDiscoveredAccounts() {
-				if account.ID == req.AccountID {
-					found = true
-					break
-				}
-			}
-			if !found {
-				return nil, fmt.Errorf("account %s not found or not accessible", req.AccountID)
-			}
-		}
-
-		logrus.WithField("target_account_id", targetAccountID).Info("Using selected account for authorization")
-	} else {
-		logrus.WithField("target_account_id", targetAccountID).Info("Using configured default account for authorization")
-	}
 
 	// Determine if we should use IAM Identity Center or traditional IAM
 	// For now, detect based on the user's source or configuration

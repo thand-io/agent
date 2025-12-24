@@ -108,7 +108,8 @@ func (t *authorizeFunction) validateAndParseRequests(
 	if authRequest.RoleRequest == nil {
 		authRequest.RoleRequest = &models.RoleRequest{}
 	}
-	authRequest.RoleRequest.AccountID = elevationRequest.AccountID
+
+	authRequest.RoleRequest.Tenant = elevationRequest.Tenants[0]
 
 	if !authRequest.IsValid() {
 		logrus.Infoln("No revocation state provided. Just handling via the cleanup state")

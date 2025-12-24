@@ -445,7 +445,6 @@ func (s *Server) setupRoutes(router *gin.Engine) {
 			api.POST("/roles/evaluate", s.postEvaluateRole)
 			api.GET("/workflows", s.getWorkflows)
 			api.GET("/providers", s.getProviders)
-			api.GET("/accounts", s.getAccounts)
 
 			api.GET("/role/:role", s.getRoleByName)
 			api.GET("/workflow/:name", s.getWorkflowByName)
@@ -453,6 +452,8 @@ func (s *Server) setupRoutes(router *gin.Engine) {
 			api.GET("/provider/:provider/permissions", s.getProviderPermissions)
 			api.GET("/provider/:provider/roles", s.getProviderRoles)
 			api.GET("/provider/:provider/identities", s.getProviderIdentities)
+			api.GET("/provider/:provider/resources", s.getProviderResources)
+			api.GET("/provider/:provider/tenants", s.getProviderTenants)
 			api.POST("/provider/:provider/authorizeSession", s.postProviderAuthorizeSession)
 
 			api.GET("/identities", s.getIdentities)

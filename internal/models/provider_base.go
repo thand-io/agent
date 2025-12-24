@@ -1,7 +1,6 @@
 package models
 
 import (
-	"context"
 	"strings"
 	"sync"
 
@@ -22,6 +21,7 @@ type BaseProvider struct {
 	// Add other common fields if necessary
 	identity *IdentitySupport
 	rbac     *RBACSupport
+	tenants  *TenantsSupport
 }
 
 type IdentitySupport struct {
@@ -50,6 +50,15 @@ type RBACSupport struct {
 	resources      []ProviderResource
 	resourcesMap   map[string]*ProviderResource // map is a pointer back to the resources list
 	resourcesIndex bleve.Index
+}
+
+type TenantsSupport struct {
+	mu sync.RWMutex
+
+	// Tenant management
+	tenants      []ProviderTenant
+	tenantsMap   map[string]*ProviderTenant
+	tenantsIndex bleve.Index
 }
 
 func NewBaseProvider(identifier string, provider Provider, capabilities *ProviderCapabilities) *BaseProvider {
@@ -102,6 +111,16 @@ func NewBaseProvider(identifier string, provider Provider, capabilities *Provide
 
 			resources:    make([]ProviderResource, 0),
 			resourcesMap: make(map[string]*ProviderResource),
+		}
+	}
+
+	if base.HasAnyCapability(
+		ProviderCapabilityTenants,
+	) {
+
+		base.tenants = &TenantsSupport{
+			tenants:    make([]ProviderTenant, 0),
+			tenantsMap: make(map[string]*ProviderTenant),
 		}
 	}
 
@@ -444,36 +463,7 @@ func (p *BaseProvider) GetProvider() string {
 	return p.provider
 }
 
-func (p *BaseProvider) SetProviderWrapper(wrapper *Provider) {
-	p.providerWrapper = wrapper
-}
-
-func (p *BaseProvider) GetProviderWrapper() *Provider {
-	return p.providerWrapper
-}
-
 func (p *BaseProvider) Initialize(identifier string, provider Provider) error {
 	// Initialize the provider
 	return nil
-}
-
-// Default ProviderAccountDiscovery implementation (no-op)
-// Providers that support account discovery should override these methods
-
-func (p *BaseProvider) DiscoverAccounts(ctx context.Context, req *DiscoverAccountsRequest) (*DiscoverAccountsResponse, error) {
-	// Default implementation returns empty list
-	// Providers implementing account discovery should override this
-	return &DiscoverAccountsResponse{Accounts: []Account{}}, nil
-}
-
-func (p *BaseProvider) GetDiscoveredAccounts() []Account {
-	// Default implementation returns empty list
-	// Providers implementing account discovery should override this
-	return []Account{}
-}
-
-func (p *BaseProvider) RefreshAccounts(ctx context.Context) error {
-	// Default implementation returns not implemented error
-	// Providers implementing account discovery should override this
-	return ErrNotImplemented
 }

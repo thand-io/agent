@@ -11,6 +11,12 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type ProviderResourcesResponse struct {
+	Version   string                           `json:"version"`
+	Provider  string                           `json:"provider"`
+	Resources []SearchResult[ProviderResource] `json:"resources"`
+}
+
 func (p *BaseProvider) SynchronizeResources(ctx context.Context, req *SynchronizeResourcesRequest) (*SynchronizeResourcesResponse, error) {
 	return nil, ErrNotImplemented
 }

@@ -278,7 +278,7 @@ func (c *Config) initializeSingleProvider(providerKey string, p *models.Provider
 	}
 
 	p.SetClient(impl)
-	impl.SetProviderWrapper(p) // Set bidirectional reference for accessing config from provider
+
 	return nil
 }
 
