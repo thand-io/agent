@@ -39,7 +39,7 @@ func (p *awsProvider) SynchronizeTenants(ctx context.Context, req *models.Synchr
 
 	if req.Pagination == nil {
 		req.Pagination = &models.PaginationOptions{
-			PageSize: 100,
+			PageSize: 10,
 		}
 	}
 

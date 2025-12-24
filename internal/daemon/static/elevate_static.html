@@ -647,6 +647,10 @@
                         if (Array.isArray(tenantsData)) {
                             const tenantsMap = {};
                             tenantsData.forEach((tenant, index) => {
+                                // Unwrap _source if present
+                                if (tenant._source) {
+                                    tenant = tenant._source;
+                                }
                                 // Prefer stable identifiers as keys; fall back to index if needed.
                                 const key = tenant.id || tenant.key || tenant.name || String(index);
                                 tenantsMap[key] = tenant;
