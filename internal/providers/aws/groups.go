@@ -90,8 +90,9 @@ func (p *awsProvider) SynchronizeGroups(ctx context.Context, req *models.Synchro
 		}
 
 		identity := models.Identity{
-			ID:    groupId,
-			Label: displayName,
+			ID:     groupId,
+			Label:  displayName,
+			Tenant: req.Tenant,
 			Group: &models.Group{
 				ID:   groupId,
 				Name: displayName,

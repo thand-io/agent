@@ -43,6 +43,7 @@ type SynchronizeTenantsResponse struct {
 }
 
 type SynchronizeRolesRequest struct {
+	Tenant     string             `json:"tenant,omitempty"`
 	Pagination *PaginationOptions `json:"pagination,omitempty"`
 }
 
@@ -52,6 +53,7 @@ type SynchronizeRolesResponse struct {
 }
 
 type SynchronizePermissionsRequest struct {
+	Tenant     string             `json:"tenant,omitempty"`
 	Pagination *PaginationOptions `json:"pagination,omitempty"`
 }
 
@@ -61,6 +63,7 @@ type SynchronizePermissionsResponse struct {
 }
 
 type SynchronizeUsersRequest struct {
+	Tenant     string             `json:"tenant,omitempty"`
 	Pagination *PaginationOptions `json:"pagination,omitempty"`
 }
 
@@ -70,6 +73,7 @@ type SynchronizeUsersResponse struct {
 }
 
 type SynchronizeGroupsRequest struct {
+	Tenant     string             `json:"tenant,omitempty"`
 	Pagination *PaginationOptions `json:"pagination,omitempty"`
 }
 
@@ -79,6 +83,7 @@ type SynchronizeGroupsResponse struct {
 }
 
 type SynchronizeResourcesRequest struct {
+	Tenant     string             `json:"tenant,omitempty"`
 	Pagination *PaginationOptions `json:"pagination,omitempty"`
 }
 
@@ -88,6 +93,7 @@ type SynchronizeResourcesResponse struct {
 }
 
 type SynchronizeIdentitiesRequest struct {
+	Tenant     string             `json:"tenant,omitempty"`
 	Pagination *PaginationOptions `json:"pagination,omitempty"`
 }
 

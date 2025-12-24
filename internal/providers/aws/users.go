@@ -103,8 +103,9 @@ func (p *awsProvider) SynchronizeUsers(ctx context.Context, req *models.Synchron
 		}
 
 		identity := models.Identity{
-			ID:    userId,
-			Label: displayName,
+			ID:     userId,
+			Label:  displayName,
+			Tenant: req.Tenant,
 			User: &models.User{
 				ID:       userId,
 				Username: userName,
