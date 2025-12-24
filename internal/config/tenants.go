@@ -54,6 +54,7 @@ func (c *Config) GetTenant(tenant string) (*models.ProviderTenant, error) {
 
 	// Query all providers in parallel and return the first match
 	var wg sync.WaitGroup
+	var closeOnce sync.Once
 	resultChan := make(chan *models.ProviderTenant, len(providerMap))
 	doneChan := make(chan struct{})
 
@@ -91,7 +92,7 @@ func (c *Config) GetTenant(tenant string) (*models.ProviderTenant, error) {
 	// If channel is closed and empty, result will be nil and ok will be false
 	for result := range resultChan {
 		if result != nil {
-			close(doneChan)
+			closeOnce.Do(func() { close(doneChan) })
 			return result, nil
 		}
 	}
