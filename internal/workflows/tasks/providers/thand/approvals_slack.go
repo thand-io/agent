@@ -86,7 +86,17 @@ func (a *approvalsNotifier) addRequestDetailsSection(blocks *[]slack.Block, elev
 	}
 
 	if len(elevateRequest.Providers) > 0 {
-		requestDetailsText.WriteString(fmt.Sprintf("- *Providers:* %s\n", strings.Join(elevateRequest.Providers, ", ")))
+
+		// Resolve provider names if possible
+		var providerNames []string
+		for _, providerID := range elevateRequest.Providers {
+			if provider, err := a.config.GetProviderByName(providerID); err == nil && provider != nil {
+				providerNames = append(providerNames, fmt.Sprintf("%s (%s)", provider.Name, providerID))
+			} else {
+				providerNames = append(providerNames, providerID)
+			}
+		}
+		requestDetailsText.WriteString(fmt.Sprintf("- *Providers:* %s\n", strings.Join(providerNames, ", ")))
 	}
 
 	if len(elevateRequest.Reason) > 0 {
@@ -98,7 +108,18 @@ func (a *approvalsNotifier) addRequestDetailsSection(blocks *[]slack.Block, elev
 	}
 
 	if len(elevateRequest.Tenants) > 0 {
-		requestDetailsText.WriteString(fmt.Sprintf("- *Tenants:* %s\n", strings.Join(elevateRequest.Tenants, ", ")))
+
+		// Resolve tenant names if possible
+		var tenantNames []string
+		for _, tenantID := range elevateRequest.Tenants {
+			if tenant, err := a.config.GetTenant(tenantID); err == nil && tenant != nil {
+				tenantNames = append(tenantNames, tenant.String())
+			} else {
+				tenantNames = append(tenantNames, tenantID)
+			}
+		}
+
+		requestDetailsText.WriteString(fmt.Sprintf("- *Tenants:* %s\n", strings.Join(tenantNames, ", ")))
 	}
 
 	*blocks = append(*blocks, slack.NewSectionBlock(

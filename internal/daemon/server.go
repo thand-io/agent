@@ -445,6 +445,7 @@ func (s *Server) setupRoutes(router *gin.Engine) {
 			api.POST("/roles/evaluate", s.postEvaluateRole)
 			api.GET("/workflows", s.getWorkflows)
 			api.GET("/providers", s.getProviders)
+			api.GET("/identities", s.getIdentities)
 
 			api.GET("/role/:role", s.getRoleByName)
 			api.GET("/workflow/:name", s.getWorkflowByName)

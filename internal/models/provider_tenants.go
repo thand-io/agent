@@ -20,6 +20,10 @@ type ProviderTenant struct {
 	Name string `json:"name"`
 }
 
+func (p ProviderTenant) String() string {
+	return fmt.Sprintf("%s (%s)", p.Name, p.ID)
+}
+
 type ProviderTenants interface {
 	GetTenant(ctx context.Context, tenant string) (*ProviderTenant, error)
 	ListTenants(ctx context.Context, searchRequest *SearchRequest) ([]SearchResult[ProviderTenant], error)
