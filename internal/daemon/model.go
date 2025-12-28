@@ -3,7 +3,8 @@ package daemon
 import "github.com/thand-io/agent/internal/models"
 
 type SimpleServices struct {
-	HasTemporal bool
+	HasTemporal           bool `json:"temporal,omitempty" yaml:"temporal"`
+	HasLargeLanguageModel bool `json:"llm,omitempty" yaml:"llm"`
 }
 
 type SimpleConfig struct {
