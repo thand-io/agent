@@ -30,6 +30,7 @@
                     </a>
                 </div>
 
+                {{if .Config.Services.HasLargeLanguageModel}}
                 <div class="method-option">
                     <a href="/elevate/llm" class="method-button"
                        @mouseenter="description = aiDesc" 
@@ -52,6 +53,7 @@
                         </div>
                     </a>
                 </div>
+                {{end}}
 
                 <div class="method-option">
                     <a href="/elevate/dynamic" class="method-button"

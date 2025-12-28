@@ -132,6 +132,12 @@ func (s *Server) GetTemplateData(c *gin.Context) TemplateData {
 		hasTemporal = true
 	}
 
+	hasAI := false
+
+	if s.Config.HasLargeLanguageModel() {
+		hasAI = true
+	}
+
 	return TemplateData{
 		Config: SimpleConfig{
 			ApiBasePath: s.Config.GetApiBasePath(),
@@ -148,7 +154,8 @@ func (s *Server) GetTemplateData(c *gin.Context) TemplateData {
 				},
 			},
 			Services: SimpleServices{
-				HasTemporal: hasTemporal,
+				HasTemporal:           hasTemporal,
+				HasLargeLanguageModel: hasAI,
 			},
 		},
 		ServiceName: serverName,
