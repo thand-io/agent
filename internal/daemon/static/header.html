@@ -93,6 +93,22 @@
                     this.open = false;
                 },
                 
+                async logout() {
+                    try {
+                        const response = await fetch('{{.Config.ApiBasePath}}/sessions', {
+                            method: 'DELETE'
+                        });
+                        
+                        if (response.ok) {
+                            window.location.reload();
+                        } else {
+                            console.error('Failed to logout');
+                        }
+                    } catch (error) {
+                        console.error('Error during logout:', error);
+                    }
+                },
+                
                 init() {
                     this.fetchSessions();
                     setInterval(() => this.fetchSessions(), 60000);
@@ -135,6 +151,7 @@
                         <div class="dropdown-menu" 
                              :class="{ 'show': open }">
                             <a href="/user" class="dropdown-item">Profile</a>
+                            <button class="dropdown-item" @click="logout()">Logout all</button>
                             <div class="dropdown-divider"></div>
                             <template x-for="session in sessions" :key="session.name">
                                 <button class="dropdown-item session-item"

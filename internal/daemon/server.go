@@ -422,11 +422,14 @@ func (s *Server) setupRoutes(router *gin.Engine) {
 			api.GET("/session/:provider", s.getSessionByProvider)
 			api.POST("/sessions", s.postSession)
 			api.DELETE("/session/:provider", s.deleteSession)
+			api.DELETE("/sessions", s.deleteSessions)
 
 		} else if s.Config.IsServer() {
 
 			// Session management
 			api.PUT("/sessions", s.putSession)
+			api.DELETE("/session/:provider", s.deleteSession)
+			api.DELETE("/sessions", s.deleteSessions)
 
 			// Register handlers
 			api.POST("/preflight", func(c *gin.Context) {

@@ -361,15 +361,144 @@ func (s *Server) deleteSession(c *gin.Context) {
 		return
 	}
 
-	sessionMgr := sessionManager.GetSessionManager()
-	err := sessionMgr.RemoveSession(s.Config.GetLoginServerHostname(), provider)
+	logrus.WithFields(logrus.Fields{
+		"provider": provider,
+	}).Debugln("Deleting session for provider")
 
-	if err != nil {
-		s.getErrorPage(c, http.StatusInternalServerError, "Failed to delete session", err)
+	if s.Config.IsServer() {
+		// Server mode: Clear all cookies for this provider
+
+		// Clear the provider-specific cookie
+		providerCookie := sessions.DefaultMany(c, CreateCookieName(provider))
+		providerCookie.Clear()
+		err := providerCookie.Save()
+
+		if err != nil {
+			s.getErrorPage(c, http.StatusInternalServerError, "Failed to clear provider cookie", err)
+			return
+		}
+
+		// If this was the default provider, clear the default setting
+		defaultCookie := sessions.DefaultMany(c, ThandCookieName)
+		if activeProvider := defaultCookie.Get(ThandCookieAttributeActiveName); activeProvider != nil {
+			if activeProviderStr, ok := activeProvider.(string); ok && activeProviderStr == provider {
+				defaultCookie.Delete(ThandCookieAttributeActiveName)
+				err = defaultCookie.Save()
+				if err != nil {
+					s.getErrorPage(c, http.StatusInternalServerError, "Failed to clear default provider", err)
+					return
+				}
+			}
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Session deleted successfully",
+		})
+		return
+
+	} else if s.Config.IsAgent() {
+		// Agent mode: Delete local session via session manager
+		sessionMgr := sessionManager.GetSessionManager()
+		err := sessionMgr.RemoveSession(s.Config.GetLoginServerHostname(), provider)
+
+		if err != nil {
+			s.getErrorPage(c, http.StatusInternalServerError, "Failed to delete session", err)
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Session deleted successfully",
+		})
+		return
+
+	} else {
+		s.getErrorPage(c, http.StatusBadRequest, "Delete session can only be called in agent or server mode")
 		return
 	}
+}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Session deleted successfully",
-	})
+// deleteSessions removes all sessions
+//
+//	@Summary		Delete all sessions
+//	@Description	Remove all sessions for the user
+//	@Tags			sessions
+//	@Accept			json
+//	@Produce		json
+//	@Success		200			{object}	map[string]any	"All sessions deleted successfully"
+//	@Failure		400			{object}	map[string]any	"Bad request"
+//	@Failure		500			{object}	map[string]any	"Internal server error"
+//	@Router			/sessions [delete]
+func (s *Server) deleteSessions(c *gin.Context) {
+
+	logrus.Debugln("Deleting all sessions")
+
+	if s.Config.IsServer() {
+		// Server mode: Get all user sessions and clear all cookies
+
+		remoteSessions, err := s.getUserSessions(c)
+		if err != nil {
+			s.getErrorPage(c, http.StatusInternalServerError, "Failed to get user sessions", err)
+			return
+		}
+
+		// Clear provider-specific cookies for each session
+		for providerName := range remoteSessions {
+			providerCookie := sessions.DefaultMany(c, CreateCookieName(providerName))
+			providerCookie.Clear()
+			err := providerCookie.Save()
+			if err != nil {
+				logrus.WithFields(logrus.Fields{
+					"provider": providerName,
+					"error":    err,
+				}).Warnln("Failed to clear provider cookie")
+			}
+		}
+
+		// Clear the default provider setting
+		defaultCookie := sessions.DefaultMany(c, ThandCookieName)
+		defaultCookie.Clear()
+		err = defaultCookie.Save()
+		if err != nil {
+			s.getErrorPage(c, http.StatusInternalServerError, "Failed to clear default cookie", err)
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message": "All sessions deleted successfully",
+		})
+		return
+
+	} else if s.Config.IsAgent() {
+		// Agent mode: Delete all local sessions via session manager
+		loginServer := s.Config.GetLoginServerHostname()
+		sessionMgr := sessionManager.GetSessionManager()
+		sessionMgr.Load(loginServer)
+
+		// Get all sessions
+		loginServerData, err := sessionMgr.GetLoginServer(loginServer)
+		if err != nil {
+			s.getErrorPage(c, http.StatusInternalServerError, "Failed to get sessions", err)
+			return
+		}
+
+		// Delete each session
+		for providerName := range loginServerData.Sessions {
+			err := sessionMgr.RemoveSession(loginServer, providerName)
+			if err != nil {
+				logrus.WithFields(logrus.Fields{
+					"provider": providerName,
+					"error":    err,
+				}).Warnln("Failed to delete session")
+			}
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message": "All sessions deleted successfully",
+		})
+		return
+
+	} else {
+		s.getErrorPage(c, http.StatusBadRequest, "Delete sessions can only be called in agent or server mode")
+		return
+	}
 }
