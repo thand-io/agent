@@ -4,11 +4,12 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
-	"github.com/thand-io/agent/internal/sessions"
+	sessionManager "github.com/thand-io/agent/internal/sessions"
 )
 
 // postSession creates a new session
@@ -121,8 +122,8 @@ func (s *Server) postSession(c *gin.Context) {
 	}).Debugln("Creating session")
 
 	// Now lets store the session in the users local session manager.
-	sessionManager := sessions.GetSessionManager()
-	err = sessionManager.AddSession(
+	sessionMgr := sessionManager.GetSessionManager()
+	err = sessionMgr.AddSession(
 		loginServer,
 		sessionCreateRequest.Provider,
 		session,
@@ -146,11 +147,20 @@ func (s *Server) postSession(c *gin.Context) {
 //	@Tags			sessions
 //	@Accept			json
 //	@Produce		json
-//	@Success		200	{object}	sessions.LoginServer		"List of sessions"
+//	@Success		200	{object}	models.SessionsResponse		"List of sessions with default provider"
 //	@Failure		400	{object}	map[string]any	"Bad request"
 //	@Failure		500	{object}	map[string]any	"Internal server error"
 //	@Router			/sessions [get]
 func (s *Server) getSessions(c *gin.Context) {
+
+	// Get the default provider from cookie
+	defaultProvider := ""
+	defaultCookie := sessions.DefaultMany(c, ThandCookieName)
+	if provider := defaultCookie.Get(ThandCookieAttributeActiveName); provider != nil {
+		if providerStr, ok := provider.(string); ok {
+			defaultProvider = providerStr
+		}
+	}
 
 	if s.Config.IsServer() {
 
@@ -171,13 +181,14 @@ func (s *Server) getSessions(c *gin.Context) {
 			}
 		}
 
-		sessionsList := sessions.LoginServer{
-			Version:   "1",
-			Timestamp: time.Now(),
-			Sessions:  foundSessions,
+		sessionsResponse := models.SessionsResponse{
+			Version:         "1",
+			Timestamp:       time.Now(),
+			Sessions:        foundSessions,
+			DefaultProvider: defaultProvider,
 		}
 
-		c.JSON(http.StatusOK, sessionsList)
+		c.JSON(http.StatusOK, sessionsResponse)
 		return
 
 	} else if s.Config.IsAgent() {
@@ -188,16 +199,23 @@ func (s *Server) getSessions(c *gin.Context) {
 			"loginServer": loginServer,
 		}).Debugln("Fetching sessions")
 
-		sessionManager := sessions.GetSessionManager()
-		sessionManager.Load(loginServer)
-		sessionsList, err := sessionManager.GetLoginServer(loginServer)
+		sessionMgr := sessionManager.GetSessionManager()
+		sessionMgr.Load(loginServer)
+		sessionsList, err := sessionMgr.GetLoginServer(loginServer)
 
 		if err != nil {
 			s.getErrorPage(c, http.StatusInternalServerError, "Failed to list sessions", err)
 			return
 		}
 
-		c.JSON(http.StatusOK, sessionsList)
+		sessionsResponse := models.SessionsResponse{
+			Version:         sessionsList.Version,
+			Timestamp:       sessionsList.Timestamp,
+			Sessions:        sessionsList.Sessions,
+			DefaultProvider: defaultProvider,
+		}
+
+		c.JSON(http.StatusOK, sessionsResponse)
 		return
 
 	} else {
@@ -235,9 +253,9 @@ func (s *Server) getSessionByProvider(c *gin.Context) {
 		"provider":    provider,
 	}).Debugln("Fetching session for provider")
 
-	sessionManager := sessions.GetSessionManager()
-	sessionManager.Load(loginServer)
-	session, err := sessionManager.GetSession(loginServer, provider)
+	sessionMgr := sessionManager.GetSessionManager()
+	sessionMgr.Load(loginServer)
+	session, err := sessionMgr.GetSession(loginServer, provider)
 
 	if err != nil {
 		s.getErrorPage(c, http.StatusInternalServerError, "Failed to get session", err)
@@ -251,6 +269,75 @@ func (s *Server) getSessionByProvider(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"session": session,
+	})
+}
+
+// putSession sets the default session provider
+//
+//	@Summary		Set default session provider
+//	@Description	Update the default session provider for the user
+//	@Tags			sessions
+//	@Accept			json
+//	@Produce		json
+//	@Param		request	body		models.SessionSetDefaultRequest	true	"Provider selection request"
+//	@Success		200		{object}	map[string]any		"Default provider updated successfully"
+//	@Failure		400		{object}	map[string]any		"Bad request"
+//	@Failure		404		{object}	map[string]any		"Provider session not found"
+//	@Failure		500		{object}	map[string]any		"Internal server error"
+//	@Router			/sessions [put]
+func (s *Server) putSession(c *gin.Context) {
+
+	// This endpoint can only be called in server mode
+	if !s.Config.IsServer() {
+		s.getErrorPage(c, http.StatusBadRequest, "Setting default session can only be called in server mode")
+		return
+	}
+
+	// Parse the request body to get the provider name
+	var requestBody models.SessionSetDefaultRequest
+	if err := c.ShouldBindJSON(&requestBody); err != nil {
+		s.getErrorPage(c, http.StatusBadRequest, "Failed to parse request body", err)
+		return
+	}
+
+	provider := requestBody.Provider
+
+	logrus.WithFields(logrus.Fields{
+		"provider": provider,
+	}).Debugln("Setting default session provider")
+
+	// Verify that the user has an active session for this provider
+	remoteSessions, err := s.getUserSessions(c)
+	if err != nil {
+		s.getErrorPage(c, http.StatusInternalServerError, "Failed to verify session", err)
+		return
+	}
+
+	session, exists := remoteSessions[provider]
+	if !exists {
+		s.getErrorPage(c, http.StatusNotFound, "No active session found for provider")
+		return
+	}
+
+	// Validate that the session is not expired
+	if session.Expiry.Before(time.Now()) {
+		s.getErrorPage(c, http.StatusBadRequest, "Session for this provider has expired")
+		return
+	}
+
+	// Update the default provider cookie
+	defaultCookie := sessions.DefaultMany(c, ThandCookieName)
+	defaultCookie.Set(ThandCookieAttributeActiveName, provider)
+	err = defaultCookie.Save()
+
+	if err != nil {
+		s.getErrorPage(c, http.StatusInternalServerError, "Failed to save default provider", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":  "Default provider updated successfully",
+		"provider": provider,
 	})
 }
 
@@ -274,8 +361,8 @@ func (s *Server) deleteSession(c *gin.Context) {
 		return
 	}
 
-	sessionManager := sessions.GetSessionManager()
-	err := sessionManager.RemoveSession(s.Config.GetLoginServerHostname(), provider)
+	sessionMgr := sessionManager.GetSessionManager()
+	err := sessionMgr.RemoveSession(s.Config.GetLoginServerHostname(), provider)
 
 	if err != nil {
 		s.getErrorPage(c, http.StatusInternalServerError, "Failed to delete session", err)

@@ -76,6 +76,17 @@ type SessionCreateRequest struct {
 	Session  string `json:"session" binding:"required"`  // Encoded session token
 }
 
+type SessionSetDefaultRequest struct {
+	Provider string `json:"provider" binding:"required"` // Provider ID to set as default
+}
+
+type SessionsResponse struct {
+	Version         string                  `json:"version"`         // Version of the response format
+	Timestamp       time.Time               `json:"timestamp"`       // Timestamp of the response
+	Sessions        map[string]LocalSession `json:"sessions"`        // Map of provider name to session
+	DefaultProvider string                  `json:"defaultProvider"` // Current default provider from cookie
+}
+
 // Session stored on the users local system
 type LocalSession struct {
 	Version  int       `json:"version,omitempty" yaml:"version"`      // Version of the session config

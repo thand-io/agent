@@ -7,6 +7,7 @@
             Alpine.data('userDropdown', () => ({
                 open: false,
                 sessions: [],
+                defaultProvider: '',
                 
                 async fetchSessions() {
                     try {
@@ -14,15 +15,37 @@
                         if (response.ok) {
                             const data = await response.json();
                             console.log('Sessions API response:', data);
+                            this.defaultProvider = data.defaultProvider || '';
                             this.sessions = Object.entries(data.sessions || {}).map(([name, session]) => ({
                                 name,
                                 expiry: session.expiry,
                                 expired: new Date(session.expiry) < new Date()
                             }));
                             console.log('Parsed sessions:', this.sessions);
+                            console.log('Default provider:', this.defaultProvider);
                         }
                     } catch (error) {
                         console.error('Failed to fetch sessions:', error);
+                    }
+                },
+                
+                async setDefaultSession(sessionName) {
+                    try {
+                        const response = await fetch('{{.Config.ApiBasePath}}/sessions', {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ provider: sessionName })
+                        });
+                        
+                        if (response.ok) {
+                            window.location.reload();
+                        } else {
+                            console.error('Failed to update default session');
+                        }
+                    } catch (error) {
+                        console.error('Error updating default session:', error);
                     }
                 },
                 
@@ -52,6 +75,10 @@
                     return expired ? 'error' : 'healthy';
                 },
                 
+                isDefaultSession(sessionName) {
+                    return this.defaultProvider === sessionName;
+                },
+                
                 handleButtonClick() {
                     if (this.hasMultipleSessions) {
                         this.open = !this.open;
@@ -60,8 +87,9 @@
                     }
                 },
                 
-                selectSession(sessionName) {
+                async selectSession(sessionName) {
                     console.log('Selected session:', sessionName);
+                    await this.setDefaultSession(sessionName);
                     this.open = false;
                 },
                 
@@ -110,12 +138,15 @@
                             <div class="dropdown-divider"></div>
                             <template x-for="session in sessions" :key="session.name">
                                 <button class="dropdown-item session-item"
-                                        :class="{ 'expired': session.expired }"
+                                        :class="{ 'expired': session.expired, 'default-session': isDefaultSession(session.name) }"
                                         @click="selectSession(session.name)">
                                     <div class="session-info">
                                         <div class="status-dot" :class="getSessionStatusClass(session.expired)"></div>
                                         <div class="session-details">
-                                            <div class="session-name" x-text="session.name"></div>
+                                            <div class="session-name">
+                                                <span x-text="session.name"></span>
+                                                <span x-show="isDefaultSession(session.name)" class="default-badge">Default</span>
+                                            </div>
                                             <div class="session-expiry" x-text="formatExpiry(session.expiry, session.expired)"></div>
                                         </div>
                                     </div>

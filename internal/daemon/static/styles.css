@@ -235,6 +235,14 @@ nav {
     opacity: 0.6;
 }
 
+.nav-right .user-dropdown .session-item.default-session {
+    background-color: hsl(var(--secondary) / 0.5);
+}
+
+.nav-right .user-dropdown .session-item.default-session:hover {
+    background-color: hsl(var(--secondary) / 0.7);
+}
+
 .nav-right .user-dropdown .session-info {
     display: flex;
     align-items: flex-start;
@@ -255,6 +263,20 @@ nav {
 
 .nav-right .user-dropdown .session-name {
     font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.nav-right .user-dropdown .default-badge {
+    display: inline-block;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.625rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    background-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    border-radius: 0.25rem;
 }
 
 .nav-right .user-dropdown .session-expiry {

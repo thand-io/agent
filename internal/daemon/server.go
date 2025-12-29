@@ -425,6 +425,9 @@ func (s *Server) setupRoutes(router *gin.Engine) {
 
 		} else if s.Config.IsServer() {
 
+			// Session management
+			api.PUT("/sessions", s.putSession)
+
 			// Register handlers
 			api.POST("/preflight", func(c *gin.Context) {
 				// Just a stub for now
