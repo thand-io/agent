@@ -11,18 +11,17 @@
                 
                 async fetchSessions() {
                     try {
-                        const response = await fetch('{{.Config.ApiBasePath}}/sessions');
+                        const response = await fetch('{{.Config.ApiBasePath}}/sessions', {
+                            credentials: 'include'
+                        });
                         if (response.ok) {
                             const data = await response.json();
-                            console.log('Sessions API response:', data);
                             this.defaultProvider = data.defaultProvider || '';
                             this.sessions = Object.entries(data.sessions || {}).map(([name, session]) => ({
                                 name,
                                 expiry: session.expiry,
                                 expired: new Date(session.expiry) < new Date()
                             }));
-                            console.log('Parsed sessions:', this.sessions);
-                            console.log('Default provider:', this.defaultProvider);
                         }
                     } catch (error) {
                         console.error('Failed to fetch sessions:', error);
@@ -36,7 +35,8 @@
                             headers: {
                                 'Content-Type': 'application/json',
                             },
-                            body: JSON.stringify({ provider: sessionName })
+                            body: JSON.stringify({ provider: sessionName }),
+                            credentials: 'include'
                         });
                         
                         if (response.ok) {
@@ -96,7 +96,8 @@
                 async logout() {
                     try {
                         const response = await fetch('{{.Config.ApiBasePath}}/sessions', {
-                            method: 'DELETE'
+                            method: 'DELETE',
+                            credentials: 'include'
                         });
                         
                         if (response.ok) {
