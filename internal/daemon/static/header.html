@@ -1,6 +1,79 @@
 {{define "header"}}
 {{template "head" .}}
 <body>
+    {{if .User}}
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('userDropdown', () => ({
+                open: false,
+                sessions: [],
+                
+                async fetchSessions() {
+                    try {
+                        const response = await fetch('{{.Config.ApiBasePath}}/sessions');
+                        if (response.ok) {
+                            const data = await response.json();
+                            console.log('Sessions API response:', data);
+                            this.sessions = Object.entries(data.sessions || {}).map(([name, session]) => ({
+                                name,
+                                expiry: session.expiry,
+                                expired: new Date(session.expiry) < new Date()
+                            }));
+                            console.log('Parsed sessions:', this.sessions);
+                        }
+                    } catch (error) {
+                        console.error('Failed to fetch sessions:', error);
+                    }
+                },
+                
+                get hasActiveSessions() {
+                    return this.sessions.length > 0;
+                },
+                
+                get hasMultipleSessions() {
+                    return this.sessions.length >= 2;
+                },
+                
+                get statusClass() {
+                    return this.hasActiveSessions ? 'status-active' : 'status-inactive';
+                },
+                
+                get statusTitle() {
+                    return this.hasActiveSessions 
+                        ? `${this.sessions.length} active session${this.sessions.length > 1 ? 's' : ''}`
+                        : 'No active sessions';
+                },
+                
+                formatExpiry(expiry, expired) {
+                    return expired ? 'Expired' : 'Expires ' + new Date(expiry).toLocaleString();
+                },
+                
+                getSessionStatusClass(expired) {
+                    return expired ? 'error' : 'healthy';
+                },
+                
+                handleButtonClick() {
+                    if (this.hasMultipleSessions) {
+                        this.open = !this.open;
+                    } else {
+                        window.location.href = '/user';
+                    }
+                },
+                
+                selectSession(sessionName) {
+                    console.log('Selected session:', sessionName);
+                    this.open = false;
+                },
+                
+                init() {
+                    this.fetchSessions();
+                    setInterval(() => this.fetchSessions(), 60000);
+                }
+            }));
+        });
+    </script>
+    {{end}}
+    
     <header>
         <nav class="container">
             <div class="nav-left">
@@ -21,7 +94,35 @@
             </div>
             <div class="nav-right">
                 {{if .User}}
-                    <a href="/user" class="nav-button">{{.User.GetName}}</a>
+                    <div class="user-dropdown" x-data="userDropdown" @click.away="open = false">
+                        <button class="nav-button user-button" 
+                                @click.prevent="handleButtonClick()">
+                            <span class="status-indicator" 
+                                  :class="statusClass"
+                                  :title="statusTitle"></span>
+                            <span>{{.User.GetName}}</span>
+                            <span class="dropdown-arrow" 
+                                  x-show="hasMultipleSessions">▼</span>
+                        </button>
+                        <div class="dropdown-menu" 
+                             :class="{ 'show': open }">
+                            <a href="/user" class="dropdown-item">Profile</a>
+                            <div class="dropdown-divider"></div>
+                            <template x-for="session in sessions" :key="session.name">
+                                <button class="dropdown-item session-item"
+                                        :class="{ 'expired': session.expired }"
+                                        @click="selectSession(session.name)">
+                                    <div class="session-info">
+                                        <div class="status-dot" :class="getSessionStatusClass(session.expired)"></div>
+                                        <div class="session-details">
+                                            <div class="session-name" x-text="session.name"></div>
+                                            <div class="session-expiry" x-text="formatExpiry(session.expiry, session.expired)"></div>
+                                        </div>
+                                    </div>
+                                </button>
+                            </template>
+                        </div>
+                    </div>
                 {{else}}
                     <a href="/auth" class="nav-button">Login</a>
                 {{end}}
