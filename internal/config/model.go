@@ -314,11 +314,16 @@ func (c *Config) GetServerAddress() string {
 // GetLocalServerUrl returns the local server URL. This is the
 // local agent server URL used for agent to server communication.
 func (c *Config) GetLocalServerUrl() string {
+	hostname := c.GetLocalHostname()
+	return fmt.Sprintf("http://%s:%d", hostname, c.Server.Port)
+}
+
+func (c *Config) GetLocalHostname() string {
 	hostname := c.Server.Host
 	if hostname == "0.0.0.0" {
 		hostname = "localhost"
 	}
-	return fmt.Sprintf("http://%s:%d", hostname, c.Server.Port)
+	return hostname
 }
 
 func (c *Config) GetLoginServerUrl() string {

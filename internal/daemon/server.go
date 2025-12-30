@@ -221,7 +221,7 @@ func (s *Server) Start() error {
 		cookieNames = append(cookieNames, CreateCookieName(providerName))
 	}
 
-	sessionStore := getSessionStore(s.GetConfig().GetSecret())
+	sessionStore := s.getSessionStore(s.GetConfig().GetSecret())
 	router.Use(sessions.SessionsMany(
 		cookieNames,
 		sessionStore,
@@ -700,13 +700,18 @@ func (s *Server) getStyle(c *gin.Context) {
 }
 
 // In your server setup
-func getSessionStore(secret string) sessions.Store {
+func (s *Server) getSessionStore(secret string) sessions.Store {
+
+	domain := s.Config.GetLocalHostname()
+
 	store := cookie.NewStore([]byte(secret))
 	store.Options(sessions.Options{
 		Path:     "/",
+		Domain:   domain,
 		MaxAge:   86400 * 7, // 7 days
 		HttpOnly: true,
-		Secure:   true, // Set to true in production with HTTPS
+		Secure:   true,                 // Set to true in production with HTTPS
+		SameSite: http.SameSiteLaxMode, // Needed for OAuth2 redirects
 	})
 	return store
 }

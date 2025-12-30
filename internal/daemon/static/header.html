@@ -50,7 +50,7 @@
                 },
                 
                 get hasActiveSessions() {
-                    return this.sessions.length > 0;
+                    return this.sessions.filter(session => !session.expired).length > 0;
                 },
                 
                 get hasMultipleSessions() {
