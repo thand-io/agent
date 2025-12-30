@@ -86,7 +86,25 @@ func (a *authorizerNotifier) addAuthorizeRequestDetailsSection(blocks *[]slack.B
 	}
 
 	if len(elevateRequest.Tenants) > 0 {
-		requestDetailsText.WriteString(fmt.Sprintf("- *Tenants:* %s\n", strings.Join(elevateRequest.Tenants, ", ")))
+
+		// Resolve tenant names if possible
+		var tenantNames []string
+		for _, tenantID := range elevateRequest.Tenants {
+
+			if len(tenantID) == 0 {
+				continue
+			}
+
+			if tenant, err := a.config.GetTenant(tenantID); err == nil && tenant != nil {
+				tenantNames = append(tenantNames, tenant.String())
+			} else {
+				tenantNames = append(tenantNames, tenantID)
+			}
+		}
+
+		if len(tenantNames) > 0 {
+			requestDetailsText.WriteString(fmt.Sprintf("- *Tenants:* %s\n", strings.Join(tenantNames, ", ")))
+		}
 	}
 
 	*blocks = append(*blocks, slack.NewSectionBlock(

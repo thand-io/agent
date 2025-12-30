@@ -33,7 +33,25 @@ func (a *authorizerNotifier) createAuthorizeEmailBody() (string, string) {
 	}
 
 	if len(elevationReq.Tenants) > 0 {
-		plainText.WriteString(fmt.Sprintf("Tenants: %s\n", strings.Join(elevationReq.Tenants, ", ")))
+
+		// Resolve tenant names if possible
+		var tenantNames []string
+		for _, tenantID := range elevationReq.Tenants {
+
+			if len(tenantID) == 0 {
+				continue
+			}
+
+			if tenant, err := a.config.GetTenant(tenantID); err == nil && tenant != nil {
+				tenantNames = append(tenantNames, tenant.String())
+			} else {
+				tenantNames = append(tenantNames, tenantID)
+			}
+		}
+
+		if len(tenantNames) > 0 {
+			plainText.WriteString(fmt.Sprintf("Tenants: %s\n", strings.Join(elevationReq.Tenants, ", ")))
+		}
 	}
 
 	plainText.WriteString("\nYour access is now active. Please use it responsibly.")
