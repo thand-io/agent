@@ -77,8 +77,9 @@ func (p *awsProvider) SynchronizeIdentities(ctx context.Context, req *models.Syn
 
 		// IAM users don't have emails
 		identity := models.Identity{
-			ID:    userId,
-			Label: userName,
+			ID:     userId,
+			Label:  userName,
+			Tenant: req.Tenant,
 			User: &models.User{
 				ID:       userId,
 				Username: userName,

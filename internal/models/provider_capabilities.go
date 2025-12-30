@@ -26,6 +26,9 @@ const (
 
 	// Notifier capabilities
 	ProviderCapabilityNotifier ProviderCapability = "notifier" // Primary capability
+
+	// Tenant discovery capability
+	ProviderCapabilityTenants ProviderCapability = "tenants"
 )
 
 type RolesConfiguration = SynchronizableConfiguration
@@ -34,6 +37,7 @@ type ResourcesConfiguration = SynchronizableConfiguration
 type IdentitiesConfiguration = SynchronizableConfiguration
 type UsersConfiguration = SynchronizableConfiguration
 type GroupsConfiguration = SynchronizableConfiguration
+type TenantsConfiguration = SynchronizableConfiguration
 
 type SynchronizableConfiguration struct {
 	Synchronizable bool `json:"synchronizable,omitempty"`
@@ -136,6 +140,9 @@ type ProviderCapabilities struct {
 	Roles        *RolesConfiguration        `json:"roles,omitempty"`
 	Permissions  *PermissionsConfiguration  `json:"permissions,omitempty"`
 	Resources    *ResourcesConfiguration    `json:"resources,omitempty"`
+
+	// Tenant discovery capability
+	Tenants *TenantsConfiguration `json:"tenants,omitempty"`
 }
 
 func (pc *ProviderCapabilities) WithDefaultRolesConfiguration() *ProviderCapabilities {
@@ -180,6 +187,11 @@ func (pc *ProviderCapabilities) WithDefaultNotifierConfiguration() *ProviderCapa
 
 func (pc *ProviderCapabilities) WithDefaultProvisioningConfiguration() *ProviderCapabilities {
 	pc.Provisioning = NewCapability()
+	return pc
+}
+
+func (pc *ProviderCapabilities) WithDefaultTenantsConfiguration() *ProviderCapabilities {
+	pc.Tenants = NewSynchronizableCapability()
 	return pc
 }
 
@@ -228,6 +240,11 @@ func (pc *ProviderCapabilities) WithProvisioningConfiguration(config Provisionin
 	return pc
 }
 
+func (pc *ProviderCapabilities) WithTenantsConfiguration(config TenantsConfiguration) *ProviderCapabilities {
+	pc.Tenants = &config
+	return pc
+}
+
 func (pc *ProviderCapabilities) getCapabilities() map[ProviderCapability]ProviderConfigurationImpl {
 	configMap := make(map[ProviderCapability]ProviderConfigurationImpl)
 
@@ -257,6 +274,9 @@ func (pc *ProviderCapabilities) getCapabilities() map[ProviderCapability]Provide
 	}
 	if pc.Provisioning != nil {
 		configMap[ProviderCapabilityProvisioning] = pc.Provisioning
+	}
+	if pc.Tenants != nil {
+		configMap[ProviderCapabilityTenants] = pc.Tenants
 	}
 
 	return configMap
@@ -370,6 +390,9 @@ func (pc *ProviderCapabilities) Update(updates *ProviderCapabilities) {
 	}
 	if pc.Provisioning != nil && updates.Provisioning != nil {
 		updateDisable(pc.Provisioning, updates.Provisioning)
+	}
+	if pc.Tenants != nil && updates.Tenants != nil {
+		updateSync(pc.Tenants, updates.Tenants)
 	}
 }
 
@@ -516,6 +539,10 @@ func (p *BaseProvider) CanSynchronizeGroups() bool {
 
 func (p *BaseProvider) CanSynchronizeIdentities() bool {
 	return p.CanSynchronize(ProviderCapabilityIdentities)
+}
+
+func (p *BaseProvider) CanSynchronizeTenants() bool {
+	return p.CanSynchronize(ProviderCapabilityTenants)
 }
 
 func (p *BaseProvider) CanSynchronizeResources() bool {

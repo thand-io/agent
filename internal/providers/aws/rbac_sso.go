@@ -19,6 +19,7 @@ import (
 func (p *awsProvider) authorizeRoleIdentityCenter(
 	ctx context.Context,
 	req *models.AuthorizeRoleRequest,
+	targetAccountID string,
 ) (*models.AuthorizeRoleResponse, error) {
 
 	user := req.GetUser()
@@ -43,7 +44,7 @@ func (p *awsProvider) authorizeRoleIdentityCenter(
 	}
 
 	// 4. Create an Account Assignment
-	err = p.createAccountAssignment(ctx, instanceArn, permissionSetArn, principalId)
+	err = p.createAccountAssignment(ctx, instanceArn, permissionSetArn, principalId, targetAccountID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create account assignment: %w", err)
 	}
@@ -53,7 +54,7 @@ func (p *awsProvider) authorizeRoleIdentityCenter(
 			"instanceArn":      instanceArn,
 			"permissionSetArn": permissionSetArn,
 			"principalId":      principalId,
-			"accountId":        p.GetAccountID(),
+			"accountId":        targetAccountID,
 		},
 	}, nil
 }
@@ -395,15 +396,15 @@ func (p *awsProvider) findIdentityCenterUser(ctx context.Context, email string) 
 	return *usersResp.Users[0].UserId, nil
 }
 
-// createAccountAssignment assigns a permission set to a user for the current account
-func (p *awsProvider) createAccountAssignment(ctx context.Context, instanceArn, permissionSetArn, principalId string) error {
+// createAccountAssignment assigns a permission set to a user for the target account
+func (p *awsProvider) createAccountAssignment(ctx context.Context, instanceArn, permissionSetArn, principalId, targetAccountID string) error {
 
 	assignmentOutput, err := p.ssoAdminService.CreateAccountAssignment(ctx, &ssoadmin.CreateAccountAssignmentInput{
 		InstanceArn:      aws.String(instanceArn),
 		PermissionSetArn: aws.String(permissionSetArn),
 		PrincipalId:      aws.String(principalId),
 		PrincipalType:    types.PrincipalTypeUser,
-		TargetId:         aws.String(p.GetAccountID()),
+		TargetId:         aws.String(targetAccountID),
 		TargetType:       types.TargetTypeAwsAccount,
 	})
 
@@ -416,7 +417,8 @@ func (p *awsProvider) createAccountAssignment(ctx context.Context, instanceArn, 
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"principalId": *assignmentOutput.AccountAssignmentCreationStatus.PrincipalId,
+		"principalId":     *assignmentOutput.AccountAssignmentCreationStatus.PrincipalId,
+		"targetAccountID": targetAccountID,
 	}).Info("Created account assignment")
 
 	return nil

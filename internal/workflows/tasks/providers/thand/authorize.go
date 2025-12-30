@@ -164,35 +164,55 @@ func (t *thandTask) executeAuthorization(
 				continue
 			}
 
-			identityObj.ID = identityId
-			authReq := models.AuthorizeRoleRequest{
-				RoleRequest: &models.RoleRequest{
-					User:     identityObj.GetUser(),
-					Role:     elevateRequest.Role,
-					Duration: &duration,
-				},
+			// Check if we have tenants specified in our request. If so, we need
+			// to create an authorization task for each identity and tenant combination
+			// if there are no tenants, we just create one task per identity
+			if len(elevateRequest.Tenants) == 0 {
+				elevateRequest.Tenants = []string{""} // Use empty string to indicate no tenant
 			}
 
-			thandAuthReq := thandFunction.ThandAuthorizeRequest{
-				AuthorizeRoleRequest: authReq,
-				Provider:             providerName,
+			for _, tenantId := range elevateRequest.Tenants {
+
+				identityObj.ID = identityId
+				authReq := models.AuthorizeRoleRequest{
+					RoleRequest: &models.RoleRequest{
+						User:     identityObj.GetUser(),
+						Role:     elevateRequest.Role,
+						Duration: &duration,
+						Tenant:   tenantId,
+					},
+				}
+
+				log.WithFields(models.Fields{
+					"identity_id": identityId,
+					"provider":    providerName,
+					"tenant":      tenantId,
+					"role":        elevateRequest.Role.Name,
+				}).Debug("authorize.go: Creating AuthorizeRoleRequest with Tenant")
+
+				thandAuthReq := thandFunction.ThandAuthorizeRequest{
+					AuthorizeRoleRequest: authReq,
+					Provider:             providerName,
+				}
+
+				authTasks = append(authTasks, authTask{
+					ProviderName: providerName,
+					Identity:     identityId,
+					AuthRequest:  authReq,
+					ThandAuthReq: thandAuthReq,
+				})
+
+				log.WithFields(models.Fields{
+					"user":     authReq.User.GetIdentity(),
+					"source":   authReq.User.Source,
+					"username": authReq.User.Username,
+					"role":     authReq.Role.GetName(),
+					"provider": providerName,
+					"duration": duration,
+					"tenant":   tenantId,
+				}).Info("Preparing authorization logic")
+
 			}
-
-			authTasks = append(authTasks, authTask{
-				ProviderName: providerName,
-				Identity:     identityId,
-				AuthRequest:  authReq,
-				ThandAuthReq: thandAuthReq,
-			})
-
-			log.WithFields(models.Fields{
-				"user":     authReq.User.GetIdentity(),
-				"source":   authReq.User.Source,
-				"username": authReq.User.Username,
-				"role":     authReq.Role.GetName(),
-				"provider": providerName,
-				"duration": duration,
-			}).Info("Preparing authorization logic")
 		}
 	}
 

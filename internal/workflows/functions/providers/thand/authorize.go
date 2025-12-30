@@ -104,6 +104,13 @@ func (t *authorizeFunction) validateAndParseRequests(
 		return nil, fmt.Errorf("failed to convert call request: %w", err)
 	}
 
+	// Set tenant if available
+	// TODO(hugh): Only a single tenant is supported for now
+	// later we can expand this to support multiple tenants
+	if len(elevationRequest.Tenants) > 0 {
+		authRequest.RoleRequest.Tenant = elevationRequest.Tenants[0]
+	}
+
 	if !authRequest.IsValid() {
 		logrus.Infoln("No revocation state provided. Just handling via the cleanup state")
 	}

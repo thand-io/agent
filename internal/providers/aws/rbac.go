@@ -19,10 +19,19 @@ func (p *awsProvider) AuthorizeRole(
 		return nil, fmt.Errorf("user and role must be provided to authorize aws role")
 	}
 
+	// Determine target account: selected account or configured default
+	targetAccountID := p.GetAccountID()
+
+	if len(req.Tenant) > 0 {
+		// If a tenant is specified, use it as the target account ID
+		targetAccountID = req.Tenant
+	}
+
 	logrus.WithFields(logrus.Fields{
 		"req_user_email":    req.User.Email,
 		"req_user_source":   req.User.Source,
 		"req_user_username": req.User.Username,
+		"account_id":        targetAccountID,
 	}).Info("AWS AuthorizeRole called")
 
 	// Determine if we should use IAM Identity Center or traditional IAM
@@ -30,9 +39,9 @@ func (p *awsProvider) AuthorizeRole(
 	useIdentityCenter := p.shouldUseIdentityCenter(req.GetUser())
 
 	if useIdentityCenter {
-		return p.authorizeRoleIdentityCenter(ctx, req)
+		return p.authorizeRoleIdentityCenter(ctx, req, targetAccountID)
 	} else {
-		return p.authorizeRoleTraditionalIAM(ctx, req)
+		return p.authorizeRoleTraditionalIAM(ctx, req, targetAccountID)
 	}
 }
 

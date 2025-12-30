@@ -43,6 +43,24 @@ func (a *ProviderActivities) RevokeRole(
 
 }
 
+func (a *ProviderActivities) SynchronizeTenants(
+	ctx context.Context,
+	req *SynchronizeTenantsRequest,
+) (*SynchronizeTenantsResponse, error) {
+
+	logrus.WithFields(logrus.Fields{
+		"pagination": req.Pagination,
+	}).Infoln("Starting SynchronizeTenants activity")
+
+	result, err := handleNotImplementedError(a.provider.SynchronizeTenants(ctx, req))
+
+	if err == nil {
+		a.provider.AddTenants(result.Tenants...)
+	}
+
+	return result, err
+}
+
 func (a *ProviderActivities) SynchronizeIdentities(
 	ctx context.Context,
 	req *SynchronizeIdentitiesRequest,

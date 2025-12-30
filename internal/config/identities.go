@@ -64,6 +64,7 @@ func (c *Config) GetIdentity(identity string) (*models.Identity, error) {
 
 	// Query all providers in parallel and return the first match
 	var wg sync.WaitGroup
+	var closeOnce sync.Once
 	resultChan := make(chan *models.Identity, len(providerMap))
 	doneChan := make(chan struct{})
 
@@ -101,7 +102,7 @@ func (c *Config) GetIdentity(identity string) (*models.Identity, error) {
 	// If channel is closed and empty, result will be nil and ok will be false
 	for result := range resultChan {
 		if result != nil {
-			close(doneChan)
+			closeOnce.Do(func() { close(doneChan) })
 			return result, nil
 		}
 	}

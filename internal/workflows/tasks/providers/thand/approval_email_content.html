@@ -27,7 +27,7 @@
 </div>
 {{end}}
 
-{{if or .Providers .Duration .Reason}}
+{{if or .Providers .Duration .Reason .Tenants}}
 <div style="margin-bottom: 1.5rem;">
     <h3 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 0.75rem;">Request Details</h3>
     {{if .Providers}}
@@ -38,6 +38,9 @@
     {{end}}
     {{if .Reason}}
     <p><strong>Reason:</strong> {{.Reason}}</p>
+    {{end}}
+    {{if .Tenants}}
+    <p><strong>Tenants:</strong> {{.Tenants}}</p>
     {{end}}
 </div>
 {{end}}

@@ -20,6 +20,7 @@ type BaseProvider struct {
 	// Add other common fields if necessary
 	identity *IdentitySupport
 	rbac     *RBACSupport
+	tenants  *TenantsSupport
 }
 
 type IdentitySupport struct {
@@ -48,6 +49,15 @@ type RBACSupport struct {
 	resources      []ProviderResource
 	resourcesMap   map[string]*ProviderResource // map is a pointer back to the resources list
 	resourcesIndex bleve.Index
+}
+
+type TenantsSupport struct {
+	mu sync.RWMutex
+
+	// Tenant management
+	tenants      []ProviderTenant
+	tenantsMap   map[string]*ProviderTenant
+	tenantsIndex bleve.Index
 }
 
 func NewBaseProvider(identifier string, provider Provider, capabilities *ProviderCapabilities) *BaseProvider {
@@ -100,6 +110,16 @@ func NewBaseProvider(identifier string, provider Provider, capabilities *Provide
 
 			resources:    make([]ProviderResource, 0),
 			resourcesMap: make(map[string]*ProviderResource),
+		}
+	}
+
+	if base.HasAnyCapability(
+		ProviderCapabilityTenants,
+	) {
+
+		base.tenants = &TenantsSupport{
+			tenants:    make([]ProviderTenant, 0),
+			tenantsMap: make(map[string]*ProviderTenant),
 		}
 	}
 

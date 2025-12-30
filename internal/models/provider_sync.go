@@ -22,6 +22,7 @@ type ProviderPatchRequest struct {
 	Roles       []ProviderRole       `json:"roles,omitempty"`
 	Permissions []ProviderPermission `json:"permissions,omitempty"`
 	Resources   []ProviderResource   `json:"resources,omitempty"`
+	Tenants     []ProviderTenant     `json:"tenants,omitempty"`
 }
 
 func (p *BaseProvider) Synchronize(
@@ -46,6 +47,7 @@ func Synchronize(
 
 	// Check if we have the relevant capabilities for synchronization
 	if !provider.HasAnyCapability(
+		ProviderCapabilityTenants,
 		ProviderCapabilityIdentities,
 		ProviderCapabilityUsers,
 		ProviderCapabilityGroups,
@@ -131,6 +133,17 @@ func Synchronize(
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var errs []error
+
+	if provider.CanSynchronizeTenants() {
+		// Synchronize Tenants
+		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeTenants, &SynchronizeTenantsRequest{},
+			func(ctx context.Context, req *SynchronizeTenantsRequest) (*SynchronizeTenantsResponse, error) {
+				return provider.SynchronizeTenants(ctx, req)
+			},
+			func(resp *SynchronizeTenantsResponse) {
+				provider.AddTenants(resp.Tenants...)
+			})
+	}
 
 	if provider.CanSynchronizeIdentities() {
 		// Synchronize Identities
@@ -288,6 +301,11 @@ func PatchProviderUpstream(
 	providerReq := ProviderPatchRequest{}
 
 	switch name {
+	case SynchronizeTenants:
+		tenantsResp, ok := payload.(SynchronizeTenantsResponse)
+		if ok {
+			providerReq.Tenants = tenantsResp.Tenants
+		}
 	case SynchronizeIdentities:
 		identitiesResp, ok := payload.(SynchronizeIdentitiesResponse)
 		if ok {
@@ -341,6 +359,10 @@ func getSynchronizationRequests(provider ProviderImpl) []SynchronizeCapability {
 	// Determine which capabilities to synchronize
 	// Check if the underlying provider has been overridden to
 	// support identities, roles, permissions, resources
+
+	if provider.CanSynchronizeTenants() {
+		requests = append(requests, SynchronizeTenants)
+	}
 
 	if provider.CanSynchronizeIdentities() {
 		requests = append(requests, SynchronizeIdentities)

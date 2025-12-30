@@ -166,6 +166,7 @@ type ProviderImpl interface {
 	CanSynchronizePermissions() bool
 	CanSynchronizeResources() bool
 	CanSynchronizeIdentities() bool
+	CanSynchronizeTenants() bool
 	CanSynchronizeUsers() bool
 	CanSynchronizeGroups() bool
 
@@ -174,6 +175,7 @@ type ProviderImpl interface {
 	ProviderAuthorizor
 	ProviderRoleBasedAccessControl
 	ProviderIdentities
+	ProviderTenants
 }
 
 type AuthorizeSessionResponse struct {
@@ -181,6 +183,7 @@ type AuthorizeSessionResponse struct {
 }
 
 type RoleRequest struct {
+	Tenant   string         `json:"tenant,omitempty"` // Optional tenant ID for multi-account providers
 	User     *User          `json:"user"`
 	Role     *Role          `json:"role"`
 	Duration *time.Duration `json:"duration,omitempty"` // Optional duration for temporary access

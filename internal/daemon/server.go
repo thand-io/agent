@@ -221,7 +221,7 @@ func (s *Server) Start() error {
 		cookieNames = append(cookieNames, CreateCookieName(providerName))
 	}
 
-	sessionStore := getSessionStore(s.GetConfig().GetSecret())
+	sessionStore := s.getSessionStore(s.GetConfig().GetSecret())
 	router.Use(sessions.SessionsMany(
 		cookieNames,
 		sessionStore,
@@ -458,6 +458,7 @@ func (s *Server) setupRoutes(router *gin.Engine) {
 			api.POST("/roles/evaluate", s.postEvaluateRole)
 			api.GET("/workflows", s.getWorkflows)
 			api.GET("/providers", s.getProviders)
+			api.GET("/identities", s.getIdentities)
 
 			api.GET("/role/:role", s.getRoleByName)
 			api.GET("/workflow/:name", s.getWorkflowByName)
@@ -465,9 +466,11 @@ func (s *Server) setupRoutes(router *gin.Engine) {
 			api.GET("/provider/:provider/permissions", s.getProviderPermissions)
 			api.GET("/provider/:provider/roles", s.getProviderRoles)
 			api.GET("/provider/:provider/identities", s.getProviderIdentities)
-			api.POST("/provider/:provider/authorizeSession", s.postProviderAuthorizeSession)
+			api.GET("/provider/:provider/resources", s.getProviderResources)
+			api.GET("/provider/:provider/tenants", s.getProviderTenants)
 
-			api.GET("/identities", s.getIdentities)
+			// Proxied provider calls
+			api.POST("/provider/:provider/authorizeSession", s.postProviderAuthorizeSession)
 
 			// Sync endpoints
 			api.GET("/sync", s.getSync)
@@ -697,13 +700,18 @@ func (s *Server) getStyle(c *gin.Context) {
 }
 
 // In your server setup
-func getSessionStore(secret string) sessions.Store {
+func (s *Server) getSessionStore(secret string) sessions.Store {
+
+	domain := s.Config.GetLocalHostname()
+
 	store := cookie.NewStore([]byte(secret))
 	store.Options(sessions.Options{
 		Path:     "/",
+		Domain:   domain,
 		MaxAge:   86400 * 7, // 7 days
 		HttpOnly: true,
-		Secure:   true, // Set to true in production with HTTPS
+		Secure:   true,                 // Set to true in production with HTTPS
+		SameSite: http.SameSiteLaxMode, // Needed for OAuth2 redirects
 	})
 	return store
 }

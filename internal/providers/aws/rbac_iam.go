@@ -17,6 +17,7 @@ import (
 func (p *awsProvider) authorizeRoleTraditionalIAM(
 	ctx context.Context,
 	req *models.AuthorizeRoleRequest,
+	targetAccountID string,
 ) (*models.AuthorizeRoleResponse, error) {
 
 	user := req.GetUser()
@@ -26,7 +27,7 @@ func (p *awsProvider) authorizeRoleTraditionalIAM(
 	existingRole, err := p.getRole(ctx, role)
 	if err != nil {
 		// If role doesn't exist, create it
-		existingRole, err = p.createRole(ctx, role)
+		existingRole, err = p.createRole(ctx, role, targetAccountID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create role: %w", err)
 		}
@@ -39,7 +40,7 @@ func (p *awsProvider) authorizeRoleTraditionalIAM(
 	}
 
 	// Bind the user to the role (assuming user will assume this role)
-	err = p.bindUserToRole(ctx, user, existingRole.RoleName)
+	err = p.bindUserToRole(ctx, user, existingRole.RoleName, targetAccountID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to bind user to role: %w", err)
 	}
@@ -81,10 +82,7 @@ func (p *awsProvider) getRole(ctx context.Context, role *models.Role) (*types.Ro
 }
 
 // createRole creates a new IAM role with the specified permissions
-func (p *awsProvider) createRole(ctx context.Context, role *models.Role) (*types.Role, error) {
-	// Use the cached account ID
-	accountID := p.GetAccountID()
-
+func (p *awsProvider) createRole(ctx context.Context, role *models.Role, targetAccountID string) (*types.Role, error) {
 	// Create a basic assume role policy document using structs
 	// Initially allow the account root to assume the role (will be updated later)
 	assumeRolePolicy := PolicyDocument{
@@ -93,7 +91,7 @@ func (p *awsProvider) createRole(ctx context.Context, role *models.Role) (*types
 			{
 				Effect: "Allow",
 				Principal: map[string]string{
-					"AWS": fmt.Sprintf("arn:aws:iam::%s:root", accountID),
+					"AWS": fmt.Sprintf("arn:aws:iam::%s:root", targetAccountID),
 				},
 				Action: "sts:AssumeRole",
 			},
@@ -159,10 +157,7 @@ func (p *awsProvider) attachPoliciesToRole(ctx context.Context, roleName *string
 }
 
 // bindUserToRole creates or updates the assume role policy to allow the user to assume the role
-func (p *awsProvider) bindUserToRole(ctx context.Context, user *models.User, roleName *string) error {
-	// Use the cached account ID
-	accountID := p.GetAccountID()
-
+func (p *awsProvider) bindUserToRole(ctx context.Context, user *models.User, roleName *string, targetAccountID string) error {
 	// Create a basic assume role policy that allows the user to assume the role
 	var assumeRolePolicy PolicyDocument
 
@@ -180,7 +175,7 @@ func (p *awsProvider) bindUserToRole(ctx context.Context, user *models.User, rol
 			{
 				Effect: "Allow",
 				Principal: map[string]string{
-					"AWS": fmt.Sprintf("arn:aws:iam::%s:user/%s", accountID, username),
+					"AWS": fmt.Sprintf("arn:aws:iam::%s:user/%s", targetAccountID, username),
 				},
 				Action: "sts:AssumeRole",
 			},

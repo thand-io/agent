@@ -12,6 +12,10 @@ type Identity struct {
 	// Label is a human-readable name or description for this identity.
 	Label string `json:"label"`
 
+	// Tenant represents the tenant or organization this identity belongs to.
+	// This is useful for multi-tenant systems where identities are scoped to specific tenants.
+	Tenant string `json:"tenant,omitempty"`
+
 	// User contains the user details if this identity represents a user.
 	// Will be nil if this identity represents a group.
 	User *User `json:"user,omitempty"`

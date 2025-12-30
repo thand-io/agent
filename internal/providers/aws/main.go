@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/identitystore"
+	"github.com/aws/aws-sdk-go-v2/service/organizations"
 	"github.com/aws/aws-sdk-go-v2/service/ssoadmin"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
@@ -31,6 +32,8 @@ type awsProvider struct {
 	stsService          *sts.Client
 	ssoAdminService     *ssoadmin.Client
 	identityStoreClient *identitystore.Client
+	organizationsClient *organizations.Client // For account discovery
+
 }
 
 func (p *awsProvider) Initialize(identifier string, provider models.Provider) error {
@@ -54,6 +57,7 @@ func (p *awsProvider) Initialize(identifier string, provider models.Provider) er
 	p.stsService = sts.NewFromConfig(sdkConfig.Config)
 	p.ssoAdminService = ssoadmin.NewFromConfig(sdkConfig.Config)
 	p.identityStoreClient = identitystore.NewFromConfig(sdkConfig.Config)
+	p.organizationsClient = organizations.NewFromConfig(sdkConfig.Config)
 
 	// Set the account ID from config or retrieve it via STS
 	err = p.GetAccountId(awsConfig)

@@ -42,6 +42,12 @@ func (s *Server) getElevate(c *gin.Context) {
 		return
 	}
 
+	logrus.WithFields(logrus.Fields{
+		"provider": request.Provider,
+		"role":     request.Role,
+		"tenants":  request.Tenants,
+	}).Debug("getElevate: Received elevation request")
+
 	role, err := s.Config.GetRoleByName(request.Role)
 
 	if err != nil {
@@ -67,6 +73,7 @@ func (s *Server) getElevate(c *gin.Context) {
 		Reason:     request.Reason,
 		Duration:   request.Duration,
 		Session:    request.Session,
+		Tenants:    request.Tenants,
 	})
 }
 
@@ -667,11 +674,21 @@ type ElevateStaticPageData struct {
 	Roles      []string          `json:"roles"`
 	Duration   string            `json:"duration"`
 	Reason     string            `json:"reason"`
+	Tenants    []string          `json:"tenants"`
 }
 
 func (s *Server) getElevationPagePrefill(c *gin.Context) ElevateStaticPageData {
 	data := ElevateStaticPageData{
 		TemplateData: s.GetTemplateData(c),
+	}
+
+	preFilledTenants := c.QueryArray("tenants")
+	validTenants := []string{}
+	for _, tenantID := range preFilledTenants {
+		tenant, err := s.Config.GetTenant(tenantID)
+		if err == nil && tenant != nil {
+			validTenants = append(validTenants, tenant.ID)
+		}
 	}
 
 	// Add pre-selected identities from query parameters
