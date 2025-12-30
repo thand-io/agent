@@ -17,6 +17,8 @@ type ProviderTenantsResponse struct {
 
 type ProviderTenant struct {
 	ID   string `json:"id"`
+	Parent string `json:"parent,omitempty"`
+	Type string `json:"type,omitempty"` // account, folder, organization, etc.
 	Name string `json:"name"`
 }
 

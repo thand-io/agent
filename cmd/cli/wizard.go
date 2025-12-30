@@ -59,6 +59,20 @@ func RunRequestWizard(config *config.Config) (*models.ElevateRequest, error) {
 	}
 	data.Reason = reason
 
+	// Step 5: Optional - Select Identities
+	identities, err := selectIdentities()
+	if err != nil {
+		return nil, err
+	}
+	data.Identities = identities
+
+	// Step 6: Optional - Select Tenants
+	tenants, err := selectTenants()
+	if err != nil {
+		return nil, err
+	}
+	data.Tenants = tenants
+
 	// Display summary
 	displaySummary(data)
 
@@ -335,6 +349,120 @@ func validateReason(val string) error {
 	return nil
 }
 
+// selectIdentities prompts for optional identity input
+func selectIdentities() ([]string, error) {
+	var identitiesInput string
+	var skip bool
+
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Specify identities?").
+				Description("Do you want to specify specific identities for this request? (Optional)").
+				Value(&skip).
+				Affirmative("Yes").
+				Negative("Skip"),
+		),
+	)
+
+	err := form.Run()
+	if err != nil {
+		return nil, fmt.Errorf("identity selection cancelled: %w", err)
+	}
+
+	if !skip {
+		return []string{}, nil
+	}
+
+	inputForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("Enter identities (comma-separated):").
+				Description("e.g., user@example.com,admin@example.com or provider:identity").
+				Value(&identitiesInput).
+				Validate(func(val string) error {
+					if strings.TrimSpace(val) == "" {
+						return fmt.Errorf("identities cannot be empty when specified")
+					}
+					return nil
+				}),
+		),
+	)
+
+	err = inputForm.Run()
+	if err != nil {
+		return nil, fmt.Errorf("identity input cancelled: %w", err)
+	}
+
+	// Split by comma and trim spaces
+	identities := []string{}
+	for _, id := range strings.Split(identitiesInput, ",") {
+		trimmed := strings.TrimSpace(id)
+		if trimmed != "" {
+			identities = append(identities, trimmed)
+		}
+	}
+
+	return identities, nil
+}
+
+// selectTenants prompts for optional tenant input
+func selectTenants() ([]string, error) {
+	var tenantsInput string
+	var skip bool
+
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Specify tenants?").
+				Description("Do you want to specify specific tenants/accounts for this request? (Optional)").
+				Value(&skip).
+				Affirmative("Yes").
+				Negative("Skip"),
+		),
+	)
+
+	err := form.Run()
+	if err != nil {
+		return nil, fmt.Errorf("tenant selection cancelled: %w", err)
+	}
+
+	if !skip {
+		return []string{}, nil
+	}
+
+	inputForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("Enter tenants (comma-separated):").
+				Description("e.g., tenant-id-1,account-123,org-456").
+				Value(&tenantsInput).
+				Validate(func(val string) error {
+					if strings.TrimSpace(val) == "" {
+						return fmt.Errorf("tenants cannot be empty when specified")
+					}
+					return nil
+				}),
+		),
+	)
+
+	err = inputForm.Run()
+	if err != nil {
+		return nil, fmt.Errorf("tenant input cancelled: %w", err)
+	}
+
+	// Split by comma and trim spaces
+	tenants := []string{}
+	for _, t := range strings.Split(tenantsInput, ",") {
+		trimmed := strings.TrimSpace(t)
+		if trimmed != "" {
+			tenants = append(tenants, trimmed)
+		}
+	}
+
+	return tenants, nil
+}
+
 // displaySummary shows a summary of the configured request
 func displaySummary(data *models.ElevateRequest) {
 	fmt.Println()
@@ -345,6 +473,15 @@ func displaySummary(data *models.ElevateRequest) {
 	fmt.Printf("Role: %s\n", data.Role.Name)
 	fmt.Printf("Duration: %s\n", data.Duration)
 	fmt.Printf("Reason: %s\n", data.Reason)
+	
+	if len(data.Identities) > 0 {
+		fmt.Printf("Identities: %s\n", strings.Join(data.Identities, ", "))
+	}
+	
+	if len(data.Tenants) > 0 {
+		fmt.Printf("Tenants: %s\n", strings.Join(data.Tenants, ", "))
+	}
+	
 	fmt.Println()
 }
 

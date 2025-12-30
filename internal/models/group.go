@@ -10,6 +10,8 @@ import (
 type Group struct {
 	// ID is the unique identifier for the group.
 	ID string `json:"id,omitempty"`
+	// Parent is the ID of the parent group, if any.
+	Parent string `json:"parent,omitempty"`
 	// Name is the human-readable name of the group.
 	Name string `json:"name"`
 	// Email is the email address associated with the group (e.g., a mailing list).
