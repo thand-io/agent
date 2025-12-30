@@ -28,3 +28,5 @@ type ProviderIdentities = internal.ProviderIdentities
 
 // ProviderPatchRequest represents a request to patch provider data.
 type ProviderPatchRequest = internal.ProviderPatchRequest
+
+type ProviderDefinitions = internal.ProviderDefinitions

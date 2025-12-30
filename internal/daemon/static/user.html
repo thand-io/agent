@@ -86,6 +86,7 @@
                             <th>Version</th>
                             <th>Expiry</th>
                             <th>Status</th>
+                            <th>Default</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -107,7 +108,18 @@
                                     </span>
                                 </td>
                                 <td>
+                                    <span x-show="isDefaultSession(session.provider)" class="default-badge-table">
+                                        ✓ Default
+                                    </span>
+                                </td>
+                                <td>
                                     <div class="action-buttons">
+                                        <button @click="setDefaultSession(session.provider)" 
+                                                :disabled="isDefaultSession(session.provider) || session.status === 'expired'"
+                                                class="action-button set-default"
+                                                :class="{ 'disabled': isDefaultSession(session.provider) || session.status === 'expired' }">
+                                            Set Default
+                                        </button>
                                         <button @click="renewSession(session.provider)" 
                                                 class="action-button renew">
                                             Renew
@@ -211,6 +223,33 @@
             color: hsl(var(--destructive-foreground));
         }
 
+        .action-button.set-default {
+            background-color: transparent;
+            color: hsl(var(--primary));
+            border-color: hsl(var(--primary));
+        }
+
+        .action-button.set-default:hover:not(.disabled) {
+            background-color: hsl(var(--primary));
+            color: hsl(var(--primary-foreground));
+        }
+
+        .action-button.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .default-badge-table {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background-color: hsl(var(--primary));
+            color: hsl(var(--primary-foreground));
+            border-radius: 0.25rem;
+        }
+
         .status-badge {
             padding: 0.25rem 0.5rem;
             border-radius: 0.375rem;
@@ -251,6 +290,7 @@
                 loading: false,
                 error: null,
                 sessions: [],
+                defaultProvider: '',
 
                 // Initialize the app
                 init() {
@@ -273,6 +313,9 @@
                         }
 
                         const sessionData = await response.json();
+                        
+                        // Store default provider
+                        this.defaultProvider = sessionData.defaultProvider || '';
                         
                         // Convert sessions object to array with provider names
                         if (sessionData && sessionData.sessions) {
@@ -299,6 +342,35 @@
                     }
                 },
 
+                // Set default session
+                async setDefaultSession(provider) {
+                    try {
+                        const response = await fetch('{{.Config.ApiBasePath}}/sessions', {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            credentials: 'include',
+                            body: JSON.stringify({ provider: provider })
+                        });
+                        
+                        if (response.ok) {
+                            window.location.reload();
+                        } else {
+                            const error = await response.json();
+                            throw new Error(error.message || 'Failed to set default session');
+                        }
+                    } catch (error) {
+                        console.error('Error setting default session:', error);
+                        alert('Error setting default session. Please try again.');
+                    }
+                },
+
+                // Check if session is default
+                isDefaultSession(provider) {
+                    return this.defaultProvider === provider;
+                },
+
                 // Session actions
                 async renewSession(provider) {
                     if (confirm(`Are you sure you want to renew the session for ${provider}?`)) {
@@ -322,7 +394,6 @@
                             if (response.ok) {
                                 // Reload sessions to update the display
                                 await this.loadSessions();
-                                alert(`Session for ${provider} has been deleted successfully.`);
                             } else {
                                 throw new Error('Failed to delete session');
                             }

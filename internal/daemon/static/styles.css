@@ -124,12 +124,164 @@ nav {
     border-color: hsl(var(--primary));
     text-decoration: none;
     font-size: 0.875rem;
+    line-height: 1.25rem;
     transition: color 0.2s;
 }
 
 .nav-button:hover {
     opacity: 0.9;
     color: hsl(var(--primary));
+}
+
+/* Header user dropdown */
+.nav-right .user-dropdown {
+    position: relative;
+}
+
+.nav-right .user-dropdown .user-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid hsl(var(--primary));
+    position: relative;
+    padding: 0.25rem 0.75rem 0.25rem 0.85rem;
+    margin: -0.25rem -0.75rem;
+    font-weight: 500;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    color: hsl(var(--muted-foreground));
+    transition: color 0.2s;
+}
+
+.nav-right .user-dropdown .user-button:hover {
+    opacity: 0.9;
+    color: hsl(var(--primary));
+}
+
+.nav-right .user-dropdown .status-indicator {
+    width: 4px;
+    position: absolute;
+    left: -1px;
+    top: -1px;
+    bottom: -1px;
+    border-radius: 0.25rem 0 0 0.25rem;
+}
+
+.nav-right .user-dropdown .status-indicator.status-active {
+    background-color: #10b981;
+}
+
+.nav-right .user-dropdown .status-indicator.status-inactive {
+    background-color: #fbbf24;
+}
+
+.nav-right .user-dropdown .dropdown-arrow {
+    font-size: 0.7rem;
+    margin-left: 0.25rem;
+}
+
+.nav-right .user-dropdown .dropdown-menu {
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    right: 0;
+    min-width: 250px;
+    background-color: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.375rem;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    display: none;
+    flex-direction: column;
+    z-index: 1000;
+}
+
+.nav-right .user-dropdown .dropdown-menu.show {
+    display: flex;
+}
+
+.nav-right .user-dropdown .dropdown-item {
+    padding: 0.5rem 1rem;
+    color: hsl(var(--foreground));
+    text-decoration: none;
+    transition: background-color 0.2s;
+    border: none;
+    background: transparent;
+    text-align: left;
+    width: 100%;
+    cursor: pointer;
+    font-size: 0.875rem;
+}
+
+.nav-right .user-dropdown .dropdown-item:hover {
+    background-color: hsl(var(--secondary));
+}
+
+.nav-right .user-dropdown .dropdown-divider {
+    height: 1px;
+    background-color: hsl(var(--border));
+    margin: 0.25rem 0;
+}
+
+.nav-right .user-dropdown .session-item {
+    display: flex;
+    flex-direction: column;
+    padding: 0.75rem 1rem;
+}
+
+.nav-right .user-dropdown .session-item.expired {
+    opacity: 0.6;
+}
+
+.nav-right .user-dropdown .session-item.default-session {
+    background-color: hsl(var(--secondary) / 0.5);
+}
+
+.nav-right .user-dropdown .session-item.default-session:hover {
+    background-color: hsl(var(--secondary) / 0.7);
+}
+
+.nav-right .user-dropdown .session-info {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
+.nav-right .user-dropdown .session-info .status-dot {
+    margin-top: 0.25rem;
+    flex-shrink: 0;
+}
+
+.nav-right .user-dropdown .session-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    flex: 1;
+}
+
+.nav-right .user-dropdown .session-name {
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.nav-right .user-dropdown .default-badge {
+    display: inline-block;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.625rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    background-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    border-radius: 0.25rem;
+}
+
+.nav-right .user-dropdown .session-expiry {
+    font-size: 0.75rem;
+    color: hsl(var(--muted-foreground));
 }
 
 .nav-divider {

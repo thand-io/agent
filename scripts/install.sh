@@ -18,15 +18,15 @@ NC='\033[0m' # No Color
 
 # Function to print colored output
 print_status() {
-    echo -e "${GREEN}[INFO]${NC} $1"
+    printf "${GREEN}[INFO]${NC} %s\n" "$1"
 }
 
 print_warning() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
+    printf "${YELLOW}[WARN]${NC} %s\n" "$1"
 }
 
 print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    printf "${RED}[ERROR]${NC} %s\n" "$1"
 }
 
 # Function to detect OS and architecture
@@ -95,9 +95,9 @@ get_download_url() {
     local extension=""
     
     # Set file extension based on OS
-    if [[ "$platform" == *"windows"* ]]; then
-        extension=".exe"
-    fi
+    case "$platform" in
+        *windows*) extension=".exe" ;;
+    esac
     
     # Extract download URL using grep and sed (more portable than jq)
     # Look for assets that match: agent-{platform}{extension}
@@ -116,7 +116,7 @@ install_binary() {
     local version="$2"
     local platform="$3"
     
-    if [[ -z "$download_url" ]]; then
+    if [ -z "$download_url" ]; then
         print_error "No download URL found for platform: $platform"
         print_error "Please check if a release exists for your platform at: https://github.com/${REPO_OWNER}/${REPO_NAME}/releases"
         exit 1
@@ -137,32 +137,36 @@ install_binary() {
         wget -O "$temp_file" "$download_url"
     fi
     
-    if [[ ! -f "$temp_file" ]]; then
+    if [ ! -f "$temp_file" ]; then
         print_error "Failed to download the binary"
         exit 1
     fi
     
     # Handle different archive formats
     local binary_path=""
-    if [[ "$filename" == *.tar.gz ]]; then
-        print_status "Extracting tar.gz archive..."
-        tar -xzf "$temp_file" -C "$temp_dir"
-        binary_path=$(find "$temp_dir" -name "$BINARY_NAME*" -type f -executable | head -1)
-    elif [[ "$filename" == *.zip ]]; then
-        print_status "Extracting zip archive..."
-        if command -v unzip >/dev/null 2>&1; then
-            unzip -q "$temp_file" -d "$temp_dir"
-            binary_path=$(find "$temp_dir" -name "$BINARY_NAME*" -type f | head -1)
-        else
-            print_error "unzip command not found. Please install unzip to extract .zip files."
-            exit 1
-        fi
-    else
-        # Assume it's a direct binary
-        binary_path="$temp_file"
-    fi
+    case "$filename" in
+        *.tar.gz)
+            print_status "Extracting tar.gz archive..."
+            tar -xzf "$temp_file" -C "$temp_dir"
+            binary_path=$(find "$temp_dir" -name "$BINARY_NAME*" -type f -executable | head -1)
+            ;;
+        *.zip)
+            print_status "Extracting zip archive..."
+            if command -v unzip >/dev/null 2>&1; then
+                unzip -q "$temp_file" -d "$temp_dir"
+                binary_path=$(find "$temp_dir" -name "$BINARY_NAME*" -type f | head -1)
+            else
+                print_error "unzip command not found. Please install unzip to extract .zip files."
+                exit 1
+            fi
+            ;;
+        *)
+            # Assume it's a direct binary
+            binary_path="$temp_file"
+            ;;
+    esac
     
-    if [[ -z "$binary_path" || ! -f "$binary_path" ]]; then
+    if [ -z "$binary_path" ] || [ ! -f "$binary_path" ]; then
         print_error "Could not find binary in downloaded archive"
         exit 1
     fi
@@ -174,7 +178,7 @@ install_binary() {
     print_status "Installing to ${INSTALL_DIR}/${BINARY_NAME}..."
     
     # Check if we need sudo
-    if [[ ! -w "$INSTALL_DIR" ]]; then
+    if [ ! -w "$INSTALL_DIR" ]; then
         print_warning "Installing to ${INSTALL_DIR} requires sudo privileges"
         sudo mv "$binary_path" "${INSTALL_DIR}/${BINARY_NAME}"
     else
@@ -228,17 +232,19 @@ try_brew_install() {
     local platform="$1"
     
     # Only try brew on macOS and Linux
-    if [[ "$platform" == "darwin-"* ]] || [[ "$platform" == "linux-"* ]]; then
-        if command -v brew >/dev/null 2>&1; then
-            print_status "Homebrew detected, attempting installation via brew..."
-            if install_via_brew; then
-                return 0
-            else
-                print_warning "Homebrew installation failed, falling back to direct download..."
-                return 1
+    case "$platform" in
+        darwin-*|linux-*)
+            if command -v brew >/dev/null 2>&1; then
+                print_status "Homebrew detected, attempting installation via brew..."
+                if install_via_brew; then
+                    return 0
+                else
+                    print_warning "Homebrew installation failed, falling back to direct download..."
+                    return 1
+                fi
             fi
-        fi
-    fi
+            ;;
+    esac
     
     return 1
 }
@@ -263,7 +269,7 @@ main() {
     # Get latest release information
     local release_json=$(get_latest_release)
     
-    if [[ -z "$release_json" ]]; then
+    if [ -z "$release_json" ]; then
         print_error "Failed to fetch release information from GitHub"
         exit 1
     fi
@@ -271,7 +277,7 @@ main() {
     # Extract version and download URL
     local version=$(get_version "$release_json")
  
-    if [[ -z "$version" ]]; then
+    if [ -z "$version" ]; then
         print_error "Could not determine latest version"
         exit 1
     fi
@@ -281,7 +287,7 @@ main() {
     # Check if already installed
     if command -v "$BINARY_NAME" >/dev/null 2>&1; then
         local current_version=$($BINARY_NAME --version 2>/dev/null | grep -o 'v[0-9.]*' || echo "unknown")
-        if [[ "$current_version" == "$version" ]]; then
+        if [ "$current_version" = "$version" ]; then
             print_status "thand $version is already installed"
             exit 0
         else
@@ -295,7 +301,6 @@ main() {
     install_binary "$download_url" "$version" "$platform"
 }
 
-# Check if running as script (not sourced) or piped from curl
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]] || [[ -z "${BASH_SOURCE[0]}" ]]; then
-    main "$@"
-fi
+# Run main
+main "$@"
+
