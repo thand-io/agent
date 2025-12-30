@@ -61,6 +61,11 @@ func (a *approvalsNotifier) createApprovalEmailBody() (string, string) {
 		// Resolve tenant names if possible
 		var tenantNames []string
 		for _, tenantID := range elevateRequest.Tenants {
+
+			if len(tenantID) == 0 {
+				continue
+			}
+
 			if tenant, err := a.config.GetTenant(tenantID); err == nil && tenant != nil {
 				tenantNames = append(tenantNames, tenant.String())
 			} else {
@@ -68,7 +73,9 @@ func (a *approvalsNotifier) createApprovalEmailBody() (string, string) {
 			}
 		}
 
-		plainText.WriteString(fmt.Sprintf("Tenants: %s\n", strings.Join(tenantNames, ", ")))
+		if len(tenantNames) > 0 {
+			plainText.WriteString(fmt.Sprintf("Tenants: %s\n", strings.Join(tenantNames, ", ")))
+		}
 	}
 
 	if len(elevateRequest.Identities) > 0 {

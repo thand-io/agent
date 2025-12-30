@@ -112,6 +112,11 @@ func (a *approvalsNotifier) addRequestDetailsSection(blocks *[]slack.Block, elev
 		// Resolve tenant names if possible
 		var tenantNames []string
 		for _, tenantID := range elevateRequest.Tenants {
+
+			if len(tenantID) == 0 {
+				continue
+			}
+
 			if tenant, err := a.config.GetTenant(tenantID); err == nil && tenant != nil {
 				tenantNames = append(tenantNames, tenant.String())
 			} else {
@@ -119,7 +124,9 @@ func (a *approvalsNotifier) addRequestDetailsSection(blocks *[]slack.Block, elev
 			}
 		}
 
-		requestDetailsText.WriteString(fmt.Sprintf("- *Tenants:* %s\n", strings.Join(tenantNames, ", ")))
+		if len(tenantNames) > 0 {
+			requestDetailsText.WriteString(fmt.Sprintf("- *Tenants:* %s\n", strings.Join(tenantNames, ", ")))
+		}
 	}
 
 	*blocks = append(*blocks, slack.NewSectionBlock(
