@@ -20,6 +20,7 @@ type ProviderTenant struct {
 	Parent string `json:"parent,omitempty"`
 	Type   string `json:"type,omitempty"` // account, folder, organization, etc.
 	Name   string `json:"name"`
+	Tenant any    `json:"-"` // Underlying provider-specific tenant object
 }
 
 func (p ProviderTenant) String() string {

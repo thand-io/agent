@@ -12,4 +12,5 @@ var GcpCapabilities = models.NewProviderCapabilities().
 		Enabled:        true,
 		Synchronizable: false,
 	}).
-	WithDefaultProvisioningConfiguration()
+	WithDefaultProvisioningConfiguration().
+	WithDefaultTenantsConfiguration()
