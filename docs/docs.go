@@ -1093,74 +1093,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/provider/{provider}/authorizeSession": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Authorize a session with a specific provider",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "providers"
-                ],
-                "summary": "Authorize provider session",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Provider name",
-                        "name": "provider",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Authorization request",
-                        "name": "user",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.AuthorizeUser"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Authorization response",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Provider not found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/provider/{provider}/identities": {
             "get": {
                 "security": [
@@ -1427,6 +1359,80 @@ const docTemplate = `{
                         "description": "Provider tenants",
                         "schema": {
                             "$ref": "#/definitions/models.ProviderTenantsResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Provider not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/provider/{provider}/{function}": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Execute a specific function on a provider (e.g., authorizesession, listidentities)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "providers"
+                ],
+                "summary": "Execute provider function",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Provider name",
+                        "name": "provider",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Function name (authorizesession, listidentities)",
+                        "name": "function",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Function-specific request body",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Function response",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
                     "404": {
@@ -2507,6 +2513,10 @@ const docTemplate = `{
                 },
                 "name": {
                     "description": "Name is the human-readable name of the group.",
+                    "type": "string"
+                },
+                "parent": {
+                    "description": "Parent is the ID of the parent group, if any.",
                     "type": "string"
                 }
             }
@@ -3758,26 +3768,6 @@ const docTemplate = `{
                 }
             }
         },
-        "models.AuthorizeUser": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "string"
-                },
-                "redirect_uri": {
-                    "type": "string"
-                },
-                "scopes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "state": {
-                    "type": "string"
-                }
-            }
-        },
         "models.AuthorizerConfiguration": {
             "type": "object",
             "properties": {
@@ -4206,6 +4196,13 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "parent": {
+                    "type": "string"
+                },
+                "type": {
+                    "description": "account, folder, organization, etc.",
                     "type": "string"
                 }
             }

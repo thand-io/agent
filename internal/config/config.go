@@ -375,7 +375,7 @@ func (c *Config) SyncWithLoginServer() error {
 
 	localToken := ""
 
-	if c.HasAPIKey() {
+	if c.HasAPIKey() && c.IsServer() {
 
 		logrus.Debugln("Using API key for login server authentication")
 		localToken = c.GetAPIKey()
@@ -383,26 +383,19 @@ func (c *Config) SyncWithLoginServer() error {
 	} else {
 
 		logrus.Debugf("Looking for valid session to sync with login server at: %s", c.GetLoginServerUrl())
-		localSessions := loginServer.GetSessions()
+		providerName, session, err := loginServer.GetFirstActiveSession()
 
-		// Find the first non-expired session token
-		for providerName, session := range localSessions {
-			if !session.IsExpired() {
-
-				logrus.Debugf("Found valid session for provider '%s'", providerName)
-				localToken = session.GetEncodedLocalSession()
-
-				if len(session.Endpoint) > 0 && !strings.EqualFold(session.Endpoint, c.GetLoginServerUrl()) {
-					logrus.Infof("Updating login server URL from session endpoint: %s", session.Endpoint)
-					c.Login.Endpoint = session.Endpoint
-				}
-
-				break
-			}
+		if err != nil {
+			return ErrNoActiveLoginSession
 		}
 
-		if len(localToken) == 0 {
-			return ErrNoActiveLoginSession
+		// Find the first non-expired session token
+		logrus.Debugf("Found valid session for provider '%s'", providerName)
+		localToken = session.GetEncodedLocalSession()
+
+		if len(session.Endpoint) > 0 && !strings.EqualFold(session.Endpoint, c.GetLoginServerUrl()) {
+			logrus.Infof("Updating login server URL from session endpoint: %s", session.Endpoint)
+			c.Login.Endpoint = session.Endpoint
 		}
 
 	}

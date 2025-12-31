@@ -135,7 +135,11 @@ func (p *BaseProvider) buildIdentitiyIndices() error {
 	}
 
 	// Index identities
-	for _, identity := range p.identity.identities {
+	p.identity.mu.RLock()
+	identities := p.identity.identities
+	p.identity.mu.RUnlock()
+
+	for _, identity := range identities {
 		if err := identityIndex.Index(identity.ID, identity); err != nil {
 			return fmt.Errorf("failed to index identity %s: %v", identity.ID, err)
 		}

@@ -127,8 +127,10 @@ func (c *Config) LoadRoles() (map[string]models.Role, error) {
 func (c *Config) ApplyRoles(foundRoles []*models.RoleDefinitions) (map[string]models.Role, error) {
 
 	// Add roles defined directly in config
-	if len(c.Roles.Definitions) > 0 {
-		logrus.Debugln("Adding roles defined directly in config: ", len(c.Roles.Definitions))
+	c.mu.RLock()
+	rolesLen := len(c.Roles.Definitions)
+	if rolesLen > 0 {
+		logrus.Debugln("Adding roles defined directly in config: ", rolesLen)
 		defaultVersion := version.Must(version.NewVersion("1.0"))
 
 		for roleKey, role := range c.Roles.Definitions {
@@ -138,6 +140,7 @@ func (c *Config) ApplyRoles(foundRoles []*models.RoleDefinitions) (map[string]mo
 			})
 		}
 	}
+	c.mu.RUnlock()
 
 	defs := make(map[string]models.Role)
 	logrus.Debugln("Processing loaded roles: ", len(foundRoles))
@@ -243,6 +246,8 @@ func (c *Config) loadRolesVaultData() (string, error) {
 }
 
 func (c *Config) GetRoleByName(name string) (*models.Role, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return c.Roles.GetRoleByName(name)
 }
 
@@ -277,7 +282,7 @@ func (c *Config) GetCompositeRoleByName(identity *models.Identity, roleName stri
 	if err != nil {
 		return nil, fmt.Errorf("failed to get role '%s': %w", roleName, err)
 	}
-	return c.GetCompositeRole(identity, baseRole)
+	return c.resolveCompositeRole(identity, baseRole, make(map[string]bool, 8))
 }
 
 func (c *Config) resolveCompositeRoleByName(identity *models.Identity, roleName string, visited map[string]bool) (*models.Role, error) {
@@ -656,6 +661,7 @@ func (c *Config) resolvePermissionConflicts(role *models.Role) {
 // Returns the provider name, the remainder, and whether it matched a known provider.
 // Checks both exact provider names and provider engine types.
 // Used for inheritance resolution where engine type matching is desired.
+// Note: This function assumes the caller already holds c.mu.RLock()
 func (c *Config) parseProviderPrefix(spec string) (providerName, remainder string, isProvider bool) {
 	colonIdx := strings.Index(spec, ":")
 	if colonIdx <= 0 || colonIdx >= len(spec)-1 {
@@ -665,13 +671,15 @@ func (c *Config) parseProviderPrefix(spec string) (providerName, remainder strin
 	prefix := spec[:colonIdx]
 	suffix := spec[colonIdx+1:]
 
-	// Check if prefix is a known provider by exact name
-	if _, err := c.GetProviderByName(prefix); err == nil {
+	// Check if prefix is a known provider by exact name (direct map access)
+	if _, exists := c.Providers.Definitions[prefix]; exists {
 		return prefix, suffix, true
 	}
 	// Check if prefix is a provider engine type
-	if foundName, _, err := c.GetProvider(prefix); err == nil {
-		return foundName, suffix, true
+	for foundName, provider := range c.Providers.Definitions {
+		if strings.Compare(provider.Provider, prefix) == 0 {
+			return foundName, suffix, true
+		}
 	}
 
 	return "", spec, false

@@ -10,9 +10,10 @@ import (
 )
 
 var serviceCmd = &cobra.Command{
-	Use:   "service",
-	Short: "Service management commands",
-	Long:  `Manage the Thand Agent as a system service`,
+	Use:               "service",
+	Short:             "Service management commands",
+	Long:              `Manage the Thand Agent as a system service`,
+	PersistentPreRunE: preRunClientConfigE,
 }
 
 var installCmd = &cobra.Command{

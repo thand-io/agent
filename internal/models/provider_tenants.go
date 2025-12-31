@@ -16,10 +16,10 @@ type ProviderTenantsResponse struct {
 }
 
 type ProviderTenant struct {
-	ID   string `json:"id"`
+	ID     string `json:"id"`
 	Parent string `json:"parent,omitempty"`
-	Type string `json:"type,omitempty"` // account, folder, organization, etc.
-	Name string `json:"name"`
+	Type   string `json:"type,omitempty"` // account, folder, organization, etc.
+	Name   string `json:"name"`
 }
 
 func (p ProviderTenant) String() string {
@@ -50,6 +50,9 @@ func (p *BaseProvider) GetTenant(ctx context.Context, tenant string) (*ProviderT
 
 	tenant = strings.ToLower(tenant)
 	// Fast map lookup
+	p.tenants.mu.RLock()
+	defer p.tenants.mu.RUnlock()
+
 	if tnt, exists := p.tenants.tenantsMap[tenant]; exists {
 		return tnt, nil
 	}
@@ -67,7 +70,10 @@ func (p *BaseProvider) ListTenants(ctx context.Context, searchReq *SearchRequest
 
 	// If no filters, return all tenants
 	if searchReq == nil || searchReq.IsEmpty() {
-		return ReturnSearchResults(p.tenants.tenants), nil
+		p.tenants.mu.RLock()
+		tenants := p.tenants.tenants
+		p.tenants.mu.RUnlock()
+		return ReturnSearchResults(tenants), nil
 	}
 
 	// Check if search index is ready
@@ -77,16 +83,21 @@ func (p *BaseProvider) ListTenants(ctx context.Context, searchReq *SearchRequest
 
 	if tenantsIndex != nil {
 		// Use Bleve search for better search capabilities
+		tenants := p.tenants.tenants
+		p.tenants.mu.RUnlock()
 		return BleveListSearch(ctx, tenantsIndex, func(a *search.DocumentMatch, b ProviderTenant) bool {
 			return strings.EqualFold(a.ID, b.Name)
-		}, p.tenants.tenants, searchReq)
+		}, tenants, searchReq)
 	}
 
 	// Fallback to simple substring filtering while index is being built
+	tenants := p.tenants.tenants
+	p.tenants.mu.RUnlock()
+
 	var filtered []ProviderTenant
 	filterText := strings.ToLower(strings.Join(searchReq.Terms, " "))
 
-	for _, tnt := range p.tenants.tenants {
+	for _, tnt := range tenants {
 		// Check if any filter matches the tenant name or description
 		if strings.Contains(strings.ToLower(tnt.Name), filterText) {
 			filtered = append(filtered, tnt)
@@ -156,16 +167,20 @@ func (p *BaseProvider) AddTenants(tenants ...ProviderTenant) {
 		return
 	}
 
+	p.tenants.mu.RLock()
 	existing := p.tenants.tenants
 
 	if existing == nil {
 		existing = make([]ProviderTenant, 0)
 	}
 
-	combined := append(existing, FilterDuplicates(
+	filtered := FilterDuplicates(
 		tenants,
 		p.tenants.tenantsMap,
 		CreateKeysFromTenants,
-	)...)
+	)
+	p.tenants.mu.RUnlock()
+
+	combined := append(existing, filtered...)
 	p.SetTenants(combined)
 }

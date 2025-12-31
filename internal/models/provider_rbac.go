@@ -499,15 +499,20 @@ func (p *BaseProvider) buildPermissionIndices() error {
 	}
 
 	// Index permissions
-	for _, perm := range p.rbac.permissions {
+	p.rbac.mu.RLock()
+	permissions := p.rbac.permissions
+	roles := p.rbac.roles
+	p.rbac.mu.RUnlock()
+
+	for _, perm := range permissions {
 		if err := permissionsIndex.Index(perm.Name, perm); err != nil {
 			return fmt.Errorf("failed to index permission %s: %v", perm.Name, err)
 		}
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"permissions": len(p.rbac.permissions),
-		"roles":       len(p.rbac.roles),
+		"permissions": len(permissions),
+		"roles":       len(roles),
 	}).Debug("RBAC search indices ready")
 
 	p.rbac.mu.Lock()
@@ -548,7 +553,12 @@ func (p *BaseProvider) buildRoleIndices() error {
 	}
 
 	// Index roles
-	for _, role := range p.rbac.roles {
+	p.rbac.mu.RLock()
+	roles := p.rbac.roles
+	permissions := p.rbac.permissions
+	p.rbac.mu.RUnlock()
+
+	for _, role := range roles {
 		if err := rolesIndex.Index(role.Name, role); err != nil {
 			return fmt.Errorf("failed to index role %s: %v", role.Name, err)
 		}
@@ -559,8 +569,8 @@ func (p *BaseProvider) buildRoleIndices() error {
 	p.rbac.mu.Unlock()
 
 	logrus.WithFields(logrus.Fields{
-		"permissions": len(p.rbac.permissions),
-		"roles":       len(p.rbac.roles),
+		"permissions": len(permissions),
+		"roles":       len(roles),
 	}).Debug("RBAC search indices ready")
 
 	return nil
@@ -597,7 +607,11 @@ func (p *BaseProvider) buildTenantIndices() error {
 	}
 
 	// Index tenants
-	for _, tenant := range p.tenants.tenants {
+	p.tenants.mu.RLock()
+	tenants := p.tenants.tenants
+	p.tenants.mu.RUnlock()
+
+	for _, tenant := range tenants {
 		if err := tenantsIndex.Index(tenant.Name, tenant); err != nil {
 			return fmt.Errorf("failed to index tenant %s: %v", tenant.Name, err)
 		}
@@ -608,7 +622,7 @@ func (p *BaseProvider) buildTenantIndices() error {
 	p.tenants.mu.Unlock()
 
 	logrus.WithFields(logrus.Fields{
-		"tenants": len(p.tenants.tenants),
+		"tenants": len(tenants),
 	}).Debug("Tenant search indices ready")
 
 	return nil

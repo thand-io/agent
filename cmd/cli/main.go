@@ -41,11 +41,39 @@ func preRunClientConfigE(cmd *cobra.Command, _ []string) error {
 	return preRunConfigE(cmd, config.ModeClient)
 }
 
+func preRunClientConfigWithServerE(cmd *cobra.Command, args []string) error {
+	err := preRunConfigE(cmd, config.ModeClient)
+
+	if err != nil {
+		return err
+	}
+
+	err = preRunServerE(cmd, args)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func preRunClientConfigWithSessionE(cmd *cobra.Command, args []string) error {
+
+	err := preRunClientConfigWithServerE(cmd, args)
+	if err != nil {
+		return err
+	}
+
+	// Authenticate
+	return preAuthenticateE(cmd, args)
+
+}
+
 func preRunServerConfigE(cmd *cobra.Command, _ []string) error {
 	return preRunConfigE(cmd, config.ModeServer)
 }
 
-func preRunAgentConfigE(cmd *cobra.Command, _ []string) error {
+func preRunAgentConfigE(cmd *cobra.Command, args []string) error {
 	return preRunConfigE(cmd, config.ModeAgent)
 }
 
@@ -89,6 +117,16 @@ func preRunConfigE(cmd *cobra.Command, mode config.Mode) error {
 
 		// Load users session state before any command runs
 		sessionManager = loadUserSessionState(cfg.GetLoginServerHostname())
+
+	case config.ModeAgent:
+
+		// Initialize providers
+		err = cfg.InitializeProviders()
+
+		if err != nil {
+			logrus.WithError(err).Errorln("Failed to initialize providers")
+			return err
+		}
 
 	case config.ModeServer:
 
@@ -206,25 +244,6 @@ func preAuthenticateE(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func preAgentE(cmd *cobra.Command, args []string) error {
-
-	logrus.Debug("Starting server")
-
-	// Server has to run first so we can get our callback
-	// from the auth response
-	err := preRunServerE(cmd, args) // load config and authenticate using
-	if err != nil {
-		return err
-	}
-
-	err = preAuthenticateE(cmd, args)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 var rootCmd = &cobra.Command{
 	Use:   "agent",
 	Short: "Thand Agent - Just-in-time access to cloud infrastructure and SaaS applications",
@@ -232,8 +251,7 @@ var rootCmd = &cobra.Command{
 Instead of permanent admin rights, users request access when needed, for only as long as needed.
 
 Complete documentation is available at https://docs.thand.io`,
-	PersistentPreRunE: preRunClientConfigE,
-	PreRunE:           preAgentE,
+	PreRunE: preRunClientConfigWithSessionE,
 	RunE: func(cmd *cobra.Command, args []string) error {
 
 		// When nothing is specified. First check if a login-server is configured

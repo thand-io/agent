@@ -21,7 +21,7 @@ var accessCmd = &cobra.Command{
 	Use:     "access",
 	Short:   "Request access to a specific resource",
 	Long:    `Request access to a specific resource with role and duration`,
-	PreRunE: preAgentE, // load agent
+	PreRunE: preRunClientConfigWithSessionE, // load agent
 	Run: func(cmd *cobra.Command, args []string) {
 		// TODO: use resource, permissions later to let users request specific permissions
 		// and access to specific resources

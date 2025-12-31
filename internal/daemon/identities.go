@@ -69,8 +69,8 @@ func (s *Server) getIdentities(c *gin.Context) {
 	}
 
 	// Return the aggregated identities
-	c.JSON(http.StatusOK, gin.H{
-		"identities": identities,
-		"providers":  len(identityProvidersCount),
+	c.JSON(http.StatusOK, models.IdentitiesResponse{
+		Identities: identities,
+		Providers:  len(identityProvidersCount),
 	})
 }

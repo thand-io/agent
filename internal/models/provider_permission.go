@@ -36,6 +36,9 @@ func (p *BaseProvider) GetPermission(ctx context.Context, permission string) (*P
 
 	permission = strings.ToLower(permission)
 	// Fast map lookup
+	p.rbac.mu.RLock()
+	defer p.rbac.mu.RUnlock()
+
 	if perm, exists := p.rbac.permissionsMap[permission]; exists {
 		return perm, nil
 	}
@@ -53,26 +56,30 @@ func (p *BaseProvider) ListPermissions(ctx context.Context, searchReq *SearchReq
 
 	// If no filters, return all permissions
 	if searchReq == nil || searchReq.IsEmpty() {
-		return ReturnSearchResults(p.rbac.permissions), nil
+		p.rbac.mu.RLock()
+		permissions := p.rbac.permissions
+		p.rbac.mu.RUnlock()
+		return ReturnSearchResults(permissions), nil
 	}
 
 	// Check if search index is ready
 	p.rbac.mu.RLock()
 	permissionsIndex := p.rbac.permissionsIndex
+	permissions := p.rbac.permissions
 	p.rbac.mu.RUnlock()
 
 	if permissionsIndex != nil {
 		// Use Bleve search for better search capabilities
 		return BleveListSearch(ctx, permissionsIndex, func(a *search.DocumentMatch, b ProviderPermission) bool {
 			return strings.EqualFold(a.ID, b.Name)
-		}, p.rbac.permissions, searchReq)
+		}, permissions, searchReq)
 	}
 
 	// Fallback to simple substring filtering while index is being built
 	var filtered []ProviderPermission
 	filterText := strings.ToLower(strings.Join(searchReq.Terms, " "))
 
-	for _, perm := range p.rbac.permissions {
+	for _, perm := range permissions {
 		// Check if any filter matches the permission name or description
 		if strings.Contains(strings.ToLower(perm.Name), filterText) ||
 			strings.Contains(strings.ToLower(perm.Description), filterText) {

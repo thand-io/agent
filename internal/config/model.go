@@ -79,6 +79,7 @@ func (c *Config) GetMode() Mode {
 }
 
 func (c *Config) SetMode(mode Mode) {
+	logrus.Debugf("Setting mode: %s", mode)
 	c.mode = mode
 }
 
@@ -129,6 +130,9 @@ func (c *Config) GetServices() models.ServicesClientImpl {
 func (c *Config) GetProvider(providerName string) (string, *models.Provider, error) {
 
 	// Get the first provider by provider name
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	for foundName, provider := range c.Providers.Definitions {
 		if strings.Compare(provider.Provider, providerName) == 0 {
 			return foundName, &provider, nil
@@ -139,6 +143,9 @@ func (c *Config) GetProvider(providerName string) (string, *models.Provider, err
 }
 
 func (c *Config) GetProviderByName(name string) (*models.Provider, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	if provider, exists := c.Providers.Definitions[name]; exists {
 		return &provider, nil
 	}
@@ -152,6 +159,9 @@ func (c *Config) GetProvidersByCapability(capability ...models.ProviderCapabilit
 func (c *Config) GetProvidersByCapabilityWithUser(user *models.User, capability ...models.ProviderCapability) map[string]models.Provider {
 
 	providers := make(map[string]models.Provider)
+
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
 	for name, provider := range c.Providers.Definitions {
 		// Skip providers that don't have a client initialized
@@ -177,6 +187,9 @@ func (c *Config) GetProvidersByCapabilityWithUser(user *models.User, capability 
 }
 
 func (c *Config) GetWorkflowByName(name string) (*models.Workflow, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	if workflow, exists := c.Workflows.Definitions[name]; exists {
 		return &workflow, nil
 	}
@@ -543,7 +556,9 @@ func (r *Config) GetWorkflowFromElevationRequest(
 		return nil, fmt.Errorf("workflow '%s' not allowed for role '%s', workflows: %v", workflowName, roleName, role.Workflows)
 	}
 
+	r.mu.RLock()
 	workflow, foundWorkflow := r.Workflows.Definitions[workflowName]
+	r.mu.RUnlock()
 
 	if !foundWorkflow {
 		return nil, fmt.Errorf("workflow '%s' not found for role '%s'", workflowName, roleName)

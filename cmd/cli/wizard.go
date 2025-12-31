@@ -1,17 +1,24 @@
 package cli
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/charmbracelet/huh"
+	"github.com/serverlessworkflow/sdk-go/v3/model"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
+	"github.com/thand-io/agent/internal/providers"
 )
 
 // RunRequestWizard runs the interactive wizard and returns the collected data
@@ -60,14 +67,14 @@ func RunRequestWizard(config *config.Config) (*models.ElevateRequest, error) {
 	data.Reason = reason
 
 	// Step 5: Optional - Select Identities
-	identities, err := selectIdentities()
+	identities, err := selectIdentities(provider)
 	if err != nil {
 		return nil, err
 	}
 	data.Identities = identities
 
 	// Step 6: Optional - Select Tenants
-	tenants, err := selectTenants()
+	tenants, err := selectTenants(provider)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +162,9 @@ func getProviderOptions(config *config.Config) []huh.Option[string] {
 
 	// Get providers from config
 	for providerKey, provider := range config.Providers.Definitions {
+
 		if len(provider.Name) == 0 { // Only providers with names
+			logrus.Debugf("Skipping provider %s as it has no name", providerKey)
 			continue
 		}
 
@@ -163,6 +172,7 @@ func getProviderOptions(config *config.Config) []huh.Option[string] {
 		hasRoles := false
 		for _, role := range config.Roles.Definitions {
 			if !role.Enabled {
+				logrus.Debugf("Skipping disabled role %s for provider %s", role.Name, providerKey)
 				continue
 			}
 			if slices.Contains(role.Providers, providerKey) {
@@ -175,6 +185,7 @@ func getProviderOptions(config *config.Config) []huh.Option[string] {
 
 		// Skip providers with no associated roles
 		if !hasRoles {
+			logrus.Debugf("Skipping provider %s as it has no associated roles", providerKey)
 			continue
 		}
 
@@ -350,16 +361,15 @@ func validateReason(val string) error {
 }
 
 // selectIdentities prompts for optional identity input
-func selectIdentities() ([]string, error) {
-	var identitiesInput string
-	var skip bool
+func selectIdentities(provider string) ([]string, error) {
+	var wantIdentities bool
 
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewConfirm().
 				Title("Specify identities?").
 				Description("Do you want to specify specific identities for this request? (Optional)").
-				Value(&skip).
+				Value(&wantIdentities).
 				Affirmative("Yes").
 				Negative("Skip"),
 		),
@@ -370,9 +380,44 @@ func selectIdentities() ([]string, error) {
 		return nil, fmt.Errorf("identity selection cancelled: %w", err)
 	}
 
-	if !skip {
+	if !wantIdentities {
 		return []string{}, nil
 	}
+
+	// Get identities from providers
+	identityOptions, err := getIdentityOptions()
+	if err != nil || len(identityOptions) == 0 {
+		fmt.Println(err)
+		// Fallback to manual input if no identities available
+		return selectIdentitiesManual()
+	}
+
+	var selectedIdentities []string
+
+	// Show searchable list of identities
+	selectForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewMultiSelect[string]().
+				Title("Select identities:").
+				Description("Search and select identities (use arrow keys, space to select, enter to confirm)").
+				Options(identityOptions...).
+				Filterable(true).
+				Limit(10).
+				Value(&selectedIdentities),
+		),
+	)
+
+	err = selectForm.Run()
+	if err != nil {
+		return nil, fmt.Errorf("identity selection cancelled: %w", err)
+	}
+
+	return selectedIdentities, nil
+}
+
+// selectIdentitiesManual allows manual entry of identities
+func selectIdentitiesManual() ([]string, error) {
+	var identitiesInput string
 
 	inputForm := huh.NewForm(
 		huh.NewGroup(
@@ -389,14 +434,14 @@ func selectIdentities() ([]string, error) {
 		),
 	)
 
-	err = inputForm.Run()
+	err := inputForm.Run()
 	if err != nil {
 		return nil, fmt.Errorf("identity input cancelled: %w", err)
 	}
 
 	// Split by comma and trim spaces
 	identities := []string{}
-	for _, id := range strings.Split(identitiesInput, ",") {
+	for id := range strings.SplitSeq(identitiesInput, ",") {
 		trimmed := strings.TrimSpace(id)
 		if trimmed != "" {
 			identities = append(identities, trimmed)
@@ -406,17 +451,100 @@ func selectIdentities() ([]string, error) {
 	return identities, nil
 }
 
+// getIdentityOptions returns identity options from a specific provider
+func getIdentityOptions() ([]huh.Option[string], error) {
+	var options []huh.Option[string]
+
+	loginSessions, err := sessionManager.GetLoginServer(cfg.GetLoginServerHostname())
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get login sessions: %w", err)
+	}
+
+	_, session, err := loginSessions.GetFirstActiveSession()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active session: %w", err)
+	}
+
+	bodyBytes, err := json.Marshal(models.SearchRequest{
+		Limit: 100, // Limit to prevent overwhelming the UI
+	})
+
+	fmt.Println(session.Session)
+
+	params := url.Values{
+		"q": {""},
+	}
+
+	identityUrl := fmt.Sprintf("%s/identities?%s",
+		cfg.DiscoverLoginServerApiUrl(
+			cfg.GetLoginServerUrl(),
+		),
+		params.Encode(),
+	)
+
+	resp, err := common.InvokeHttpRequest(
+		&model.HTTPArguments{
+			Method: http.MethodGet,
+			Endpoint: &model.Endpoint{
+				EndpointConfig: &model.EndpointConfiguration{
+					URI: &model.LiteralUri{
+						Value: identityUrl,
+					},
+					Authentication: &model.ReferenceableAuthenticationPolicy{
+						AuthenticationPolicy: &model.AuthenticationPolicy{
+							Bearer: &model.BearerAuthenticationPolicy{
+								Token: session.GetEncodedLocalSession(),
+							},
+						},
+					},
+				},
+			},
+			Body:    bodyBytes,
+			Headers: map[string]string{"Content-Type": "application/json"},
+		},
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to list identities: %w", err)
+	}
+
+	responseBody := resp.Body()
+
+	fmt.Println(string(responseBody))
+
+	identities := models.IdentitiesResponse{}
+	err = json.Unmarshal(responseBody, &identities)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse identities response: %w", err)
+	}
+
+	// Add identities as options
+	for _, identity := range identities.Identities {
+		displayName := identity.Result.ID
+		if len(identity.Result.Label) > 0 {
+			displayName = fmt.Sprintf("%s (%s)", identity.Result.Label, identity.Result.ID)
+		}
+
+		option := huh.NewOption(displayName, identity.Result.ID)
+		options = append(options, option)
+	}
+
+	return options, nil
+}
+
 // selectTenants prompts for optional tenant input
-func selectTenants() ([]string, error) {
-	var tenantsInput string
-	var skip bool
+func selectTenants(provider string) ([]string, error) {
+	var wantTenants bool
 
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewConfirm().
 				Title("Specify tenants?").
 				Description("Do you want to specify specific tenants/accounts for this request? (Optional)").
-				Value(&skip).
+				Value(&wantTenants).
 				Affirmative("Yes").
 				Negative("Skip"),
 		),
@@ -427,9 +555,44 @@ func selectTenants() ([]string, error) {
 		return nil, fmt.Errorf("tenant selection cancelled: %w", err)
 	}
 
-	if !skip {
+	if !wantTenants {
 		return []string{}, nil
 	}
+
+	// Get tenants from providers
+	tenantOptions, err := getTenantOptions(provider)
+
+	if err != nil || len(tenantOptions) == 0 {
+		// Fallback to manual input if no tenants available
+		return selectTenantsManual()
+	}
+
+	var selectedTenants []string
+
+	// Show searchable list of tenants
+	selectForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewMultiSelect[string]().
+				Title("Select tenants/accounts:").
+				Description("Search and select tenants (use arrow keys, space to select, enter to confirm)").
+				Options(tenantOptions...).
+				Filterable(true).
+				Limit(10).
+				Value(&selectedTenants),
+		),
+	)
+
+	err = selectForm.Run()
+	if err != nil {
+		return nil, fmt.Errorf("tenant selection cancelled: %w", err)
+	}
+
+	return selectedTenants, nil
+}
+
+// selectTenantsManual allows manual entry of tenants
+func selectTenantsManual() ([]string, error) {
+	var tenantsInput string
 
 	inputForm := huh.NewForm(
 		huh.NewGroup(
@@ -446,14 +609,14 @@ func selectTenants() ([]string, error) {
 		),
 	)
 
-	err = inputForm.Run()
+	err := inputForm.Run()
 	if err != nil {
 		return nil, fmt.Errorf("tenant input cancelled: %w", err)
 	}
 
 	// Split by comma and trim spaces
 	tenants := []string{}
-	for _, t := range strings.Split(tenantsInput, ",") {
+	for t := range strings.SplitSeq(tenantsInput, ",") {
 		trimmed := strings.TrimSpace(t)
 		if trimmed != "" {
 			tenants = append(tenants, trimmed)
@@ -461,6 +624,72 @@ func selectTenants() ([]string, error) {
 	}
 
 	return tenants, nil
+}
+
+// getTenantOptions returns tenant options from a specific provider
+func getTenantOptions(providerKey string) ([]huh.Option[string], error) {
+	var options []huh.Option[string]
+	ctx := context.Background()
+
+	// Get the specific provider
+	providerDef, err := cfg.GetProviderByName(providerKey)
+	if err != nil {
+		return nil, fmt.Errorf("provider %s not found: %w", providerKey, err)
+	}
+
+	provider := providerDef.GetClient()
+	if provider == nil {
+		return nil, fmt.Errorf("provider %s client not initialized", providerKey)
+	}
+
+	// Check if provider supports tenants
+	if !provider.HasCapability(models.ProviderCapabilityTenants) {
+		return nil, fmt.Errorf("provider %s does not support tenants", providerKey)
+	}
+
+	// Search for tenants (empty query returns all, with limit)
+	searchReq := &models.SearchRequest{
+		Limit: 100, // Limit to prevent overwhelming the UI
+	}
+
+	loginSessions, err := sessionManager.GetLoginServer(cfg.GetLoginServerHostname())
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get login sessions: %w", err)
+	}
+
+	_, session, err := loginSessions.GetFirstActiveSession()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active session: %w", err)
+	}
+
+	// Set session key in context for provider proxy
+	ctx = context.WithValue(ctx, providers.ProviderProxySessionKey, session)
+
+	tenants, err := provider.ListTenants(ctx, searchReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list tenants: %w", err)
+	}
+
+	// Add tenants as options
+	for _, tenant := range tenants {
+		displayName := tenant.Result.Name
+		if len(tenant.Result.ID) > 0 && tenant.Result.ID != tenant.Result.Name {
+			displayName = fmt.Sprintf("%s (%s)", tenant.Result.Name, tenant.Result.ID)
+		}
+		if len(tenant.Result.Type) > 0 {
+			displayName = fmt.Sprintf("%s [%s]", displayName, tenant.Result.Type)
+		}
+
+		// Use the tenant ID as the value
+		value := tenant.Result.ID
+
+		option := huh.NewOption(displayName, value)
+		options = append(options, option)
+	}
+
+	return options, nil
 }
 
 // displaySummary shows a summary of the configured request
@@ -473,15 +702,15 @@ func displaySummary(data *models.ElevateRequest) {
 	fmt.Printf("Role: %s\n", data.Role.Name)
 	fmt.Printf("Duration: %s\n", data.Duration)
 	fmt.Printf("Reason: %s\n", data.Reason)
-	
+
 	if len(data.Identities) > 0 {
 		fmt.Printf("Identities: %s\n", strings.Join(data.Identities, ", "))
 	}
-	
+
 	if len(data.Tenants) > 0 {
 		fmt.Printf("Tenants: %s\n", strings.Join(data.Tenants, ", "))
 	}
-	
+
 	fmt.Println()
 }
 
@@ -490,7 +719,7 @@ var wizardCmd = &cobra.Command{
 	Short:   "Interactive wizard to configure access requests",
 	Long:    `Launch an interactive wizard that guides you through creating an access request with proper validation and configuration from your workflows, roles, and providers.`,
 	Hidden:  true,
-	PreRunE: preRunServerE,
+	PreRunE: preRunClientConfigWithSessionE,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("Starting Interactive Access Request Wizard...")
 		fmt.Println()

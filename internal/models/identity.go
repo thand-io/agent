@@ -1,6 +1,8 @@
 package models
 
-import "strings"
+import (
+	"strings"
+)
 
 // Identity represents either a user or a group in the system.
 // It serves as a unified abstraction for access control subjects,
@@ -138,4 +140,9 @@ func (i *Identity) AddProvider(provider *Provider) {
 	if _, exists := i.Providers[provider.Name]; !exists {
 		i.Providers[provider.Name] = provider.Provider
 	}
+}
+
+type IdentitiesResponse struct {
+	Identities []SearchResult[Identity] `json:"identities"`
+	Providers  int                      `json:"providers"`
 }

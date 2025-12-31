@@ -53,6 +53,9 @@ func (p *BaseProvider) GetRole(ctx context.Context, role string) (*ProviderRole,
 	role = strings.ToLower(role)
 
 	// Fast map lookup
+	p.rbac.mu.RLock()
+	defer p.rbac.mu.RUnlock()
+
 	if r, exists := p.rbac.rolesMap[role]; exists {
 		return r, nil
 	}
@@ -74,26 +77,30 @@ func (p *BaseProvider) ListRoles(
 
 	// If no filters, return all roles
 	if searchRequest == nil || searchRequest.IsEmpty() {
-		return ReturnSearchResults(p.rbac.roles), nil
+		p.rbac.mu.RLock()
+		roles := p.rbac.roles
+		p.rbac.mu.RUnlock()
+		return ReturnSearchResults(roles), nil
 	}
 
 	// Check if search index is ready
 	p.rbac.mu.RLock()
 	rolesIndex := p.rbac.rolesIndex
+	roles := p.rbac.roles
 	p.rbac.mu.RUnlock()
 
 	if rolesIndex != nil {
 		// Use Bleve search for better search capabilities
 		return BleveListSearch(ctx, rolesIndex, func(a *search.DocumentMatch, b ProviderRole) bool {
 			return strings.Compare(a.ID, b.Name) == 0
-		}, p.rbac.roles, searchRequest)
+		}, roles, searchRequest)
 	}
 
 	// Fallback to simple substring filtering while index is being built
 	var filtered []ProviderRole
 	filterText := strings.ToLower(strings.Join(searchRequest.Terms, " "))
 
-	for _, role := range p.rbac.roles {
+	for _, role := range roles {
 		// Check if any filter matches the role name
 		if strings.Contains(strings.ToLower(role.Name), filterText) {
 			filtered = append(filtered, role)

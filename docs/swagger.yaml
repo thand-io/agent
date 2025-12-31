@@ -266,6 +266,9 @@ definitions:
       name:
         description: Name is the human-readable name of the group.
         type: string
+      parent:
+        description: Parent is the ID of the parent group, if any.
+        type: string
     type: object
   github_com_thand-io_agent_internal_models.Groups:
     properties:
@@ -1110,19 +1113,6 @@ definitions:
     - do
     - document
     type: object
-  models.AuthorizeUser:
-    properties:
-      code:
-        type: string
-      redirect_uri:
-        type: string
-      scopes:
-        items:
-          type: string
-        type: array
-      state:
-        type: string
-    type: object
   models.AuthorizerConfiguration:
     properties:
       enabled:
@@ -1405,6 +1395,11 @@ definitions:
       id:
         type: string
       name:
+        type: string
+      parent:
+        type: string
+      type:
+        description: account, folder, organization, etc.
         type: string
     type: object
   models.ProviderTenantsResponse:
@@ -2363,28 +2358,33 @@ paths:
       summary: Get provider by name
       tags:
       - providers
-  /provider/{provider}/authorizeSession:
+  /provider/{provider}/{function}:
     post:
       consumes:
       - application/json
-      description: Authorize a session with a specific provider
+      description: Execute a specific function on a provider (e.g., authorizesession,
+        listidentities)
       parameters:
       - description: Provider name
         in: path
         name: provider
         required: true
         type: string
-      - description: Authorization request
-        in: body
-        name: user
+      - description: Function name (authorizesession, listidentities)
+        in: path
+        name: function
         required: true
+        type: string
+      - description: Function-specific request body
+        in: body
+        name: body
         schema:
-          $ref: '#/definitions/models.AuthorizeUser'
+          type: object
       produces:
       - application/json
       responses:
         "200":
-          description: Authorization response
+          description: Function response
           schema:
             additionalProperties: true
             type: object
@@ -2405,7 +2405,7 @@ paths:
             type: object
       security:
       - BearerAuth: []
-      summary: Authorize provider session
+      summary: Execute provider function
       tags:
       - providers
   /provider/{provider}/identities:

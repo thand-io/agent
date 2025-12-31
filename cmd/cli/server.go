@@ -15,7 +15,7 @@ var serverCmd = &cobra.Command{
 	Short: "Run the agent server",
 	Long: `Start the Thand Agent server directly in the foreground.
 This will run the web service that handles authentication and authorization requests.`,
-	PersistentPreRunE: preRunServerConfigE,
+	PreRunE: preRunServerConfigE,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check if configuration is loaded
 		if cfg == nil {

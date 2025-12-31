@@ -35,6 +35,9 @@ func (p *BaseProvider) GetResource(ctx context.Context, resource string) (*Provi
 	resource = strings.ToLower(resource)
 
 	// Fast map lookup
+	p.rbac.mu.RLock()
+	defer p.rbac.mu.RUnlock()
+
 	if r, exists := p.rbac.resourcesMap[resource]; exists {
 		return r, nil
 	}
@@ -53,26 +56,30 @@ func (p *BaseProvider) ListResources(ctx context.Context, searchRequest *SearchR
 
 	// If no filters, return all resources
 	if searchRequest == nil || searchRequest.IsEmpty() {
-		return ReturnSearchResults(p.rbac.resources), nil
+		p.rbac.mu.RLock()
+		resources := p.rbac.resources
+		p.rbac.mu.RUnlock()
+		return ReturnSearchResults(resources), nil
 	}
 
 	// Check if search index is ready
 	p.rbac.mu.RLock()
 	resourcesIndex := p.rbac.resourcesIndex
+	resources := p.rbac.resources
 	p.rbac.mu.RUnlock()
 
 	if resourcesIndex != nil {
 		// Use Bleve search for better search capabilities
 		return BleveListSearch(ctx, resourcesIndex, func(a *search.DocumentMatch, b ProviderResource) bool {
 			return strings.Compare(a.ID, b.Name) == 0
-		}, p.rbac.resources, searchRequest)
+		}, resources, searchRequest)
 	}
 
 	// Fallback to simple substring filtering while index is being built
 	var filtered []ProviderResource
 	filterText := strings.ToLower(strings.Join(searchRequest.Terms, " "))
 
-	for _, resource := range p.rbac.resources {
+	for _, resource := range resources {
 		// Check if any filter matches the resource name
 		if strings.Contains(strings.ToLower(resource.Name), filterText) {
 			filtered = append(filtered, resource)
@@ -97,7 +104,11 @@ func (p *BaseProvider) buildResourceIndices() error {
 	}
 
 	// Index resources
-	for _, resource := range p.rbac.resources {
+	p.rbac.mu.RLock()
+	resources := p.rbac.resources
+	p.rbac.mu.RUnlock()
+
+	for _, resource := range resources {
 		if err := resourceIndex.Index(resource.ID, resource); err != nil {
 			return fmt.Errorf("failed to index resource %s: %v", resource.ID, err)
 		}
@@ -108,7 +119,7 @@ func (p *BaseProvider) buildResourceIndices() error {
 	p.rbac.mu.Unlock()
 
 	logrus.WithFields(logrus.Fields{
-		"resources": len(p.rbac.resources),
+		"resources": len(resources),
 	}).Debug("Resource search indices ready")
 
 	return nil

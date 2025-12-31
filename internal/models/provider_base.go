@@ -185,19 +185,23 @@ func (p *BaseProvider) AddPermissions(permissions ...ProviderPermission) {
 		return
 	}
 
+	p.rbac.mu.RLock()
 	existing := p.rbac.permissions
 
 	if existing == nil {
 		existing = make([]ProviderPermission, 0)
 	}
 
-	combined := append(existing, FilterDuplicates(
+	filtered := FilterDuplicates(
 		permissions,
 		p.rbac.permissionsMap,
 		func(p ProviderPermission) []string {
 			return []string{p.Name}
 		},
-	)...)
+	)
+	p.rbac.mu.RUnlock()
+
+	combined := append(existing, filtered...)
 	p.SetPermissions(combined)
 }
 
@@ -254,17 +258,21 @@ func (p *BaseProvider) AddRoles(roles ...ProviderRole) {
 		return
 	}
 
+	p.rbac.mu.RLock()
 	existing := p.rbac.roles
 
 	if existing == nil {
 		existing = make([]ProviderRole, 0)
 	}
 
-	combined := append(existing, FilterDuplicates(
+	filtered := FilterDuplicates(
 		roles,
 		p.rbac.rolesMap,
 		CreateKeysFromRoles,
-	)...)
+	)
+	p.rbac.mu.RUnlock()
+
+	combined := append(existing, filtered...)
 	p.SetRoles(combined)
 }
 
@@ -321,17 +329,22 @@ func (p *BaseProvider) AddResources(resources ...ProviderResource) {
 		logrus.Warningln("provider has no resources support")
 		return
 	}
+
+	p.rbac.mu.RLock()
 	existing := p.rbac.resources
 
 	if existing == nil {
 		existing = make([]ProviderResource, 0)
 	}
 
-	combined := append(existing, FilterDuplicates(
+	filtered := FilterDuplicates(
 		resources,
 		p.rbac.resourcesMap,
 		CreateKeysFromResources,
-	)...)
+	)
+	p.rbac.mu.RUnlock()
+
+	combined := append(existing, filtered...)
 	p.SetResources(combined)
 }
 
@@ -433,16 +446,20 @@ func (p *BaseProvider) AddIdentities(identities ...Identity) {
 		return
 	}
 
+	p.identity.mu.RLock()
 	existing := p.identity.identities
 	if existing == nil {
 		existing = make([]Identity, 0)
 	}
 
-	combined := append(existing, FilterDuplicates(
+	filtered := FilterDuplicates(
 		identities,
 		p.identity.identitiesMap,
 		CreateKeysFromIdentity,
-	)...)
+	)
+	p.identity.mu.RUnlock()
+
+	combined := append(existing, filtered...)
 	p.SetIdentities(combined)
 }
 
