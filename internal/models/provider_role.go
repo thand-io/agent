@@ -109,3 +109,78 @@ func (p *BaseProvider) ListRoles(
 
 	return ReturnSearchResults(filtered), nil
 }
+
+func (p *BaseProvider) SetRoles(roles []ProviderRole) {
+	p.SetRolesWithKey(roles, CreateKeysFromRoles)
+}
+
+func CreateKeysFromRoles(r ProviderRole) []string {
+	return []string{r.ID, r.Name}
+}
+
+func (p *BaseProvider) SetRolesWithKey(
+	roles []ProviderRole,
+	keyFunc func(r ProviderRole) []string) {
+
+	if p.rbac == nil {
+		logrus.Warningln("provider has no roles support")
+		return
+	}
+
+	p.rbac.mu.Lock()
+	defer p.rbac.mu.Unlock()
+
+	if p.rbac.roles == nil {
+		p.rbac.roles = make([]ProviderRole, 0)
+	}
+
+	p.rbac.roles = roles
+
+	// Create the roles map
+	p.rbac.rolesMap = make(map[string]*ProviderRole)
+	for i := range roles {
+		role := roles[i]
+		keyNames := keyFunc(role)
+		for _, keyName := range keyNames {
+			p.rbac.rolesMap[strings.ToLower(keyName)] = &role
+		}
+	}
+
+	// Trigger reindex
+	go func() {
+		err := p.buildRoleIndices()
+		if err != nil {
+			logrus.WithError(err).Error("Failed to build role search indices")
+			return
+		}
+	}()
+}
+
+func (p *BaseProvider) AddRoles(roles ...ProviderRole) {
+	// Take existing roles and append new ones
+	if p.rbac == nil {
+		logrus.Warningln("provider has no roles support")
+		return
+	}
+
+	p.rbac.mu.RLock()
+	existing := p.rbac.roles
+
+	if existing == nil {
+		existing = make([]ProviderRole, 0)
+	}
+
+	// Make a copy to avoid data races when appending
+	existingCopy := make([]ProviderRole, len(existing))
+	copy(existingCopy, existing)
+
+	filtered := FilterDuplicates(
+		roles,
+		p.rbac.rolesMap,
+		CreateKeysFromRoles,
+	)
+	p.rbac.mu.RUnlock()
+
+	combined := append(existingCopy, filtered...)
+	p.SetRoles(combined)
+}

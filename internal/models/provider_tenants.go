@@ -83,6 +83,7 @@ func (p *BaseProvider) ListTenants(ctx context.Context, searchReq *SearchRequest
 
 	if tenantsIndex != nil {
 		// Use Bleve search for better search capabilities
+		p.tenants.mu.RLock()
 		tenants := p.tenants.tenants
 		p.tenants.mu.RUnlock()
 		return BleveListSearch(ctx, tenantsIndex, func(a *search.DocumentMatch, b ProviderTenant) bool {
@@ -91,6 +92,7 @@ func (p *BaseProvider) ListTenants(ctx context.Context, searchReq *SearchRequest
 	}
 
 	// Fallback to simple substring filtering while index is being built
+	p.tenants.mu.RLock()
 	tenants := p.tenants.tenants
 	p.tenants.mu.RUnlock()
 
@@ -174,6 +176,10 @@ func (p *BaseProvider) AddTenants(tenants ...ProviderTenant) {
 		existing = make([]ProviderTenant, 0)
 	}
 
+	// Make a copy to avoid data races when appending
+	existingCopy := make([]ProviderTenant, len(existing))
+	copy(existingCopy, existing)
+
 	filtered := FilterDuplicates(
 		tenants,
 		p.tenants.tenantsMap,
@@ -181,6 +187,6 @@ func (p *BaseProvider) AddTenants(tenants ...ProviderTenant) {
 	)
 	p.tenants.mu.RUnlock()
 
-	combined := append(existing, filtered...)
+	combined := append(existingCopy, filtered...)
 	p.SetTenants(combined)
 }

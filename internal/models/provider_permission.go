@@ -96,3 +96,78 @@ func (p *BaseProvider) SynchronizePermissions(
 ) (*SynchronizePermissionsResponse, error) {
 	return nil, ErrNotImplemented
 }
+
+func (p *BaseProvider) SetPermissions(permissions []ProviderPermission) {
+	p.SetPermissionsWithKey(permissions, func(p *ProviderPermission) string {
+		return p.Name
+	})
+}
+
+// Create the permissions map
+func (p *BaseProvider) SetPermissionsWithKey(
+	permissions []ProviderPermission,
+	keyFunc func(p *ProviderPermission) string,
+) {
+	if p.rbac == nil {
+		logrus.Warningln("provider has no permissions support")
+		return
+	}
+
+	p.rbac.mu.Lock()
+	defer p.rbac.mu.Unlock()
+
+	if p.rbac.permissions == nil {
+		p.rbac.permissions = make([]ProviderPermission, 0)
+	}
+
+	p.rbac.permissions = permissions
+
+	// Create the permissions map
+	p.rbac.permissionsMap = make(map[string]*ProviderPermission)
+	for i := range permissions {
+		perm := &permissions[i]
+		keyName := keyFunc(perm)
+		p.rbac.permissionsMap[strings.ToLower(keyName)] = perm
+	}
+
+	// Trigger reindex
+	go func() {
+		err := p.buildPermissionIndices()
+		if err != nil {
+			logrus.WithError(err).Error("Failed to build rbac search indices")
+			return
+		}
+	}()
+}
+
+func (p *BaseProvider) AddPermissions(permissions ...ProviderPermission) {
+	// Take existing permissions and append new ones
+
+	if p.rbac == nil {
+		logrus.Warningln("provider has no permissions support")
+		return
+	}
+
+	p.rbac.mu.RLock()
+	existing := p.rbac.permissions
+
+	if existing == nil {
+		existing = make([]ProviderPermission, 0)
+	}
+
+	// Make a copy to avoid data races when appending
+	existingCopy := make([]ProviderPermission, len(existing))
+	copy(existingCopy, existing)
+
+	filtered := FilterDuplicates(
+		permissions,
+		p.rbac.permissionsMap,
+		func(p ProviderPermission) []string {
+			return []string{p.Name}
+		},
+	)
+	p.rbac.mu.RUnlock()
+
+	combined := append(existingCopy, filtered...)
+	p.SetPermissions(combined)
+}

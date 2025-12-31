@@ -71,7 +71,7 @@ func (p *BaseProvider) ListResources(ctx context.Context, searchRequest *SearchR
 	if resourcesIndex != nil {
 		// Use Bleve search for better search capabilities
 		return BleveListSearch(ctx, resourcesIndex, func(a *search.DocumentMatch, b ProviderResource) bool {
-			return strings.Compare(a.ID, b.Name) == 0
+			return strings.EqualFold(a.ID, b.ID)
 		}, resources, searchRequest)
 	}
 
@@ -123,4 +123,80 @@ func (p *BaseProvider) buildResourceIndices() error {
 	}).Debug("Resource search indices ready")
 
 	return nil
+}
+
+func (p *BaseProvider) SetResources(resources []ProviderResource) {
+	p.SetResourcesWithKey(resources, CreateKeysFromResources)
+}
+
+func CreateKeysFromResources(r ProviderResource) []string {
+	return []string{r.ID, r.Name}
+}
+
+func (p *BaseProvider) SetResourcesWithKey(
+	resources []ProviderResource,
+	keyFunc func(r ProviderResource) []string,
+) {
+
+	if p.rbac == nil {
+		logrus.Warningln("provider has no resources support")
+		return
+	}
+
+	p.rbac.mu.Lock()
+	defer p.rbac.mu.Unlock()
+
+	if p.rbac.resources == nil {
+		p.rbac.resources = make([]ProviderResource, 0)
+	}
+
+	p.rbac.resources = resources
+
+	// Create the resources map
+	p.rbac.resourcesMap = make(map[string]*ProviderResource)
+	for i := range resources {
+		resource := resources[i]
+		keyNames := keyFunc(resource)
+		for _, keyName := range keyNames {
+			p.rbac.resourcesMap[strings.ToLower(keyName)] = &resource
+		}
+	}
+
+	// Trigger reindex
+	go func() {
+		err := p.buildResourceIndices()
+		if err != nil {
+			logrus.WithError(err).Error("Failed to build resources search indices")
+			return
+		}
+	}()
+}
+
+func (p *BaseProvider) AddResources(resources ...ProviderResource) {
+	// Take existing resources and append new ones
+	if p.rbac == nil {
+		logrus.Warningln("provider has no resources support")
+		return
+	}
+
+	p.rbac.mu.RLock()
+	existing := p.rbac.resources
+
+	if existing == nil {
+		existing = make([]ProviderResource, 0)
+	}
+
+	// Make a copy to avoid data races when appending
+	existingCopy := make([]ProviderResource, len(existing))
+	copy(existingCopy, existing)
+
+	filtered := FilterDuplicates(
+		resources,
+		p.rbac.resourcesMap,
+		CreateKeysFromResources,
+	)
+	p.rbac.mu.RUnlock()
+
+	combined := append(existingCopy, filtered...)
+	p.SetResources(combined)
 }
