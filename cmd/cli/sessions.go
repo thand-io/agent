@@ -30,10 +30,10 @@ const (
 
 // sessionCmd represents the session command
 var sessionCmd = &cobra.Command{
-	Use:     "sessions",
-	Short:   "Interactive sessions management",
-	Long:    `Manage authentication sessions with providers interactively.`,
-	PreRunE: preRunServerE,
+	Use:               "sessions",
+	Short:             "Interactive sessions management",
+	Long:              `Manage authentication sessions with providers interactively.`,
+	PersistentPreRunE: preRunClientConfigWithServerE,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runInteractiveSessionManager()
 	},

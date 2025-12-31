@@ -469,8 +469,9 @@ func (s *Server) setupRoutes(router *gin.Engine) {
 			api.GET("/provider/:provider/resources", s.getProviderResources)
 			api.GET("/provider/:provider/tenants", s.getProviderTenants)
 
-			// Proxied provider calls
-			api.POST("/provider/:provider/authorizeSession", s.postProviderAuthorizeSession)
+			// Proxied provider calls. These help the client invoke
+			// provider specific functions via the server.
+			api.Any("/provider/:provider/:function", s.providerFunctionHandler)
 
 			// Sync endpoints
 			api.GET("/sync", s.getSync)

@@ -127,11 +127,12 @@ type ProvidersResponse struct {
 }
 
 type ProviderResponse struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Provider    string `json:"provider"` // e.g. aws, gcp, azure
-	Enabled     bool   `json:"enabled"`
+	ID           string                `json:"id"`
+	Name         string                `json:"name"`
+	Description  string                `json:"description"`
+	Provider     string                `json:"provider"` // e.g. aws, gcp, azure
+	Capabilities *ProviderCapabilities `json:"capabilities"`
+	Enabled      bool                  `json:"enabled"`
 }
 
 /*

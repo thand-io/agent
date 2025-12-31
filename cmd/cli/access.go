@@ -21,12 +21,13 @@ var accessCmd = &cobra.Command{
 	Use:     "access",
 	Short:   "Request access to a specific resource",
 	Long:    `Request access to a specific resource with role and duration`,
-	PreRunE: preAgentE, // load agent
+	PreRunE: preRunClientConfigWithSessionE, // load agent
 	Run: func(cmd *cobra.Command, args []string) {
 		// TODO: use resource, permissions later to let users request specific permissions
 		// and access to specific resources
 		// resource, _ := cmd.Flags().GetString("resource")
 		identities, _ := cmd.Flags().GetStringArray("identity")
+		tenants, _ := cmd.Flags().GetStringArray("tenant")
 		authenticator, _ := cmd.Flags().GetString("authenticator")
 		workflow, _ := cmd.Flags().GetString("workflow")
 		providers, _ := cmd.Flags().GetStringArray("provider")
@@ -51,6 +52,7 @@ var accessCmd = &cobra.Command{
 			Role:          foundRole,
 			Providers:     providers,
 			Identities:    identities,
+			Tenants:       tenants,
 			Authenticator: authenticator,
 			Workflow:      workflow,
 			Reason:        reason,
@@ -71,7 +73,8 @@ func init() {
 
 	// Add flags for access command
 	// accessCmd.Flags().StringP("resource", "r", "", "Resource to access (e.g., snowflake-prod, aws-prod)")
-	accessCmd.Flags().StringArrayP("identities", "i", []string{}, "Identities to use for access (e.g., user@example.com)")
+	accessCmd.Flags().StringArrayP("identity", "i", []string{}, "Identities to use for access (e.g., user@example.com)")
+	accessCmd.Flags().StringArrayP("tenant", "t", []string{}, "Tenants to use for access (e.g., tenant-id, account-id)")
 	accessCmd.Flags().StringP("authenticator", "a", "", "Authenticator to use for login (overrides provider selection)")
 	accessCmd.Flags().StringP("workflow", "w", "", "Workflow to execute (e.g., snowflake-access)")
 	accessCmd.Flags().StringArrayP("provider", "p", []string{}, "Provider to access (alias for resource)")

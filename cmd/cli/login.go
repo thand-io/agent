@@ -11,22 +11,11 @@ import (
 )
 
 var loginCmd = &cobra.Command{
-	Use:   "login",
-	Short: "Authenticate with the login server",
-	Long:  "Opens a browser to authenticate with the login server and establishes a session",
-	PreRunE: func(cmd *cobra.Command, args []string) error {
-
-		err := preRunClientConfigE(cmd, args)
-		if err != nil {
-			return err
-		}
-		err = preRunServerE(cmd, args)
-		if err != nil {
-			return err
-		}
-		return nil
-	},
-	RunE: runLogin,
+	Use:     "login",
+	Short:   "Authenticate with the login server",
+	Long:    "Opens a browser to authenticate with the login server and establishes a session",
+	PreRunE: preRunClientConfigWithServerE,
+	RunE:    runLogin,
 }
 
 func runLogin(cmd *cobra.Command, args []string) error {

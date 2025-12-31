@@ -57,9 +57,9 @@ definitions:
   daemon.ExecutionsPageData:
     properties:
       config:
-        $ref: '#/definitions/github_com_thand-io_agent_internal_config.Config'
+        $ref: '#/definitions/daemon.SimpleConfig'
       environment:
-        $ref: '#/definitions/models.EnvironmentConfig'
+        $ref: '#/definitions/daemon.SimpleEnvrinment'
       executions:
         items:
           $ref: '#/definitions/github_com_thand-io_agent_internal_models.WorkflowExecutionInfo'
@@ -75,41 +75,51 @@ definitions:
       version:
         type: string
     type: object
-  github_com_thand-io_agent_internal_config.Config:
+  daemon.SimpleConfig:
     properties:
-      api:
-        $ref: '#/definitions/github_com_thand-io_agent_internal_models.APIConfig'
-      environment:
-        allOf:
-        - $ref: '#/definitions/models.EnvironmentConfig'
-        description: Environment configuration and core services
-      logging:
-        $ref: '#/definitions/github_com_thand-io_agent_internal_models.LoggingConfig'
-      login:
-        allOf:
-        - $ref: '#/definitions/github_com_thand-io_agent_internal_models.LoginConfig'
-        description: System configuration
-      providers:
-        allOf:
-        - $ref: '#/definitions/github_com_thand-io_agent_internal_config.ProviderConfig'
-        description: These are integration providers like AWS, GCP, etc.
-      roles:
-        allOf:
-        - $ref: '#/definitions/github_com_thand-io_agent_internal_config.RoleConfig'
-        description: Workflow engine config
-      secret:
-        description: Secret used for signing cookies and tokens
+      apiBasePath:
         type: string
       server:
-        $ref: '#/definitions/github_com_thand-io_agent_internal_models.ServerConfig'
+        $ref: '#/definitions/daemon.SimpleServer'
       services:
-        allOf:
-        - $ref: '#/definitions/github_com_thand-io_agent_internal_models.ServicesConfig'
-        description: External services / non-core services
-      workflows:
-        allOf:
-        - $ref: '#/definitions/github_com_thand-io_agent_internal_config.WorkflowConfig'
-        description: These are workflows to run for role associated workflows
+        $ref: '#/definitions/daemon.SimpleServices'
+    type: object
+  daemon.SimpleEnvrinment:
+    properties:
+      platform:
+        type: string
+    type: object
+  daemon.SimpleHealth:
+    properties:
+      enabled:
+        type: boolean
+      path:
+        type: string
+    type: object
+  daemon.SimpleMetrics:
+    properties:
+      enabled:
+        type: boolean
+      path:
+        type: string
+    type: object
+  daemon.SimpleServer:
+    properties:
+      health:
+        $ref: '#/definitions/daemon.SimpleHealth'
+      host:
+        type: string
+      metrics:
+        $ref: '#/definitions/daemon.SimpleMetrics'
+      port:
+        type: integer
+    type: object
+  daemon.SimpleServices:
+    properties:
+      llm:
+        type: boolean
+      temporal:
+        type: boolean
     type: object
   github_com_thand-io_agent_internal_config.Mode:
     enum:
@@ -145,7 +155,7 @@ definitions:
       commit:
         type: string
       environment:
-        $ref: '#/definitions/models.EnvironmentConfig'
+        $ref: '#/definitions/github_com_thand-io_agent_internal_models.EnvironmentConfig'
       identifier:
         type: string
       mode:
@@ -202,39 +212,47 @@ definitions:
         description: vault secret / path to use
         type: string
     type: object
-  github_com_thand-io_agent_internal_models.APIConfig:
-    properties:
-      rate_limit:
-        $ref: '#/definitions/github_com_thand-io_agent_internal_models.RateLimitConfig'
-      version:
-        default: v1
-        type: string
-    type: object
   github_com_thand-io_agent_internal_models.BasicConfig:
     additionalProperties: {}
     type: object
-  github_com_thand-io_agent_internal_models.CORSConfig:
+  github_com_thand-io_agent_internal_models.EnvironmentConfig:
     properties:
-      allow_credentials:
+      architecture:
+        default: amd64
+        description: amd64, arm64
+        type: string
+      config:
+        allOf:
+        - $ref: '#/definitions/github_com_thand-io_agent_internal_models.BasicConfig'
+        description: Settings for the platform
+      ephemeral:
+        default: false
+        description: true if running in an ephemeral environment
         type: boolean
-      allowed_headers:
-        items:
-          type: string
-        type: array
-      allowed_methods:
-        items:
-          type: string
-        type: array
-      allowed_origins:
-        items:
-          type: string
-        type: array
-      expose_headers:
-        items:
-          type: string
-        type: array
-      max_age:
-        type: integer
+      hostname:
+        default: localhost
+        type: string
+      metaData:
+        allOf:
+        - $ref: '#/definitions/github_com_thand-io_agent_internal_models.BasicConfig'
+        description: Metadata for the environment
+      name:
+        default: development
+        description: This is the name of the environment or hostname
+        type: string
+      operatingSystem:
+        default: linux
+        description: Operating System details
+        type: string
+      operatingSystemVersion:
+        default: latest
+        description: e.g. 10, 11, 12 for macOS
+        type: string
+      platform:
+        allOf:
+        - $ref: '#/definitions/models.EnvironmentPlatform'
+        default: aws
+        description: AWS, GCP, Kubernetes, Local
     type: object
   github_com_thand-io_agent_internal_models.Group:
     properties:
@@ -248,6 +266,9 @@ definitions:
       name:
         description: Name is the human-readable name of the group.
         type: string
+      parent:
+        description: Parent is the ID of the parent group, if any.
+        type: string
     type: object
   github_com_thand-io_agent_internal_models.Groups:
     properties:
@@ -259,16 +280,6 @@ definitions:
         items:
           type: string
         type: array
-    type: object
-  github_com_thand-io_agent_internal_models.HealthConfig:
-    properties:
-      enabled:
-        default: true
-        type: boolean
-      path:
-        default: /health
-        description: Don't use /healthz as it conflicts with google k8s health checks
-        type: string
     type: object
   github_com_thand-io_agent_internal_models.Identity:
     properties:
@@ -293,6 +304,11 @@ definitions:
           The providers this identity is associated with
           Format is map[provider_name]provider_type
         type: object
+      tenant:
+        description: |-
+          Tenant represents the tenant or organization this identity belongs to.
+          This is useful for multi-tenant systems where identities are scoped to specific tenants.
+        type: string
       user:
         allOf:
         - $ref: '#/definitions/github_com_thand-io_agent_internal_models.User'
@@ -326,30 +342,6 @@ definitions:
       open_telemetry:
         $ref: '#/definitions/github_com_thand-io_agent_internal_models.OpenTelemetryConfig'
       output:
-        type: string
-    type: object
-  github_com_thand-io_agent_internal_models.LoginConfig:
-    properties:
-      api_key:
-        description: API key for authenticating with the login server
-        type: string
-      base:
-        default: /
-        description: Base path for login endpoint e.g. /
-        type: string
-      endpoint:
-        default: https://auth.thand.io/
-        type: string
-    type: object
-  github_com_thand-io_agent_internal_models.MetricsConfig:
-    properties:
-      enabled:
-        default: true
-        type: boolean
-      namespace:
-        type: string
-      path:
-        default: /metrics
         type: string
     type: object
   github_com_thand-io_agent_internal_models.OpenTelemetryConfig:
@@ -386,6 +378,10 @@ definitions:
     type: object
   github_com_thand-io_agent_internal_models.Provider:
     properties:
+      capabilities:
+        allOf:
+        - $ref: '#/definitions/models.ProviderCapabilities'
+        description: Allows the user to specify what this provider can do
       config:
         allOf:
         - $ref: '#/definitions/github_com_thand-io_agent_internal_models.BasicConfig'
@@ -404,22 +400,56 @@ definitions:
         allOf:
         - $ref: '#/definitions/github_com_thand-io_agent_internal_models.Role'
         description: The base role for this provider
+      version:
+        $ref: '#/definitions/version.Version'
     type: object
-  github_com_thand-io_agent_internal_models.RateLimitConfig:
+  github_com_thand-io_agent_internal_models.ProviderPermission:
     properties:
-      burst:
-        type: integer
-      requests_per_minute:
-        type: integer
-    type: object
-  github_com_thand-io_agent_internal_models.ReadyConfig:
-    properties:
-      enabled:
-        default: true
-        type: boolean
-      path:
-        default: /ready
+      description:
         type: string
+      id:
+        type: string
+      name:
+        type: string
+      title:
+        type: string
+    type: object
+  github_com_thand-io_agent_internal_models.ProviderResource:
+    properties:
+      description:
+        type: string
+      id:
+        type: string
+      metadata:
+        additionalProperties: {}
+        description: Store additional metadata if needed
+        type: object
+      name:
+        type: string
+      type:
+        type: string
+    type: object
+  github_com_thand-io_agent_internal_models.ProviderRole:
+    properties:
+      description:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      title:
+        type: string
+    type: object
+  github_com_thand-io_agent_internal_models.Resources:
+    properties:
+      allow:
+        items:
+          type: string
+        type: array
+      deny:
+        items:
+          type: string
+        type: array
     type: object
   github_com_thand-io_agent_internal_models.Role:
     properties:
@@ -457,12 +487,14 @@ definitions:
         type: array
       resources:
         allOf:
-        - $ref: '#/definitions/models.Resources'
+        - $ref: '#/definitions/github_com_thand-io_agent_internal_models.Resources'
         description: resource access rules, apis, files, systems etc
       scopes:
         allOf:
         - $ref: '#/definitions/github_com_thand-io_agent_internal_models.RoleScopes'
         description: scope of who can be assigned this role
+      version:
+        $ref: '#/definitions/version.Version'
       workflows:
         description: The workflows to execute
         items:
@@ -483,41 +515,6 @@ definitions:
         items:
           type: string
         type: array
-    type: object
-  github_com_thand-io_agent_internal_models.SecurityConfig:
-    properties:
-      cors:
-        $ref: '#/definitions/github_com_thand-io_agent_internal_models.CORSConfig'
-    type: object
-  github_com_thand-io_agent_internal_models.ServerConfig:
-    properties:
-      health:
-        $ref: '#/definitions/github_com_thand-io_agent_internal_models.HealthConfig'
-      host:
-        type: string
-      limits:
-        $ref: '#/definitions/github_com_thand-io_agent_internal_models.ServerLimitsConfig'
-      metrics:
-        $ref: '#/definitions/github_com_thand-io_agent_internal_models.MetricsConfig'
-      port:
-        type: integer
-      ready:
-        $ref: '#/definitions/github_com_thand-io_agent_internal_models.ReadyConfig'
-      security:
-        $ref: '#/definitions/github_com_thand-io_agent_internal_models.SecurityConfig'
-    type: object
-  github_com_thand-io_agent_internal_models.ServerLimitsConfig:
-    properties:
-      burst:
-        type: integer
-      idle_timeout:
-        $ref: '#/definitions/time.Duration'
-      read_timeout:
-        $ref: '#/definitions/time.Duration'
-      requests_per_minute:
-        type: integer
-      write_timeout:
-        $ref: '#/definitions/time.Duration'
     type: object
   github_com_thand-io_agent_internal_models.ServicesConfig:
     properties:
@@ -580,6 +577,8 @@ definitions:
         type: boolean
       name:
         type: string
+      version:
+        $ref: '#/definitions/version.Version'
       workflow:
         $ref: '#/definitions/model.Workflow'
     type: object
@@ -603,7 +602,7 @@ definitions:
         type: string
       identities:
         items:
-          type: string
+          $ref: '#/definitions/github_com_thand-io_agent_internal_models.Identity'
         type: array
       input:
         description: Context
@@ -1114,18 +1113,10 @@ definitions:
     - do
     - document
     type: object
-  models.AuthorizeUser:
+  models.AuthorizerConfiguration:
     properties:
-      code:
-        type: string
-      redirect_uri:
-        type: string
-      scopes:
-        items:
-          type: string
-        type: array
-      state:
-        type: string
+      enabled:
+        type: boolean
     type: object
   models.ElevateLLMRequest:
     properties:
@@ -1157,47 +1148,13 @@ definitions:
         $ref: '#/definitions/github_com_thand-io_agent_internal_models.Role'
       session:
         $ref: '#/definitions/github_com_thand-io_agent_internal_models.LocalSession'
+      tenants:
+        description: Optional tenant IDs for multi-account providers
+        items:
+          type: string
+        type: array
       workflow:
         type: string
-    type: object
-  models.EnvironmentConfig:
-    properties:
-      architecture:
-        default: amd64
-        description: amd64, arm64
-        type: string
-      config:
-        allOf:
-        - $ref: '#/definitions/github_com_thand-io_agent_internal_models.BasicConfig'
-        description: Settings for the platform
-      ephemeral:
-        default: false
-        description: true if running in an ephemeral environment
-        type: boolean
-      hostname:
-        default: localhost
-        type: string
-      metaData:
-        allOf:
-        - $ref: '#/definitions/github_com_thand-io_agent_internal_models.BasicConfig'
-        description: Metadata for the environment
-      name:
-        default: development
-        description: This is the name of the environment or hostname
-        type: string
-      operatingSystem:
-        default: linux
-        description: Operating System details
-        type: string
-      operatingSystemVersion:
-        default: latest
-        description: e.g. 10, 11, 12 for macOS
-        type: string
-      platform:
-        allOf:
-        - $ref: '#/definitions/models.EnvironmentPlatform'
-        default: aws
-        description: AWS, GCP, Kubernetes, Local
     type: object
   models.EnvironmentPlatform:
     enum:
@@ -1213,6 +1170,16 @@ definitions:
     - Azure
     - Kubernetes
     - Local
+  models.GroupsConfiguration:
+    properties:
+      enabled:
+        type: boolean
+      interval:
+        description: in minutes
+        type: integer
+      synchronizable:
+        type: boolean
+    type: object
   models.HealthResponse:
     properties:
       path:
@@ -1238,6 +1205,16 @@ definitions:
     - HealthStatusHealthy
     - HealthStatusDegraded
     - HealthStatusUnhealthy
+  models.IdentitiesConfiguration:
+    properties:
+      enabled:
+        type: boolean
+      interval:
+        description: in minutes
+        type: integer
+      synchronizable:
+        type: boolean
+    type: object
   models.LargeLanguageModelConfig:
     properties:
       apikey:
@@ -1271,58 +1248,128 @@ definitions:
       workflows_count:
         type: integer
     type: object
+  models.NotifierConfiguration:
+    properties:
+      enabled:
+        type: boolean
+    type: object
+  models.PermissionsConfiguration:
+    properties:
+      enabled:
+        type: boolean
+      interval:
+        description: in minutes
+        type: integer
+      synchronizable:
+        type: boolean
+    type: object
+  models.ProviderCapabilities:
+    properties:
+      authorizer:
+        allOf:
+        - $ref: '#/definitions/models.AuthorizerConfiguration'
+        description: SSO Capabilities
+      groups:
+        $ref: '#/definitions/models.GroupsConfiguration'
+      identities:
+        allOf:
+        - $ref: '#/definitions/models.IdentitiesConfiguration'
+        description: Identity management capabilities
+      notifier:
+        allOf:
+        - $ref: '#/definitions/models.NotifierConfiguration'
+        description: Notifier
+      permissions:
+        $ref: '#/definitions/models.PermissionsConfiguration'
+      provisioning:
+        allOf:
+        - $ref: '#/definitions/models.ProvisioningConfiguration'
+        description: Rbac capabilities
+      resources:
+        $ref: '#/definitions/models.ResourcesConfiguration'
+      roles:
+        $ref: '#/definitions/models.RolesConfiguration'
+      tenants:
+        allOf:
+        - $ref: '#/definitions/models.TenantsConfiguration'
+        description: Tenant discovery capability
+      users:
+        $ref: '#/definitions/models.UsersConfiguration'
+    type: object
   models.ProviderIdentitiesResponse:
     properties:
       identities:
         items:
-          $ref: '#/definitions/github_com_thand-io_agent_internal_models.Identity'
+          properties:
+            _id:
+              type: string
+            _reason:
+              type: string
+            _score:
+              type: number
+            _source:
+              $ref: '#/definitions/github_com_thand-io_agent_internal_models.Identity'
+          type: object
         type: array
       provider:
         type: string
       version:
-        type: string
-    type: object
-  models.ProviderPermission:
-    properties:
-      description:
-        type: string
-      name:
-        type: string
-      title:
         type: string
     type: object
   models.ProviderPermissionsResponse:
     properties:
       permissions:
         items:
-          $ref: '#/definitions/models.ProviderPermission'
+          properties:
+            _id:
+              type: string
+            _reason:
+              type: string
+            _score:
+              type: number
+            _source:
+              $ref: '#/definitions/github_com_thand-io_agent_internal_models.ProviderPermission'
+          type: object
         type: array
       provider:
         type: string
       version:
         type: string
     type: object
+  models.ProviderResourcesResponse:
+    properties:
+      provider:
+        type: string
+      resources:
+        items:
+          properties:
+            _id:
+              type: string
+            _reason:
+              type: string
+            _score:
+              type: number
+            _source:
+              $ref: '#/definitions/github_com_thand-io_agent_internal_models.ProviderResource'
+          type: object
+        type: array
+      version:
+        type: string
+    type: object
   models.ProviderResponse:
     properties:
+      capabilities:
+        $ref: '#/definitions/models.ProviderCapabilities'
       description:
         type: string
       enabled:
         type: boolean
-      name:
-        type: string
-      provider:
-        description: e.g. aws, gcp, azure
-        type: string
-    type: object
-  models.ProviderRole:
-    properties:
-      description:
-        type: string
       id:
         type: string
       name:
         type: string
-      title:
+      provider:
+        description: e.g. aws, gcp, azure
         type: string
     type: object
   models.ProviderRolesResponse:
@@ -1331,7 +1378,48 @@ definitions:
         type: string
       roles:
         items:
-          $ref: '#/definitions/models.ProviderRole'
+          properties:
+            _id:
+              type: string
+            _reason:
+              type: string
+            _score:
+              type: number
+            _source:
+              $ref: '#/definitions/github_com_thand-io_agent_internal_models.ProviderRole'
+          type: object
+        type: array
+      version:
+        type: string
+    type: object
+  models.ProviderTenant:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      parent:
+        type: string
+      type:
+        description: account, folder, organization, etc.
+        type: string
+    type: object
+  models.ProviderTenantsResponse:
+    properties:
+      provider:
+        type: string
+      tenants:
+        items:
+          properties:
+            _id:
+              type: string
+            _reason:
+              type: string
+            _score:
+              type: number
+            _source:
+              $ref: '#/definitions/models.ProviderTenant'
+          type: object
         type: array
       version:
         type: string
@@ -1345,16 +1433,20 @@ definitions:
       version:
         type: string
     type: object
-  models.Resources:
+  models.ProvisioningConfiguration:
     properties:
-      allow:
-        items:
-          type: string
-        type: array
-      deny:
-        items:
-          type: string
-        type: array
+      enabled:
+        type: boolean
+    type: object
+  models.ResourcesConfiguration:
+    properties:
+      enabled:
+        type: boolean
+      interval:
+        description: in minutes
+        type: integer
+      synchronizable:
+        type: boolean
     type: object
   models.RoleResponse:
     properties:
@@ -1392,17 +1484,29 @@ definitions:
         type: array
       resources:
         allOf:
-        - $ref: '#/definitions/models.Resources'
+        - $ref: '#/definitions/github_com_thand-io_agent_internal_models.Resources'
         description: resource access rules, apis, files, systems etc
       scopes:
         allOf:
         - $ref: '#/definitions/github_com_thand-io_agent_internal_models.RoleScopes'
         description: scope of who can be assigned this role
+      version:
+        $ref: '#/definitions/version.Version'
       workflows:
         description: The workflows to execute
         items:
           type: string
         type: array
+    type: object
+  models.RolesConfiguration:
+    properties:
+      enabled:
+        type: boolean
+      interval:
+        description: in minutes
+        type: integer
+      synchronizable:
+        type: boolean
     type: object
   models.RolesResponse:
     properties:
@@ -1438,6 +1542,31 @@ definitions:
     - provider
     - session
     type: object
+  models.SessionSetDefaultRequest:
+    properties:
+      provider:
+        description: Provider ID to set as default
+        type: string
+    required:
+    - provider
+    type: object
+  models.SessionsResponse:
+    properties:
+      defaultProvider:
+        description: Current default provider from cookie
+        type: string
+      sessions:
+        additionalProperties:
+          $ref: '#/definitions/github_com_thand-io_agent_internal_models.LocalSession'
+        description: Map of provider name to session
+        type: object
+      timestamp:
+        description: Timestamp of the response
+        type: string
+      version:
+        description: Version of the response format
+        type: string
+    type: object
   models.TemporalConfig:
     properties:
       apiKey:
@@ -1461,6 +1590,26 @@ definitions:
         default: 7233
         type: integer
     type: object
+  models.TenantsConfiguration:
+    properties:
+      enabled:
+        type: boolean
+      interval:
+        description: in minutes
+        type: integer
+      synchronizable:
+        type: boolean
+    type: object
+  models.UsersConfiguration:
+    properties:
+      enabled:
+        type: boolean
+      interval:
+        description: in minutes
+        type: integer
+      synchronizable:
+        type: boolean
+    type: object
   models.WorkflowResponse:
     properties:
       description:
@@ -1479,40 +1628,8 @@ definitions:
           $ref: '#/definitions/models.WorkflowResponse'
         type: object
     type: object
-  sessions.LoginServer:
-    properties:
-      sessions:
-        additionalProperties:
-          $ref: '#/definitions/github_com_thand-io_agent_internal_models.LocalSession'
-        type: object
-      timestamp:
-        type: string
-      version:
-        default: "1.0"
-        description: Map of session ID to Session object
-        type: string
+  version.Version:
     type: object
-  time.Duration:
-    enum:
-    - -9223372036854775808
-    - 9223372036854775807
-    - 1
-    - 1000
-    - 1000000
-    - 1000000000
-    - 60000000000
-    - 3600000000000
-    format: int64
-    type: integer
-    x-enum-varnames:
-    - minDuration
-    - maxDuration
-    - Nanosecond
-    - Microsecond
-    - Millisecond
-    - Second
-    - Minute
-    - Hour
 host: localhost:8080
 info:
   contact:
@@ -1602,7 +1719,39 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Authentication callback
+      summary: OAuth2 authentication callback
+      tags:
+      - auth
+    post:
+      consumes:
+      - application/x-www-form-urlencoded
+      description: Handle the SAML POST callback from the provider
+      parameters:
+      - description: Provider name
+        in: path
+        name: provider
+        required: true
+        type: string
+      - description: SAML RelayState (SP-initiated)
+        in: formData
+        name: RelayState
+        type: string
+      - description: SAML Response
+        in: formData
+        name: SAMLResponse
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Authentication successful
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: SAML authentication callback
       tags:
       - auth
   /auth/logout:
@@ -2211,33 +2360,44 @@ paths:
       summary: Get provider by name
       tags:
       - providers
-  /provider/{provider}/authorizeSession:
+  /provider/{provider}/{function}:
     post:
       consumes:
       - application/json
-      description: Authorize a session with a specific provider
+      description: 'Execute a specific function on a provider. Requires server mode
+        and authentication. Supported functions: authorizesession (authorize user
+        session), listidentities (list provider identities with optional search parameters)'
       parameters:
       - description: Provider name
         in: path
         name: provider
         required: true
         type: string
-      - description: Authorization request
-        in: body
-        name: user
+      - description: Function name (authorizesession, listidentities)
+        in: path
+        name: function
         required: true
+        type: string
+      - description: Function-specific request body (optional)
+        in: body
+        name: body
         schema:
-          $ref: '#/definitions/models.AuthorizeUser'
+          type: object
       produces:
       - application/json
       responses:
         "200":
-          description: Authorization response
+          description: Function response
           schema:
             additionalProperties: true
             type: object
         "400":
           description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
           schema:
             additionalProperties: true
             type: object
@@ -2253,7 +2413,7 @@ paths:
             type: object
       security:
       - BearerAuth: []
-      summary: Authorize provider session
+      summary: Execute provider function
       tags:
       - providers
   /provider/{provider}/identities:
@@ -2275,7 +2435,7 @@ paths:
       - application/json
       responses:
         "200":
-          description: Provider roles
+          description: Provider identities
           schema:
             $ref: '#/definitions/models.ProviderIdentitiesResponse'
         "404":
@@ -2330,6 +2490,43 @@ paths:
       summary: List provider permissions
       tags:
       - providers
+  /provider/{provider}/resources:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of resources available in a specific provider
+      parameters:
+      - description: Provider name
+        in: path
+        name: provider
+        required: true
+        type: string
+      - description: Filter query
+        in: query
+        name: q
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Provider resources
+          schema:
+            $ref: '#/definitions/models.ProviderResourcesResponse'
+        "404":
+          description: Provider not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List provider resources
+      tags:
+      - providers
   /provider/{provider}/roles:
     get:
       consumes:
@@ -2365,6 +2562,43 @@ paths:
       security:
       - BearerAuth: []
       summary: List provider roles
+      tags:
+      - providers
+  /provider/{provider}/tenants:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of tenants available in a specific provider
+      parameters:
+      - description: Provider name
+        in: path
+        name: provider
+        required: true
+        type: string
+      - description: Filter query
+        in: query
+        name: q
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Provider tenants
+          schema:
+            $ref: '#/definitions/models.ProviderTenantsResponse'
+        "404":
+          description: Provider not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List provider tenants
       tags:
       - providers
   /providers:
@@ -2612,6 +2846,31 @@ paths:
       tags:
       - sessions
   /sessions:
+    delete:
+      consumes:
+      - application/json
+      description: Remove all sessions for the user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: All sessions deleted successfully
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete all sessions
+      tags:
+      - sessions
     get:
       consumes:
       - application/json
@@ -2620,9 +2879,9 @@ paths:
       - application/json
       responses:
         "200":
-          description: List of sessions
+          description: List of sessions with default provider
           schema:
-            $ref: '#/definitions/sessions.LoginServer'
+            $ref: '#/definitions/models.SessionsResponse'
         "400":
           description: Bad request
           schema:
@@ -2666,6 +2925,43 @@ paths:
             additionalProperties: true
             type: object
       summary: Create a new session
+      tags:
+      - sessions
+    put:
+      consumes:
+      - application/json
+      description: Update the default session provider for the user
+      parameters:
+      - description: Provider selection request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.SessionSetDefaultRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Default provider updated successfully
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Provider session not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Set default session provider
       tags:
       - sessions
   /sync:

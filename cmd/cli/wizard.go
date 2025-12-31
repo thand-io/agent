@@ -1,17 +1,24 @@
 package cli
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/charmbracelet/huh"
+	"github.com/serverlessworkflow/sdk-go/v3/model"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
+	"github.com/thand-io/agent/internal/providers"
 )
 
 // RunRequestWizard runs the interactive wizard and returns the collected data
@@ -58,6 +65,20 @@ func RunRequestWizard(config *config.Config) (*models.ElevateRequest, error) {
 		return nil, err
 	}
 	data.Reason = reason
+
+	// Step 5: Optional - Select Identities
+	identities, err := selectIdentities(provider)
+	if err != nil {
+		return nil, err
+	}
+	data.Identities = identities
+
+	// Step 6: Optional - Select Tenants
+	tenants, err := selectTenants(provider)
+	if err != nil {
+		return nil, err
+	}
+	data.Tenants = tenants
 
 	// Display summary
 	displaySummary(data)
@@ -141,7 +162,9 @@ func getProviderOptions(config *config.Config) []huh.Option[string] {
 
 	// Get providers from config
 	for providerKey, provider := range config.Providers.Definitions {
+
 		if len(provider.Name) == 0 { // Only providers with names
+			logrus.Debugf("Skipping provider %s as it has no name", providerKey)
 			continue
 		}
 
@@ -149,6 +172,7 @@ func getProviderOptions(config *config.Config) []huh.Option[string] {
 		hasRoles := false
 		for _, role := range config.Roles.Definitions {
 			if !role.Enabled {
+				logrus.Debugf("Skipping disabled role %s for provider %s", role.Name, providerKey)
 				continue
 			}
 			if slices.Contains(role.Providers, providerKey) {
@@ -161,6 +185,7 @@ func getProviderOptions(config *config.Config) []huh.Option[string] {
 
 		// Skip providers with no associated roles
 		if !hasRoles {
+			logrus.Debugf("Skipping provider %s as it has no associated roles", providerKey)
 			continue
 		}
 
@@ -335,6 +360,420 @@ func validateReason(val string) error {
 	return nil
 }
 
+// selectIdentities prompts for optional identity input with improved search interface
+func selectIdentities(provider string) ([]string, error) {
+	var wantIdentities bool
+
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Specify identities?").
+				Description("Do you want to specify specific identities for this request? (Optional)").
+				Value(&wantIdentities).
+				Affirmative("Yes").
+				Negative("Skip"),
+		),
+	)
+
+	err := form.Run()
+	if err != nil {
+		return nil, fmt.Errorf("identity selection cancelled: %w", err)
+	}
+
+	if !wantIdentities {
+		return []string{}, nil
+	}
+
+	// Get initial identities from providers
+	allIdentities, err := getIdentityOptions()
+	if err != nil || len(allIdentities) == 0 {
+		// Fallback to manual input if no identities available
+		return selectIdentitiesManual()
+	}
+
+	// Build map of ID to display name for later formatting
+	identityDisplayMap := make(map[string]string)
+	for _, opt := range allIdentities {
+		identityDisplayMap[opt.Value] = opt.Key
+	}
+
+	selectedIdentities := []string{}
+	availableOptions := allIdentities
+
+	fmt.Println()
+	fmt.Println(infoStyle.Render("🔍 Identity Search & Selection"))
+	fmt.Println("Start typing to filter identities in real-time. Use space to select, arrow keys to navigate.")
+	fmt.Println("You can add up to 10 identities total.")
+	fmt.Println()
+
+	// Interactive loop to add multiple identities
+	for len(selectedIdentities) < 10 {
+		// Show current selection with formatted display
+		if len(selectedIdentities) > 0 {
+			displayNames := make([]string, len(selectedIdentities))
+			for i, id := range selectedIdentities {
+				if display, ok := identityDisplayMap[id]; ok {
+					displayNames[i] = display
+				} else {
+					displayNames[i] = id
+				}
+			}
+			fmt.Printf(successStyle.Render("✓ Selected (%d/10):\n"), len(selectedIdentities))
+			for _, name := range displayNames {
+				fmt.Printf("  • %s\n", name)
+			}
+			fmt.Println()
+		}
+
+		var newSelections []string
+
+		// Calculate remaining slots
+		remainingSlots := 10 - len(selectedIdentities)
+
+		// Show searchable multi-select list with live filtering
+		selectForm := huh.NewForm(
+			huh.NewGroup(
+				huh.NewMultiSelect[string]().
+					Title(fmt.Sprintf("Select identities (can select up to %d more):", remainingSlots)).
+					Description("Press / to filter → Type to search → Arrow keys to navigate → Space to select → Enter when done → ESC to return to previous menu").
+					Options(availableOptions...).
+					Filterable(true).
+					Limit(15).
+					Value(&newSelections),
+			),
+		)
+
+		err = selectForm.Run()
+		if err != nil {
+			// ESC pressed - user wants to finish
+			if len(selectedIdentities) > 0 {
+				return selectedIdentities, nil
+			}
+			return nil, fmt.Errorf("identity selection cancelled: %w", err)
+		}
+
+		// If no new selections, user pressed ESC or Enter without selecting
+		if len(newSelections) == 0 {
+			break
+		}
+
+		// Enforce the remaining slots limit
+		if len(newSelections) > remainingSlots {
+			newSelections = newSelections[:remainingSlots]
+			fmt.Println(warningStyle.Render(fmt.Sprintf("⚠ Limited to %d selections (maximum of 10 total)", remainingSlots)))
+			fmt.Println()
+		}
+
+		// Add new selections, checking for duplicates
+		added := 0
+		for _, id := range newSelections {
+			if !slices.Contains(selectedIdentities, id) && len(selectedIdentities) < 10 {
+				selectedIdentities = append(selectedIdentities, id)
+				added++
+				if displayName, ok := identityDisplayMap[id]; ok {
+					fmt.Println(successStyle.Render("✓ Added: ") + displayName)
+				} else {
+					fmt.Println(successStyle.Render("✓ Added: ") + id)
+				}
+			}
+		}
+
+		if added > 0 {
+			fmt.Println()
+		}
+
+		// Remove selected items from available options
+		newAvailableOptions := []huh.Option[string]{}
+		for _, opt := range availableOptions {
+			if !slices.Contains(selectedIdentities, opt.Value) {
+				newAvailableOptions = append(newAvailableOptions, opt)
+			}
+		}
+		availableOptions = newAvailableOptions
+
+		// Check if we've reached the limit
+		if len(selectedIdentities) >= 10 {
+			fmt.Println(warningStyle.Render("⚠ Maximum of 10 identities reached"))
+			fmt.Println()
+			break
+		}
+
+		// Check if there are more options available
+		if len(availableOptions) == 0 {
+			fmt.Println(infoStyle.Render("ℹ All available identities have been selected"))
+			fmt.Println()
+			break
+		}
+
+		// Ask if user wants to add more
+		var addMore bool
+		moreForm := huh.NewForm(
+			huh.NewGroup(
+				huh.NewConfirm().
+					Title("Add more identities?").
+					Description(fmt.Sprintf("You have selected %d/10 identities. %d more available.", len(selectedIdentities), len(availableOptions))).
+					Value(&addMore).
+					Affirmative("Yes").
+					Negative("Done"),
+			),
+		)
+
+		err = moreForm.Run()
+		if err != nil || !addMore {
+			break
+		}
+		fmt.Println()
+	}
+
+	return selectedIdentities, nil
+}
+
+// selectIdentitiesManual allows manual entry of identities
+func selectIdentitiesManual() ([]string, error) {
+	var identitiesInput string
+
+	inputForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("Enter identities (comma-separated):").
+				Description("e.g., user@example.com,admin@example.com or provider:identity").
+				Value(&identitiesInput).
+				Validate(func(val string) error {
+					if strings.TrimSpace(val) == "" {
+						return fmt.Errorf("identities cannot be empty when specified")
+					}
+					return nil
+				}),
+		),
+	)
+
+	err := inputForm.Run()
+	if err != nil {
+		return nil, fmt.Errorf("identity input cancelled: %w", err)
+	}
+
+	// Split by comma and trim spaces
+	identities := []string{}
+	for id := range strings.SplitSeq(identitiesInput, ",") {
+		trimmed := strings.TrimSpace(id)
+		if trimmed != "" {
+			identities = append(identities, trimmed)
+		}
+	}
+
+	return identities, nil
+}
+
+// getIdentityOptions returns identity options from a specific provider
+func getIdentityOptions() ([]huh.Option[string], error) {
+	var options []huh.Option[string]
+
+	loginSessions, err := sessionManager.GetLoginServer(cfg.GetLoginServerHostname())
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get login sessions: %w", err)
+	}
+
+	_, session, err := loginSessions.GetFirstActiveSession()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active session: %w", err)
+	}
+
+	bodyBytes, err := json.Marshal(models.SearchRequest{
+		Limit: 100, // Limit to prevent overwhelming the UI
+	})
+
+	fmt.Println(session.Session)
+
+	params := url.Values{
+		"q": {""},
+	}
+
+	identityUrl := fmt.Sprintf("%s/identities?%s",
+		cfg.DiscoverLoginServerApiUrl(
+			cfg.GetLoginServerUrl(),
+		),
+		params.Encode(),
+	)
+
+	resp, err := common.InvokeHttpRequest(
+		&model.HTTPArguments{
+			Method: http.MethodGet,
+			Endpoint: &model.Endpoint{
+				EndpointConfig: &model.EndpointConfiguration{
+					URI: &model.LiteralUri{
+						Value: identityUrl,
+					},
+					Authentication: &model.ReferenceableAuthenticationPolicy{
+						AuthenticationPolicy: &model.AuthenticationPolicy{
+							Bearer: &model.BearerAuthenticationPolicy{
+								Token: session.GetEncodedLocalSession(),
+							},
+						},
+					},
+				},
+			},
+			Body:    bodyBytes,
+			Headers: map[string]string{"Content-Type": "application/json"},
+		},
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to list identities: %w", err)
+	}
+
+	responseBody := resp.Body()
+
+	fmt.Println(string(responseBody))
+
+	identities := models.IdentitiesResponse{}
+	err = json.Unmarshal(responseBody, &identities)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse identities response: %w", err)
+	}
+
+	// Add identities as options
+	for _, identity := range identities.Identities {
+		displayName := identity.Result.ID
+		if len(identity.Result.Label) > 0 {
+			displayName = fmt.Sprintf("%s (%s)", identity.Result.Label, identity.Result.ID)
+		}
+
+		option := huh.NewOption(displayName, identity.Result.ID)
+		options = append(options, option)
+	}
+
+	return options, nil
+}
+
+// selectTenants prompts for optional tenant input
+func selectTenants(provider string) ([]string, error) {
+	// Query provider first to check if tenants are available
+	tenantOptions, err := getTenantOptions(provider)
+
+	// If no tenants available (error or empty list), skip tenant selection
+	if err != nil || len(tenantOptions) == 0 {
+		if err != nil {
+			logrus.Debug("No tenants available from provider: ", err)
+		}
+		// Skip tenant selection silently - not all providers support tenants
+		return []string{}, nil
+	}
+
+	// Tenants are available, ask user if they want to specify them
+	var wantTenants bool
+
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Specify tenants?").
+				Description(fmt.Sprintf("Found %d tenant(s)/account(s). Do you want to specify which ones? (Optional)", len(tenantOptions))).
+				Value(&wantTenants).
+				Affirmative("Yes").
+				Negative("Skip"),
+		),
+	)
+
+	err = form.Run()
+	if err != nil {
+		return nil, fmt.Errorf("tenant selection cancelled: %w", err)
+	}
+
+	if !wantTenants {
+		return []string{}, nil
+	}
+
+	var selectedTenants []string
+
+	// Show searchable list of tenants
+	selectForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewMultiSelect[string]().
+				Title("Select tenants/accounts:").
+				Description("Search and select tenants (use arrow keys, space to select, enter to confirm)").
+				Options(tenantOptions...).
+				Filterable(true).
+				Limit(10).
+				Value(&selectedTenants),
+		),
+	)
+
+	err = selectForm.Run()
+	if err != nil {
+		return nil, fmt.Errorf("tenant selection cancelled: %w", err)
+	}
+
+	return selectedTenants, nil
+}
+
+// getTenantOptions returns tenant options from a specific provider
+func getTenantOptions(providerKey string) ([]huh.Option[string], error) {
+	var options []huh.Option[string]
+	ctx := context.Background()
+
+	// Get the specific provider
+	providerDef, err := cfg.GetProviderByName(providerKey)
+	if err != nil {
+		return nil, fmt.Errorf("provider %s not found: %w", providerKey, err)
+	}
+
+	provider := providerDef.GetClient()
+	if provider == nil {
+		return nil, fmt.Errorf("provider %s client not initialized", providerKey)
+	}
+
+	// Check if provider supports tenants
+	//if !provider.HasCapability(models.ProviderCapabilityTenants) {
+	//	return nil, fmt.Errorf("provider %s does not support tenants", providerKey)
+	//}
+
+	// Search for tenants (empty query returns all, with limit)
+	searchReq := &models.SearchRequest{
+		Limit: 100, // Limit to prevent overwhelming the UI
+	}
+
+	loginSessions, err := sessionManager.GetLoginServer(cfg.GetLoginServerHostname())
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get login sessions: %w", err)
+	}
+
+	_, session, err := loginSessions.GetFirstActiveSession()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active session: %w", err)
+	}
+
+	// Set session key in context for provider proxy
+	ctx = context.WithValue(ctx, providers.ProviderProxySessionKey, session)
+
+	tenants, err := provider.ListTenants(ctx, searchReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list tenants: %w", err)
+	}
+
+	// Add tenants as options
+	for _, tenant := range tenants {
+		displayName := tenant.Result.Name
+		if len(tenant.Result.ID) > 0 && tenant.Result.ID != tenant.Result.Name {
+			displayName = fmt.Sprintf("%s (%s)", tenant.Result.Name, tenant.Result.ID)
+		}
+		if len(tenant.Result.Type) > 0 {
+			displayName = fmt.Sprintf("%s [%s]", displayName, tenant.Result.Type)
+		}
+
+		// Use the tenant ID as the value
+		value := tenant.Result.ID
+
+		option := huh.NewOption(displayName, value)
+		options = append(options, option)
+	}
+
+	return options, nil
+}
+
 // displaySummary shows a summary of the configured request
 func displaySummary(data *models.ElevateRequest) {
 	fmt.Println()
@@ -345,6 +784,15 @@ func displaySummary(data *models.ElevateRequest) {
 	fmt.Printf("Role: %s\n", data.Role.Name)
 	fmt.Printf("Duration: %s\n", data.Duration)
 	fmt.Printf("Reason: %s\n", data.Reason)
+
+	if len(data.Identities) > 0 {
+		fmt.Printf("Identities: %s\n", strings.Join(data.Identities, ", "))
+	}
+
+	if len(data.Tenants) > 0 {
+		fmt.Printf("Tenants: %s\n", strings.Join(data.Tenants, ", "))
+	}
+
 	fmt.Println()
 }
 
@@ -353,7 +801,7 @@ var wizardCmd = &cobra.Command{
 	Short:   "Interactive wizard to configure access requests",
 	Long:    `Launch an interactive wizard that guides you through creating an access request with proper validation and configuration from your workflows, roles, and providers.`,
 	Hidden:  true,
-	PreRunE: preRunServerE,
+	PreRunE: preRunClientConfigWithSessionE,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("Starting Interactive Access Request Wizard...")
 		fmt.Println()

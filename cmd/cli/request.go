@@ -33,7 +33,7 @@ var requestCmd = &cobra.Command{
 	Use:     "request",
 	Short:   "Request access to resources",
 	Long:    `Request just-in-time access to cloud infrastructure or SaaS applications`,
-	PreRunE: preAgentE,
+	PreRunE: preRunClientConfigWithSessionE,
 	Run: func(cmd *cobra.Command, args []string) {
 
 		reason := strings.TrimSpace(strings.Join(args, " "))

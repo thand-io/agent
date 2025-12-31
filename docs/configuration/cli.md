@@ -289,6 +289,15 @@ thand request access --provider <provider> --role <role> --duration <duration> -
 | `--duration` | `-d` | Access duration | `1h`, `4h`, `8h` |
 | `--reason` | `-e` | Justification for access | `Emergency maintenance` |
 
+**Optional Flags:**
+
+| Flag | Short | Description | Example |
+|------|-------|-------------|---------|
+| `--identity` | `-i` | Identities to use for access (repeatable) | `user@example.com` |
+| `--tenant` | `-t` | Tenants/accounts to access (repeatable) | `account-123`, `tenant-id` |
+| `--authenticator` | `-a` | Authenticator to use for login | `okta`, `aws` |
+| `--workflow` | `-w` | Workflow to execute | `snowflake-access` |
+
 **Examples:**
 ```bash
 # Request AWS admin access
@@ -298,12 +307,32 @@ thand request access \
   --duration 2h \
   --reason "Emergency security patch deployment"
 
-# Request read-only Snowflake access
+# Request access with specific identity
 thand request access \
-  -r snowflake-prod \
-  -o analyst \
-  -d 4h \
-  -e "Monthly report generation"
+  --provider snowflake-prod \
+  --role analyst \
+  --duration 4h \
+  --reason "Monthly report generation" \
+  --identity analyst@company.com
+
+# Request access to specific tenants/accounts
+thand request access \
+  --provider aws-prod \
+  --role readonly \
+  --duration 1h \
+  --reason "Cross-account audit" \
+  --tenant account-123 \
+  --tenant account-456
+
+# Request with multiple identities and tenants
+thand request access \
+  --provider gcp-prod \
+  --role developer \
+  --duration 2h \
+  --reason "Multi-project deployment" \
+  --identity dev-team@company.com \
+  --tenant project-alpha \
+  --tenant project-beta
 ```
 
 ---
@@ -644,7 +673,9 @@ The main `agent` command provides an interactive wizard:
 2. **Role Selection**: Pick appropriate role for selected provider
 3. **Duration**: Select access duration (1h, 2h, 4h, 8h, custom)
 4. **Reason**: Enter justification for access
-5. **Summary**: Review and confirm request
+5. **Identities** (Optional): Specify identities for the access request
+6. **Tenants** (Optional): Specify tenants/accounts for the access request
+7. **Summary**: Review and confirm request
 
 ### Session Manager
 

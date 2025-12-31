@@ -4,11 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/thand-io/agent/internal/agent"
 	"github.com/thand-io/agent/internal/common"
-	"github.com/thand-io/agent/internal/config"
 )
 
 // agentCmd represents the agent command
@@ -17,33 +15,8 @@ var agentCmd = &cobra.Command{
 	Short: "Run the Thand Agent",
 	Long: `Start the Thand Agent directly in the foreground.
 This will run the web service that handles authentication and authorization requests.`,
-	Hidden: true,
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		var err error
-		cfg, err = loadConfig(cmd)
-
-		if err != nil {
-			return fmt.Errorf("failed to load configuration: %w", err)
-		}
-
-		// Disable login agent. We're not a client
-		cfg.SetMode(config.ModeAgent)
-		err = cfg.ReloadConfig()
-
-		if err != nil {
-			logrus.WithError(err).Errorln("Failed to sync configuration with agent")
-		}
-
-		// Initialize providers
-		err = cfg.InitializeProviders()
-
-		if err != nil {
-			logrus.WithError(err).Errorln("Failed to initialize providers")
-			return err
-		}
-
-		return nil
-	},
+	Hidden:            true,
+	PersistentPreRunE: preRunAgentConfigE,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check if configuration is loaded
 		if cfg == nil {
@@ -84,6 +57,10 @@ This will run the web service that handles authentication and authorization requ
 			fmt.Println("Agent stopped")
 		}
 	},
+}
+
+func GetAgentCommand() *cobra.Command {
+	return agentCmd
 }
 
 func init() {

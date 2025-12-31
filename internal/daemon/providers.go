@@ -149,10 +149,12 @@ func (s *Server) getProviderByName(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, models.ProviderResponse{
-		Name:        provider.Name,
-		Description: provider.Description,
-		Provider:    provider.Provider,
-		Enabled:     true,
+		ID:           providerName,
+		Name:         provider.Name,
+		Description:  provider.Description,
+		Provider:     provider.Provider,
+		Capabilities: provider.GetClient().GetCapabilities(),
+		Enabled:      true,
 	})
 }
 
@@ -385,11 +387,12 @@ func (s *Server) getProvidersAsProviderResponse(
 		}
 
 		providerResponse[providerKey] = models.ProviderResponse{
-			ID:          providerKey,
-			Name:        providerName,
-			Description: provider.Description,
-			Provider:    provider.Provider,
-			Enabled:     true,
+			ID:           providerKey,
+			Name:         providerName,
+			Description:  provider.Description,
+			Provider:     provider.Provider,
+			Capabilities: provider.GetClient().GetCapabilities(),
+			Enabled:      true,
 		}
 	}
 
@@ -477,27 +480,39 @@ func (s *Server) getProviders(c *gin.Context) {
 	}
 }
 
-// postProviderAuthorizeSession authorizes a session with a provider
+// providerFunctionHandler handles dynamic function calls to provider clients
+// This handler requires server mode and user authentication to execute provider functions.
+// Supported functions: authorizesession, listidentities
 //
-//	@Summary		Authorize provider session
-//	@Description	Authorize a session with a specific provider
+//	@Summary		Execute provider function
+//	@Description	Execute a specific function on a provider. Requires server mode and authentication. Supported functions: authorizesession (authorize user session), listidentities (list provider identities with optional search parameters)
 //	@Tags			providers
 //	@Accept			json
 //	@Produce		json
 //	@Param			provider	path		string						true	"Provider name"
-//	@Param			user		body		models.AuthorizeUser		true	"Authorization request"
-//	@Success		200			{object}	map[string]any		"Authorization response"
+//	@Param			function	path		string						true	"Function name (authorizesession, listidentities)"
+//	@Param			body		body		object						false	"Function-specific request body (optional)"
+//	@Success		200			{object}	map[string]any		"Function response"
 //	@Failure		400			{object}	map[string]any		"Bad request"
+//	@Failure		401			{object}	map[string]any		"Unauthorized"
 //	@Failure		404			{object}	map[string]any		"Provider not found"
 //	@Failure		500			{object}	map[string]any		"Internal server error"
-//	@Router			/provider/{provider}/authorizeSession [post]
+//	@Router			/provider/{provider}/{function} [post]
 //	@Security		BearerAuth
-func (s *Server) postProviderAuthorizeSession(c *gin.Context) {
+func (s *Server) providerFunctionHandler(c *gin.Context) {
 
-	// User in body
-	var user models.AuthorizeUser
-	if err := c.ShouldBindJSON(&user); err != nil {
-		s.getErrorPage(c, http.StatusBadRequest, "Invalid request payload")
+	// If we're in server mode then we need to ensure the user is authenticated
+	// before we return any roles
+	// This is because roles can contain sensitive information
+	// and we want to ensure that only authenticated users can access them
+	if !s.Config.IsServer() {
+		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: server is not in server mode")
+		return
+	}
+
+	_, _, err := s.getUser(c)
+	if err != nil {
+		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of available providers", err)
 		return
 	}
 
@@ -508,14 +523,79 @@ func (s *Server) postProviderAuthorizeSession(c *gin.Context) {
 		return
 	}
 
-	authResponse, err := provider.GetClient().AuthorizeSession(context.Background(), &user)
+	function := c.Param("function")
 
-	if err != nil {
-		s.getErrorPage(c, http.StatusInternalServerError, "Failed to authorize session", err)
+	if len(function) == 0 {
+		s.getErrorPage(c, http.StatusBadRequest, "Function not specified")
 		return
 	}
 
-	c.JSON(http.StatusOK, authResponse)
+	var providerResponse any
+
+	switch strings.ToLower(function) {
+
+	case "authorizesession":
+
+		user := models.AuthorizeUser{}
+
+		if c.Request.ContentLength > 0 {
+			if err := c.ShouldBindJSON(&user); err != nil {
+				s.getErrorPage(c, http.StatusBadRequest, "Invalid request payload", err)
+				return
+			}
+		}
+
+		providerResponse, err = provider.GetClient().AuthorizeSession(
+			context.Background(),
+			&user)
+
+	case "listidentities":
+
+		searchRequest := models.SearchRequest{
+			Limit: 10,
+		}
+
+		if c.Request.ContentLength > 0 {
+			if err := c.ShouldBindJSON(&searchRequest); err != nil {
+				s.getErrorPage(c, http.StatusBadRequest, "Invalid request payload", err)
+				return
+			}
+		}
+
+		providerResponse, err = provider.GetClient().ListIdentities(
+			context.Background(),
+			&searchRequest,
+		)
+
+	case "listtenants":
+
+		searchRequest := models.SearchRequest{
+			Limit: 10,
+		}
+
+		if c.Request.ContentLength > 0 {
+			if err := c.ShouldBindJSON(&searchRequest); err != nil {
+				s.getErrorPage(c, http.StatusBadRequest, "Invalid request payload", err)
+				return
+			}
+		}
+
+		providerResponse, err = provider.GetClient().ListTenants(
+			context.Background(),
+			&searchRequest,
+		)
+
+	default:
+		s.getErrorPage(c, http.StatusBadRequest, "Function not supported")
+		return
+	}
+
+	if err != nil {
+		s.getErrorPage(c, http.StatusInternalServerError, "Failed to execute provider function", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, providerResponse)
 }
 
 func (s *Server) getProvider(providerName string) (*models.Provider, error) {

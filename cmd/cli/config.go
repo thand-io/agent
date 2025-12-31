@@ -7,8 +7,9 @@ import (
 )
 
 var configCmd = &cobra.Command{
-	Use:   "config",
-	Short: "Configure the agent",
+	Use:     "config",
+	Short:   "Configure the agent",
+	PreRunE: preRunClientConfigE,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("Agent Configuration")
 		fmt.Println("Current settings:")

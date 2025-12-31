@@ -71,9 +71,10 @@ func (c *Config) LoadProviders() (map[string]models.Provider, error) {
 
 func (c *Config) ApplyProviders(foundProviders []*models.ProviderDefinitions) (map[string]models.Provider, error) {
 
-	if len(c.Providers.Definitions) > 0 {
+	providersLen := len(c.Providers.Definitions)
+	if providersLen > 0 {
 		// Add providers defined directly in config
-		logrus.Debugln("Adding providers defined directly in config: ", len(c.Providers.Definitions))
+		logrus.Debugln("Adding providers defined directly in config: ", providersLen)
 
 		defaultVersion := version.Must(version.NewVersion("1.0.0"))
 
@@ -288,6 +289,8 @@ func (c *Config) getProviderImplementation(providerKey string, providerName stri
 		return providers.CreateInstance(strings.ToLower(providerName))
 	}
 
+	// If we're a client, return a remote proxy. This will let us forward
+	// requests to the server for provider operations
 	if c.IsClient() {
 		return providers.NewRemoteProviderProxy(
 			providerKey,

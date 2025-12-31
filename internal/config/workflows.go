@@ -53,9 +53,11 @@ func (c *Config) LoadWorkflows() (map[string]models.Workflow, error) {
 func (c *Config) ApplyWorkflows(foundWorkflows []*models.WorkflowDefinitions) (map[string]models.Workflow, error) {
 
 	// Add workflows defined directly in config
-	if len(c.Workflows.Definitions) > 0 {
+	c.mu.RLock()
+	workflowsLen := len(c.Workflows.Definitions)
+	if workflowsLen > 0 {
 
-		logrus.Debugln("Adding workflows defined directly in config: ", len(c.Workflows.Definitions))
+		logrus.Debugln("Adding workflows defined directly in config: ", workflowsLen)
 
 		defaultVersion := version.Must(version.NewVersion("1.0"))
 
@@ -68,6 +70,7 @@ func (c *Config) ApplyWorkflows(foundWorkflows []*models.WorkflowDefinitions) (m
 			})
 		}
 	}
+	c.mu.RUnlock()
 
 	defs := make(map[string]models.Workflow)
 

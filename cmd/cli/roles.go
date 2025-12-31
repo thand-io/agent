@@ -12,7 +12,7 @@ var rolesCmd = &cobra.Command{
 	Use:     "roles",
 	Short:   "List available roles",
 	Long:    "List all available roles from the remote login server",
-	PreRunE: preAgentE, // load agent
+	PreRunE: preRunClientConfigWithSessionE, // load agent in case of login required
 	RunE:    runListRoles,
 }
 

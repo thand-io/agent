@@ -135,7 +135,11 @@ func (p *BaseProvider) buildIdentitiyIndices() error {
 	}
 
 	// Index identities
-	for _, identity := range p.identity.identities {
+	p.identity.mu.RLock()
+	identities := p.identity.identities
+	p.identity.mu.RUnlock()
+
+	for _, identity := range identities {
 		if err := identityIndex.Index(identity.ID, identity); err != nil {
 			return fmt.Errorf("failed to index identity %s: %v", identity.ID, err)
 		}
@@ -143,11 +147,104 @@ func (p *BaseProvider) buildIdentitiyIndices() error {
 
 	p.identity.mu.Lock()
 	p.identity.identitiesIndex = identityIndex
+	identityCount := len(p.identity.identities)
 	p.identity.mu.Unlock()
 
 	logrus.WithFields(logrus.Fields{
-		"identities": len(p.identity.identities),
+		"identities": identityCount,
 	}).Debug("Identity search indices ready")
 
 	return nil
+}
+
+func CreateKeysFromIdentity(i Identity) []string {
+	var keys []string
+	keys = append(keys, i.ID)
+	keys = append(keys, i.Label)
+	if i.User != nil && len(i.User.Email) != 0 {
+		keys = append(keys, i.User.Email)
+	}
+	if i.Group != nil {
+		if len(i.Group.Name) != 0 {
+			keys = append(keys, i.Group.Name)
+		}
+		if len(i.Group.Email) != 0 {
+			keys = append(keys, i.Group.Email)
+		}
+	}
+	return keys
+}
+
+func (p *BaseProvider) SetIdentities(identities []Identity) {
+	p.SetIdentitiesWithKey(identities, CreateKeysFromIdentity)
+}
+
+func (p *BaseProvider) SetIdentitiesWithKey(
+	identities []Identity,
+	keyFunc func(i Identity) []string,
+) {
+
+	if p.identity == nil {
+		logrus.Warningln("provider has no identity support")
+		return
+	}
+
+	p.identity.mu.Lock()
+	defer p.identity.mu.Unlock()
+
+	if p.identity.identities == nil {
+		p.identity.identities = make([]Identity, 0)
+	}
+
+	p.identity.identities = identities
+
+	// Build the identities map
+	p.identity.identitiesMap = make(map[string]*Identity)
+	for i := range identities {
+
+		identity := identities[i]
+
+		keys := keyFunc(identity)
+
+		for _, key := range keys {
+			p.identity.identitiesMap[strings.ToLower(key)] = &identity
+		}
+	}
+
+	// Trigger reindex
+	go func() {
+		err := p.buildIdentitiyIndices()
+		if err != nil {
+			logrus.WithError(err).Error("Failed to build identity search indices")
+			return
+		}
+	}()
+}
+
+func (p *BaseProvider) AddIdentities(identities ...Identity) {
+	// Take existing identities and append new ones
+	if p.identity == nil {
+		logrus.Warningln("provider has no identity support")
+		return
+	}
+
+	p.identity.mu.RLock()
+	existing := p.identity.identities
+	if existing == nil {
+		existing = make([]Identity, 0)
+	}
+
+	// Make a copy to avoid data races when appending
+	existingCopy := make([]Identity, len(existing))
+	copy(existingCopy, existing)
+
+	filtered := FilterDuplicates(
+		identities,
+		p.identity.identitiesMap,
+		CreateKeysFromIdentity,
+	)
+	p.identity.mu.RUnlock()
+
+	combined := append(existingCopy, filtered...)
+	p.SetIdentities(combined)
 }
