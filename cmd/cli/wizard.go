@@ -360,7 +360,7 @@ func validateReason(val string) error {
 	return nil
 }
 
-// selectIdentities prompts for optional identity input
+// selectIdentities prompts for optional identity input with improved search interface
 func selectIdentities(provider string) ([]string, error) {
 	var wantIdentities bool
 
@@ -384,32 +384,145 @@ func selectIdentities(provider string) ([]string, error) {
 		return []string{}, nil
 	}
 
-	// Get identities from providers
-	identityOptions, err := getIdentityOptions()
-	if err != nil || len(identityOptions) == 0 {
-		fmt.Println(err)
+	// Get initial identities from providers
+	allIdentities, err := getIdentityOptions()
+	if err != nil || len(allIdentities) == 0 {
 		// Fallback to manual input if no identities available
 		return selectIdentitiesManual()
 	}
 
-	var selectedIdentities []string
+	// Build map of ID to display name for later formatting
+	identityDisplayMap := make(map[string]string)
+	for _, opt := range allIdentities {
+		identityDisplayMap[opt.Value] = opt.Key
+	}
 
-	// Show searchable list of identities
-	selectForm := huh.NewForm(
-		huh.NewGroup(
-			huh.NewMultiSelect[string]().
-				Title("Select identities:").
-				Description("Search and select identities (use arrow keys, space to select, enter to confirm)").
-				Options(identityOptions...).
-				Filterable(true).
-				Limit(10).
-				Value(&selectedIdentities),
-		),
-	)
+	selectedIdentities := []string{}
+	availableOptions := allIdentities
 
-	err = selectForm.Run()
-	if err != nil {
-		return nil, fmt.Errorf("identity selection cancelled: %w", err)
+	fmt.Println()
+	fmt.Println(infoStyle.Render("🔍 Identity Search & Selection"))
+	fmt.Println("Start typing to filter identities in real-time. Use space to select, arrow keys to navigate.")
+	fmt.Println("You can add up to 10 identities total.")
+	fmt.Println()
+
+	// Interactive loop to add multiple identities
+	for len(selectedIdentities) < 10 {
+		// Show current selection with formatted display
+		if len(selectedIdentities) > 0 {
+			displayNames := make([]string, len(selectedIdentities))
+			for i, id := range selectedIdentities {
+				if display, ok := identityDisplayMap[id]; ok {
+					displayNames[i] = display
+				} else {
+					displayNames[i] = id
+				}
+			}
+			fmt.Printf(successStyle.Render("✓ Selected (%d/10):\n"), len(selectedIdentities))
+			for _, name := range displayNames {
+				fmt.Printf("  • %s\n", name)
+			}
+			fmt.Println()
+		}
+
+		var newSelections []string
+
+		// Calculate remaining slots
+		remainingSlots := 10 - len(selectedIdentities)
+
+		// Show searchable multi-select list with live filtering
+		selectForm := huh.NewForm(
+			huh.NewGroup(
+				huh.NewMultiSelect[string]().
+					Title(fmt.Sprintf("Select identities (can select up to %d more):", remainingSlots)).
+					Description("Press / to filter → Type to search → Arrow keys to navigate → Space to select → Enter when done → ESC to return to previous menu").
+					Options(availableOptions...).
+					Filterable(true).
+					Limit(15).
+					Value(&newSelections),
+			),
+		)
+
+		err = selectForm.Run()
+		if err != nil {
+			// ESC pressed - user wants to finish
+			if len(selectedIdentities) > 0 {
+				return selectedIdentities, nil
+			}
+			return nil, fmt.Errorf("identity selection cancelled: %w", err)
+		}
+
+		// If no new selections, user pressed ESC or Enter without selecting
+		if len(newSelections) == 0 {
+			break
+		}
+
+		// Enforce the remaining slots limit
+		if len(newSelections) > remainingSlots {
+			newSelections = newSelections[:remainingSlots]
+			fmt.Println(warningStyle.Render(fmt.Sprintf("⚠ Limited to %d selections (maximum of 10 total)", remainingSlots)))
+			fmt.Println()
+		}
+
+		// Add new selections, checking for duplicates
+		added := 0
+		for _, id := range newSelections {
+			if !slices.Contains(selectedIdentities, id) && len(selectedIdentities) < 10 {
+				selectedIdentities = append(selectedIdentities, id)
+				added++
+				if displayName, ok := identityDisplayMap[id]; ok {
+					fmt.Println(successStyle.Render("✓ Added: ") + displayName)
+				} else {
+					fmt.Println(successStyle.Render("✓ Added: ") + id)
+				}
+			}
+		}
+
+		if added > 0 {
+			fmt.Println()
+		}
+
+		// Remove selected items from available options
+		newAvailableOptions := []huh.Option[string]{}
+		for _, opt := range availableOptions {
+			if !slices.Contains(selectedIdentities, opt.Value) {
+				newAvailableOptions = append(newAvailableOptions, opt)
+			}
+		}
+		availableOptions = newAvailableOptions
+
+		// Check if we've reached the limit
+		if len(selectedIdentities) >= 10 {
+			fmt.Println(warningStyle.Render("⚠ Maximum of 10 identities reached"))
+			fmt.Println()
+			break
+		}
+
+		// Check if there are more options available
+		if len(availableOptions) == 0 {
+			fmt.Println(infoStyle.Render("ℹ All available identities have been selected"))
+			fmt.Println()
+			break
+		}
+
+		// Ask if user wants to add more
+		var addMore bool
+		moreForm := huh.NewForm(
+			huh.NewGroup(
+				huh.NewConfirm().
+					Title("Add more identities?").
+					Description(fmt.Sprintf("You have selected %d/10 identities. %d more available.", len(selectedIdentities), len(availableOptions))).
+					Value(&addMore).
+					Affirmative("Yes").
+					Negative("Done"),
+			),
+		)
+
+		err = moreForm.Run()
+		if err != nil || !addMore {
+			break
+		}
+		fmt.Println()
 	}
 
 	return selectedIdentities, nil
@@ -537,34 +650,39 @@ func getIdentityOptions() ([]huh.Option[string], error) {
 
 // selectTenants prompts for optional tenant input
 func selectTenants(provider string) ([]string, error) {
+	// Query provider first to check if tenants are available
+	tenantOptions, err := getTenantOptions(provider)
+
+	// If no tenants available (error or empty list), skip tenant selection
+	if err != nil || len(tenantOptions) == 0 {
+		if err != nil {
+			logrus.Debug("No tenants available from provider: ", err)
+		}
+		// Skip tenant selection silently - not all providers support tenants
+		return []string{}, nil
+	}
+
+	// Tenants are available, ask user if they want to specify them
 	var wantTenants bool
 
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewConfirm().
 				Title("Specify tenants?").
-				Description("Do you want to specify specific tenants/accounts for this request? (Optional)").
+				Description(fmt.Sprintf("Found %d tenant(s)/account(s). Do you want to specify which ones? (Optional)", len(tenantOptions))).
 				Value(&wantTenants).
 				Affirmative("Yes").
 				Negative("Skip"),
 		),
 	)
 
-	err := form.Run()
+	err = form.Run()
 	if err != nil {
 		return nil, fmt.Errorf("tenant selection cancelled: %w", err)
 	}
 
 	if !wantTenants {
 		return []string{}, nil
-	}
-
-	// Get tenants from providers
-	tenantOptions, err := getTenantOptions(provider)
-
-	if err != nil || len(tenantOptions) == 0 {
-		// Fallback to manual input if no tenants available
-		return selectTenantsManual()
 	}
 
 	var selectedTenants []string
@@ -590,42 +708,6 @@ func selectTenants(provider string) ([]string, error) {
 	return selectedTenants, nil
 }
 
-// selectTenantsManual allows manual entry of tenants
-func selectTenantsManual() ([]string, error) {
-	var tenantsInput string
-
-	inputForm := huh.NewForm(
-		huh.NewGroup(
-			huh.NewInput().
-				Title("Enter tenants (comma-separated):").
-				Description("e.g., tenant-id-1,account-123,org-456").
-				Value(&tenantsInput).
-				Validate(func(val string) error {
-					if strings.TrimSpace(val) == "" {
-						return fmt.Errorf("tenants cannot be empty when specified")
-					}
-					return nil
-				}),
-		),
-	)
-
-	err := inputForm.Run()
-	if err != nil {
-		return nil, fmt.Errorf("tenant input cancelled: %w", err)
-	}
-
-	// Split by comma and trim spaces
-	tenants := []string{}
-	for t := range strings.SplitSeq(tenantsInput, ",") {
-		trimmed := strings.TrimSpace(t)
-		if trimmed != "" {
-			tenants = append(tenants, trimmed)
-		}
-	}
-
-	return tenants, nil
-}
-
 // getTenantOptions returns tenant options from a specific provider
 func getTenantOptions(providerKey string) ([]huh.Option[string], error) {
 	var options []huh.Option[string]
@@ -643,9 +725,9 @@ func getTenantOptions(providerKey string) ([]huh.Option[string], error) {
 	}
 
 	// Check if provider supports tenants
-	if !provider.HasCapability(models.ProviderCapabilityTenants) {
-		return nil, fmt.Errorf("provider %s does not support tenants", providerKey)
-	}
+	//if !provider.HasCapability(models.ProviderCapabilityTenants) {
+	//	return nil, fmt.Errorf("provider %s does not support tenants", providerKey)
+	//}
 
 	// Search for tenants (empty query returns all, with limit)
 	searchReq := &models.SearchRequest{

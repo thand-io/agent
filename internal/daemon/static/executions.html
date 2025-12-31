@@ -273,10 +273,7 @@
                         }
 
                         const data = await response.json();
-                        console.log('API Response:', data);
-                        console.log('Executions count:', (data.executions || []).length);
-                        console.log('First 3 executions:', (data.executions || []).slice(0, 3));
-                        
+  
                         this.executions = data.executions || [];
                         this.filterExecutions();
                         this.lastUpdated = new Date().toLocaleTimeString();
