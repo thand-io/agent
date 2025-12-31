@@ -1358,6 +1358,8 @@ definitions:
     type: object
   models.ProviderResponse:
     properties:
+      capabilities:
+        $ref: '#/definitions/models.ProviderCapabilities'
       description:
         type: string
       enabled:
@@ -2362,8 +2364,9 @@ paths:
     post:
       consumes:
       - application/json
-      description: Execute a specific function on a provider (e.g., authorizesession,
-        listidentities)
+      description: 'Execute a specific function on a provider. Requires server mode
+        and authentication. Supported functions: authorizesession (authorize user
+        session), listidentities (list provider identities with optional search parameters)'
       parameters:
       - description: Provider name
         in: path
@@ -2375,7 +2378,7 @@ paths:
         name: function
         required: true
         type: string
-      - description: Function-specific request body
+      - description: Function-specific request body (optional)
         in: body
         name: body
         schema:
@@ -2390,6 +2393,11 @@ paths:
             type: object
         "400":
           description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
           schema:
             additionalProperties: true
             type: object

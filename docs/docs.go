@@ -1385,7 +1385,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Execute a specific function on a provider (e.g., authorizesession, listidentities)",
+                "description": "Execute a specific function on a provider. Requires server mode and authentication. Supported functions: authorizesession (authorize user session), listidentities (list provider identities with optional search parameters)",
                 "consumes": [
                     "application/json"
                 ],
@@ -1412,7 +1412,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Function-specific request body",
+                        "description": "Function-specific request body (optional)",
                         "name": "body",
                         "in": "body",
                         "schema": {
@@ -1430,6 +1430,13 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -4140,6 +4147,9 @@ const docTemplate = `{
         "models.ProviderResponse": {
             "type": "object",
             "properties": {
+                "capabilities": {
+                    "$ref": "#/definitions/models.ProviderCapabilities"
+                },
                 "description": {
                     "type": "string"
                 },
