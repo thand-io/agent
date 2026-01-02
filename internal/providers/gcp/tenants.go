@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -130,27 +131,37 @@ func (p *gcpProvider) SynchronizeTenants(ctx context.Context, req *models.Synchr
 	return response, nil
 }
 
-func (p *gcpProvider) listProjects(ctx context.Context, crmV3Service *cloudresourcemanager.Service, pagination *models.PaginationOptions) ([]models.ProviderTenant, string, error) {
+func (p *gcpProvider) listProjects(
+	ctx context.Context,
+	crmV3Service *cloudresourcemanager.Service,
+	pagination *models.PaginationOptions,
+) ([]models.ProviderTenant, string, error) {
+
 	var tenants []models.ProviderTenant
 
-	projectsListCall := crmV3Service.Projects.List()
-	projectsListCall.PageSize(int64(pagination.PageSize))
+	projectsSearchCall := crmV3Service.Projects.Search()
+	projectsSearchCall.PageSize(int64(pagination.PageSize))
 
 	if len(pagination.Token) != 0 {
-		projectsListCall.PageToken(pagination.Token)
+		projectsSearchCall.PageToken(pagination.Token)
 	}
 
-	// Search for projects in the ACTIVE state
-	projectsListCall.ShowDeleted(false)
+	// Search for all ACTIVE projects accessible to the service account
+	// Note: This returns projects where the service account has at least viewer permissions
+	// To see ALL projects in an organization, grant roles/browser at the org level
+	projectsSearchCall.Query("state:ACTIVE")
 
-	projectsResp, err := projectsListCall.Do()
+	logrus.Debug("Searching for GCP projects")
+	projectsResp, err := projectsSearchCall.Do()
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to list projects: %w", err)
+		return nil, "", fmt.Errorf("failed to search projects: %w", err)
 	}
+
+	logrus.WithField("project_count", len(projectsResp.Projects)).Debug("Retrieved projects from GCP")
 
 	for _, project := range projectsResp.Projects {
 		// Skip projects that are not ACTIVE
-		if project.State != "ACTIVE" {
+		if !strings.EqualFold(project.State, "ACTIVE") {
 			continue
 		}
 
@@ -158,7 +169,7 @@ func (p *gcpProvider) listProjects(ctx context.Context, crmV3Service *cloudresou
 		projectId := project.ProjectId
 		projectName := project.DisplayName
 
-		if projectName == "" {
+		if len(projectName) == 0 {
 			projectName = projectId
 		}
 
@@ -175,10 +186,15 @@ func (p *gcpProvider) listProjects(ctx context.Context, crmV3Service *cloudresou
 	return tenants, projectsResp.NextPageToken, nil
 }
 
-func (p *gcpProvider) listFolders(ctx context.Context, crmV3Service *cloudresourcemanager.Service, pagination *models.PaginationOptions) ([]models.ProviderTenant, string, error) {
+func (p *gcpProvider) listFolders(
+	ctx context.Context,
+	crmV3Service *cloudresourcemanager.Service,
+	pagination *models.PaginationOptions,
+) ([]models.ProviderTenant, string, error) {
+
 	var tenants []models.ProviderTenant
 
-	// List folders - we need to search under a parent (organization or folder)
+	// Search for folders - we need to search under a parent (organization or folder)
 	// If no parent is specified, we'll try to list all accessible folders
 	foldersSearchCall := crmV3Service.Folders.Search()
 	foldersSearchCall.PageSize(int64(pagination.PageSize))
@@ -195,9 +211,11 @@ func (p *gcpProvider) listFolders(ctx context.Context, crmV3Service *cloudresour
 		return nil, "", fmt.Errorf("failed to list folders: %w", err)
 	}
 
+	logrus.WithField("folder_count", len(foldersResp.Folders)).Debug("Retrieved folders from GCP")
+
 	for _, folder := range foldersResp.Folders {
 		// Skip folders that are not ACTIVE
-		if folder.State != "ACTIVE" {
+		if !strings.EqualFold(folder.State, "ACTIVE") {
 			continue
 		}
 
@@ -205,7 +223,7 @@ func (p *gcpProvider) listFolders(ctx context.Context, crmV3Service *cloudresour
 		folderId := folder.Name
 		folderDisplayName := folder.DisplayName
 
-		if folderDisplayName == "" {
+		if len(folderDisplayName) == 0 {
 			folderDisplayName = folderId
 		}
 
