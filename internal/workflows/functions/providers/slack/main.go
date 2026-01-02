@@ -1,16 +1,16 @@
 package slack
 
 import (
-	"github.com/thand-io/agent/internal/config"
+	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/workflows/functions"
 )
 
 type slackCollection struct {
-	config *config.Config
+	config models.ConfigImpl
 	functions.FunctionCollection
 }
 
-func NewSlackCollection(config *config.Config) *slackCollection {
+func NewSlackCollection(config models.ConfigImpl) *slackCollection {
 	return &slackCollection{
 		config: config,
 	}

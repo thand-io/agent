@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/thand-io/agent/internal/common"
-	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
@@ -297,7 +296,7 @@ func executeTemporalRevokeParallel(
 
 // executeGoRevokeParallel executes revocation tasks in parallel using Go routines and WaitGroup
 func executeGoRevokeParallel(
-	config *config.Config,
+	config models.ConfigImpl,
 	workflowTask *models.WorkflowTask,
 	revokeTasks []revokeTask,
 ) ([]revokeResult, error) {

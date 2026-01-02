@@ -6,6 +6,37 @@ import (
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 )
 
+type ConfigImpl interface {
+
+	// Core
+	GetServices() ServicesClientImpl
+	GetEnvironment() EnvironmentConfig
+
+	GetResumeCallbackUrl(workflowTask *WorkflowTask) string
+	GetAuthCallbackUrl(providerName string) string
+	GetSignalCallbackUrl(workflowTask *WorkflowTask) string
+	GetLoginServerUrl() string
+	GetLocalServerUrl() string
+
+	// Roles
+	GetCompositeRole(identity *Identity, baseRole *Role) (*Role, error)
+
+	// Identities
+	GetIdentity(byEmail string) (*Identity, error)
+
+	// Tenants
+	GetTenant(name string) (*ProviderTenant, error)
+
+	// Workflows
+	GetWorkflowByName(name string) (*Workflow, error)
+	GetWorkflowFromElevationRequest(elevationRequest *ElevateRequest) (*Workflow, error)
+
+	// Providers
+	GetProviderByName(name string) (*Provider, error)
+	GetProvidersByCapability(capability ...ProviderCapability) map[string]Provider
+	GetProvidersByCapabilityWithUser(user *User, capability ...ProviderCapability) map[string]Provider
+}
+
 type ServerConfig struct {
 	Host     string             `json:"host" yaml:"host" mapstructure:"host"`
 	Port     int                `json:"port" yaml:"port" mapstructure:"port"`

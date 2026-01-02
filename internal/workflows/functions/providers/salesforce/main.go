@@ -1,16 +1,16 @@
 package salesforce
 
 import (
-	"github.com/thand-io/agent/internal/config"
+	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/workflows/functions"
 )
 
 type salesforceCollection struct {
-	config *config.Config
+	config models.ConfigImpl
 	functions.FunctionCollection
 }
 
-func NewSalesforceCollection(config *config.Config) *salesforceCollection {
+func NewSalesforceCollection(config models.ConfigImpl) *salesforceCollection {
 	return &salesforceCollection{
 		config: config,
 	}

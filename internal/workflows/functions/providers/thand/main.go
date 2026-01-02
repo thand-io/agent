@@ -1,16 +1,16 @@
 package thand
 
 import (
-	"github.com/thand-io/agent/internal/config"
+	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/workflows/functions"
 )
 
 type thandCollection struct {
-	config *config.Config
+	config models.ConfigImpl
 	functions.FunctionCollection
 }
 
-func NewThandCollection(config *config.Config) *thandCollection {
+func NewThandCollection(config models.ConfigImpl) *thandCollection {
 	return &thandCollection{
 		config: config,
 	}

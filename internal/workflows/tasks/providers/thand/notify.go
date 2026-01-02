@@ -296,7 +296,7 @@ func (t *thandTask) executeNotifyGoParallel(
 			defer wg.Done()
 
 			// Get provider config
-			providerConfig, err := t.config.Providers.GetProviderByName(notifyTask.Provider)
+			providerConfig, err := t.config.GetProviderByName(notifyTask.Provider)
 			if err != nil {
 				results[index] = notifyResult{
 					Recipient: notifyTask.Recipient,

@@ -1,16 +1,16 @@
 package gcp
 
 import (
-	"github.com/thand-io/agent/internal/config"
+	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/workflows/functions"
 )
 
 type gcpCollection struct {
-	config *config.Config
+	config models.ConfigImpl
 	functions.FunctionCollection
 }
 
-func NewGCPCollection(config *config.Config) *gcpCollection {
+func NewGCPCollection(config models.ConfigImpl) *gcpCollection {
 	return &gcpCollection{
 		config: config,
 	}

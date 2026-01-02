@@ -7,10 +7,10 @@ import (
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
-	"github.com/thand-io/agent/internal/config"
+	"github.com/thand-io/agent/internal/models"
 )
 
-func NewTaskRegistry(config *config.Config) *TaskRegistry {
+func NewTaskRegistry(config models.ConfigImpl) *TaskRegistry {
 	return &TaskRegistry{
 		config:   config,
 		handlers: make(map[string]Task),
@@ -19,7 +19,7 @@ func NewTaskRegistry(config *config.Config) *TaskRegistry {
 
 // TaskRegistry manages custom task handlers
 type TaskRegistry struct {
-	config   *config.Config
+	config   models.ConfigImpl
 	handlers map[string]Task
 	mu       sync.RWMutex
 }

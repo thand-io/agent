@@ -17,6 +17,20 @@ type Workflow struct {
 	Enabled     bool             `json:"enabled" default:"true"` // By default enable the workflow
 }
 
+func NewWorkflow(version *version.Version, name string, description string, workflow *model.Workflow) *Workflow {
+	return &Workflow{
+		Version:     version,
+		Name:        name,
+		Description: description,
+		Workflow:    workflow,
+		Enabled:     true,
+	}
+}
+
+func (w *Workflow) GetVersion() *version.Version {
+	return w.Version
+}
+
 func (r *Workflow) HasPermission(user *User) bool {
 	return true
 }

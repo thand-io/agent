@@ -1,16 +1,16 @@
 package aws
 
 import (
-	"github.com/thand-io/agent/internal/config"
+	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/workflows/functions"
 )
 
 type AWSCollection struct {
-	config *config.Config
+	config models.ConfigImpl
 	functions.FunctionCollection
 }
 
-func NewAWSCollection(config *config.Config) *AWSCollection {
+func NewAWSCollection(config models.ConfigImpl) *AWSCollection {
 	return &AWSCollection{
 		config: config,
 	}

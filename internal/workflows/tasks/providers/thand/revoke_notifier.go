@@ -8,7 +8,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/slack-go/slack"
 	"github.com/thand-io/agent/internal/common"
-	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 	emailProvider "github.com/thand-io/agent/internal/providers/email"
 	slackProvider "github.com/thand-io/agent/internal/providers/slack"
@@ -17,7 +16,7 @@ import (
 
 // revokeNotifier handles notifications sent to users after their access has been revoked
 type revokeNotifier struct {
-	config       *config.Config
+	config       models.ConfigImpl
 	workflowTask *models.WorkflowTask
 	elevationReq *models.ElevateRequestInternal
 	req          *thandFunction.NotifierRequest
@@ -27,7 +26,7 @@ type revokeNotifier struct {
 
 // NewRevokeNotifier creates a new notifier for sending revocation notifications
 func NewRevokeNotifier(
-	config *config.Config,
+	config models.ConfigImpl,
 	workflowTask *models.WorkflowTask,
 	elevationReq *models.ElevateRequestInternal,
 	req *thandFunction.NotifierRequest,

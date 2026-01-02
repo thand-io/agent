@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
-	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/workflows/functions"
 )
@@ -15,7 +14,7 @@ type slackFunction struct {
 }
 
 // NewSlackFunction creates a new Slack notification Function
-func NewSlackPostMessageFunction(config *config.Config) *slackFunction {
+func NewSlackPostMessageFunction(config models.ConfigImpl) *slackFunction {
 	return &slackFunction{
 		BaseFunction: functions.NewBaseFunction(
 			"slack.postMessage",

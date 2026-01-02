@@ -7,7 +7,6 @@ import (
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
-	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/workflows/functions"
 )
@@ -16,12 +15,12 @@ const ThandAuthorizeFunction = "thand.authorize"
 
 // AuthorizeFunction implements access authorization based on roles and workflows
 type authorizeFunction struct {
-	config *config.Config
+	config models.ConfigImpl
 	*functions.BaseFunction
 }
 
 // NewAuthorizeFunction creates a new authorization Function
-func NewAuthorizeFunction(config *config.Config) *authorizeFunction {
+func NewAuthorizeFunction(config models.ConfigImpl) *authorizeFunction {
 	return &authorizeFunction{
 		config: config,
 		BaseFunction: functions.NewBaseFunction(

@@ -5,7 +5,7 @@ import (
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
-	config "github.com/thand-io/agent/internal/config"
+	"github.com/thand-io/agent/internal/models"
 )
 
 // FunctionHandler represents a custom function that can be called from workflows
@@ -14,15 +14,15 @@ type FunctionHandler func(ctx context.Context, call model.CallFunction, input ma
 // FunctionRegistry manages custom functions for workflow execution
 type FunctionRegistry struct {
 	functions map[string]Function
-	config    *config.Config
+	config    models.ConfigImpl
 }
 
-func (r *FunctionRegistry) GetConfig() *config.Config {
+func (r *FunctionRegistry) GetConfig() models.ConfigImpl {
 	return r.config
 }
 
 // NewFunctionRegistry creates a new function registry
-func NewFunctionRegistry(config *config.Config) *FunctionRegistry {
+func NewFunctionRegistry(config models.ConfigImpl) *FunctionRegistry {
 	registry := &FunctionRegistry{
 		functions: make(map[string]Function),
 		config:    config,
