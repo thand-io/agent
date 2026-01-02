@@ -7,6 +7,7 @@ import "github.com/thand-io/agent/sdk/models"
 // availability checks. This allows workflows to be tested without requiring actual service connections
 // to encryption providers, vaults, schedulers, Temporal, or LLM services.
 type Services struct {
+	temporal models.TemporalService
 }
 
 // Initialize sets up all configured services (encryption, vault, storage, scheduler, LLM, temporal).
@@ -88,13 +89,14 @@ func (s *Services) HasLargeLanguageModel() bool {
 
 // GetTemporal returns the Temporal workflow engine service for orchestrating complex,
 // long-running workflows with built-in retry logic, timeouts, and failure handling.
-// This is the core workflow execution engine for Thand. This stub returns nil.
+// This is the core workflow execution engine for Thand. Returns the in-memory temporal
+// service if configured via SetupInMemoryTemporal, otherwise returns nil.
 func (s *Services) GetTemporal() models.TemporalService {
-	return nil
+	return s.temporal
 }
 
 // HasTemporal checks if a Temporal service connection is configured and available.
-// This stub returns false.
+// Returns true if an in-memory temporal service has been set up.
 func (s *Services) HasTemporal() bool {
-	return false
+	return s.temporal != nil
 }

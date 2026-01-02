@@ -10,29 +10,37 @@ import (
 const WorkflowHelloWorldName = "hello_world"
 const WorkflowHelloWorldVersion = "1.0.0"
 
+var WorkflowHelloWorld = models.NewWorkflow(
+	version.Must(version.NewVersion(WorkflowHelloWorldVersion)),
+	"hello_world",
+	"Hello World Workflow",
+	model.NewWorkflowBuilder().
+		SetDocument(
+			"1.0.0-alpha5",
+			"examples",
+			WorkflowHelloWorldName,
+			WorkflowHelloWorldVersion,
+		).
+		AddTask("greet", &model.SetTask{
+			Set: map[string]any{
+				"greeting": "Hello, World!",
+			},
+		}).
+		Build(),
+)
+
+// HelloWorld is a simple example workflow that returns "Hello, World!" message.
+// This runs without Temporal, using the local workflow manager.
+// Thand can run workflows with or without Temporal, making it easy to develop and test workflows locally.
+// However, no using temporal means no durability or scalability guarantees.
+// Critically this means that no state is saved between workflow steps, so long running workflows
+// that require waiting for external events will not function correctly without Temporal.
+// State is relayed via redirect URLs handed back to the user.
 func HelloWorld() any {
 
 	cfg := NewConfig()
-	wf := models.NewWorkflow(
-		version.Must(version.NewVersion(WorkflowHelloWorldVersion)),
-		"hello_world",
-		"Hello World Workflow",
-		model.NewWorkflowBuilder().
-			SetDocument(
-				"1.0.0-alpha5",
-				"examples",
-				WorkflowHelloWorldName,
-				WorkflowHelloWorldVersion,
-			).
-			AddTask("greet", &model.SetTask{
-				Set: map[string]any{
-					"greeting": "Hello, World!",
-				},
-			}).
-			Build(),
-	)
 
-	err := cfg.RegisterWorkflow(WorkflowHelloWorldName, wf)
+	err := cfg.RegisterWorkflow(WorkflowHelloWorldName, WorkflowHelloWorld)
 
 	if err != nil {
 		panic(err)
