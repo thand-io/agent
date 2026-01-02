@@ -31,12 +31,17 @@ func HelloWorld() any {
 			}).
 			Build(),
 	)
-	cfg.RegisterWorkflow(WorkflowHelloWorldName, wf)
+
+	err := cfg.RegisterWorkflow(WorkflowHelloWorldName, wf)
+
+	if err != nil {
+		panic(err)
+	}
 
 	// Create workflow manager
 	workflowManager := manager.NewWorkflowManager(cfg)
 
-	// Get workflow by name, regisered in our config
+	// Get workflow by name, registered in our config
 	workflow, err := cfg.GetWorkflowByName(WorkflowHelloWorldName)
 
 	if err != nil {
