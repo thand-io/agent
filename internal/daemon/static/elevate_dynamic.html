@@ -292,7 +292,7 @@
             }
 
             function loadProviders() {
-                fetch('{{.Config.ApiBasePath}}/providers?capability=rbac')
+                fetch('{{.Config.ApiBasePath}}/providers?capability=provisioning')
                     .then(response => response.json())
                     .then(data => {
                         const providers = Object.keys(data.providers).map(key => ({
