@@ -38,6 +38,10 @@ type EnvironmentConfig struct {
 
 }
 
+func (e *EnvironmentConfig) IsEphemeral() bool {
+	return e.Ephemeral
+}
+
 func (e *EnvironmentConfig) GetIdentifier() string {
 	return common.ConvertToSnakeCase(
 		fmt.Sprintf("thand-%s-%s", e.Platform, e.Name))

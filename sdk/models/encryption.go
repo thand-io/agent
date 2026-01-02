@@ -6,4 +6,4 @@ import internal "github.com/thand-io/agent/internal/models"
 // EncryptionImpl defines the encryption implementation interface.
 // It provides methods for encrypting and decrypting sensitive data
 // used by the agent for secure credential storage and transmission.
-type EncryptionImpl = internal.EncryptionImpl
+type EncryptionService = internal.EncryptionImpl

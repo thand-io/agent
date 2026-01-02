@@ -9,7 +9,6 @@ import (
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
-	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/workflows/functions"
 )
@@ -18,12 +17,12 @@ const ThandNotifyFunction = "thand.notify"
 
 // NotifyFunction implements access request notification using LLM or user input
 type notifyFunction struct {
-	config *config.Config
+	config models.ConfigImpl
 	*functions.BaseFunction
 }
 
 // NewValidateFunction creates a new validation Function
-func NewNotifyFunction(config *config.Config) *notifyFunction {
+func NewNotifyFunction(config models.ConfigImpl) *notifyFunction {
 	return &notifyFunction{
 		config: config,
 		BaseFunction: functions.NewBaseFunction(
@@ -205,7 +204,7 @@ func (t *notifyFunction) Execute(
 	}
 
 	// Get server config to fetch provider
-	providerConfig, err := t.config.Providers.GetProviderByName(foundProvider)
+	providerConfig, err := t.config.GetProviderByName(foundProvider)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get provider config: %w", err)
 	}

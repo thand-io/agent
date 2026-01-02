@@ -7,7 +7,6 @@ import (
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
-	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/workflows/functions"
 )
@@ -25,12 +24,12 @@ func (r *ThandRevokeRequest) IsValid() bool {
 
 // RevokeFunction implements access revocation functionality
 type revokeFunction struct {
-	config *config.Config
+	config models.ConfigImpl
 	*functions.BaseFunction
 }
 
 // NewRevokeFunction creates a new revocation Function
-func NewRevokeFunction(config *config.Config) *revokeFunction {
+func NewRevokeFunction(config models.ConfigImpl) *revokeFunction {
 	return &revokeFunction{
 		config: config,
 		BaseFunction: functions.NewBaseFunction(

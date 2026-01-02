@@ -5,18 +5,17 @@ import (
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
-	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/workflows/tasks"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
 )
 
 type thandCollection struct {
-	config *config.Config
+	config models.ConfigImpl
 	tasks.TaskCollection
 }
 
-func NewThandCollection(config *config.Config) *thandCollection {
+func NewThandCollection(config models.ConfigImpl) *thandCollection {
 	return &thandCollection{
 		config: config,
 	}
@@ -32,10 +31,10 @@ func (c *thandCollection) RegisterTasks(r *tasks.TaskRegistry) {
 }
 
 type thandTask struct {
-	config *config.Config
+	config models.ConfigImpl
 }
 
-func NewThandTask(config *config.Config) *thandTask {
+func NewThandTask(config models.ConfigImpl) *thandTask {
 	return &thandTask{
 		config: config,
 	}

@@ -10,7 +10,6 @@ import (
 	swctx "github.com/serverlessworkflow/sdk-go/v3/impl/ctx"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
-	"github.com/thand-io/agent/internal/config"
 	models "github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/workflows/functions"
 	providerAws "github.com/thand-io/agent/internal/workflows/functions/providers/aws"
@@ -27,13 +26,13 @@ import (
 
 // WorkflowManager manages workflow lifecycle and execution using the official SDK
 type WorkflowManager struct {
-	config    *config.Config
+	config    models.ConfigImpl
 	functions *functions.FunctionRegistry
 	tasks     *tasks.TaskRegistry
 }
 
 // NewWorkflowManager creates a new workflow manager
-func NewWorkflowManager(cfg *config.Config) *WorkflowManager {
+func NewWorkflowManager(cfg models.ConfigImpl) *WorkflowManager {
 
 	wm := WorkflowManager{
 		config:    cfg,

@@ -95,7 +95,7 @@ func (r *ResumableWorkflowRunner) executeWaitTask(
 			"duration": duration,
 		}).Info("Executing standard wait")
 
-		if r.config.Environment.Ephemeral && duration > 1*time.Minute {
+		if r.config.GetEnvironment().Ephemeral && duration > 1*time.Minute {
 			return nil, fmt.Errorf("cannot wait for more than 1 minute in ephemeral mode")
 		}
 

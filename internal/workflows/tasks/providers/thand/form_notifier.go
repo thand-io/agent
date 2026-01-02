@@ -8,7 +8,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/slack-go/slack"
 	"github.com/thand-io/agent/internal/common"
-	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 	emailProvider "github.com/thand-io/agent/internal/providers/email"
 	slackProvider "github.com/thand-io/agent/internal/providers/slack"
@@ -26,7 +25,7 @@ type FormNotifierConfig struct {
 }
 
 type formNotifier struct {
-	config       *config.Config
+	config       models.ConfigImpl
 	workflowTask *models.WorkflowTask
 	elevationReq *models.ElevateRequestInternal
 	req          *FormNotifierConfig
@@ -34,7 +33,7 @@ type formNotifier struct {
 
 // NewFormNotifier creates a new form notifier
 func NewFormNotifier(
-	config *config.Config,
+	config models.ConfigImpl,
 	workflowTask *models.WorkflowTask,
 	elevationReq *models.ElevateRequestInternal,
 	req *FormNotifierConfig,
