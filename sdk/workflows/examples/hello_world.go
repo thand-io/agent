@@ -32,7 +32,7 @@ var WorkflowHelloWorld = models.NewWorkflow(
 // HelloWorld is a simple example workflow that returns "Hello, World!" message.
 // This runs without Temporal, using the local workflow manager.
 // Thand can run workflows with or without Temporal, making it easy to develop and test workflows locally.
-// However, no using temporal means no durability or scalability guarantees.
+// However, not using Temporal means no durability or scalability guarantees.
 // Critically this means that no state is saved between workflow steps, so long running workflows
 // that require waiting for external events will not function correctly without Temporal.
 // State is relayed via redirect URLs handed back to the user.
