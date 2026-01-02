@@ -14,6 +14,7 @@ The GCP provider enables integration with Google Cloud Platform, providing role-
 
 - **Role-Based Access Control (RBAC)**: Supports GCP IAM roles and bindings
 - **Project Management**: Access to GCP projects and resources
+- **Tenant Support**: Automatically discovers and synchronizes GCP projects and folders
 - **Permission Management**: Access to GCP IAM permissions and policies
 - **Service Account Integration**: Support for service account authentication
 
@@ -31,6 +32,10 @@ The GCP provider enables integration with Google Cloud Platform, providing role-
 
 The following GCP IAM permissions are required for the agent to function properly:
 
+#### Basic Permissions (Project-Level Access)
+
+For accessing a single project:
+
 ```yaml
 permissions:
   - iam.roles.list
@@ -42,6 +47,21 @@ permissions:
 ```
 
 **Recommended Role**: `roles/viewer` (includes all necessary read permissions)
+
+#### Organization-Level Permissions (Tenant Discovery)
+
+For discovering all projects and folders across your organization:
+
+```yaml
+permissions:
+  - resourcemanager.projects.list
+  - resourcemanager.folders.list
+  - resourcemanager.organizations.get
+```
+
+**Recommended Role**: `roles/browser` (enables full tenant hierarchy discovery)
+
+> **Note**: For full tenant synchronization capabilities (listing all projects and folders in your organization), grant the `roles/browser` role at the organization level. This allows the agent to discover and track your entire GCP resource hierarchy.
 
 ## Authentication Methods
 
@@ -140,7 +160,27 @@ providers:
 
 1. **Create Service Account**: In GCP Console → IAM & Admin → Service Accounts → Create Service Account
 
-2. **Set Permissions**: Grant the service account the `Viewer` role or custom role with required permissions
+2. **Set Permissions**: 
+   - **For single project access**: Grant the service account the `Viewer` role at the project level
+   - **For organization-wide tenant discovery**: Grant the `Browser` role at the organization level
+
+   ```bash
+   # Organization-level access (recommended for tenant discovery)
+   ORG_ID=$(gcloud organizations list --format="value(ID)")
+   gcloud organizations add-iam-policy-binding $ORG_ID \
+       --member="serviceAccount:agent@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+       --role="roles/browser"
+   
+   # Optional: Add folder viewer for detailed folder information
+   gcloud organizations add-iam-policy-binding $ORG_ID \
+       --member="serviceAccount:agent@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+       --role="roles/resourcemanager.folderViewer"
+   
+   # OR: Project-level access (for single project)
+   gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+       --member="serviceAccount:agent@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+       --role="roles/viewer"
+   ```
 
 3. **Create Key**: In the service account details → Keys → Add Key → Create New Key
    - Choose JSON format
@@ -266,6 +306,24 @@ providers:
 
 ## Features
 
+### Tenant Discovery and Synchronization
+
+The GCP provider automatically discovers and synchronizes your GCP resource hierarchy:
+
+- **Projects**: All active GCP projects accessible to the service account
+- **Folders**: Organizational folders (requires organization-level permissions)
+- **Hierarchical Structure**: Maintains parent-child relationships in your GCP organization
+
+Tenant synchronization enables:
+- Multi-project access management
+- Organization-wide visibility
+- Hierarchical role assignments
+- Folder-based policy application
+
+**Requirements for full tenant discovery:**
+- Service account with `roles/browser` role at organization level
+- Cloud Resource Manager API enabled
+
 ### GCP IAM Integration
 
 The GCP provider automatically discovers and indexes GCP predefined and custom roles, making them available for role elevation requests.
@@ -300,8 +358,15 @@ The provider includes comprehensive GCP IAM permissions data, enabling:
 
 3. **Permission Issues**
    - Verify service account has `Viewer` role or equivalent permissions
+   - For tenant discovery, verify `Browser` role is granted at organization level
    - Check if organization policies restrict access
    - Ensure IAM API is enabled
+
+4. **Tenant Synchronization Issues**
+   - Verify Cloud Resource Manager API is enabled
+   - Check service account has `roles/browser` permission at organization level
+   - Ensure projects and folders are in `ACTIVE` state
+   - Review logs for API quota or rate limit errors
 
 ### Debugging
 

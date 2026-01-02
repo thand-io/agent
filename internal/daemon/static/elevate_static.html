@@ -551,7 +551,7 @@
                  */
                 async loadProviders() {
                     try {
-                        const response = await fetch(`${this.apiBasePath}/providers?capability=rbac`);
+                        const response = await fetch(`${this.apiBasePath}/providers?capability=provisioning`);
                         
                         if (!response.ok) {
                             throw new Error(`HTTP error! status: ${response.status}`);

@@ -80,8 +80,10 @@ func (p *awsProvider) SynchronizeTenants(ctx context.Context, req *models.Synchr
 		}
 
 		tenant := models.ProviderTenant{
-			ID:   accountId,
-			Name: accountName,
+			ID:     accountId,
+			Type:   "account",
+			Name:   accountName,
+			Tenant: account,
 		}
 		tenants = append(tenants, tenant)
 	}
