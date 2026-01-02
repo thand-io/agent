@@ -41,7 +41,7 @@ type TenantsConfiguration = SynchronizableConfiguration
 
 type SynchronizableConfiguration struct {
 	Synchronizable bool `json:"synchronizable,omitempty"`
-	Interval       int  `json:"interval,omitempty"` // in minutes
+	Interval       int  `json:"interval,omitempty" validate:"omitempty,min=1,max=43200"` // in minutes (max 30 days)
 	Enabled        bool `json:"enabled,omitempty"`
 }
 

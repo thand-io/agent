@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/config/environment"
@@ -121,6 +122,15 @@ func (c *Config) loadProviderVaultData() (string, error) {
 func (c *Config) processProviderDefinitions(foundProviders []*models.ProviderDefinitions) map[string]models.Provider {
 	defs := make(map[string]models.Provider)
 	logrus.Debugln("Processing loaded providers: ", len(foundProviders))
+
+	// Validate all provider definitions before processing
+	validate := validator.New()
+	for _, providerDef := range foundProviders {
+		if err := providerDef.Validate(validate); err != nil {
+			logrus.WithError(err).Errorln("Provider definition validation failed")
+			continue
+		}
+	}
 
 	for _, provider := range foundProviders {
 		for providerKey, p := range provider.Providers {

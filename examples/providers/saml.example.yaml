@@ -3,6 +3,7 @@
 version: "1.0"
 providers:
   company-saml:
+    name: "Company SAML"
     description: Company SAML Identity Provider
     provider: saml
     enabled: false

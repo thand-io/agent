@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/blevesearch/bleve/v2"
+	"github.com/go-playground/validator/v10"
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/config/environment"
@@ -144,6 +145,14 @@ func (c *Config) ApplyRoles(foundRoles []*models.RoleDefinitions) (map[string]mo
 
 	defs := make(map[string]models.Role)
 	logrus.Debugln("Processing loaded roles: ", len(foundRoles))
+
+	// Validate all role definitions before processing
+	validate := validator.New()
+	for _, roleDef := range foundRoles {
+		if err := roleDef.Validate(validate); err != nil {
+			return nil, fmt.Errorf("role definition validation failed: %w", err)
+		}
+	}
 
 	for _, role := range foundRoles {
 		for roleKey, r := range role.Roles {

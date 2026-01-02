@@ -45,13 +45,13 @@ var ErrNotImplemented = errors.New("not implemented")
 
 type Provider struct {
 	Version      *version.Version      `json:"version,omitempty"`
-	Name         string                `json:"name"`
-	Description  string                `json:"description"`
-	Provider     string                `json:"provider"`               // e.g. aws, gcp, azure
-	Capabilities *ProviderCapabilities `json:"capabilities,omitempty"` // Allows the user to specify what this provider can do
-	Config       *BasicConfig          `json:"config,omitempty"`       // Provider-specific configuration
-	Role         *Role                 `json:"role,omitempty"`         // The base role for this provider
-	Enabled      bool                  `json:"enabled"`                // Whether this provider is enabled
+	Name         string                `json:"name" validate:"required,min=1,max=100"`
+	Description  string                `json:"description" validate:"max=500"`
+	Provider     string                `json:"provider" validate:"required,min=2,max=50,alphanum_hyphen"` // e.g. aws, gcp, azure
+	Capabilities *ProviderCapabilities `json:"capabilities,omitempty"`                                    // Allows the user to specify what this provider can do
+	Config       *BasicConfig          `json:"config,omitempty"`                                          // Provider-specific configuration
+	Role         *Role                 `json:"role,omitempty"`                                            // The base role for this provider
+	Enabled      bool                  `json:"enabled"`                                                   // Whether this provider is enabled
 
 	client ProviderImpl `json:"-" yaml:"-"`
 }
@@ -258,6 +258,21 @@ func (h *ProviderDefinitions) UnmarshalYAML(unmarshal func(any) error) error {
 
 	h.Version = parsedVersion
 	h.Providers = aux.Providers
+
+	return nil
+}
+
+// Validate validates all providers in the definition using struct validation tags
+func (h *ProviderDefinitions) Validate(v interface{ Struct(interface{}) error }) error {
+	if v == nil {
+		return fmt.Errorf("validator is required")
+	}
+
+	for providerKey, provider := range h.Providers {
+		if err := v.Struct(&provider); err != nil {
+			return fmt.Errorf("provider '%s' validation failed: %w", providerKey, err)
+		}
+	}
 
 	return nil
 }

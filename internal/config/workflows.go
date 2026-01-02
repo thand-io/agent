@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/config/environment"
@@ -75,6 +76,14 @@ func (c *Config) ApplyWorkflows(foundWorkflows []*models.WorkflowDefinitions) (m
 	defs := make(map[string]models.Workflow)
 
 	logrus.Debugln("Processing loaded workflows: ", len(foundWorkflows))
+
+	// Validate all workflow definitions before processing
+	validate := validator.New()
+	for _, workflowDef := range foundWorkflows {
+		if err := workflowDef.Validate(validate); err != nil {
+			return nil, fmt.Errorf("workflow definition validation failed: %w", err)
+		}
+	}
 
 	for _, workflow := range foundWorkflows {
 		for workflowKey, p := range workflow.Workflows {

@@ -11,7 +11,7 @@ func HelloWorldTemporal() any {
 
 	// Setup local temporal
 
-	err := cfg.RegisterWorkflow(WorkflowHelloWorldName, WorkflowHellowWorld)
+	err := cfg.RegisterWorkflow(WorkflowHelloWorldName, WorkflowHelloWorld)
 
 	if err != nil {
 		panic(err)

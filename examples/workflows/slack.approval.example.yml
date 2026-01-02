@@ -1,6 +1,7 @@
 version: "1.0"
 workflows:
   slack_approval:
+    name: "Slack Approval Workflow"
     description: Access to AWS resources
     # Set which authentication is used to auth the users request
     # before the workflow is run
