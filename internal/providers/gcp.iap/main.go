@@ -270,9 +270,8 @@ func (p *gcpIAPProvider) ConvertIAPClaimsToSession(claims *IAPClaims, expiryTime
 	// Try to extract name and username from email
 	if len(claims.Email) != 0 {
 		// Simple name extraction from email
-		name := common.ExtractNameFromEmail(claims.Email)
-		user.Name = name
-		user.Username = name
+		user.Name = common.ExtractNameFromEmail(claims.Email)
+		user.Username = common.ExtractUsernameFromEmail(claims.Email)
 	}
 
 	// Parse Google claims if present

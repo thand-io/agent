@@ -104,7 +104,7 @@ func parseMemberToIdentity(member string) (*models.Identity, string) {
 			User: &models.User{
 				ID:       memberValue,
 				Email:    memberValue,
-				Username: name,
+				Username: common.ExtractUsernameFromEmail(memberValue),
 				Name:     name,
 				Source:   "gcp",
 			},

@@ -45,7 +45,7 @@ func (p *gsuiteProvider) SynchronizeUsers(ctx context.Context, req *models.Synch
 			Label: user.Name.FullName,
 			User: &models.User{
 				ID:       user.Id,
-				Username: common.ExtractNameFromEmail(user.PrimaryEmail),
+				Username: common.ExtractUsernameFromEmail(user.PrimaryEmail),
 				Email:    user.PrimaryEmail,
 				Name:     user.Name.FullName,
 				Source:   "gsuite",

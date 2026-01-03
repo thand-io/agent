@@ -26,3 +26,7 @@ func ExtractNameFromEmail(email string) string {
 
 	return strings.Join(words, " ")
 }
+
+func ExtractUsernameFromEmail(email string) string {
+	return ConvertToSnakeCase(ExtractNameFromEmail(email))
+}

@@ -239,7 +239,7 @@ func (p *samlProvider) CreateSession(ctx context.Context, authRequest *models.Au
 			// Use NameID as email if it looks like an email
 			if strings.Contains(nameID, "@") {
 				email = nameID
-				username = common.ExtractNameFromEmail(nameID)
+				username = common.ExtractUsernameFromEmail(nameID)
 			} else {
 				username = nameID
 			}

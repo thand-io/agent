@@ -291,7 +291,7 @@ func (p *awsProvider) getUsernameForIAM(user *models.User) string {
 
 	// Second priority: extract from email if available
 	if len(user.Email) > 0 {
-		return common.ExtractNameFromEmail(user.Email)
+		return common.ExtractUsernameFromEmail(user.Email)
 	}
 
 	// No valid username found - caller should fallback to account root
