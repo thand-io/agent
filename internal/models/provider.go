@@ -174,6 +174,7 @@ type ProviderImpl interface {
 
 	// Sub-interfaces
 	ProviderNotifier
+	ProviderWebhook
 	ProviderAuthorizor
 	ProviderRoleBasedAccessControl
 	ProviderIdentities

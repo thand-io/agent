@@ -457,17 +457,23 @@ func (c *Config) GetApiBasePath() string {
 	return strings.TrimSuffix(fmt.Sprintf("/api/%s", c.API.GetVersion()), "/")
 }
 
+func (c *Config) GetCallbackUrl(path string) string {
+	return fmt.Sprintf(
+		"%s/%s/%s",
+		c.GetLoginServerUrl(),
+		strings.TrimPrefix(strings.TrimSuffix(c.GetApiBasePath(), "/"), "/"),
+		strings.TrimPrefix(strings.TrimSuffix(path, "/"), "/"),
+	)
+}
+
 func (c *Config) GetAuthCallbackUrl(providerName string) string {
 
 	if len(providerName) == 0 {
 		logrus.Fatalf("provider name cannot be empty")
 	}
 
-	return fmt.Sprintf(
-		"%s/%s/auth/callback/%s",
-		c.GetLoginServerUrl(),
-		strings.TrimPrefix(c.GetApiBasePath(), "/"),
-		url.PathEscape(providerName),
+	return c.GetCallbackUrl(
+		fmt.Sprintf("/auth/callback/%s", url.PathEscape(providerName)),
 	)
 }
 
@@ -481,12 +487,10 @@ func (c *Config) GetResumeCallbackUrl(workflowTask *models.WorkflowTask) string 
 		"taskStatus": {workflowTask.GetStatus().String()},
 	}
 
-	return fmt.Sprintf(
-		"%s/%s/elevate/resume?%s",
-		c.GetLoginServerUrl(),
-		strings.TrimPrefix(c.GetApiBasePath(), "/"),
+	return c.GetCallbackUrl(fmt.Sprintf(
+		"/elevate/resume?%s",
 		queryParams.Encode(),
-	)
+	))
 }
 
 func (c *Config) GetSignalCallbackUrl(workflowTask *models.WorkflowTask) string {
@@ -502,13 +506,11 @@ func (c *Config) GetSignalCallbackUrl(workflowTask *models.WorkflowTask) string 
 		"taskStatus": {workflowTask.GetStatus().String()},
 	}
 
-	return fmt.Sprintf(
-		"%s/%s/execution/%s/signal?%s",
-		c.GetLoginServerUrl(),
-		strings.TrimPrefix(c.GetApiBasePath(), "/"),
+	return c.GetCallbackUrl(fmt.Sprintf(
+		"/execution/%s/signal?%s",
 		workflowTask.WorkflowID,
 		queryParams.Encode(),
-	)
+	))
 }
 
 func (c *Config) GetEventsWithFilter(filter LogFilter) []*models.LogEntry {

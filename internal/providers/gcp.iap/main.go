@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,6 +18,7 @@ import (
 )
 
 const GcpIAPProviderName = "gcp.iap"
+const WebhookResourceIAP = "iap"
 
 const (
 	// IAPJWTHeader is the header that IAP adds to requests
@@ -87,8 +91,112 @@ func (p *gcpIAPProvider) Initialize(identifier string, provider models.Provider)
 
 // AuthorizeSession is not applicable for IAP as authorization happens at the IAP layer
 func (p *gcpIAPProvider) AuthorizeSession(ctx context.Context, auth *models.AuthorizeUser) (*models.AuthorizeSessionResponse, error) {
-	// Just return nil as authorization is handled by IAP
-	return nil, nil
+
+	// We don't yet have our user information as this is handled by IAP.
+	// and we're not really supposed to have the user context at this stage.
+	// so we need to hijack the redirect url. To our own webhook handler that
+	// can extract the JWT and convert it into a session.
+
+	logrus.Debugln("AuthorizeSession called - generating redirect URL to IAP webhook")
+
+	newRedirectUri := strings.TrimSuffix(auth.RedirectUri, "/auth/callback/"+p.GetIdentifier())
+	newRedirectUri += fmt.Sprintf(
+		"/provider/%s/%s",
+		url.PathEscape(p.GetIdentifier()),
+		WebhookResourceIAP,
+	)
+
+	foundUrl, err := url.Parse(newRedirectUri)
+
+	if err != nil {
+		logrus.WithError(err).Errorln("Failed to parse redirect URI")
+		return nil, fmt.Errorf("failed to parse redirect URI: %w", err)
+	}
+
+	// Override the path with our webhook endpoint
+	query := foundUrl.Query()
+	query.Add("state", auth.State)
+	foundUrl.RawQuery = query.Encode()
+
+	return &models.AuthorizeSessionResponse{
+		Url: foundUrl.String(),
+	}, nil
+}
+
+// HandleWebhook
+func (p *gcpIAPProvider) HandleWebhook(ctx context.Context, req *models.WebhookRequest) error {
+
+	if req == nil {
+		logrus.Errorln("Missing webhook request")
+		return fmt.Errorf("missing webhook request")
+	}
+
+	if req.Context == nil {
+		logrus.Errorln("Missing request context in webhook")
+		return fmt.Errorf("missing request context in webhook")
+	}
+
+	function := req.Context.Param("function")
+
+	if len(function) == 0 {
+		logrus.Errorln("Missing webhook function")
+		return fmt.Errorf("missing webhook function")
+	}
+
+	if !strings.EqualFold(function, WebhookResourceIAP) {
+		logrus.WithField("function", function).Errorln("Unsupported webhook function")
+		return fmt.Errorf("unsupported webhook function: %s", function)
+	}
+
+	context := req.Context
+
+	/*
+		We implement a single webhook handler here to that is able to take in IAP JWTs
+		and convert them into the request needed for the CreateSession handler after the
+		callback
+	*/
+
+	sessionState := context.Query("state")
+
+	if len(sessionState) == 0 {
+		logrus.Errorln("Missing state parameter in webhook request")
+		return fmt.Errorf("missing state parameter in webhook request")
+	}
+
+	// Extract the JWT token from the header
+	jwtToken := context.GetHeader(IAPJWTHeader)
+
+	if len(jwtToken) == 0 {
+		logrus.WithField("header", IAPJWTHeader).Errorln("Missing IAP JWT token in request")
+		return fmt.Errorf("missing IAP JWT token in header: %s", IAPJWTHeader)
+	}
+
+	// Create our new URL redirect request with the JWT as the code
+	redirectUrl, err := url.Parse(fmt.Sprintf(
+		"%s/%s",
+		strings.TrimSuffix(req.Endpoint, "/"),
+		strings.TrimPrefix(fmt.Sprintf("/auth/callback/%s", url.PathEscape(p.GetIdentifier())), "/"),
+	))
+
+	if err != nil {
+		logrus.WithError(err).Errorln("Failed to parse redirect URL")
+		return fmt.Errorf("failed to parse redirect URL: %w", err)
+	}
+
+	// State is already captured in the query parameters
+	// Just need to add the JWT token. Taken from the header
+	query := redirectUrl.Query()
+	query.Add("code", jwtToken)
+	query.Add("state", sessionState)
+	redirectUrl.RawQuery = query.Encode()
+
+	context.Redirect(
+		http.StatusFound,
+		redirectUrl.String(),
+	)
+
+	return nil
+
 }
 
 // CreateSession creates a session from an IAP JWT token
@@ -118,6 +226,9 @@ func (p *gcpIAPProvider) CreateSession(ctx context.Context, auth *models.Authori
 
 	// Convert claims to session
 	session := p.ConvertIAPClaimsToSession(claims, expiryTime)
+
+	// Add the access token to the session for reference
+	session.AccessToken = jwtToken
 
 	logrus.WithFields(logrus.Fields{
 		"user_email": session.User.Email,
