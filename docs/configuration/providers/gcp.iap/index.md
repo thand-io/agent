@@ -266,13 +266,7 @@ providers:
 
 ### App Engine
 
-#### 1. Deploy Application
-
-```bash
-gcloud app deploy app.yaml
-```
-
-#### 2. Enable IAP via Console
+#### 1. Enable IAP via Console
 
 1. Go to [IAP Settings](https://console.cloud.google.com/security/iap)
 2. Find your App Engine app
@@ -291,81 +285,6 @@ providers:
       audience: "/projects/123456789/apps/my-project-id"
 ```
 
-## Complete Example
-
-```yaml
-# config.yaml
-
-# Server Configuration
-server:
-  host: "0.0.0.0"
-  port: 5225
-  
-  security:
-    cors:
-      allowed_origins:
-        - "https://*.example.com"
-
-# Logging
-logging:
-  level: "info"
-  format: "json"
-
-# Providers
-providers:
-  # GCP IAP for authentication
-  gcp-iap:
-    provider: gcp.iap
-    description: "GCP IAP Authentication"
-    enabled: true
-    config:
-      audience: "/projects/123456789/locations/us-central1/services/thand-agent"
-  
-  # Additional providers (AWS, Azure, etc.)
-  aws-prod:
-    provider: aws
-    # ... other config
-```
-
-## Usage in Code
-
-Access authenticated user information in your handlers:
-
-```go
-import (
-    "github.com/gin-gonic/gin"
-    "github.com/thand-io/agent/internal/daemon"
-    "github.com/thand-io/agent/internal/models"
-)
-
-func myHandler(c *gin.Context) {
-    // Get sessions from context
-    sessionsInterface, exists := c.Get(daemon.SessionContextKey)
-    if !exists {
-        c.JSON(401, gin.H{"error": "Not authenticated"})
-        return
-    }
-    
-    sessions := sessionsInterface.(map[string]*models.Session)
-    
-    // Get IAP session (use your provider name)
-    if iapSession, ok := sessions["gcp-iap"]; ok {
-        user := iapSession.User
-        
-        // User information available:
-        email := user.Email           // user@example.com
-        userID := user.ID              // Stable identifier
-        name := user.Name              // Extracted from email
-        verified := user.Verified      // Always true for IAP
-        
-        c.JSON(200, gin.H{
-            "message": "Welcome",
-            "email": email,
-        })
-    }
-}
-```
-
 ## Security Considerations
 
 ### Why Verify the JWT?
@@ -381,17 +300,6 @@ Even though IAP protects your application, JWT verification provides defense in 
 - **Lifetime**: IAP JWTs are short-lived (typically 10 minutes maximum)
 - **No Renewal**: Tokens cannot be renewed programmatically - users must re-authenticate through IAP
 - **Automatic Refresh**: IAP automatically issues new tokens as needed
-
-### Health Checks
-
-Health check requests from Google Cloud Load Balancers don't include JWT headers. Ensure your health check endpoint doesn't require authentication:
-
-```yaml
-# The /health endpoint should not require IAP authentication
-server:
-  health:
-    path: "/health"
-```
 
 ## Troubleshooting
 

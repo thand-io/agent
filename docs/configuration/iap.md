@@ -150,27 +150,6 @@ server:
     path: "/health"  # This endpoint is exempt from auth requirements
 ```
 
-### JWT Lifetime
- // or whatever you named your provider
-
-user := iapSession.User
-// user.Email = "user@example.com"
-// user.ID = "accounts.google.com:1234567890" (unique, stable identifier)
-// user.Source = "gcp.
-## User Information
-
-Once authenticated, user information is available via the session:
-
-```go
-sessions := c.MustGet(SessionContextKey).(map[string]*models.Session)
-iapSession := sessions["gcp-iap"]
-
-user := iapSession.User
-// user.Email = "user@example.com"
-// user.ID = "accounts.google.com:1234567890" (unique, stable identifier)
-// user.Source = "gcp-iap"
-```
-
 ### External Identities
 
 If you're using IAP with external identity providers (via Identity Platform), the JWT will include additional claims in the `gcip` field with provider-specific information.

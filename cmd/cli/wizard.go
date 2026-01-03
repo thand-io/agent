@@ -556,7 +556,7 @@ func selectIdentitiesManual() ([]string, error) {
 	identities := []string{}
 	for id := range strings.SplitSeq(identitiesInput, ",") {
 		trimmed := strings.TrimSpace(id)
-		if trimmed != "" {
+		if len(trimmed) != 0 {
 			identities = append(identities, trimmed)
 		}
 	}

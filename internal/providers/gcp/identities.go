@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 	"google.golang.org/api/cloudresourcemanager/v1"
 )
@@ -96,28 +97,22 @@ func parseMemberToIdentity(member string) (*models.Identity, string) {
 	switch memberType {
 	case "user":
 		// Regular user account
-		name := extractNameFromEmail(memberValue)
+		name := common.ExtractNameFromEmail(memberValue)
 		return &models.Identity{
 			ID:    memberValue,
 			Label: name,
 			User: &models.User{
-				ID:    memberValue,
-				Email: memberValue,
-				Username: func() string {
-					username, _, found := strings.Cut(memberValue, "@")
-					if !found {
-						return memberValue
-					}
-					return username
-				}(),
-				Name:   name,
-				Source: "gcp",
+				ID:       memberValue,
+				Email:    memberValue,
+				Username: name,
+				Name:     name,
+				Source:   "gcp",
 			},
 		}, "user"
 
 	case "group":
 		// Google group
-		name := extractNameFromEmail(memberValue)
+		name := common.ExtractNameFromEmail(memberValue)
 		return &models.Identity{
 			ID:    memberValue,
 			Label: name,
@@ -132,29 +127,4 @@ func parseMemberToIdentity(member string) (*models.Identity, string) {
 		// Skip service accounts, domains, allUsers, allAuthenticatedUsers, etc.
 		return nil, ""
 	}
-}
-
-// extractNameFromEmail extracts a display name from an email address
-func extractNameFromEmail(email string) string {
-	// Try to extract name from email format (e.g., "john.doe@example.com" -> "John Doe")
-	parts := strings.Split(email, "@")
-	if len(parts) == 0 {
-		return email
-	}
-
-	localPart := parts[0]
-	// Replace dots, underscores, and hyphens with spaces
-	name := strings.ReplaceAll(localPart, ".", " ")
-	name = strings.ReplaceAll(name, "_", " ")
-	name = strings.ReplaceAll(name, "-", " ")
-
-	// Capitalize each word
-	words := strings.Fields(name)
-	for i, word := range words {
-		if len(word) > 0 {
-			words[i] = strings.ToUpper(word[:1]) + strings.ToLower(word[1:])
-		}
-	}
-
-	return strings.Join(words, " ")
 }

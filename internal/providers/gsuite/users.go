@@ -3,10 +3,10 @@ package gsuite
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 )
 
@@ -45,7 +45,7 @@ func (p *gsuiteProvider) SynchronizeUsers(ctx context.Context, req *models.Synch
 			Label: user.Name.FullName,
 			User: &models.User{
 				ID:       user.Id,
-				Username: strings.Split(user.PrimaryEmail, "@")[0],
+				Username: common.ExtractNameFromEmail(user.PrimaryEmail),
 				Email:    user.PrimaryEmail,
 				Name:     user.Name.FullName,
 				Source:   "gsuite",

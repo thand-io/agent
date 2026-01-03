@@ -113,7 +113,7 @@ func (p *gcpProvider) SynchronizeTenants(ctx context.Context, req *models.Synchr
 	}
 
 	// Create a composite token if either projects or folders have more pages
-	if nextToken != "" || folderToken != "" {
+	if len(nextToken) != 0 || len(folderToken) != 0 {
 		newCompositeToken := gcpPaginationToken{
 			ProjectToken: nextToken,
 			FolderToken:  folderToken,

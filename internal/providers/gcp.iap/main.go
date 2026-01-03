@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
+	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/providers"
 	"google.golang.org/api/idtoken"
@@ -86,7 +87,8 @@ func (p *gcpIAPProvider) Initialize(identifier string, provider models.Provider)
 
 // AuthorizeSession is not applicable for IAP as authorization happens at the IAP layer
 func (p *gcpIAPProvider) AuthorizeSession(ctx context.Context, auth *models.AuthorizeUser) (*models.AuthorizeSessionResponse, error) {
-	return nil, fmt.Errorf("GCP IAP does not support AuthorizeSession - authorization happens at the IAP layer")
+	// Just return nil as authorization is handled by IAP
+	return nil, nil
 }
 
 // CreateSession creates a session from an IAP JWT token
@@ -225,7 +227,7 @@ func (p *gcpIAPProvider) VerifyIAPJWT(ctx context.Context, tokenString string) (
 		"skew_tolerance": 30,
 	}).Debugln("Checking token timing")
 
-	if now.Add(30 * time.Second).After(expiryTime) {
+	if now.After(expiryTime.Add(30 * time.Second)) {
 		logrus.WithFields(logrus.Fields{
 			"expired_at": expiryTime.Format(time.RFC3339),
 			"now":        now.Format(time.RFC3339),
@@ -266,27 +268,15 @@ func (p *gcpIAPProvider) ConvertIAPClaimsToSession(claims *IAPClaims, expiryTime
 	}).Debugln("Created user object")
 
 	// Try to extract name and username from email
-	if claims.Email != "" {
+	if len(claims.Email) != 0 {
 		// Simple name extraction from email
-		atIndex := 0
-		for i, c := range claims.Email {
-			if c == '@' {
-				atIndex = i
-				break
-			}
-		}
-		if atIndex > 0 {
-			user.Name = claims.Email[:atIndex]
-			user.Username = claims.Email[:atIndex]
-			logrus.WithFields(logrus.Fields{
-				"name":     user.Name,
-				"username": user.Username,
-			}).Debugln("Extracted name and username from email")
-		}
+		name := common.ExtractNameFromEmail(claims.Email)
+		user.Name = name
+		user.Username = name
 	}
 
 	// Parse Google claims if present
-	if claims.GoogleClaims != "" {
+	if len(claims.GoogleClaims) != 0 {
 		logrus.Debugln("Parsing Google claims")
 		var googleClaims IAPGoogleClaims
 		if err := json.Unmarshal([]byte(claims.GoogleClaims), &googleClaims); err == nil {
@@ -298,7 +288,7 @@ func (p *gcpIAPProvider) ConvertIAPClaimsToSession(claims *IAPClaims, expiryTime
 	}
 
 	// Check for hosted domain
-	if claims.HostedDomain != "" {
+	if len(claims.HostedDomain) != 0 {
 		logrus.WithField("domain", claims.HostedDomain).Debugln("User has hosted domain")
 	}
 
