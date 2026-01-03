@@ -127,6 +127,20 @@ func (s *Server) getAuthRequest(c *gin.Context) {
 		return
 	}
 
+	if authResponse == nil || len(authResponse.Url) == 0 {
+		logrus.WithFields(logrus.Fields{
+			"provider": provider,
+		}).Errorln("Authorization response is nil or missing URL")
+		c.Redirect(
+			http.StatusTemporaryRedirect,
+			// Redirect to the user page
+			fmt.Sprintf("%s/user",
+				s.Config.GetLoginServerUrl(),
+			),
+		)
+		return
+	}
+
 	c.Redirect(
 		http.StatusTemporaryRedirect,
 		authResponse.Url,

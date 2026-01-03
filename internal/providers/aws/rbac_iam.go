@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
@@ -292,11 +291,7 @@ func (p *awsProvider) getUsernameForIAM(user *models.User) string {
 
 	// Second priority: extract from email if available
 	if len(user.Email) > 0 {
-		username := strings.Split(user.Email, "@")[0]
-		// Basic validation - ensure it doesn't contain invalid characters for IAM usernames
-		if len(username) > 0 && !strings.Contains(username, " ") {
-			return username
-		}
+		return common.ExtractUsernameFromEmail(user.Email)
 	}
 
 	// No valid username found - caller should fallback to account root

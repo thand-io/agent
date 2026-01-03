@@ -239,7 +239,7 @@ func (p *samlProvider) CreateSession(ctx context.Context, authRequest *models.Au
 			// Use NameID as email if it looks like an email
 			if strings.Contains(nameID, "@") {
 				email = nameID
-				username = strings.Split(nameID, "@")[0]
+				username = common.ExtractUsernameFromEmail(nameID)
 			} else {
 				username = nameID
 			}
@@ -340,9 +340,9 @@ func (p *samlProvider) RenewSession(ctx context.Context, session *models.Session
 
 	// Create a new session with extended expiry
 	newSession := &models.Session{
-		UUID:         uuid.New(),
-		User:         session.User,
-		Expiry:       time.Now().Add(24 * time.Hour),
+		UUID:   uuid.New(),
+		User:   session.User,
+		Expiry: time.Now().Add(24 * time.Hour),
 	}
 
 	logrus.Infof("Renewed SAML session for user: %s", session.User.Username)
