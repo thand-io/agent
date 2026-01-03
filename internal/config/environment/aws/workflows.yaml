@@ -1,6 +1,7 @@
 version: "1.0"
 workflows:
   aws_simple_elevation:
+    name: "AWS Simple Elevation"
     description: Simple AWS access elevation without approval
     authentication: default
     enabled: true
@@ -32,6 +33,7 @@ workflows:
             then: end
   
   aws_email_approval:
+    name: "AWS Email Approval"
     description: AWS access elevation with email approval via SES
     authentication: default
     enabled: true

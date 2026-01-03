@@ -1,6 +1,7 @@
 version: "1.0"
 workflows:
   azure_simple_elevation:
+    name: "Azure Simple Elevation"
     description: Simple Azure access elevation without approval
     authentication: default
     enabled: true
@@ -32,6 +33,7 @@ workflows:
             then: end
   
   azure_email_approval:
+    name: "Azure Email Approval"
     description: Azure access elevation with email approval
     authentication: default
     enabled: true

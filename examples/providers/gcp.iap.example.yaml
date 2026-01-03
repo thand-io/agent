@@ -1,0 +1,67 @@
+# GCP Identity-Aware Proxy (IAP) Provider Example
+# 
+# This provider enables authentication via GCP IAP when your application
+# is deployed behind Identity-Aware Proxy. IAP handles the actual authentication
+# and adds a signed JWT to each request in the X-Goog-IAP-JWT-Assertion header.
+#
+# Your application uses this provider to verify the JWT and extract user information.
+
+# Basic GCP IAP Provider Configuration
+gcp-iap:
+  provider: gcp.iap
+  description: "GCP IAP Authentication for Cloud Run"
+  enabled: true
+  
+  config:
+    # REQUIRED: The audience claim that identifies your backend service
+    # Get this from: Cloud Console > Security > IAP > Click "More" > "Signed Header JWT Audience"
+    # 
+    # Format depends on your deployment type:
+    # - App Engine:     /projects/PROJECT_NUMBER/apps/PROJECT_ID
+    # - Compute/GKE:    /projects/PROJECT_NUMBER/global/backendServices/SERVICE_ID
+    # - Cloud Run:      /projects/PROJECT_NUMBER/locations/REGION/services/SERVICE_NAME
+    audience: "/projects/123456789/locations/us-central1/services/my-service"
+
+---
+
+# Example for App Engine
+gcp-iap-appengine:
+  provider: gcp.iap
+  description: "IAP for App Engine"
+  enabled: true
+  config:
+    # App Engine audience format
+    audience: "/projects/123456789/apps/my-project-id"
+
+---
+
+# Example for Compute Engine / GKE
+gcp-iap-gce:
+  provider: gcp.iap
+  description: "IAP for GKE Backend Service"
+  enabled: true
+  config:
+    # Backend service audience format
+    # Get SERVICE_ID from: gcloud compute backend-services describe SERVICE_NAME --global --format="value(id)"
+    audience: "/projects/123456789/global/backendServices/567890123456"
+
+---
+
+# Example with Role Restriction
+# Only users authenticated through IAP can access certain roles
+gcp-iap-restricted:
+  provider: gcp.iap
+  description: "IAP with Role Restrictions"
+  enabled: true
+  
+  # Optional: Restrict access to this provider
+  role:
+    name: "iam-admins"
+    description: "Only IAM administrators can use this provider"
+    users:
+      - "admin@example.com"
+    groups:
+      - "iam-admins@example.com"
+  
+  config:
+    audience: "/projects/123456789/locations/us-central1/services/admin-api"

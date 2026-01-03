@@ -16,6 +16,7 @@ import (
 	_ "github.com/thand-io/agent/internal/providers/cloudflare"
 	_ "github.com/thand-io/agent/internal/providers/email"
 	_ "github.com/thand-io/agent/internal/providers/gcp"
+	_ "github.com/thand-io/agent/internal/providers/gcp.iap"
 	_ "github.com/thand-io/agent/internal/providers/github"
 	_ "github.com/thand-io/agent/internal/providers/kubernetes"
 	_ "github.com/thand-io/agent/internal/providers/oauth2"
@@ -121,7 +122,6 @@ func (c *Config) loadProviderVaultData() (string, error) {
 func (c *Config) processProviderDefinitions(foundProviders []*models.ProviderDefinitions) map[string]models.Provider {
 	defs := make(map[string]models.Provider)
 	logrus.Debugln("Processing loaded providers: ", len(foundProviders))
-
 
 	for _, provider := range foundProviders {
 

@@ -11,6 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
+	gcpiap "github.com/thand-io/agent/internal/providers/gcp.iap"
 	sessionManager "github.com/thand-io/agent/internal/sessions"
 )
 
@@ -222,6 +223,7 @@ func (s *Server) AuthMiddleware() gin.HandlerFunc {
 		s.processProviderCookies(c, encryptionServer, foundSessions)
 		s.processBearerToken(c, encryptionServer, foundSessions)
 		s.processAPIKey(c, encryptionServer, foundSessions)
+		s.processIAPJWT(c, foundSessions)
 
 		// Handle agent/client mode if no sessions found
 		if len(foundSessions) == 0 && (s.Config.IsAgent() || s.Config.IsClient()) {
@@ -381,6 +383,58 @@ func (s *Server) processAPIKey(
 	}
 
 	foundSessions[decodedSession.Provider] = decodedSession.Session
+}
+
+// processIAPJWT extracts user information from GCP Identity-Aware Proxy JWT
+func (s *Server) processIAPJWT(
+	c *gin.Context,
+	foundSessions map[string]*models.Session,
+) {
+	// Check if IAP JWT header is present
+	iapJWT := c.GetHeader(gcpiap.IAPJWTHeader)
+	if len(iapJWT) == 0 {
+		return
+	}
+
+	// Check if we have any GCP IAP providers configured
+	iapProviders := s.Config.GetProvidersByCapability(models.ProviderCapabilityAuthorizer)
+
+	var iapProvider models.ProviderImpl
+	var iapProviderName string
+
+	for providerName, provider := range iapProviders {
+		if provider.Provider == gcpiap.GcpIAPProviderName {
+			iapProvider = provider.GetClient()
+			iapProviderName = providerName
+			break
+		}
+	}
+
+	if iapProvider == nil {
+		logrus.Warnln("IAP JWT found but no GCP IAP provider configured")
+		return
+	}
+
+	// Create a mock auth request with the JWT as the code
+	authRequest := &models.AuthorizeUser{
+		Code: iapJWT,
+	}
+
+	// Create session using the provider
+	session, err := iapProvider.CreateSession(c.Request.Context(), authRequest)
+	if err != nil {
+		logrus.WithError(err).WithField("provider", iapProviderName).Errorln("Failed to create session from IAP JWT")
+		return
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"email":    session.User.Email,
+		"user_id":  session.User.ID,
+		"provider": iapProviderName,
+	}).Infoln("User authenticated via GCP IAP")
+
+	// Store session under the provider name
+	foundSessions[iapProviderName] = session
 }
 
 // handleAgentMode processes sessions for agent/client mode

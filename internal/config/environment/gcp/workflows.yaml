@@ -1,6 +1,7 @@
 version: "1.0"
 workflows:
   gcp_simple_elevation:
+    name: "GCP Simple Elevation"
     description: Simple GCP access elevation without approval
     authentication: default
     enabled: true
