@@ -3,9 +3,52 @@ package common
 import (
 	"net/mail"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
+	"sync"
+
+	"github.com/go-playground/validator/v10"
 )
+
+var (
+	// validatorInstance is the singleton validator instance
+	validatorInstance *validator.Validate
+	validatorOnce     sync.Once
+
+	// semanticVersionPattern for semver validation
+	semanticVersionPattern = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$`)
+)
+
+// GetValidator returns a singleton validator instance with all custom validators registered
+func GetValidator() *validator.Validate {
+	validatorOnce.Do(func() {
+		validatorInstance = validator.New()
+
+		// Register custom validator for semantic versioning
+		if err := validatorInstance.RegisterValidation("semver_pattern", func(fl validator.FieldLevel) bool {
+			value := fl.Field().String()
+			return semanticVersionPattern.MatchString(value)
+		}); err != nil {
+			// Log error but don't panic - validation will just fail if this doesn't work
+			// In a production system, you might want to panic here since validation is critical
+		}
+
+		// Register custom validator for alphanumeric with hyphens, underscores, and dots
+		// Used by Provider field validation in models.Provider
+		if err := validatorInstance.RegisterValidation("alphanum_hyphen", func(fl validator.FieldLevel) bool {
+			value := fl.Field().String()
+			// Allow alphanumeric, hyphens, underscores, and dots
+			// Must start with alphanumeric character
+			matched, _ := regexp.MatchString(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`, value)
+			return matched
+		}); err != nil {
+			// Log error but don't panic
+		}
+	})
+
+	return validatorInstance
+}
 
 func IsValidLoginServer(hostname string) bool {
 

@@ -122,7 +122,14 @@ func (c *Config) processProviderDefinitions(foundProviders []*models.ProviderDef
 	defs := make(map[string]models.Provider)
 	logrus.Debugln("Processing loaded providers: ", len(foundProviders))
 
+
 	for _, provider := range foundProviders {
+
+		if err := provider.Validate(); err != nil {
+			logrus.WithError(err).Errorln("Provider definition validation failed")
+			continue
+		}
+
 		for providerKey, p := range provider.Providers {
 			if !c.shouldIncludeProvider(providerKey, p, defs) {
 				continue

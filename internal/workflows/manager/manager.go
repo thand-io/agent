@@ -265,9 +265,9 @@ func (m *WorkflowManager) ResumeWorkflow(
 	// Check if workfow has already been registered on temporal
 	serviceClient := m.config.GetServices()
 
-	// If we have temporal configured, then we can resume the workflow
+	// If we have temporal configured with a client, then we can resume the workflow
 	// from the workflow ID or create one if the workflow ID does not exist
-	if serviceClient.HasTemporal() {
+	if serviceClient.HasTemporal() && serviceClient.GetTemporal().HasClient() {
 
 		// Check the workflow task
 		err := m.Hydrate(result)

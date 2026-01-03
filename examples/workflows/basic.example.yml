@@ -1,6 +1,7 @@
 version: "1.0"
-policies:
+workflows:
   basic:
+    name: "Basic Elevation Workflow"
     description: Simple elevation flow
     # Set which authentication is used to auth the users request
     # before the workflow is run

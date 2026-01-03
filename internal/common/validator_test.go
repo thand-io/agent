@@ -151,3 +151,79 @@ func TestValidateNumberRange(t *testing.T) {
 		}
 	}
 }
+
+func TestGetValidator(t *testing.T) {
+	// Test that GetValidator returns a non-nil validator
+	v1 := GetValidator()
+	if v1 == nil {
+		t.Fatal("GetValidator() returned nil")
+	}
+
+	// Test singleton pattern - should return the same instance
+	v2 := GetValidator()
+	if v1 != v2 {
+		t.Error("GetValidator() did not return the same instance (singleton pattern violated)")
+	}
+
+	// Test that custom validators are registered
+	type TestStruct struct {
+		SemverField      string `validate:"semver_pattern"`
+		AlphanumHyphen   string `validate:"alphanum_hyphen"`
+	}
+
+	tests := []struct {
+		name    string
+		input   TestStruct
+		wantErr bool
+	}{
+		{
+			name: "valid semver",
+			input: TestStruct{
+				SemverField:    "1.0.0",
+				AlphanumHyphen: "valid-name_123",
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid semver",
+			input: TestStruct{
+				SemverField:    "1.0",
+				AlphanumHyphen: "valid-name",
+			},
+			wantErr: true,
+		},
+		{
+			name: "valid alphanum_hyphen",
+			input: TestStruct{
+				SemverField:    "1.0.0",
+				AlphanumHyphen: "aws-provider_v2.0",
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid alphanum_hyphen - starts with hyphen",
+			input: TestStruct{
+				SemverField:    "1.0.0",
+				AlphanumHyphen: "-invalid",
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid alphanum_hyphen - special chars",
+			input: TestStruct{
+				SemverField:    "1.0.0",
+				AlphanumHyphen: "invalid@name",
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := v1.Struct(test.input)
+			if (err != nil) != test.wantErr {
+				t.Errorf("Validate(%+v) error = %v, wantErr %v", test.input, err, test.wantErr)
+			}
+		})
+	}
+}

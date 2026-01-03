@@ -76,7 +76,14 @@ func (c *Config) ApplyWorkflows(foundWorkflows []*models.WorkflowDefinitions) (m
 
 	logrus.Debugln("Processing loaded workflows: ", len(foundWorkflows))
 
+
 	for _, workflow := range foundWorkflows {
+
+		if err := workflow.Validate(); err != nil {
+			logrus.WithError(err).Errorln("Workflow definition validation failed")
+			continue
+		}
+
 		for workflowKey, p := range workflow.Workflows {
 
 			if !p.Enabled {

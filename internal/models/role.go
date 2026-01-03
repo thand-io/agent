@@ -2,6 +2,7 @@ package models
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/hashicorp/go-version"
@@ -11,17 +12,17 @@ import (
 
 type Role struct {
 	Version        *version.Version `json:"version,omitempty"`
-	Name           string           `json:"name"`
-	Description    string           `json:"description"`
-	Authenticators []string         `json:"authenticators"`         // All the auth providers that the role can use. If empty then any provider can be used
-	Workflows      []string         `json:"workflows,omitempty"`    // The workflows to execute
-	Inherits       []string         `json:"inherits,omitempty"`     // roles to inherit from or provider specific roles/policies etc
-	Groups         Groups           `json:"groups,omitempty"`       // groups to add the user to
-	Permissions    Permissions      `json:"permissions,omitempty"`  // granular permissions for the role
-	Resources      Resources        `json:"resources,omitempty"`    // resource access rules, apis, files, systems etc
-	Scopes         *RoleScopes      `json:"scopes,omitempty"`       // scope of who can be assigned this role
-	Providers      []string         `json:"providers"`              // providers that can assign this role
-	Enabled        bool             `json:"enabled" default:"true"` // By default enable the role
+	Name           string           `json:"name" validate:"required,min=1,max=100"`
+	Description    string           `json:"description" validate:"max=500"`
+	Authenticators []string         `json:"authenticators" validate:"dive,min=2,max=100"`            // All the auth providers that the role can use. If empty then any provider can be used
+	Workflows      []string         `json:"workflows,omitempty" validate:"max=5,dive,min=1,max=100"` // The workflows to execute
+	Inherits       []string         `json:"inherits,omitempty" validate:"max=50,dive,min=1,max=100"` // roles to inherit from or provider specific roles/policies etc
+	Groups         Groups           `json:"groups"`                                                  // groups to add the user to
+	Permissions    Permissions      `json:"permissions"`                                             // granular permissions for the role
+	Resources      Resources        `json:"resources"`                                               // resource access rules, apis, files, systems etc
+	Scopes         *RoleScopes      `json:"scopes,omitempty"`                                        // scope of who can be assigned this role
+	Providers      []string         `json:"providers" validate:"max=5,dive,min=2,max=100"`           // providers that can assign this role
+	Enabled        bool             `json:"enabled" default:"true"`                                  // By default enable the role
 }
 
 func (r *Role) HasPermission(user *User) bool {
@@ -106,14 +107,14 @@ func (r *Role) GetDescription() string {
 
 // Groups defines group-based access controls with allow and deny lists.
 type Groups struct {
-	Allow []string `json:"allow,omitempty"`
-	Deny  []string `json:"deny,omitempty"`
+	Allow []string `json:"allow,omitempty" validate:"max=100,dive,min=1,max=200"`
+	Deny  []string `json:"deny,omitempty" validate:"max=100,dive,min=1,max=200"`
 }
 
 // Permissions defines permission-based access controls with allow and deny lists.
 type Permissions struct {
-	Allow []string `json:"allow,omitempty"`
-	Deny  []string `json:"deny,omitempty"`
+	Allow []string `json:"allow,omitempty" validate:"max=500,dive,min=1,max=500"`
+	Deny  []string `json:"deny,omitempty" validate:"max=500,dive,min=1,max=500"`
 }
 
 // RoleScopes defines the scope of a role in terms of users, groups, and domains (identities).
@@ -121,9 +122,9 @@ type Permissions struct {
 // The Domains field allows restricting role assignment to users from particular domains (e.g., email domains or organizational domains),
 // and can be used in conjunction with Groups and Users for more granular access control.
 type RoleScopes struct {
-	Groups  []string `json:"groups,omitempty"`
-	Users   []string `json:"users,omitempty"`
-	Domains []string `json:"domains,omitempty"`
+	Groups  []string `json:"groups,omitempty" validate:"max=100,dive,min=1,max=200"`
+	Users   []string `json:"users,omitempty" validate:"max=500,dive,min=1,max=320"`
+	Domains []string `json:"domains,omitempty" validate:"max=50,dive,min=2,max=253,hostname"`
 }
 
 // RolesResponse represents the response for /roles endpoint
@@ -137,8 +138,8 @@ type RoleResponse struct {
 }
 
 type Resources struct {
-	Allow []string `json:"allow,omitempty"`
-	Deny  []string `json:"deny,omitempty"`
+	Allow []string `json:"allow,omitempty" validate:"max=500,dive,min=1,max=1000"`
+	Deny  []string `json:"deny,omitempty" validate:"max=500,dive,min=1,max=1000"`
 }
 
 // RoleDefinitions represents the structure for roles YAML/JSON
@@ -191,6 +192,37 @@ func (h *RoleDefinitions) UnmarshalYAML(unmarshal func(any) error) error {
 
 	h.Version = parsedVersion
 	h.Roles = aux.Roles
+
+	return nil
+}
+
+// Validate validates all roles in the definition using struct validation tags
+func (h *RoleDefinitions) Validate() error {
+	validate := common.GetValidator()
+
+	const (
+		MaxInherits  = 50
+		MaxProviders = 5
+		MaxWorkflows = 5
+	)
+
+	for roleKey, role := range h.Roles {
+		// Validate struct tags
+		if err := validate.Struct(&role); err != nil {
+			return fmt.Errorf("role '%s' validation failed: %w", roleKey, err)
+		}
+
+		// Additional business logic validations
+		if len(role.Inherits) > MaxInherits {
+			return fmt.Errorf("role '%s' exceeds maximum inherits limit (%d > %d)", roleKey, len(role.Inherits), MaxInherits)
+		}
+		if len(role.Providers) > MaxProviders {
+			return fmt.Errorf("role '%s' exceeds maximum providers limit (%d > %d)", roleKey, len(role.Providers), MaxProviders)
+		}
+		if len(role.Workflows) > MaxWorkflows {
+			return fmt.Errorf("role '%s' exceeds maximum workflows limit (%d > %d)", roleKey, len(role.Workflows), MaxWorkflows)
+		}
+	}
 
 	return nil
 }

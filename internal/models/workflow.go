@@ -2,6 +2,7 @@ package models
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/hashicorp/go-version"
@@ -11,9 +12,9 @@ import (
 
 type Workflow struct {
 	Version     *version.Version `json:"version,omitempty"`
-	Name        string           `json:"name"`
-	Description string           `json:"description"`
-	Workflow    *model.Workflow  `json:"workflow,omitempty"`
+	Name        string           `json:"name" validate:"required,min=1,max=100"`
+	Description string           `json:"description" validate:"max=500"`
+	Workflow    *model.Workflow  `json:"workflow,omitempty" validate:"required"`
 	Enabled     bool             `json:"enabled" default:"true"` // By default enable the workflow
 }
 
@@ -218,6 +219,24 @@ func (h *WorkflowDefinitions) UnmarshalYAML(unmarshal func(any) error) error {
 
 	h.Version = parsedVersion
 	h.Workflows = aux.Workflows
+
+	return nil
+}
+
+// Validate validates all workflows in the definition
+// Note: Workflows use serverless workflow SDK with complex validation,
+// so we only perform basic structural validation here
+func (h *WorkflowDefinitions) Validate() error {
+	// Basic validation without struct tags (workflows have complex SDK requirements)
+
+	for workflowKey, workflow := range h.Workflows {
+		if workflow.Workflow == nil {
+			return fmt.Errorf("workflow '%s' is missing workflow definition", workflowKey)
+		}
+		if workflow.Name == "" {
+			return fmt.Errorf("workflow '%s' is missing required field 'name'", workflowKey)
+		}
+	}
 
 	return nil
 }

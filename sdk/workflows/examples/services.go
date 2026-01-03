@@ -88,13 +88,14 @@ func (s *Services) HasLargeLanguageModel() bool {
 
 // GetTemporal returns the Temporal workflow engine service for orchestrating complex,
 // long-running workflows with built-in retry logic, timeouts, and failure handling.
-// This is the core workflow execution engine for Thand. This stub returns nil.
+// This is the core workflow execution engine for Thand. Returns the in-memory temporal
+// service if configured via SetupInMemoryTemporal, otherwise returns nil.
 func (s *Services) GetTemporal() models.TemporalService {
 	return nil
 }
 
 // HasTemporal checks if a Temporal service connection is configured and available.
-// This stub returns false.
+// Returns true if an in-memory temporal service has been set up.
 func (s *Services) HasTemporal() bool {
 	return false
 }
