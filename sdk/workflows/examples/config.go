@@ -26,12 +26,6 @@ func NewConfig() *Config {
 	}
 }
 
-func NewConfigWithTemporal() *Config {
-	config := NewConfig()
-	config.services.SetupInMemoryTemporal()
-	return config
-}
-
 // RegisterWorkflow adds a workflow to the configuration's workflow registry.
 // It returns an error if a workflow with the same name already exists.
 // This allows workflows to be dynamically registered for testing and execution.
