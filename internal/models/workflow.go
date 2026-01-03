@@ -226,8 +226,9 @@ func (h *WorkflowDefinitions) UnmarshalYAML(unmarshal func(any) error) error {
 // Validate validates all workflows in the definition
 // Note: Workflows use serverless workflow SDK with complex validation,
 // so we only perform basic structural validation here
-func (h *WorkflowDefinitions) Validate(v interface{ Struct(interface{}) error }) error {
+func (h *WorkflowDefinitions) Validate() error {
 	// Basic validation without struct tags (workflows have complex SDK requirements)
+
 	for workflowKey, workflow := range h.Workflows {
 		if workflow.Workflow == nil {
 			return fmt.Errorf("workflow '%s' is missing workflow definition", workflowKey)

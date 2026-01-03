@@ -197,10 +197,8 @@ func (h *RoleDefinitions) UnmarshalYAML(unmarshal func(any) error) error {
 }
 
 // Validate validates all roles in the definition using struct validation tags
-func (h *RoleDefinitions) Validate(v interface{ Struct(interface{}) error }) error {
-	if v == nil {
-		return fmt.Errorf("validator is required")
-	}
+func (h *RoleDefinitions) Validate() error {
+	validate := common.GetValidator()
 
 	const (
 		MaxInherits  = 50
@@ -210,7 +208,7 @@ func (h *RoleDefinitions) Validate(v interface{ Struct(interface{}) error }) err
 
 	for roleKey, role := range h.Roles {
 		// Validate struct tags
-		if err := v.Struct(&role); err != nil {
+		if err := validate.Struct(&role); err != nil {
 			return fmt.Errorf("role '%s' validation failed: %w", roleKey, err)
 		}
 

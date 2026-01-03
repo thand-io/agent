@@ -11,6 +11,7 @@ import (
 
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
+	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/interpolate"
 )
 
@@ -263,13 +264,12 @@ func (h *ProviderDefinitions) UnmarshalYAML(unmarshal func(any) error) error {
 }
 
 // Validate validates all providers in the definition using struct validation tags
-func (h *ProviderDefinitions) Validate(v interface{ Struct(interface{}) error }) error {
-	if v == nil {
-		return fmt.Errorf("validator is required")
-	}
+func (h *ProviderDefinitions) Validate() error {
+
+	validate := common.GetValidator()
 
 	for providerKey, provider := range h.Providers {
-		if err := v.Struct(&provider); err != nil {
+		if err := validate.Struct(&provider); err != nil {
 			return fmt.Errorf("provider '%s' validation failed: %w", providerKey, err)
 		}
 	}

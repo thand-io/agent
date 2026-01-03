@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/go-playground/validator/v10"
@@ -17,8 +16,7 @@ import (
 
 var (
 	// Global validator instance
-	validate               *validator.Validate
-	semanticVersionPattern = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$`)
+	validate *validator.Validate
 )
 
 type validationResult struct {
@@ -43,8 +41,8 @@ var validateCmd = &cobra.Command{
 	Long: `Validate configuration files in a directory. 
 	
 Automatically detects whether files contain roles, workflows, or providers and validates them.
-Use --dry-run (default) to only validate syntax without initializing providers.
-Without --dry-run, providers will be initialized to test full functionality.`,
+Use --dry-run to only validate syntax without initializing providers.
+By default (without --dry-run), providers will be initialized to test full functionality.`,
 	Args:         cobra.ExactArgs(1),
 	RunE:         runValidate,
 	SilenceUsage: true, // Don't print usage when validation fails
@@ -53,26 +51,8 @@ Without --dry-run, providers will be initialized to test full functionality.`,
 var dryRun bool
 
 func runValidate(cmd *cobra.Command, args []string) error {
-	// Initialize validator with custom validation functions
-	validate = validator.New()
-
-	// Register custom validators needed by serverless workflow SDK
-	if err := validate.RegisterValidation("semver_pattern", func(fl validator.FieldLevel) bool {
-		value := fl.Field().String()
-		return semanticVersionPattern.MatchString(value)
-	}); err != nil {
-		return fmt.Errorf("failed to register semver_pattern validator: %w", err)
-	}
-
-	// Register custom validator for alphanumeric with hyphens and underscores
-	if err := validate.RegisterValidation("alphanum_hyphen", func(fl validator.FieldLevel) bool {
-		value := fl.Field().String()
-		// Allow alphanumeric, hyphens, underscores, and dots
-		matched, _ := regexp.MatchString(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`, value)
-		return matched
-	}); err != nil {
-		return fmt.Errorf("failed to register alphanum_hyphen validator: %w", err)
-	}
+	// Use the common singleton validator instance
+	validate = common.GetValidator()
 
 	dirPath := args[0]
 
@@ -227,7 +207,7 @@ func validateAsProvider(path string, data []byte) validationResult {
 	result.Success = true
 
 	// Validate using the struct's built-in validation
-	if err := providerDef.Validate(validate); err != nil {
+	if err := providerDef.Validate(); err != nil {
 		result.Success = false
 		result.Error = err
 		return result
@@ -278,7 +258,7 @@ func validateAsRole(path string, data []byte) validationResult {
 	result.Success = true
 
 	// Validate using the struct's built-in validation
-	if err := roleDef.Validate(validate); err != nil {
+	if err := roleDef.Validate(); err != nil {
 		result.Success = false
 		result.Error = err
 		return result
@@ -308,11 +288,10 @@ func validateAsWorkflow(path string, data []byte) validationResult {
 	}
 
 	// Successfully parsed as workflow
-	// Successfully parsed as workflow
 	result.Success = true
 
 	// Validate using the struct's built-in validation
-	if err := workflowDef.Validate(validate); err != nil {
+	if err := workflowDef.Validate(); err != nil {
 		result.Success = false
 		result.Error = err
 		return result
