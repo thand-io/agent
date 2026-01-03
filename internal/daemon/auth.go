@@ -134,9 +134,8 @@ func (s *Server) getAuthRequest(c *gin.Context) {
 		c.Redirect(
 			http.StatusTemporaryRedirect,
 			// Redirect to the user page
-			fmt.Sprintf(
+			fmt.Sprintf("%s/user",
 				s.Config.GetLoginServerUrl(),
-				"/user",
 			),
 		)
 		return

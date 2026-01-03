@@ -403,6 +403,8 @@ func (s *Server) processIAPJWT(
 	var iapProviderName string
 
 	for providerName, provider := range iapProviders {
+		// Use the first GCP IAP provider we find
+		// TODO: Support multiple IAP providers? - Use the aud claim to match?
 		if provider.Provider == gcpiap.GcpIAPProviderName {
 			iapProvider = provider.GetClient()
 			iapProviderName = providerName
