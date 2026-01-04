@@ -9,9 +9,11 @@ import (
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
+	gpcIap "github.com/thand-io/agent/internal/providers/gcp.iap"
 )
 
 // Authentication Callback Handlers
@@ -411,6 +413,74 @@ func (s *Server) getAuthCallbackPage(c *gin.Context, auth models.AuthWrapper) {
 	exportableSession := &models.ExportableSession{
 		Session:  session,
 		Provider: auth.Provider,
+	}
+
+	if s.Config.Server.Security.IsUpstreamAuthEnabled() {
+
+		var authenticationPolicy *model.AuthenticationPolicy
+
+		upstreamConfig := s.Config.Server.Security.Upstream
+
+		logrus.WithFields(logrus.Fields{
+			"iap": upstreamConfig.Auth.IAP,
+			"ava": upstreamConfig.Auth.AVA,
+			"eap": upstreamConfig.Auth.EAP,
+		}).Debugln("Configuring upstream authentication for login server requests")
+
+		if upstreamConfig.Auth.IAP {
+
+			// Make sure that only specified provider types are listed here.
+			// So that we don't accidentally leak access tokens.
+			if provider.Provider != gpcIap.GcpIAPProviderName {
+				s.getErrorPage(c, http.StatusInternalServerError,
+					"Upstream IAP authentication is only supported with GCP IAP provider")
+				return
+			}
+
+			if len(session.AccessToken) == 0 {
+				s.getErrorPage(c, http.StatusInternalServerError,
+					"Access token is required for IAP authentication")
+				return
+			}
+
+			// Google Identity-Aware Proxy (IAP) authentication
+			// IAP requires the Proxy-Authorization header with Bearer token
+			// The login server validates the X-Goog-IAP-JWT-Assertion header added by IAP
+			authenticationPolicy = &model.AuthenticationPolicy{
+				ProxyBearer: &model.ProxyBearerAuthenticationPolicy{
+					Token: session.AccessToken,
+				},
+			}
+
+		} else if upstreamConfig.Auth.AVA {
+			// AWS Verified Access (AVA) authentication
+			// AVA adds a signed JWT in the x-amzn-ava-user-context header (base64-encoded)
+			// The login server validates this JWT using AWS signature verification
+			// Required config: audience, region
+			// TODO: Implement AVA authentication policy with session token
+		} else if upstreamConfig.Auth.EAP {
+			// Microsoft Entra Application Proxy (EAP) authentication
+			// EAP forwards user identity via X-MS-CLIENT-PRINCIPAL header (base64-encoded JSON)
+			// Additional headers: X-MS-CLIENT-PRINCIPAL-ID, X-MS-CLIENT-PRINCIPAL-NAME
+			// The login server validates these headers against the configured tenant
+			// Required config: tenant_id
+			// TODO: Implement EAP authentication policy with session token
+		} else {
+			logrus.Errorln("Upstream auth is enabled but no valid method is configured")
+		}
+
+		// Set proxy if the server is configured to use one
+		endpoint := model.Endpoint{
+			EndpointConfig: &model.EndpointConfiguration{
+				URI: &model.LiteralUri{Value: s.Config.GetLoginServerUrl()},
+				Authentication: &model.ReferenceableAuthenticationPolicy{
+					AuthenticationPolicy: authenticationPolicy,
+				},
+			},
+		}
+
+		exportableSession.Endpoint = &endpoint
+
 	}
 
 	// Covert our sensitive session to one we can store on the users local system

@@ -55,15 +55,16 @@ func loadDataFromSource[
 			return nil, fmt.Errorf("failed to fetch from URL %s: %w", uri.Endpoint.String(), err)
 		}
 
+		data := resp.Body()
+
 		if resp.StatusCode() != http.StatusOK {
 			logrus.WithFields(logrus.Fields{
 				"url":    uri.Endpoint.String(),
 				"status": resp.StatusCode(),
+				"body":   string(data),
 			}).Errorln("Failed to fetch from URL")
 			return nil, fmt.Errorf("failed to fetch from URL %s: status %d", uri.Endpoint.String(), resp.StatusCode())
 		}
-
-		data := resp.Body()
 
 		item, err := common.ReadDataToInterface(data, definition)
 

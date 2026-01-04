@@ -609,9 +609,14 @@ func (s *Server) providerFunctionHandler(c *gin.Context) {
 					Session:  foundUser,
 				},
 			)
+
 			// If no error, the webhook handler has taken care of the response
-			return
+			if err == nil {
+				return
+			}
+
 		} else {
+
 			err = fmt.Errorf("function '%s' is not supported", function)
 		}
 	}

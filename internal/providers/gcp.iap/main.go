@@ -14,8 +14,11 @@ import (
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/providers"
+	"golang.org/x/oauth2"
 	"google.golang.org/api/idtoken"
 )
+
+// Calling ?gcp-iap-mode=CLEAR_LOGIN_COOKIE to the webhook will clear the login cookie
 
 const GcpIAPProviderName = "gcp.iap"
 const WebhookResourceIAP = "iap"
@@ -46,7 +49,9 @@ type IAPGoogleClaims struct {
 // gcpIAPProvider implements the ProviderImpl interface for GCP IAP
 type gcpIAPProvider struct {
 	*models.BaseProvider
-	audience string
+	audience          string // Audience for validating incoming JWTs (e.g., /projects/NUM/apps/ID)
+	oauthClientId     string // OAuth 2.0 client ID for programmatic access (e.g., XXX.apps.googleusercontent.com)
+	oauthClientSecret string // OAuth client secret for token exchange
 }
 
 func (p *gcpIAPProvider) Initialize(identifier string, provider models.Provider) error {
@@ -81,10 +86,19 @@ func (p *gcpIAPProvider) Initialize(identifier string, provider models.Provider)
 
 	p.audience = audience
 
+	// OAuth client ID for programmatic access (optional)
+	oauthClientId, _ := gcpIAPConfig.GetString("oauth_client_id")
+	p.oauthClientId = oauthClientId
+
+	oauthClientSecret, _ := gcpIAPConfig.GetString("oauth_client_secret")
+	p.oauthClientSecret = oauthClientSecret
+
 	logrus.WithFields(logrus.Fields{
-		"provider": identifier,
-		"audience": audience,
-	}).Infoln("Initialized GCP IAP provider with audience")
+		"provider":         identifier,
+		"audience":         audience,
+		"oauth_client_id":  oauthClientId,
+		"has_oauth_secret": len(oauthClientSecret) > 0,
+	}).Infoln("Initialized GCP IAP provider")
 
 	return nil
 }
@@ -225,16 +239,44 @@ func (p *gcpIAPProvider) CreateSession(ctx context.Context, auth *models.Authori
 	}).Debugln("JWT verified, converting to session")
 
 	// Convert claims to session
-	session := p.ConvertIAPClaimsToSession(claims, expiryTime)
+	session := p.ConvertIAPClaimsToSession(ctx, claims, expiryTime)
 
-	// Add the access token to the session for reference
-	session.AccessToken = jwtToken
+	// If OAuth is configured, exchange for a user ID token for programmatic access
+	if len(auth.State) > 0 && len(p.oauthClientId) > 0 {
+		logrus.Debugln("OAuth configured - generating user ID token for programmatic IAP access")
+
+		// For programmatic IAP access, generate an ID token with the OAuth client ID as audience
+		// This token can be used by the client to make authenticated requests to IAP
+		identityToken, err := p.GetIdentityToken(ctx, p.oauthClientId)
+		if err != nil {
+			logrus.WithError(err).Errorln("Failed to generate OAuth ID token")
+			return nil, fmt.Errorf("failed to generate OAuth ID token: %w", err)
+		}
+
+		// This token has the OAuth client ID as the audience
+		// The client can use this to authenticate to IAP-protected resources
+		session.AccessToken = identityToken.AccessToken
+		session.RefreshToken = identityToken.RefreshToken
+		session.Expiry = identityToken.Expiry
+
+		logrus.WithFields(logrus.Fields{
+			"user_email":     session.User.Email,
+			"token_expiry":   session.Expiry.Format(time.RFC3339),
+			"oauth_audience": p.oauthClientId,
+		}).Infoln("Created session with OAuth ID token for programmatic access")
+	} else if len(auth.State) > 0 {
+		// No OAuth configured - store the IAP JWT (server-side only)
+		logrus.Warnln("No OAuth client configured - using IAP JWT (server-side validation only)")
+		session.AccessToken = jwtToken
+		session.Expiry = expiryTime
+	}
 
 	logrus.WithFields(logrus.Fields{
-		"user_email": session.User.Email,
-		"user_id":    session.User.ID,
-		"session_id": session.UUID,
-		"expiry":     session.Expiry.Format(time.RFC3339),
+		"user_email":   session.User.Email,
+		"user_id":      session.User.ID,
+		"session_id":   session.UUID,
+		"expiry":       session.Expiry.Format(time.RFC3339),
+		"access_token": len(session.AccessToken),
 	}).Debugln("Session created from claims")
 
 	// Add user to identities pool
@@ -249,6 +291,54 @@ func (p *gcpIAPProvider) CreateSession(ctx context.Context, auth *models.Authori
 	return session, nil
 }
 
+// GetIdentityToken generates an identity token for authenticating to IAP
+// https://docs.cloud.google.com/iap/docs/authentication-howto#iap_make_request-go
+func (p *gcpIAPProvider) GetIdentityToken(ctx context.Context, oauthAudience string) (*oauth2.Token, error) {
+
+	logrus.WithField("audience", oauthAudience).Debugln("Generating identity token")
+
+	if len(oauthAudience) == 0 {
+		logrus.Errorln("Token audience is not configured")
+		return nil, fmt.Errorf("token audience is not configured")
+	}
+
+	// Generate an identity token with the specified audience
+	// For Cloud Run: use the Cloud Run service URL
+	// For IAP: use the OAuth 2.0 client ID
+	// This uses Application Default Credentials
+	tokenSource, err := idtoken.NewTokenSource(
+		ctx,
+		// This needs to be the login server URL: https://docs.cloud.google.com/iap/docs/authentication-howto
+		oauthAudience,
+	)
+	if err != nil {
+		logrus.WithError(err).Errorln("Failed to create token source")
+		return nil, fmt.Errorf("failed to create token source: %w", err)
+	}
+
+	idToken, err := tokenSource.Token()
+	if err != nil {
+		logrus.WithError(err).Errorln("Failed to get identity token")
+		return nil, fmt.Errorf("failed to get identity token: %w", err)
+	}
+
+	payload, err := idtoken.Validate(ctx, idToken.AccessToken, oauthAudience)
+
+	if err != nil {
+		logrus.WithError(err).Errorln("Failed to validate generated identity token")
+		return nil, fmt.Errorf("failed to validate generated identity token: %w", err)
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"issuer":  payload.Issuer,
+		"subject": payload.Subject,
+		"expires": payload.Expires,
+		"issued":  payload.IssuedAt,
+	}).Debugln("Generated identity token validated successfully")
+
+	return idToken, nil
+}
+
 // ValidateSession validates an existing IAP session
 func (p *gcpIAPProvider) ValidateSession(ctx context.Context, session *models.Session) error {
 	// Check if session has expired
@@ -256,8 +346,7 @@ func (p *gcpIAPProvider) ValidateSession(ctx context.Context, session *models.Se
 		return fmt.Errorf("session has expired")
 	}
 
-	// IAP sessions are short-lived and validated by IAP itself
-	// We just check the expiry here
+	// TODO(hugh): VerifyIAPJWT can be called here if we have the JWT token stored
 	return nil
 }
 
@@ -356,7 +445,7 @@ func (p *gcpIAPProvider) VerifyIAPJWT(ctx context.Context, tokenString string) (
 }
 
 // ConvertIAPClaimsToSession converts IAP JWT claims into a session
-func (p *gcpIAPProvider) ConvertIAPClaimsToSession(claims *IAPClaims, expiryTime time.Time) *models.Session {
+func (p *gcpIAPProvider) ConvertIAPClaimsToSession(ctx context.Context, claims *IAPClaims, expiryTime time.Time) *models.Session {
 	logrus.WithFields(logrus.Fields{
 		"subject": claims.Subject,
 		"email":   claims.Email,

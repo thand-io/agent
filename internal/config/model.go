@@ -342,7 +342,7 @@ func (c *Config) GetLocalHostname() string {
 func (c *Config) GetLoginServerUrl() string {
 	return strings.TrimSuffix(fmt.Sprintf(
 		"%s/%s",
-		strings.TrimSuffix(c.Login.Endpoint, "/"),
+		strings.TrimSuffix(c.Login.Endpoint.String(), "/"),
 		strings.TrimPrefix(strings.TrimSuffix(c.Login.Base, "/"), "/")),
 		"/")
 }
@@ -419,7 +419,7 @@ func (c *Config) discoverServerApiUrl(
 }
 
 func (c *Config) GetLoginServerHostname() string {
-	hostname, err := url.Parse(c.Login.Endpoint)
+	hostname, err := url.Parse(c.Login.Endpoint.String())
 	if err != nil {
 		return "localhost"
 	}
@@ -433,7 +433,7 @@ func (c *Config) SetLoginServer(loginServer string) error {
 	if err != nil {
 		return fmt.Errorf("invalid login server URL: %w", err)
 	}
-	c.Login.Endpoint = parsedUrl.String()
+	c.Login.Endpoint = model.NewEndpoint(parsedUrl.String())
 	return nil
 }
 

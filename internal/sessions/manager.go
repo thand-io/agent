@@ -38,6 +38,27 @@ func (l LoginServer) GetSessions() map[string]models.LocalSession {
 	return l.Sessions
 }
 
+// MarshalYAML implements custom YAML marshaling for LoginServer
+func (l LoginServer) MarshalYAML() (any, error) {
+	result := make(map[string]any)
+
+	result["version"] = l.Version
+	result["timestamp"] = l.Timestamp
+
+	// Marshal each session using its custom MarshalYAML
+	sessionsMap := make(map[string]any)
+	for provider, session := range l.Sessions {
+		sessionYAML, err := session.MarshalYAML()
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal session for provider %s: %w", provider, err)
+		}
+		sessionsMap[provider] = sessionYAML
+	}
+	result["sessions"] = sessionsMap
+
+	return result, nil
+}
+
 func (l LoginServer) GetFirstActiveSession(providers ...string) (string, *models.LocalSession, error) {
 
 	if len(l.Sessions) == 0 {

@@ -43,6 +43,14 @@ func InvokeHttpRequest(r *model.HTTPArguments) (*resty.Response, error) {
 
 func MakeRequestFromBuilder(restBuilder *resty.Request, method string, finalUrl string) (*resty.Response, error) {
 
+	logrus.WithFields(logrus.Fields{
+		"url":     finalUrl,
+		"headers": restBuilder.Header,
+		"auth":    restBuilder.AuthScheme,
+		"token":   restBuilder.Token,
+		"method":  method,
+	}).Infoln("Making HTTP request")
+
 	switch strings.ToUpper(method) {
 	case http.MethodGet:
 		return restBuilder.Get(finalUrl)
@@ -103,17 +111,19 @@ func configureAuthentication(restBuilder *resty.Request, uri *model.Endpoint) er
 
 	auth := uri.EndpointConfig.Authentication.AuthenticationPolicy
 
-	switch {
-	case auth.Basic != nil:
+	// Configure various authentication methods
+	// Do not use a switch here as multiple auth methods can be set
+	if auth.Basic != nil {
 		restBuilder.SetBasicAuth(auth.Basic.Username, auth.Basic.Password)
-	case auth.Bearer != nil:
+	}
+	if auth.Bearer != nil {
 		restBuilder.SetAuthToken(auth.Bearer.Token)
-	case auth.Digest != nil:
+	}
+	if auth.ProxyBearer != nil {
+		restBuilder.SetHeader("Proxy-Authorization", fmt.Sprintf("Bearer %s", auth.ProxyBearer.Token))
+	}
+	if auth.Digest != nil {
 		restBuilder.SetDigestAuth(auth.Digest.Username, auth.Digest.Password)
-	default:
-		logrus.WithFields(logrus.Fields{
-			"url": uri.String(),
-		}).Warnln("Unsupported authentication type in endpoint config")
 	}
 
 	return nil
