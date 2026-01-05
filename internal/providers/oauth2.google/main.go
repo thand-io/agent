@@ -23,7 +23,7 @@ var Oauth2GoogleProviderName = "oauth2.google"
 // oauth2Provider implements the ProviderImpl interface for OAuth2
 type oauth2Provider struct {
 	*models.BaseProvider
-	OauthConfig *oauth2.Config
+	oauthConfig *oauth2.Config
 }
 
 func (p *oauth2Provider) Initialize(identifier string, provider models.Provider) error {
@@ -59,14 +59,14 @@ func (p *oauth2Provider) Initialize(identifier string, provider models.Provider)
 		Endpoint:     google.Endpoint,
 	}
 
-	p.OauthConfig = conf
+	p.oauthConfig = conf
 
 	return nil
 }
 
 func (p *oauth2Provider) AuthorizeSession(ctx context.Context, authRequest *models.AuthorizeUser) (*models.AuthorizeSessionResponse, error) {
 
-	googleConfig := p.OauthConfig
+	googleConfig := p.oauthConfig
 
 	scopes := googleConfig.Scopes
 
@@ -96,7 +96,7 @@ func (p *oauth2Provider) AuthorizeSession(ctx context.Context, authRequest *mode
 
 func (p *oauth2Provider) CreateSession(ctx context.Context, authRequest *models.AuthorizeUser) (*models.Session, error) {
 
-	googleConfig := p.OauthConfig
+	googleConfig := p.oauthConfig
 
 	scopes := googleConfig.Scopes
 
@@ -131,6 +131,7 @@ func (p *oauth2Provider) CreateSession(ctx context.Context, authRequest *models.
 		ctx,
 		option.WithTokenSource(conf.TokenSource(ctx, token)),
 	)
+
 	if err != nil {
 		return nil, err
 	}
@@ -148,9 +149,15 @@ func (p *oauth2Provider) CreateSession(ctx context.Context, authRequest *models.
 		Source:   "google",
 	}
 
+	// Extract the ID token from the OAuth response
+	// The ID token is a JWT that can be used for authentication (e.g., with IAP)
+	// The access token is for calling Google APIs
+	idToken, _ := token.Extra("id_token").(string)
+
 	session := models.Session{
 		UUID:         uuid.New(),
 		User:         user,
+		Token:        idToken,
 		AccessToken:  token.AccessToken,
 		RefreshToken: token.RefreshToken,
 		Expiry:       token.Expiry,

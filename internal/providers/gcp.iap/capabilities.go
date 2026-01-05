@@ -7,4 +7,5 @@ var GcpIAPCapabilities = models.NewProviderCapabilities().
 	WithIdentitiesConfiguration(models.IdentitiesConfiguration{
 		Enabled:        true,
 		Synchronizable: false,
-	})
+	}).
+	WithDefaultWebhookConfiguration()

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
 )
 
@@ -510,7 +511,9 @@ func (s *Server) providerFunctionHandler(c *gin.Context) {
 		return
 	}
 
-	_, _, err := s.getUser(c)
+	// TODO(hugh): Try and use the session for the specified provider
+	// if it supports it
+	_, foundUser, err := s.getUser(c)
 	if err != nil {
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of available providers", err)
 		return
@@ -527,6 +530,13 @@ func (s *Server) providerFunctionHandler(c *gin.Context) {
 
 	if len(function) == 0 {
 		s.getErrorPage(c, http.StatusBadRequest, "Function not specified")
+		return
+	}
+
+	providerClient := provider.GetClient()
+
+	if providerClient == nil {
+		s.getErrorPage(c, http.StatusNotFound, "Provider has no client defined")
 		return
 	}
 
@@ -562,7 +572,7 @@ func (s *Server) providerFunctionHandler(c *gin.Context) {
 			}
 		}
 
-		providerResponse, err = provider.GetClient().ListIdentities(
+		providerResponse, err = providerClient.ListIdentities(
 			context.Background(),
 			&searchRequest,
 		)
@@ -580,17 +590,39 @@ func (s *Server) providerFunctionHandler(c *gin.Context) {
 			}
 		}
 
-		providerResponse, err = provider.GetClient().ListTenants(
+		providerResponse, err = providerClient.ListTenants(
 			context.Background(),
 			&searchRequest,
 		)
 
 	default:
-		s.getErrorPage(c, http.StatusBadRequest, "Function not supported")
-		return
+
+		if providerClient.HasCapability(models.ProviderCapabilityWebhook) {
+
+			logrus.Debugln("Handling provider webhook function:", function)
+
+			// Let the provider handle the webhook
+			err = providerClient.HandleWebhook(
+				context.Background(), &models.WebhookRequest{
+					Context:  c,
+					Endpoint: s.Config.GetCallbackUrl("/"),
+					Session:  foundUser,
+				},
+			)
+
+			// If no error, the webhook handler has taken care of the response
+			if err == nil {
+				return
+			}
+
+		} else {
+
+			err = fmt.Errorf("function '%s' is not supported", function)
+		}
 	}
 
 	if err != nil {
+		logrus.WithError(err).Errorln("Failed to execute provider function")
 		s.getErrorPage(c, http.StatusInternalServerError, "Failed to execute provider function", err)
 		return
 	}

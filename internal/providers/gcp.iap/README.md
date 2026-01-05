@@ -108,3 +108,9 @@ When the IAP JWT header is not found, the provider logs all request headers to h
 ## External Identities
 
 If using IAP with external identity providers (via Identity Platform), the JWT includes additional claims in the `gcip` field with provider-specific information and custom attributes.
+
+
+# Links
+
+https://discuss.google.dev/t/cannot-authenticate-to-iap-when-using-desktop-oauth-client/189332/2
+

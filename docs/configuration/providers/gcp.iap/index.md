@@ -8,414 +8,84 @@ grand_parent: Configuration
 
 # GCP IAP Provider
 
-The GCP IAP (Identity-Aware Proxy) provider enables authentication when your application is deployed behind Google Cloud's Identity-Aware Proxy. IAP handles user authentication and adds a signed JWT to each request, which this provider verifies to establish user sessions.
+The GCP IAP (Identity-Aware Proxy) provider enables authentication when your application is deployed behind Google Cloud's Identity-Aware Proxy.
 
-## Overview
+## Setup Guide
 
-When your application is behind IAP:
-1. User accesses your application through IAP
-2. IAP authenticates the user (via Google Account or external IdP)
-3. IAP adds `X-Goog-IAP-JWT-Assertion` header with signed JWT to the request
-4. The provider verifies the JWT signature and creates a user session
+### Step 1: Create OIDC Credentials
 
-## Capabilities
+To allow programmatic access (e.g., for CLI tools), you need an OAuth 2.0 client ID.
 
-- **Authentication**: Verifies IAP JWT tokens and creates user sessions
-- **Identity Management**: Extracts user email, subject ID, and hosted domain
-- **Defense in Depth**: Provides secondary verification even if IAP is bypassed
-- **Automatic Token Validation**: Checks signature, audience, issuer, and expiration
+1. Go to [APIs & Services > Credentials](https://console.cloud.google.com/apis/credentials).
+2. Click **Create Credentials** → **OAuth 2.0 Client ID**.
+3. Choose **Desktop app** (for CLI tools) or **Web application**.
+4. Copy the **Client ID** (e.g., `XXXXX.apps.googleusercontent.com`) and **Client Secret**.
 
-## Prerequisites
+### Step 2: Choose App Platform & Enable IAP
 
-### GCP Setup
+Choose your deployment platform to enable IAP.
 
-1. **GCP Project**: Active Google Cloud Platform project
-2. **IAP-Protected Resource**: Application deployed on Cloud Run, App Engine, Compute Engine, or GKE
-3. **IAP Enabled**: Identity-Aware Proxy must be enabled for your resource
-4. **OAuth Consent Screen**: Configured for user authentication
+#### Cloud Run
 
-### Required Permissions
+1.  **Deploy your Cloud Run service**:
+    Follow the [Cloud Run deployment documentation](https://cloud.google.com/run/docs/deploying) to deploy your service.
 
-The application itself doesn't need special GCP permissions - IAP handles authentication. However, to set up IAP, you need:
+2.  **Enable IAP**:
+    Enable Identity-Aware Proxy for your Cloud Run service via the Google Cloud Console:
+    1. Go to the cloud run application. Click on the **Security** tab. Under authentication, click on **Require authentication** and check both boxes to allow only authenticated invocations (**Identity and Access Management (IAM)** and **Identity-Aware Proxy (IAP)**).
+    2. Then you need to manage the users who can access the application. Click on the **Edit policy**. Then add the users or groups who should have access to the application. No need to add a role.
+    3. Save your changes.
 
-```
-iap.web.getIamPolicy
-iap.web.setIamPolicy
-compute.backendServices.update (for GCE/GKE)
-run.services.getIamPolicy (for Cloud Run)
-```
+### Step 3: Enable OIDC as Auth Method
 
-## Configuration
+To allow your OIDC client (created in Step 1) to authenticate with IAP, you must add it to the IAP settings.
 
-### Basic Configuration
+#### Cloud Run Example (Without Load Balancer)
+
+Use the following commands to apply the OIDC settings.
+
+1.  **List your services**:
+    ```bash
+    gcloud run services list --project=thand
+    ```
+
+2.  **Apply IAP Settings**:
+    Create a file named `iap_settings.yaml` with your OAuth client ID:
+
+    ```yaml
+    access_settings:
+      oauth_settings:
+        programmatic_clients: ["PROJECTID-XXXX.apps.googleusercontent.com"]
+    ```
+
+    Then apply the settings:
+
+    ```bash
+    # Set IAP settings on the Cloud Run service:
+    gcloud beta iap settings set iap_settings.yaml \
+      --project=thand  \
+      --resource-type=cloud-run \
+      --service=agent \
+      --region=europe-west1
+    ```
+
+## Agent Configuration
+
+Configure the provider in your `config.yaml`:
 
 ```yaml
 providers:
   gcp-iap:
     provider: gcp.iap
-    description: "GCP IAP Authentication"
     enabled: true
     config:
-      # REQUIRED: JWT audience claim for your backend service
+      # REQUIRED: JWT audience claim for validating incoming IAP JWTs
       audience: "/projects/PROJECT_NUMBER/locations/REGION/services/SERVICE_NAME"
+      
+      # REQUIRED for programmatic access: OAuth 2.0 client ID
+      client_id: "XXXXX.apps.googleusercontent.com"
+      client_secret: "YOUR_CLIENT_SECRET"
 ```
 
-### Configuration Options
-
-| Option | Type | Required | Description |
-|--------|------|----------|-------------|
-| `audience` | string | Yes | JWT audience claim that identifies your backend service |
-
-## Getting Your Audience String
-
-The audience string uniquely identifies your backend service. It varies by deployment type.
-
-### Method 1: Using Google Cloud Console
-
-1. Go to [IAP Settings](https://console.cloud.google.com/security/iap)
-2. Find your resource in the list
-3. Click **More** (⋮) next to the resource
-4. Select **Signed Header JWT Audience**
-5. Copy the audience string
-
-### Method 2: Using gcloud CLI
-
-#### For Cloud Run
-
-```bash
-# Get project number
-PROJECT_NUMBER=$(gcloud projects describe PROJECT_ID \
-  --format="value(projectNumber)")
-
-# Get service details
-SERVICE_NAME="your-service-name"
-REGION="us-central1"
-
-# Construct audience
-echo "/projects/${PROJECT_NUMBER}/locations/${REGION}/services/${SERVICE_NAME}"
-```
-
-#### For Compute Engine / GKE
-
-```bash
-# Get project number
-PROJECT_NUMBER=$(gcloud projects describe PROJECT_ID \
-  --format="value(projectNumber)")
-
-# Get backend service ID
-SERVICE_ID=$(gcloud compute backend-services describe SERVICE_NAME \
-  --global \
-  --format="value(id)")
-
-# Construct audience
-echo "/projects/${PROJECT_NUMBER}/global/backendServices/${SERVICE_ID}"
-```
-
-#### For App Engine
-
-```bash
-# Get project details
-PROJECT_ID="your-project-id"
-PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID \
-  --format="value(projectNumber)")
-
-# Construct audience
-echo "/projects/${PROJECT_NUMBER}/apps/${PROJECT_ID}"
-```
-
-## Setting Up IAP
-
-### Cloud Run
-
-#### 1. Deploy Your Application
-
-```bash
-gcloud run deploy SERVICE_NAME \
-  --image gcr.io/PROJECT_ID/IMAGE_NAME \
-  --region REGION \
-  --platform managed \
-  --allow-unauthenticated
-```
-
-#### 2. Enable IAP
-
-```bash
-# Get the backend service name (created automatically with Cloud Run)
-gcloud compute backend-services list
-
-# Enable IAP on the backend service
-gcloud iap web enable \
-  --resource-type=backend-services \
-  --service=SERVICE_NAME
-```
-
-#### 3. Grant User Access
-
-```bash
-# Grant specific users access
-gcloud iap web add-iam-policy-binding \
-  --resource-type=backend-services \
-  --service=SERVICE_NAME \
-  --member='user:user@example.com' \
-  --role='roles/iap.httpsResourceAccessor'
-
-# Or grant a group access
-gcloud iap web add-iam-policy-binding \
-  --resource-type=backend-services \
-  --service=SERVICE_NAME \
-  --member='group:team@example.com' \
-  --role='roles/iap.httpsResourceAccessor'
-```
-
-#### 4. Configure Provider
-
-```yaml
-providers:
-  gcp-iap:
-    provider: gcp.iap
-    enabled: true
-    config:
-      audience: "/projects/123456789/locations/us-central1/services/my-service"
-```
-
-### GKE (Google Kubernetes Engine)
-
-#### 1. Create Ingress with IAP-Enabled Backend Service
-
-```yaml
-# backend-config.yaml
-apiVersion: cloud.google.com/v1
-kind: BackendConfig
-metadata:
-  name: my-backend-config
-spec:
-  iap:
-    enabled: true
-    oauthclientCredentials:
-      secretName: oauth-client-secret
-```
-
-#### 2. Create OAuth Client Secret
-
-```bash
-# Create OAuth client in Cloud Console first, then:
-kubectl create secret generic oauth-client-secret \
-  --from-literal=client_id=YOUR_CLIENT_ID \
-  --from-literal=client_secret=YOUR_CLIENT_SECRET
-```
-
-#### 3. Create Service and Ingress
-
-```yaml
-# service.yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: my-service
-  annotations:
-    cloud.google.com/backend-config: '{"default": "my-backend-config"}'
-spec:
-  type: NodePort
-  selector:
-    app: my-app
-  ports:
-    - port: 80
-      targetPort: 5225
----
-# ingress.yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: my-ingress
-spec:
-  rules:
-    - host: myapp.example.com
-      http:
-        paths:
-          - path: /*
-            pathType: ImplementationSpecific
-            backend:
-              service:
-                name: my-service
-                port:
-                  number: 80
-```
-
-#### 4. Get Backend Service ID and Configure Provider
-
-```bash
-# Get backend service ID
-gcloud compute backend-services list --filter="name:k8s-*"
-SERVICE_ID=$(gcloud compute backend-services describe BACKEND_SERVICE_NAME \
-  --global --format="value(id)")
-
-PROJECT_NUMBER=$(gcloud projects describe PROJECT_ID --format="value(projectNumber)")
-
-# Audience will be:
-echo "/projects/${PROJECT_NUMBER}/global/backendServices/${SERVICE_ID}"
-```
-
-```yaml
-providers:
-  gcp-iap:
-    provider: gcp.iap
-    enabled: true
-    config:
-      audience: "/projects/123456789/global/backendServices/567890123456"
-```
-
-### App Engine
-
-#### 1. Enable IAP via Console
-
-1. Go to [IAP Settings](https://console.cloud.google.com/security/iap)
-2. Find your App Engine app
-3. Toggle IAP to **On**
-4. Configure OAuth consent screen if prompted
-5. Add authorized users/groups
-
-#### 3. Configure Provider
-
-```yaml
-providers:
-  gcp-iap:
-    provider: gcp.iap
-    enabled: true
-    config:
-      audience: "/projects/123456789/apps/my-project-id"
-```
-
-## Security Considerations
-
-### Why Verify the JWT?
-
-Even though IAP protects your application, JWT verification provides defense in depth:
-
-1. **Accidental IAP Disable**: If IAP is accidentally turned off, your app still rejects unauthenticated requests
-2. **Firewall Misconfiguration**: Protects against direct access to your backend
-3. **Internal Threats**: Prevents unauthorized access from within your project
-
-### JWT Token Lifecycle
-
-- **Lifetime**: IAP JWTs are short-lived (typically 10 minutes maximum)
-- **No Renewal**: Tokens cannot be renewed programmatically - users must re-authenticate through IAP
-- **Automatic Refresh**: IAP automatically issues new tokens as needed
-
-## Troubleshooting
-
-### No JWT Header Found
-
-**Symptoms**: Log shows "No IAP JWT header found"
-
-**Possible Causes**:
-1. IAP is not enabled for your resource
-2. Testing locally without going through IAP
-3. Firewall rules allow direct access, bypassing IAP
-
-**Solution**:
-```bash
-# Verify IAP is enabled
-gcloud iap web get-iam-policy \
-  --resource-type=backend-services \
-  --service=SERVICE_NAME
-
-# Check firewall rules - should only allow traffic from load balancer
-gcloud compute firewall-rules list
-```
-
-### JWT Verification Failed
-
-**Symptoms**: "Failed to verify IAP JWT: invalid audience"
-
-**Causes**:
-1. Wrong audience string in configuration
-2. Using audience from different resource/environment
-
-**Solution**:
-```bash
-# Get the correct audience from Cloud Console
-# Or use gcloud to verify:
-gcloud compute backend-services describe SERVICE_NAME \
-  --global --format="value(id)"
-```
-
-### IAP JWT Found but Provider Not Configured
-
-**Symptoms**: "IAP JWT found but no GCP IAP provider configured"
-
-**Solution**: Add the provider to your configuration:
-
-```yaml
-providers:
-  gcp-iap:
-    provider: gcp.iap
-    enabled: true
-    config:
-      audience: "YOUR_AUDIENCE_HERE"
-```
-
-### Users Can't Access Application
-
-**Symptoms**: Users get "You don't have access" error
-
-**Solution**: Grant IAP access to users:
-
-```bash
-# List current IAP access
-gcloud iap web get-iam-policy \
-  --resource-type=backend-services \
-  --service=SERVICE_NAME
-
-# Grant access to user
-gcloud iap web add-iam-policy-binding \
-  --resource-type=backend-services \
-  --service=SERVICE_NAME \
-  --member='user:user@example.com' \
-  --role='roles/iap.httpsResourceAccessor'
-```
-
-## External Identities
-
-If using IAP with external identity providers (via Identity Platform), the JWT includes additional claims:
-
-```yaml
-providers:
-  gcp-iap:
-    provider: gcp.iap
-    enabled: true
-    config:
-      audience: "/projects/123456789/apps/my-app"
-    # The provider automatically handles external identities
-    # User information is extracted from the gcip claim
-```
-
-## Environment Variables
-
-You can configure the provider using environment variables:
-
-```bash
-export THAND_PROVIDERS_GCP_IAP_PROVIDER="gcp.iap"
-export THAND_PROVIDERS_GCP_IAP_ENABLED="true"
-export THAND_PROVIDERS_GCP_IAP_CONFIG_AUDIENCE="/projects/123456789/locations/us-central1/services/my-service"
-```
-
-## Best Practices
-
-1. **Use Separate Providers**: Create different IAP providers for different environments (dev, staging, prod)
-2. **Monitor Access**: Regularly review IAP access logs in Cloud Logging
-3. **Limit Access**: Use groups instead of individual users for easier management
-4. **Test Locally**: Use alternative authentication methods for local development
-5. **Health Checks**: Ensure health check endpoints don't require authentication
-
-## Related Documentation
-
-- [GCP IAP Documentation](https://cloud.google.com/iap/docs)
-- [Securing Your App with Signed Headers](https://cloud.google.com/iap/docs/signed-headers-howto)
-- [IAP Access Control](https://cloud.google.com/iap/docs/managing-access)
-- [Thand IAP Configuration Guide](../../iap)
-
-## Examples
-
-See complete configuration examples:
-- [Basic IAP Configuration](../../../../examples/providers/gcp.iap.example.yaml)
-- [IAP Authentication Handler](../../../../examples/iap_authentication.go)
+After configuring the provider, restart your application to apply the changes.
+You will now be able to authenticate using GCP IAP and use the CLI tools with programmatic access.

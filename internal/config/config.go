@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -37,7 +38,13 @@ func DefaultConfig() *Config {
 	setDefaults(v)
 
 	var config Config
-	if err := v.Unmarshal(&config); err != nil {
+	if err := v.Unmarshal(&config, viper.DecodeHook(
+		mapstructure.ComposeDecodeHookFunc(
+			mapstructure.StringToTimeDurationHookFunc(),
+			mapstructure.StringToSliceHookFunc(","),
+			stringToEndpointHookFunc(),
+		),
+	)); err != nil {
 		log.Fatalf("error unmarshaling default config: %v", err)
 	}
 
@@ -157,10 +164,18 @@ func bindEnvironmentVariables(v *viper.Viper) {
 	v.BindEnv("environment.config.api_key", "THAND_ENVIRONMENT_CONFIG_API_KEY")
 	v.BindEnv("environment.config.timeout", "THAND_ENVIRONMENT_CONFIG_TIMEOUT")
 
+	bindServerEnvVars(v)
 	bindCloudProviderEnvVars(v)
 	bindVaultEnvVars(v)
 	bindLoggingEnvVars(v)
 	bindServiceEnvVars(v)
+}
+
+func bindServerEnvVars(v *viper.Viper) {
+	// Server mode environment variables
+	v.BindEnv("server.security.upstream.auth.iap", "THAND_SERVER_SECURITY_UPSTREAM_AUTH_IAP")
+	v.BindEnv("server.security.upstream.auth.ava", "THAND_SERVER_SECURITY_UPSTREAM_AUTH_AVA")
+	v.BindEnv("server.security.upstream.auth.eap", "THAND_SERVER_SECURITY_UPSTREAM_AUTH_EAP")
 }
 
 // bindCloudProviderEnvVars binds cloud provider specific environment variables
@@ -229,7 +244,13 @@ func readAndUnmarshalConfig(v *viper.Viper) (*Config, error) {
 	}
 
 	var config Config
-	if err := v.Unmarshal(&config); err != nil {
+	if err := v.Unmarshal(&config, viper.DecodeHook(
+		mapstructure.ComposeDecodeHookFunc(
+			mapstructure.StringToTimeDurationHookFunc(),
+			mapstructure.StringToSliceHookFunc(","),
+			stringToEndpointHookFunc(),
+		),
+	)); err != nil {
 		return nil, fmt.Errorf("error unmarshaling config: %w", err)
 	}
 
@@ -353,12 +374,12 @@ func (c *Config) ReloadConfig() error {
 }
 
 func (c *Config) HasLoginServer() bool {
-	return len(c.Login.Endpoint) > 0
+	return len(c.Login.Endpoint.String()) > 0
 }
 
 func (c *Config) SyncWithLoginServer() error {
 
-	if len(c.Login.Endpoint) == 0 {
+	if len(c.Login.Endpoint.String()) == 0 {
 		return fmt.Errorf("no login server endpoint configured")
 	}
 
@@ -393,8 +414,8 @@ func (c *Config) SyncWithLoginServer() error {
 		logrus.Debugf("Found valid session for provider '%s'", providerName)
 		localToken = session.GetEncodedLocalSession()
 
-		if len(session.Endpoint) > 0 && !strings.EqualFold(session.Endpoint, c.GetLoginServerUrl()) {
-			logrus.Infof("Updating login server URL from session endpoint: %s", session.Endpoint)
+		if session.Endpoint != nil && len(session.Endpoint.String()) > 0 {
+			logrus.Infof("Updating login server URL from session endpoint: %s", session.Endpoint.String())
 			c.Login.Endpoint = session.Endpoint
 		}
 
@@ -407,7 +428,36 @@ func (c *Config) SyncWithLoginServer() error {
 	// Lets make our registration request. This will pull down our
 	// remote configuration and also register this instance with the login server
 
-	_, err = c.RegisterWithLoginServer(localToken)
+	// First set up the authentication policy for the Thand server using our
+	// local session token
+	authentication := &model.ReferenceableAuthenticationPolicy{
+		AuthenticationPolicy: &model.AuthenticationPolicy{
+			Bearer: &model.BearerAuthenticationPolicy{
+				Token: localToken,
+			},
+		},
+	}
+
+	// Next, if the sever is configured to use IAP, we need to add that to the
+	// authentication policy as well
+
+	if c.Login.Endpoint != nil &&
+		c.Login.Endpoint.EndpointConfig != nil &&
+		c.Login.Endpoint.EndpointConfig.Authentication != nil &&
+		c.Login.Endpoint.EndpointConfig.Authentication.AuthenticationPolicy != nil {
+
+		logrus.Debugln("Configuring IAP authentication for login server requests")
+
+		authConfig := c.Login.Endpoint.EndpointConfig.Authentication.AuthenticationPolicy
+
+		if authConfig.ProxyBearer != nil {
+			authentication.AuthenticationPolicy.ProxyBearer = &model.ProxyBearerAuthenticationPolicy{
+				Token: authConfig.ProxyBearer.Token,
+			}
+		}
+	}
+
+	_, err = c.RegisterWithLoginServer(authentication)
 
 	if err != nil {
 		return fmt.Errorf("failed to register with login server: %w", err)
@@ -419,42 +469,24 @@ func (c *Config) SyncWithLoginServer() error {
 	c.Providers = ProviderConfig{
 		URL: &model.Endpoint{
 			EndpointConfig: &model.EndpointConfiguration{
-				URI: &model.LiteralUri{Value: fmt.Sprintf("%s/providers", apiUrl)},
-				Authentication: &model.ReferenceableAuthenticationPolicy{
-					AuthenticationPolicy: &model.AuthenticationPolicy{
-						Bearer: &model.BearerAuthenticationPolicy{
-							Token: localToken,
-						},
-					},
-				},
+				URI:            &model.LiteralUri{Value: fmt.Sprintf("%s/providers", apiUrl)},
+				Authentication: authentication,
 			},
 		},
 	}
 	c.Roles = RoleConfig{
 		URL: &model.Endpoint{
 			EndpointConfig: &model.EndpointConfiguration{
-				URI: &model.LiteralUri{Value: fmt.Sprintf("%s/roles", apiUrl)},
-				Authentication: &model.ReferenceableAuthenticationPolicy{
-					AuthenticationPolicy: &model.AuthenticationPolicy{
-						Bearer: &model.BearerAuthenticationPolicy{
-							Token: localToken,
-						},
-					},
-				},
+				URI:            &model.LiteralUri{Value: fmt.Sprintf("%s/roles", apiUrl)},
+				Authentication: authentication,
 			},
 		},
 	}
 	c.Workflows = WorkflowConfig{
 		URL: &model.Endpoint{
 			EndpointConfig: &model.EndpointConfiguration{
-				URI: &model.LiteralUri{Value: fmt.Sprintf("%s/workflows", apiUrl)},
-				Authentication: &model.ReferenceableAuthenticationPolicy{
-					AuthenticationPolicy: &model.AuthenticationPolicy{
-						Bearer: &model.BearerAuthenticationPolicy{
-							Token: localToken,
-						},
-					},
-				},
+				URI:            &model.LiteralUri{Value: fmt.Sprintf("%s/workflows", apiUrl)},
+				Authentication: authentication,
 			},
 		},
 	}
@@ -508,7 +540,16 @@ func (c *Config) RegisterWithThandServer() error {
 	*/
 
 	thandLoginUrl := c.DiscoverThandServerApiUrl()
-	registration, err := c.syncWithEndpoint(thandLoginUrl, c.Thand.ApiKey)
+
+	authentication := &model.ReferenceableAuthenticationPolicy{
+		AuthenticationPolicy: &model.AuthenticationPolicy{
+			Bearer: &model.BearerAuthenticationPolicy{
+				Token: c.Thand.ApiKey,
+			},
+		},
+	}
+
+	registration, err := c.syncWithEndpoint(thandLoginUrl, authentication)
 
 	if err != nil {
 		return fmt.Errorf("failed to register with thand server: %w", err)
@@ -528,17 +569,17 @@ func (c *Config) RegisterWithThandServer() error {
 
 }
 
-func (c *Config) RegisterWithLoginServer(localToken string) (*RegistrationResponse, error) {
+func (c *Config) RegisterWithLoginServer(auth *model.ReferenceableAuthenticationPolicy) (*RegistrationResponse, error) {
 
 	loginUrl := c.DiscoverLoginServerApiUrl(
 		c.GetLoginServerUrl(),
 	)
 
-	return c.syncWithEndpoint(loginUrl, localToken)
+	return c.syncWithEndpoint(loginUrl, auth)
 
 }
 
-func (c *Config) syncWithEndpoint(loginUrl, localToken string) (*RegistrationResponse, error) {
+func (c *Config) syncWithEndpoint(loginUrl string, authentication *model.ReferenceableAuthenticationPolicy) (*RegistrationResponse, error) {
 
 	version, commit, _ := common.GetModuleBuildInfo()
 
@@ -551,14 +592,6 @@ func (c *Config) syncWithEndpoint(loginUrl, localToken string) (*RegistrationRes
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal registration request: %w", err)
-	}
-
-	authentication := &model.ReferenceableAuthenticationPolicy{
-		AuthenticationPolicy: &model.AuthenticationPolicy{
-			Bearer: &model.BearerAuthenticationPolicy{
-				Token: localToken,
-			},
-		},
 	}
 
 	// Pre-flight check
@@ -578,6 +611,10 @@ func (c *Config) syncWithEndpoint(loginUrl, localToken string) (*RegistrationRes
 	}
 
 	if preflightRes.StatusCode() != 200 {
+		logrus.WithFields(logrus.Fields{
+			"status": preflightRes.Status(),
+			"body":   string(preflightRes.Body()),
+		}).Errorln("Preflight request failed")
 		return nil, fmt.Errorf("preflight %s failed with status: %s", loginUrl+"/preflight", preflightRes.Status())
 	}
 
@@ -611,6 +648,10 @@ func (c *Config) syncWithEndpoint(loginUrl, localToken string) (*RegistrationRes
 	}
 
 	if registerRes.StatusCode() != 200 {
+		logrus.WithFields(logrus.Fields{
+			"status": registerRes.Status(),
+			"body":   string(registerRes.Body()),
+		}).Errorln("Registration request failed")
 		return nil, fmt.Errorf("registration request %s failed with status: %s", loginUrl+"/register", registerRes.Status())
 	}
 

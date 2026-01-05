@@ -4,9 +4,11 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/thand-io/agent/internal/models"
 )
 
@@ -579,6 +581,108 @@ func TestGetSessionManager(t *testing.T) {
 	if manager != manager2 {
 		t.Error("GetSessionManager should return the same instance")
 	}
+}
+
+func TestSessionManager_YAMLFormat(t *testing.T) {
+	tmpDir := setupTempSessionDir(t)
+
+	loginServer := "test.example.com"
+
+	manager := &SessionManager{
+		Servers: make(map[string]LoginServer),
+	}
+
+	// Create a session with endpoint and authentication
+	sessionWithAuth := models.LocalSession{
+		Version: 1,
+		Expiry:  time.Date(2026, 1, 4, 10, 33, 8, 0, time.UTC),
+		Session: "token-with-auth-endpoint",
+		Endpoint: &model.Endpoint{
+			EndpointConfig: &model.EndpointConfiguration{
+				URI: &model.LiteralUri{Value: "https://agent.example.com"},
+				Authentication: &model.ReferenceableAuthenticationPolicy{
+					AuthenticationPolicy: &model.AuthenticationPolicy{
+						Basic: &model.BasicAuthenticationPolicy{
+							Username: "user",
+							Password: "password123",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err := manager.AddSession(loginServer, "test-provider", sessionWithAuth)
+	if err != nil {
+		t.Fatalf("Failed to add session: %v", err)
+	}
+
+	err = manager.Commit(loginServer)
+	if err != nil {
+		t.Fatalf("Failed to commit sessions: %v", err)
+	}
+
+	// Read the YAML file
+	filePath := filepath.Join(tmpDir, loginServer+".yaml")
+	yamlContent, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("Failed to read session file: %v", err)
+	}
+
+	actualYAML := string(yamlContent)
+
+	// Expected clean YAML output (without null values)
+	expectedYAML := `version: "1.0"
+timestamp: <TIMESTAMP>
+sessions:
+  test-provider:
+    version: 1
+    expiry: 2026-01-04T10:33:08Z
+    session: token-with-auth-endpoint
+    endpoint:
+      uri: https://agent.example.com
+      authentication:
+        basic:
+          username: user
+          password: password123
+`
+
+	// Compare (ignoring timestamp line which varies)
+	if !yamlMatches(actualYAML, expectedYAML) {
+		t.Errorf("YAML output does not match expected format.\n\nExpected:\n%s\n\nGot:\n%s", expectedYAML, actualYAML)
+	}
+}
+
+// yamlMatches compares YAML strings, ignoring the timestamp line
+func yamlMatches(actual, expected string) bool {
+	// Simple approach: check if actual contains all non-timestamp lines from expected
+	expectedLines := []string{
+		`version: "1.0"`,
+		"sessions:",
+		"  test-provider:",
+		"    version: 1",
+		"    expiry: 2026-01-04T10:33:08Z",
+		"    session: token-with-auth-endpoint",
+		"    endpoint:",
+		"      uri: https://agent.example.com",
+		"      authentication:",
+		"        basic:",
+		"          username: user",
+		"          password: password123",
+	}
+
+	for _, line := range expectedLines {
+		if !strings.Contains(actual, line) {
+			return false
+		}
+	}
+
+	// Check that null doesn't appear
+	if strings.Contains(actual, "null") {
+		return false
+	}
+
+	return true
 }
 
 func TestNormalizeHostname(t *testing.T) {

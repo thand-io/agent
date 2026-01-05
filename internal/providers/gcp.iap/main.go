@@ -11,9 +11,11 @@ import (
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/providers"
+	googleOauth2Provider "github.com/thand-io/agent/internal/providers/oauth2.google"
 	"google.golang.org/api/idtoken"
 )
 
+// Calling ?gcp-iap-mode=CLEAR_LOGIN_COOKIE to the webhook will clear the login cookie
 const GcpIAPProviderName = "gcp.iap"
 
 const (
@@ -42,7 +44,8 @@ type IAPGoogleClaims struct {
 // gcpIAPProvider implements the ProviderImpl interface for GCP IAP
 type gcpIAPProvider struct {
 	*models.BaseProvider
-	audience string
+	audience      string              // Audience for validating incoming JWTs (e.g., /projects/NUM/apps/ID)
+	oauthProvider models.ProviderImpl // Underlying Google OAuth2 provider
 }
 
 func (p *gcpIAPProvider) Initialize(identifier string, provider models.Provider) error {
@@ -60,14 +63,6 @@ func (p *gcpIAPProvider) Initialize(identifier string, provider models.Provider)
 	// Get the IAP audience from config
 	gcpIAPConfig := p.GetConfig()
 
-	// Log available config keys for debugging
-	configMap := gcpIAPConfig.AsMap()
-	configKeys := make([]string, 0, len(configMap))
-	for k := range configMap {
-		configKeys = append(configKeys, k)
-	}
-	logrus.WithField("config_keys", configKeys).Debugln("Loaded configuration")
-
 	audience, foundAudience := gcpIAPConfig.GetString("audience")
 
 	if !foundAudience || len(audience) == 0 {
@@ -77,22 +72,73 @@ func (p *gcpIAPProvider) Initialize(identifier string, provider models.Provider)
 
 	p.audience = audience
 
-	logrus.WithFields(logrus.Fields{
-		"provider": identifier,
-		"audience": audience,
-	}).Infoln("Initialized GCP IAP provider with audience")
+	// Also initialize a google oauth workflow provider internally
+	oauthProvider, err := providers.Get(googleOauth2Provider.Oauth2GoogleProviderName)
+
+	if err != nil {
+		logrus.WithError(err).Errorln("Failed to get Google OAuth2 provider for GCP IAP")
+		return fmt.Errorf("failed to get Google OAuth2 provider for GCP IAP: %w", err)
+	}
+
+	gcpIAPConfig.SetKeyWithValue("scopes", []string{
+		"openid",
+		"email",
+		"profile",
+	})
+
+	err = oauthProvider.Initialize(identifier, provider)
+
+	if err != nil {
+		logrus.WithError(err).Errorln("Failed to initialize Google OAuth2 provider for GCP IAP")
+		return fmt.Errorf("failed to initialize Google OAuth2 provider for GCP IAP: %w", err)
+	}
+
+	p.oauthProvider = oauthProvider
 
 	return nil
 }
 
 // AuthorizeSession is not applicable for IAP as authorization happens at the IAP layer
 func (p *gcpIAPProvider) AuthorizeSession(ctx context.Context, auth *models.AuthorizeUser) (*models.AuthorizeSessionResponse, error) {
-	// Just return nil as authorization is handled by IAP
-	return nil, nil
+	return p.oauthProvider.AuthorizeSession(ctx, auth)
 }
 
 // CreateSession creates a session from an IAP JWT token
 func (p *gcpIAPProvider) CreateSession(ctx context.Context, auth *models.AuthorizeUser) (*models.Session, error) {
+
+	if auth == nil {
+		logrus.Errorln("Missing authorization request")
+		return nil, fmt.Errorf("missing authorization request")
+	}
+
+	if len(auth.State) > 0 && len(auth.Code) > 0 {
+		return p.CreateOauthSession(ctx, auth)
+	} else if len(auth.Code) > 0 {
+		return p.CreateIAPSession(ctx, auth)
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"state_length": len(auth.State),
+		"code_length":  len(auth.Code),
+	}).Errorln("Invalid authorization request for GCP IAP")
+
+	return nil, fmt.Errorf("invalid authorization request for GCP IAP")
+
+}
+
+func (p *gcpIAPProvider) CreateOauthSession(ctx context.Context, auth *models.AuthorizeUser) (*models.Session, error) {
+
+	logrus.WithFields(logrus.Fields{
+		"state_length": len(auth.State),
+		"code_length":  len(auth.Code),
+	}).Debugln("CreateOauthSession called")
+
+	return p.oauthProvider.CreateSession(ctx, auth)
+
+}
+
+func (p *gcpIAPProvider) CreateIAPSession(ctx context.Context, auth *models.AuthorizeUser) (*models.Session, error) {
+
 	logrus.WithFields(logrus.Fields{
 		"code_length": len(auth.Code),
 	}).Debugln("CreateSession called")
@@ -117,13 +163,14 @@ func (p *gcpIAPProvider) CreateSession(ctx context.Context, auth *models.Authori
 	}).Debugln("JWT verified, converting to session")
 
 	// Convert claims to session
-	session := p.ConvertIAPClaimsToSession(claims, expiryTime)
+	session := p.ConvertIAPClaimsToSession(ctx, claims, expiryTime)
 
 	logrus.WithFields(logrus.Fields{
-		"user_email": session.User.Email,
-		"user_id":    session.User.ID,
-		"session_id": session.UUID,
-		"expiry":     session.Expiry.Format(time.RFC3339),
+		"user_email":   session.User.Email,
+		"user_id":      session.User.ID,
+		"session_id":   session.UUID,
+		"expiry":       session.Expiry.Format(time.RFC3339),
+		"access_token": len(session.AccessToken),
 	}).Debugln("Session created from claims")
 
 	// Add user to identities pool
@@ -140,21 +187,12 @@ func (p *gcpIAPProvider) CreateSession(ctx context.Context, auth *models.Authori
 
 // ValidateSession validates an existing IAP session
 func (p *gcpIAPProvider) ValidateSession(ctx context.Context, session *models.Session) error {
-	// Check if session has expired
-	if time.Now().After(session.Expiry) {
-		return fmt.Errorf("session has expired")
-	}
-
-	// IAP sessions are short-lived and validated by IAP itself
-	// We just check the expiry here
-	return nil
+	return p.oauthProvider.ValidateSession(ctx, session)
 }
 
 // RenewSession attempts to renew an IAP session
 func (p *gcpIAPProvider) RenewSession(ctx context.Context, session *models.Session) (*models.Session, error) {
-	// IAP sessions cannot be renewed programmatically
-	// The user must go through IAP again to get a new token
-	return nil, fmt.Errorf("GCP IAP sessions cannot be renewed - user must re-authenticate through IAP")
+	return p.oauthProvider.RenewSession(ctx, session)
 }
 
 // VerifyIAPJWT verifies an IAP JWT token and returns the claims and expiry time
@@ -245,7 +283,7 @@ func (p *gcpIAPProvider) VerifyIAPJWT(ctx context.Context, tokenString string) (
 }
 
 // ConvertIAPClaimsToSession converts IAP JWT claims into a session
-func (p *gcpIAPProvider) ConvertIAPClaimsToSession(claims *IAPClaims, expiryTime time.Time) *models.Session {
+func (p *gcpIAPProvider) ConvertIAPClaimsToSession(ctx context.Context, claims *IAPClaims, expiryTime time.Time) *models.Session {
 	logrus.WithFields(logrus.Fields{
 		"subject": claims.Subject,
 		"email":   claims.Email,

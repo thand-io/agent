@@ -5,7 +5,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/thand-io/agent/internal/common"
+	"gopkg.in/yaml.v3"
 )
 
 // Local User session structure
@@ -20,7 +22,8 @@ type LocalSessionConfig struct {
 type Session struct {
 	UUID         uuid.UUID `json:"uuid"`
 	User         *User     `json:"user"`
-	AccessToken  string    `json:"token"`
+	Token        string    `json:"token"`
+	AccessToken  string    `json:"access_token"`
 	RefreshToken string    `json:"refresh_token"`
 	Expiry       time.Time `json:"expiry"`
 }
@@ -31,8 +34,8 @@ func (s *Session) IsExpired() bool {
 
 type ExportableSession struct {
 	*Session
-	Provider string `json:"provider"`
-	Endpoint string `json:"endpoint,omitempty"`
+	Provider string          `json:"provider"`
+	Endpoint *model.Endpoint `json:"endpoint,omitempty"`
 }
 
 // Encode the remote session from the local session
@@ -89,14 +92,24 @@ type SessionsResponse struct {
 
 // Session stored on the users local system
 type LocalSession struct {
-	Version  int       `json:"version,omitempty" yaml:"version"`      // Version of the session config
-	Expiry   time.Time `json:"expiry" yaml:"expiry"`                  // Expiry time of the session
-	Session  string    `json:"session,omitempty" yaml:"session,flow"` // Encoded session token
-	Endpoint string    `json:"endpoint,omitempty" yaml:"endpoint"`    // Optional endpoint associated with the session
+	Version  int             `json:"version,omitempty" yaml:"version"`      // Version of the session config
+	Expiry   time.Time       `json:"expiry" yaml:"expiry"`                  // Expiry time of the session
+	Session  string          `json:"session,omitempty" yaml:"session,flow"` // Encoded session token
+	Endpoint *model.Endpoint `json:"endpoint,omitempty" yaml:"endpoint"`    // Optional endpoint associated with the session
 }
 
 func (s *LocalSession) IsExpired() bool {
 	return time.Now().After(s.Expiry)
+}
+
+// CopyWithoutEndpoint creates a shallow copy of the LocalSession without the Endpoint field
+func (s *LocalSession) CopyWithoutEndpoint() *LocalSession {
+	copied := &LocalSession{
+		Version: s.Version,
+		Expiry:  s.Expiry,
+		Session: s.Session,
+	}
+	return copied
 }
 
 func (s *LocalSession) GetEncodedLocalSession() string {
@@ -119,4 +132,56 @@ func DecodedLocalSession(input string) (*LocalSession, error) {
 	var session *LocalSession
 	common.ConvertMapToInterface(wrapper.Data.(map[string]any), &session)
 	return session, nil
+}
+
+// UnmarshalYAML implements custom YAML unmarshaling for LocalSession to handle model.Endpoint
+func (s *LocalSession) UnmarshalYAML(node *yaml.Node) error {
+	// Marshal the YAML node to bytes, then use ReadDataToInterface which handles the conversion
+	data, err := yaml.Marshal(node)
+	if err != nil {
+		return fmt.Errorf("failed to marshal yaml node: %w", err)
+	}
+
+	// Use ReadDataToInterface which converts YAML->JSON and uses model.Endpoint's UnmarshalJSON
+	result, err := common.ReadDataToInterface(data, LocalSession{})
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal LocalSession: %w", err)
+	}
+
+	*s = *result
+	return nil
+}
+
+// MarshalYAML implements custom YAML marshaling for LocalSession to produce clean output
+func (s *LocalSession) MarshalYAML() (any, error) {
+	// Create a map for clean YAML output
+	result := make(map[string]any)
+
+	if s.Version != 0 {
+		result["version"] = s.Version
+	}
+
+	if !s.Expiry.IsZero() {
+		result["expiry"] = s.Expiry
+	}
+
+	if len(s.Session) != 0 {
+		result["session"] = s.Session
+	}
+
+	// Handle endpoint by converting through JSON (which has proper marshaling)
+	if s.Endpoint != nil {
+		// Use the SDK's JSON marshaling which properly handles nested structures
+		endpointMap, err := common.ConvertInterfaceToMap(s.Endpoint)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal endpoint: %w", err)
+		}
+
+		// Only add if not empty
+		if len(endpointMap) > 0 {
+			result["endpoint"] = endpointMap
+		}
+	}
+
+	return result, nil
 }

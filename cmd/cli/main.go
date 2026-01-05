@@ -256,7 +256,7 @@ Complete documentation is available at https://docs.thand.io`,
 
 		// When nothing is specified. First check if a login-server is configured
 		// if not then start the setup.
-		if cfg == nil || len(cfg.Login.Endpoint) == 0 {
+		if cfg == nil || len(cfg.Login.Endpoint.String()) == 0 {
 			fmt.Println("No login server configured. Starting setup...")
 			fmt.Println("Please configure your login server endpoint in config.yaml")
 			fmt.Println("Example:")

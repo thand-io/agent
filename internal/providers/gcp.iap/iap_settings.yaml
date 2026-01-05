@@ -1,0 +1,4 @@
+  access_settings:
+    oauth_settings:
+      programmatic_clients: [PROJECTID-XXXX.apps.googleusercontent.com]
+

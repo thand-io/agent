@@ -56,8 +56,8 @@ type ServerLimitsConfig struct {
 }
 
 type LoginConfig struct {
-	Endpoint string `json:"endpoint" yaml:"endpoint" mapstructure:"endpoint" default:"https://auth.thand.io/"`
-	Base     string `json:"base" yaml:"base" mapstructure:"base" default:"/"` // Base path for login endpoint e.g. /
+	Endpoint *model.Endpoint `json:"endpoint" yaml:"endpoint" mapstructure:"endpoint" default:"https://auth.thand.io/"`
+	Base     string          `json:"base" yaml:"base" mapstructure:"base" default:"/"` // Base path for login endpoint e.g. /
 }
 
 type LoggingConfig struct {
@@ -102,7 +102,12 @@ type ReadyConfig struct {
 }
 
 type SecurityConfig struct {
-	CORS CORSConfig `json:"cors" yaml:"cors" mapstructure:"cors"`
+	CORS     CORSConfig     `json:"cors" yaml:"cors" mapstructure:"cors"`
+	Upstream UpstreamConfig `json:"upstream" yaml:"upstream" mapstructure:"upstream"`
+}
+
+func (s *SecurityConfig) IsUpstreamAuthEnabled() bool {
+	return s.Upstream.Auth.IAP || s.Upstream.Auth.AVA || s.Upstream.Auth.EAP
 }
 
 type CORSConfig struct {
@@ -112,6 +117,19 @@ type CORSConfig struct {
 	ExposeHeaders    []string `json:"expose_headers" yaml:"expose_headers" mapstructure:"expose_headers"`
 	AllowCredentials bool     `json:"allow_credentials" yaml:"allow_credentials" mapstructure:"allow_credentials"`
 	MaxAge           int      `json:"max_age" yaml:"max_age" mapstructure:"max_age"`
+}
+
+// UpstreamConfig defines upstream proxy settings including authentication and trusted sources
+type UpstreamConfig struct {
+	Auth UpstreamAuthConfig `json:"auth" yaml:"auth" mapstructure:"auth"`
+	// Future: TrustedIPs []string for reverse proxy configuration
+}
+
+// UpstreamAuthConfig defines external authentication proxy settings for inbound requests
+type UpstreamAuthConfig struct {
+	IAP bool `json:"iap" yaml:"iap" mapstructure:"iap" default:"false"` // Google Identity-Aware Proxy
+	AVA bool `json:"ava" yaml:"ava" mapstructure:"ava" default:"false"` // Amazon Verified Access
+	EAP bool `json:"eap" yaml:"eap" mapstructure:"eap" default:"false"` // Microsoft Entra Application Proxy
 }
 
 // WithDefaults returns a CORSConfig with default values applied for any unset fields

@@ -66,9 +66,9 @@ var requestCmd = &cobra.Command{
 
 		loginServerUrl := cfg.GetLoginServerUrl()
 
-		if len(session.Endpoint) > 0 && !strings.EqualFold(session.Endpoint, cfg.GetLoginServerUrl()) {
-			logrus.Infof("Updating login server URL from session endpoint: %s", session.Endpoint)
-			loginServerUrl = session.Endpoint
+		if session.Endpoint != nil && len(session.Endpoint.String()) > 0 && !strings.EqualFold(session.Endpoint.String(), cfg.GetLoginServerUrl()) {
+			logrus.Infof("Updating login server URL from session endpoint: %s", session.Endpoint.String())
+			loginServerUrl = session.Endpoint.String()
 		}
 
 		loginServer := strings.TrimSuffix(cfg.DiscoverLoginServerApiUrl(

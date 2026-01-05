@@ -25,7 +25,8 @@ const (
 	ProviderCapabilityAuthorizer ProviderCapability = "authorizer" // Primary capability
 
 	// Notifier capabilities
-	ProviderCapabilityNotifier ProviderCapability = "notifier" // Primary capability
+	ProviderCapabilityNotifier ProviderCapability = "notifier" // Outbound notifications
+	ProviderCapabilityWebhook  ProviderCapability = "webhook"  // Webhook / inbound notifications
 
 	// Tenant discovery capability
 	ProviderCapabilityTenants ProviderCapability = "tenants"
@@ -98,6 +99,7 @@ func (sc *SynchronizableConfiguration) Disable() {
 
 type AuthorizerConfiguration = ProviderConfiguration
 type NotifierConfiguration = ProviderConfiguration
+type WebhookConfiguration = ProviderConfiguration
 type ProvisioningConfiguration = ProviderConfiguration
 
 type ProviderConfiguration struct {
@@ -134,6 +136,7 @@ type ProviderCapabilities struct {
 
 	// Notifier
 	Notifier *NotifierConfiguration `json:"notifier,omitempty"`
+	Webhook  *NotifierConfiguration `json:"webhook,omitempty"`
 
 	// Rbac capabilities
 	Provisioning *ProvisioningConfiguration `json:"provisioning,omitempty"`
@@ -182,6 +185,11 @@ func (pc *ProviderCapabilities) WithDefaultAuthorizerConfiguration() *ProviderCa
 
 func (pc *ProviderCapabilities) WithDefaultNotifierConfiguration() *ProviderCapabilities {
 	pc.Notifier = NewCapability()
+	return pc
+}
+
+func (pc *ProviderCapabilities) WithDefaultWebhookConfiguration() *ProviderCapabilities {
+	pc.Webhook = NewCapability()
 	return pc
 }
 
@@ -235,6 +243,11 @@ func (pc *ProviderCapabilities) WithNotifierConfiguration(config NotifierConfigu
 	return pc
 }
 
+func (pc *ProviderCapabilities) WithWebhookConfiguration(config NotifierConfiguration) *ProviderCapabilities {
+	pc.Webhook = &config
+	return pc
+}
+
 func (pc *ProviderCapabilities) WithProvisioningConfiguration(config ProvisioningConfiguration) *ProviderCapabilities {
 	pc.Provisioning = &config
 	return pc
@@ -271,6 +284,9 @@ func (pc *ProviderCapabilities) getCapabilities() map[ProviderCapability]Provide
 	}
 	if pc.Notifier != nil {
 		configMap[ProviderCapabilityNotifier] = pc.Notifier
+	}
+	if pc.Webhook != nil {
+		configMap[ProviderCapabilityWebhook] = pc.Webhook
 	}
 	if pc.Provisioning != nil {
 		configMap[ProviderCapabilityProvisioning] = pc.Provisioning
@@ -371,7 +387,6 @@ func (pc *ProviderCapabilities) Update(updates *ProviderCapabilities) {
 	if pc.Resources != nil && updates.Resources != nil {
 		updateSync(pc.Resources, updates.Resources)
 	}
-
 	if pc.Identities != nil && updates.Identities != nil {
 		updateSync(pc.Identities, updates.Identities)
 	}
@@ -381,6 +396,9 @@ func (pc *ProviderCapabilities) Update(updates *ProviderCapabilities) {
 	if pc.Groups != nil && updates.Groups != nil {
 		updateSync(pc.Groups, updates.Groups)
 	}
+	if pc.Tenants != nil && updates.Tenants != nil {
+		updateSync(pc.Tenants, updates.Tenants)
+	}
 
 	if pc.Authorizer != nil && updates.Authorizer != nil {
 		updateDisable(pc.Authorizer, updates.Authorizer)
@@ -388,11 +406,11 @@ func (pc *ProviderCapabilities) Update(updates *ProviderCapabilities) {
 	if pc.Notifier != nil && updates.Notifier != nil {
 		updateDisable(pc.Notifier, updates.Notifier)
 	}
+	if pc.Webhook != nil && updates.Webhook != nil {
+		updateDisable(pc.Webhook, updates.Webhook)
+	}
 	if pc.Provisioning != nil && updates.Provisioning != nil {
 		updateDisable(pc.Provisioning, updates.Provisioning)
-	}
-	if pc.Tenants != nil && updates.Tenants != nil {
-		updateSync(pc.Tenants, updates.Tenants)
 	}
 }
 
@@ -430,6 +448,8 @@ func NewProviderCapabilities() *ProviderCapabilities {
 		Groups:       &GroupsConfiguration{},
 		Authorizer:   &AuthorizerConfiguration{},
 		Notifier:     &NotifierConfiguration{},
+		Webhook:      &WebhookConfiguration{},
+		Tenants:      &TenantsConfiguration{},
 		Provisioning: &ProvisioningConfiguration{},
 	}
 }
@@ -441,6 +461,10 @@ func GetCapabilityFromString(cap string) (ProviderCapability, error) {
 		return ProviderCapabilityAuthorizer, nil
 	case string(ProviderCapabilityNotifier):
 		return ProviderCapabilityNotifier, nil
+	case string(ProviderCapabilityWebhook):
+		return ProviderCapabilityWebhook, nil
+	case string(ProviderCapabilityTenants):
+		return ProviderCapabilityTenants, nil
 	case string(ProviderCapabilityIdentities):
 		return ProviderCapabilityIdentities, nil
 	case string(ProviderCapabilityUsers):
