@@ -361,6 +361,8 @@ github.com/hashicorp/jsonapi v1.5.0 h1:toO1EpzVl1b3xTjC/Tw4XMIlHgJreeTnyb1a1sHnl
 github.com/hashicorp/jsonapi v1.5.0/go.mod h1:kWfdn49yCjQvbpnvY1dxxAuAFzISwrrMDQOcu6NsFoM=
 github.com/hashicorp/vault/api v1.22.0 h1:+HYFquE35/B74fHoIeXlZIP2YADVboaPjaSicHEZiH0=
 github.com/hashicorp/vault/api v1.22.0/go.mod h1:IUZA2cDvr4Ok3+NtK2Oq/r+lJeXkeCrHRmqdyWfpmGM=
+github.com/hughneale/serverless-sdk-go/v3 v3.0.0-20260105154148-a507840f0238 h1:M+qq3zO76q6VBNnMzE5XwlXzEVSn5Ryn61pKrxv8x0I=
+github.com/hughneale/serverless-sdk-go/v3 v3.0.0-20260105154148-a507840f0238/go.mod h1:N/TVPogY5OsZ+NG7NeD9oZ30VO6oHahxAsoeBPnh/Nw=
 github.com/itchyny/gojq v0.12.17 h1:8av8eGduDb5+rvEdaOO+zQUjA04MS0m3Ps8HiD+fceg=
 github.com/itchyny/gojq v0.12.17/go.mod h1:WBrEMkgAfAGO1LUcGOckBl5O726KPp+OlkKug0I/FEY=
 github.com/itchyny/timefmt-go v0.1.7 h1:xyftit9Tbw+Dc/huSSPJaEmX1TVL8lw5vxjJLK4GMMA=
@@ -520,8 +522,6 @@ github.com/sagikazarmark/locafero v0.12.0 h1:/NQhBAkUb4+fH1jivKHWusDYFjMOOKU88ee
 github.com/sagikazarmark/locafero v0.12.0/go.mod h1:sZh36u/YSZ918v0Io+U9ogLYQJ9tLLBmM4eneO6WwsI=
 github.com/senseyeio/duration v0.0.0-20180430131211-7c2a214ada46 h1:Dz0HrI1AtNSGCE8LXLLqoZU4iuOJXPWndenCsZfstA8=
 github.com/senseyeio/duration v0.0.0-20180430131211-7c2a214ada46/go.mod h1:is8FVkzSi7PYLWEXT5MgWhglFsyyiW8ffxAoJqfuFZo=
-github.com/serverlessworkflow/sdk-go/v3 v3.2.0 h1:UapUYBkOxAQ6hPnyvZjMsZngMzGTuWfoVm4JXJTtAQU=
-github.com/serverlessworkflow/sdk-go/v3 v3.2.0/go.mod h1:N/TVPogY5OsZ+NG7NeD9oZ30VO6oHahxAsoeBPnh/Nw=
 github.com/shirou/gopsutil/v4 v4.25.6 h1:kLysI2JsKorfaFPcYmcJqbzROzsBWEOAtw6A7dIfqXs=
 github.com/shirou/gopsutil/v4 v4.25.6/go.mod h1:PfybzyydfZcN+JMMjkF6Zb8Mq1A/VcogFFg7hj50W9c=
 github.com/simpleforce/simpleforce v0.0.0-20220429021116-acf4ac67ef68 h1:EW/NT+Lr1n7bASyO4QF9oOM5TvK3Bd/+nHd1O1qbCFc=

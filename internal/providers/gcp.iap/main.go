@@ -16,9 +16,7 @@ import (
 )
 
 // Calling ?gcp-iap-mode=CLEAR_LOGIN_COOKIE to the webhook will clear the login cookie
-
 const GcpIAPProviderName = "gcp.iap"
-const WebhookResourceIAP = "iap"
 
 const (
 	// IAPJWTHeader is the header that IAP adds to requests

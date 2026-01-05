@@ -4,6 +4,9 @@ go 1.25
 
 toolchain go1.25.0
 
+// replace github.com/serverlessworkflow/sdk-go/v3 => ../../serverless-sdk-go
+replace github.com/serverlessworkflow/sdk-go/v3 => github.com/hughneale/serverless-sdk-go/v3 v3.0.0-20260105154148-a507840f0238
+
 require (
 	github.com/aws/aws-sdk-go-v2 v1.41.0
 	github.com/aws/aws-sdk-go-v2/config v1.32.1
