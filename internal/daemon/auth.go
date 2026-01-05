@@ -437,7 +437,7 @@ func (s *Server) getAuthCallbackPage(c *gin.Context, auth models.AuthWrapper) {
 				return
 			}
 
-			if len(session.AccessToken) == 0 {
+			if len(session.Token) == 0 {
 				s.getErrorPage(c, http.StatusInternalServerError,
 					"Access token is required for IAP authentication")
 				return
@@ -448,7 +448,7 @@ func (s *Server) getAuthCallbackPage(c *gin.Context, auth models.AuthWrapper) {
 			// The login server validates the X-Goog-IAP-JWT-Assertion header added by IAP
 			authenticationPolicy = &model.AuthenticationPolicy{
 				ProxyBearer: &model.ProxyBearerAuthenticationPolicy{
-					Token: session.AccessToken,
+					Token: session.Token,
 				},
 			}
 

@@ -22,7 +22,8 @@ type LocalSessionConfig struct {
 type Session struct {
 	UUID         uuid.UUID `json:"uuid"`
 	User         *User     `json:"user"`
-	AccessToken  string    `json:"token"`
+	Token        string    `json:"token"`
+	AccessToken  string    `json:"access_token"`
 	RefreshToken string    `json:"refresh_token"`
 	Expiry       time.Time `json:"expiry"`
 }

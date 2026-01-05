@@ -422,15 +422,13 @@ func (c *Config) SyncWithLoginServer() error {
 	// Lets make our registration request. This will pull down our
 	// remote configuration and also register this instance with the login server
 
-	fmt.Println(localToken)
-
 	// First set up the authentication policy for the Thand server using our
 	// local session token
 	authentication := &model.ReferenceableAuthenticationPolicy{
 		AuthenticationPolicy: &model.AuthenticationPolicy{
-			//Bearer: &model.BearerAuthenticationPolicy{
-			//	Token: localToken,
-			//},
+			Bearer: &model.BearerAuthenticationPolicy{
+				Token: localToken,
+			},
 		},
 	}
 
@@ -447,7 +445,7 @@ func (c *Config) SyncWithLoginServer() error {
 		authConfig := c.Login.Endpoint.EndpointConfig.Authentication.AuthenticationPolicy
 
 		if authConfig.ProxyBearer != nil {
-			authentication.AuthenticationPolicy.Bearer = &model.BearerAuthenticationPolicy{
+			authentication.AuthenticationPolicy.ProxyBearer = &model.ProxyBearerAuthenticationPolicy{
 				Token: authConfig.ProxyBearer.Token,
 			}
 		}

@@ -4,9 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/url"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,7 +11,7 @@ import (
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/providers"
-	"golang.org/x/oauth2"
+	googleOauth2Provider "github.com/thand-io/agent/internal/providers/oauth2.google"
 	"google.golang.org/api/idtoken"
 )
 
@@ -49,9 +46,8 @@ type IAPGoogleClaims struct {
 // gcpIAPProvider implements the ProviderImpl interface for GCP IAP
 type gcpIAPProvider struct {
 	*models.BaseProvider
-	audience          string // Audience for validating incoming JWTs (e.g., /projects/NUM/apps/ID)
-	oauthClientId     string // OAuth 2.0 client ID for programmatic access (e.g., XXX.apps.googleusercontent.com)
-	oauthClientSecret string // OAuth client secret for token exchange
+	audience      string              // Audience for validating incoming JWTs (e.g., /projects/NUM/apps/ID)
+	oauthProvider models.ProviderImpl // Underlying Google OAuth2 provider
 }
 
 func (p *gcpIAPProvider) Initialize(identifier string, provider models.Provider) error {
@@ -69,14 +65,6 @@ func (p *gcpIAPProvider) Initialize(identifier string, provider models.Provider)
 	// Get the IAP audience from config
 	gcpIAPConfig := p.GetConfig()
 
-	// Log available config keys for debugging
-	configMap := gcpIAPConfig.AsMap()
-	configKeys := make([]string, 0, len(configMap))
-	for k := range configMap {
-		configKeys = append(configKeys, k)
-	}
-	logrus.WithField("config_keys", configKeys).Debugln("Loaded configuration")
-
 	audience, foundAudience := gcpIAPConfig.GetString("audience")
 
 	if !foundAudience || len(audience) == 0 {
@@ -86,135 +74,73 @@ func (p *gcpIAPProvider) Initialize(identifier string, provider models.Provider)
 
 	p.audience = audience
 
-	// OAuth client ID for programmatic access (optional)
-	oauthClientId, _ := gcpIAPConfig.GetString("oauth_client_id")
-	p.oauthClientId = oauthClientId
+	// Also initalize a google oauth workflow
+	oauthProvider, err := providers.Get(googleOauth2Provider.Oauth2GoogleProviderName)
 
-	oauthClientSecret, _ := gcpIAPConfig.GetString("oauth_client_secret")
-	p.oauthClientSecret = oauthClientSecret
+	if err != nil {
+		logrus.WithError(err).Errorln("Failed to get Google OAuth2 provider for GCP IAP")
+		return fmt.Errorf("failed to get Google OAuth2 provider for GCP IAP: %w", err)
+	}
 
-	logrus.WithFields(logrus.Fields{
-		"provider":         identifier,
-		"audience":         audience,
-		"oauth_client_id":  oauthClientId,
-		"has_oauth_secret": len(oauthClientSecret) > 0,
-	}).Infoln("Initialized GCP IAP provider")
+	gcpIAPConfig.SetKeyWithValue("scopes", []string{
+		"openid",
+		"email",
+		"profile",
+	})
+
+	err = oauthProvider.Initialize(identifier, provider)
+
+	if err != nil {
+		logrus.WithError(err).Errorln("Failed to initialize Google OAuth2 provider for GCP IAP")
+		return fmt.Errorf("failed to initialize Google OAuth2 provider for GCP IAP: %w", err)
+	}
+
+	p.oauthProvider = oauthProvider
 
 	return nil
 }
 
 // AuthorizeSession is not applicable for IAP as authorization happens at the IAP layer
 func (p *gcpIAPProvider) AuthorizeSession(ctx context.Context, auth *models.AuthorizeUser) (*models.AuthorizeSessionResponse, error) {
-
-	// We don't yet have our user information as this is handled by IAP.
-	// and we're not really supposed to have the user context at this stage.
-	// so we need to hijack the redirect url. To our own webhook handler that
-	// can extract the JWT and convert it into a session.
-
-	logrus.Debugln("AuthorizeSession called - generating redirect URL to IAP webhook")
-
-	newRedirectUri := strings.TrimSuffix(auth.RedirectUri, "/auth/callback/"+p.GetIdentifier())
-	newRedirectUri += fmt.Sprintf(
-		"/provider/%s/%s",
-		url.PathEscape(p.GetIdentifier()),
-		WebhookResourceIAP,
-	)
-
-	foundUrl, err := url.Parse(newRedirectUri)
-
-	if err != nil {
-		logrus.WithError(err).Errorln("Failed to parse redirect URI")
-		return nil, fmt.Errorf("failed to parse redirect URI: %w", err)
-	}
-
-	// Override the path with our webhook endpoint
-	query := foundUrl.Query()
-	query.Add("state", auth.State)
-	foundUrl.RawQuery = query.Encode()
-
-	return &models.AuthorizeSessionResponse{
-		Url: foundUrl.String(),
-	}, nil
-}
-
-// HandleWebhook
-func (p *gcpIAPProvider) HandleWebhook(ctx context.Context, req *models.WebhookRequest) error {
-
-	if req == nil {
-		logrus.Errorln("Missing webhook request")
-		return fmt.Errorf("missing webhook request")
-	}
-
-	if req.Context == nil {
-		logrus.Errorln("Missing request context in webhook")
-		return fmt.Errorf("missing request context in webhook")
-	}
-
-	function := req.Context.Param("function")
-
-	if len(function) == 0 {
-		logrus.Errorln("Missing webhook function")
-		return fmt.Errorf("missing webhook function")
-	}
-
-	if !strings.EqualFold(function, WebhookResourceIAP) {
-		logrus.WithField("function", function).Errorln("Unsupported webhook function")
-		return fmt.Errorf("unsupported webhook function: %s", function)
-	}
-
-	context := req.Context
-
-	/*
-		We implement a single webhook handler here to that is able to take in IAP JWTs
-		and convert them into the request needed for the CreateSession handler after the
-		callback
-	*/
-
-	sessionState := context.Query("state")
-
-	if len(sessionState) == 0 {
-		logrus.Errorln("Missing state parameter in webhook request")
-		return fmt.Errorf("missing state parameter in webhook request")
-	}
-
-	// Extract the JWT token from the header
-	jwtToken := context.GetHeader(IAPJWTHeader)
-
-	if len(jwtToken) == 0 {
-		logrus.WithField("header", IAPJWTHeader).Errorln("Missing IAP JWT token in request")
-		return fmt.Errorf("missing IAP JWT token in header: %s", IAPJWTHeader)
-	}
-
-	// Create our new URL redirect request with the JWT as the code
-	redirectUrl, err := url.Parse(fmt.Sprintf(
-		"%s/%s",
-		strings.TrimSuffix(req.Endpoint, "/"),
-		strings.TrimPrefix(fmt.Sprintf("/auth/callback/%s", url.PathEscape(p.GetIdentifier())), "/"),
-	))
-
-	if err != nil {
-		logrus.WithError(err).Errorln("Failed to parse redirect URL")
-		return fmt.Errorf("failed to parse redirect URL: %w", err)
-	}
-
-	// State is already captured in the query parameters
-	// Just need to add the JWT token. Taken from the header
-	query := redirectUrl.Query()
-	query.Add("code", jwtToken)
-	query.Add("state", sessionState)
-	redirectUrl.RawQuery = query.Encode()
-
-	context.Redirect(
-		http.StatusFound,
-		redirectUrl.String(),
-	)
-
-	return nil
-
+	return p.oauthProvider.AuthorizeSession(ctx, auth)
 }
 
 // CreateSession creates a session from an IAP JWT token
 func (p *gcpIAPProvider) CreateSession(ctx context.Context, auth *models.AuthorizeUser) (*models.Session, error) {
+
+	if auth == nil {
+		logrus.Errorln("Missing authorization request")
+		return nil, fmt.Errorf("missing authorization request")
+	}
+
+	if len(auth.State) > 0 && len(auth.Code) > 0 {
+		return p.CreateOauthSession(ctx, auth)
+	} else if len(auth.Code) > 0 {
+		return p.CreateIAPSession(ctx, auth)
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"state_length": len(auth.State),
+		"code_length":  len(auth.Code),
+	}).Errorln("Invalid authorization request for GCP IAP")
+
+	return nil, fmt.Errorf("invalid authorization request for GCP IAP")
+
+}
+
+func (p *gcpIAPProvider) CreateOauthSession(ctx context.Context, auth *models.AuthorizeUser) (*models.Session, error) {
+
+	logrus.WithFields(logrus.Fields{
+		"state_length": len(auth.State),
+		"code_length":  len(auth.Code),
+	}).Debugln("CreateOauthSession called")
+
+	return p.oauthProvider.CreateSession(ctx, auth)
+
+}
+
+func (p *gcpIAPProvider) CreateIAPSession(ctx context.Context, auth *models.AuthorizeUser) (*models.Session, error) {
+
 	logrus.WithFields(logrus.Fields{
 		"code_length": len(auth.Code),
 	}).Debugln("CreateSession called")
@@ -241,36 +167,6 @@ func (p *gcpIAPProvider) CreateSession(ctx context.Context, auth *models.Authori
 	// Convert claims to session
 	session := p.ConvertIAPClaimsToSession(ctx, claims, expiryTime)
 
-	// If OAuth is configured, exchange for a user ID token for programmatic access
-	if len(auth.State) > 0 && len(p.oauthClientId) > 0 {
-		logrus.Debugln("OAuth configured - generating user ID token for programmatic IAP access")
-
-		// For programmatic IAP access, generate an ID token with the OAuth client ID as audience
-		// This token can be used by the client to make authenticated requests to IAP
-		identityToken, err := p.GetIdentityToken(ctx, p.oauthClientId)
-		if err != nil {
-			logrus.WithError(err).Errorln("Failed to generate OAuth ID token")
-			return nil, fmt.Errorf("failed to generate OAuth ID token: %w", err)
-		}
-
-		// This token has the OAuth client ID as the audience
-		// The client can use this to authenticate to IAP-protected resources
-		session.AccessToken = identityToken.AccessToken
-		session.RefreshToken = identityToken.RefreshToken
-		session.Expiry = identityToken.Expiry
-
-		logrus.WithFields(logrus.Fields{
-			"user_email":     session.User.Email,
-			"token_expiry":   session.Expiry.Format(time.RFC3339),
-			"oauth_audience": p.oauthClientId,
-		}).Infoln("Created session with OAuth ID token for programmatic access")
-	} else if len(auth.State) > 0 {
-		// No OAuth configured - store the IAP JWT (server-side only)
-		logrus.Warnln("No OAuth client configured - using IAP JWT (server-side validation only)")
-		session.AccessToken = jwtToken
-		session.Expiry = expiryTime
-	}
-
 	logrus.WithFields(logrus.Fields{
 		"user_email":   session.User.Email,
 		"user_id":      session.User.ID,
@@ -291,70 +187,14 @@ func (p *gcpIAPProvider) CreateSession(ctx context.Context, auth *models.Authori
 	return session, nil
 }
 
-// GetIdentityToken generates an identity token for authenticating to IAP
-// https://docs.cloud.google.com/iap/docs/authentication-howto#iap_make_request-go
-func (p *gcpIAPProvider) GetIdentityToken(ctx context.Context, oauthAudience string) (*oauth2.Token, error) {
-
-	logrus.WithField("audience", oauthAudience).Debugln("Generating identity token")
-
-	if len(oauthAudience) == 0 {
-		logrus.Errorln("Token audience is not configured")
-		return nil, fmt.Errorf("token audience is not configured")
-	}
-
-	// Generate an identity token with the specified audience
-	// For Cloud Run: use the Cloud Run service URL
-	// For IAP: use the OAuth 2.0 client ID
-	// This uses Application Default Credentials
-	tokenSource, err := idtoken.NewTokenSource(
-		ctx,
-		// This needs to be the login server URL: https://docs.cloud.google.com/iap/docs/authentication-howto
-		oauthAudience,
-	)
-	if err != nil {
-		logrus.WithError(err).Errorln("Failed to create token source")
-		return nil, fmt.Errorf("failed to create token source: %w", err)
-	}
-
-	idToken, err := tokenSource.Token()
-	if err != nil {
-		logrus.WithError(err).Errorln("Failed to get identity token")
-		return nil, fmt.Errorf("failed to get identity token: %w", err)
-	}
-
-	payload, err := idtoken.Validate(ctx, idToken.AccessToken, oauthAudience)
-
-	if err != nil {
-		logrus.WithError(err).Errorln("Failed to validate generated identity token")
-		return nil, fmt.Errorf("failed to validate generated identity token: %w", err)
-	}
-
-	logrus.WithFields(logrus.Fields{
-		"issuer":  payload.Issuer,
-		"subject": payload.Subject,
-		"expires": payload.Expires,
-		"issued":  payload.IssuedAt,
-	}).Debugln("Generated identity token validated successfully")
-
-	return idToken, nil
-}
-
 // ValidateSession validates an existing IAP session
 func (p *gcpIAPProvider) ValidateSession(ctx context.Context, session *models.Session) error {
-	// Check if session has expired
-	if time.Now().After(session.Expiry) {
-		return fmt.Errorf("session has expired")
-	}
-
-	// TODO(hugh): VerifyIAPJWT can be called here if we have the JWT token stored
-	return nil
+	return p.oauthProvider.ValidateSession(ctx, session)
 }
 
 // RenewSession attempts to renew an IAP session
 func (p *gcpIAPProvider) RenewSession(ctx context.Context, session *models.Session) (*models.Session, error) {
-	// IAP sessions cannot be renewed programmatically
-	// The user must go through IAP again to get a new token
-	return nil, fmt.Errorf("GCP IAP sessions cannot be renewed - user must re-authenticate through IAP")
+	return p.oauthProvider.RenewSession(ctx, session)
 }
 
 // VerifyIAPJWT verifies an IAP JWT token and returns the claims and expiry time
