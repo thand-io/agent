@@ -1,6 +1,7 @@
 package models
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -117,14 +118,14 @@ func TestLocalSession_MarshalYAML(t *testing.T) {
 
 			// Check for expected content
 			for _, want := range tt.wantContain {
-				if !contains(yamlStr, want) {
+				if !strings.Contains(yamlStr, want) {
 					t.Errorf("MarshalYAML() output should contain %q, but doesn't.\nGot: %s", want, yamlStr)
 				}
 			}
 
 			// Check that unwanted content is omitted
 			for _, omit := range tt.wantOmit {
-				if contains(yamlStr, omit) {
+				if strings.Contains(yamlStr, omit) {
 					t.Errorf("MarshalYAML() output should NOT contain %q, but does.\nGot: %s", omit, yamlStr)
 				}
 			}
@@ -385,14 +386,14 @@ func TestLocalSession_NoNullValues(t *testing.T) {
 	t.Logf("Generated YAML:\n%s", yamlStr)
 
 	// Verify no null values in output
-	if contains(yamlStr, "null") {
+	if strings.Contains(yamlStr, "null") {
 		t.Errorf("YAML output should not contain 'null' values.\nGot: %s", yamlStr)
 	}
 
 	// Verify it contains expected fields
 	expectedFields := []string{"version", "expiry", "session", "endpoint", "uri", "authentication", "proxy_bearer", "token"}
 	for _, field := range expectedFields {
-		if !contains(yamlStr, field) {
+		if !strings.Contains(yamlStr, field) {
 			t.Errorf("YAML should contain %q field", field)
 		}
 	}
@@ -400,23 +401,10 @@ func TestLocalSession_NoNullValues(t *testing.T) {
 	// Verify it does NOT contain unwanted fields (note: proxy_bearer contains bearer, so skip that check)
 	unwantedFields := []string{"runtimeexpression", "uritemplate", "endpointconfig", "basic", "digest", "oauth2", "oidc", "authenticationpolicy"}
 	for _, field := range unwantedFields {
-		if contains(yamlStr, field) {
+		if strings.Contains(yamlStr, field) {
 			t.Errorf("YAML should NOT contain %q field, but does.\nGot: %s", field, yamlStr)
 		}
 	}
 }
 
-// Helper function to check if a string contains a substring (case-insensitive)
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
-		findSubstring(s, substr))
-}
 
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}

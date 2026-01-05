@@ -72,7 +72,7 @@ func (p *gcpIAPProvider) Initialize(identifier string, provider models.Provider)
 
 	p.audience = audience
 
-	// Also initalize a google oauth workflow
+	// Also initialize a google oauth workflow provider internally
 	oauthProvider, err := providers.Get(googleOauth2Provider.Oauth2GoogleProviderName)
 
 	if err != nil {

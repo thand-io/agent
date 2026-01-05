@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -671,13 +672,13 @@ func yamlMatches(actual, expected string) bool {
 	}
 
 	for _, line := range expectedLines {
-		if !contains(actual, line) {
+		if !strings.Contains(actual, line) {
 			return false
 		}
 	}
 
 	// Check that null doesn't appear
-	if contains(actual, "null") {
+	if strings.Contains(actual, "null") {
 		return false
 	}
 
@@ -704,21 +705,6 @@ func TestNormalizeHostname(t *testing.T) {
 			}
 		})
 	}
-}
-
-// Helper function to check if a string contains a substring
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
-		findSubstring(s, substr))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
 
 // Helper function to setup a temporary session directory for testing

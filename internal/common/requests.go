@@ -45,9 +45,6 @@ func MakeRequestFromBuilder(restBuilder *resty.Request, method string, finalUrl 
 
 	logrus.WithFields(logrus.Fields{
 		"url": finalUrl,
-		//"headers": restBuilder.Header,
-		//"auth":    restBuilder.AuthScheme,
-		//"token":   restBuilder.Token,
 		"method": method,
 	}).Infoln("Making HTTP request")
 

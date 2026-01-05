@@ -439,7 +439,7 @@ func (s *Server) getAuthCallbackPage(c *gin.Context, auth models.AuthWrapper) {
 
 			if len(session.Token) == 0 {
 				s.getErrorPage(c, http.StatusInternalServerError,
-					"Access token is required for IAP authentication")
+					"ID token is required for IAP authentication")
 				return
 			}
 

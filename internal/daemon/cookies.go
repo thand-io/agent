@@ -18,8 +18,7 @@ func (s *Server) setAuthCookie(c *gin.Context, authProvider string, localSession
 
 	// Copy the session and remove the endpoint data as we don't want to store that in the cookie
 	// This reduces the size of the cookie significantly
-	copiedLocalSession := localSession.Copy()
-	copiedLocalSession.Endpoint = nil
+	copiedLocalSession := localSession.CopyWithoutEndpoint()
 
 	// Strip the local session to clear endpoint data for cookie
 	getEncodedCookie := copiedLocalSession.GetEncodedLocalSession()
@@ -31,7 +30,9 @@ func (s *Server) setAuthCookie(c *gin.Context, authProvider string, localSession
 		return fmt.Errorf("failed to encode local session for cookie")
 	}
 
-	if len(getEncodedCookie) > 4096 {
+	// Check cookie size limit (generally 4096 bytes)
+	// Leaving some buffer for cookie name and other attributes
+	if len(getEncodedCookie) > 4000 {
 		logrus.WithFields(logrus.Fields{
 			"provider": authProvider,
 		}).Errorln("Encoded session size exceeds cookie limit")

@@ -103,19 +103,12 @@ func (s *LocalSession) IsExpired() bool {
 }
 
 // Copy creates a deep copy of the LocalSession
-func (s *LocalSession) Copy() *LocalSession {
+func (s *LocalSession) CopyWithoutEndpoint() *LocalSession {
 	copied := &LocalSession{
 		Version: s.Version,
 		Expiry:  s.Expiry,
 		Session: s.Session,
 	}
-
-	// Deep copy the endpoint if it exists
-	if s.Endpoint != nil {
-		endpointCopy := *s.Endpoint
-		copied.Endpoint = &endpointCopy
-	}
-
 	return copied
 }
 

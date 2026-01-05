@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+
 type WebhookRequest struct {
 	Context  *gin.Context
 	Endpoint string
