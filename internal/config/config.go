@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mitchellh/mapstructure"
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -38,7 +38,13 @@ func DefaultConfig() *Config {
 	setDefaults(v)
 
 	var config Config
-	if err := v.Unmarshal(&config); err != nil {
+	if err := v.Unmarshal(&config, viper.DecodeHook(
+		mapstructure.ComposeDecodeHookFunc(
+			mapstructure.StringToTimeDurationHookFunc(),
+			mapstructure.StringToSliceHookFunc(","),
+			stringToEndpointHookFunc(),
+		),
+	)); err != nil {
 		log.Fatalf("error unmarshaling default config: %v", err)
 	}
 
