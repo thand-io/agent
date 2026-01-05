@@ -430,7 +430,6 @@ func (s *Server) getAuthCallbackPage(c *gin.Context, auth models.AuthWrapper) {
 		if upstreamConfig.Auth.IAP {
 
 			// Make sure that only specified provider types are listed here.
-			// So that we don't accidentally leak access tokens.
 			if provider.Provider != gpcIap.GcpIAPProviderName {
 				s.getErrorPage(c, http.StatusInternalServerError,
 					"Upstream IAP authentication is only supported with GCP IAP provider")

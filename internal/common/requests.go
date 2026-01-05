@@ -43,11 +43,6 @@ func InvokeHttpRequest(r *model.HTTPArguments) (*resty.Response, error) {
 
 func MakeRequestFromBuilder(restBuilder *resty.Request, method string, finalUrl string) (*resty.Response, error) {
 
-	logrus.WithFields(logrus.Fields{
-		"url": finalUrl,
-		"method": method,
-	}).Infoln("Making HTTP request")
-
 	switch strings.ToUpper(method) {
 	case http.MethodGet:
 		return restBuilder.Get(finalUrl)

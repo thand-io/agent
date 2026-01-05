@@ -102,7 +102,7 @@ func (s *LocalSession) IsExpired() bool {
 	return time.Now().After(s.Expiry)
 }
 
-// Copy creates a deep copy of the LocalSession
+// CopyWithoutEndpoint creates a shallow copy of the LocalSession without the Endpoint field
 func (s *LocalSession) CopyWithoutEndpoint() *LocalSession {
 	copied := &LocalSession{
 		Version: s.Version,

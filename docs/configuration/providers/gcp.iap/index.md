@@ -83,8 +83,8 @@ providers:
       audience: "/projects/PROJECT_NUMBER/locations/REGION/services/SERVICE_NAME"
       
       # REQUIRED for programmatic access: OAuth 2.0 client ID
-      oauth_client_id: "XXXXX.apps.googleusercontent.com"
-      oauth_client_secret: "YOUR_CLIENT_SECRET"
+      client_id: "XXXXX.apps.googleusercontent.com"
+      client_secret: "YOUR_CLIENT_SECRET"
 ```
 
 After configuring the provider, restart your application to apply the changes.
