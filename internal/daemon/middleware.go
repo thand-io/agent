@@ -316,9 +316,9 @@ func (s *Server) processProviderCookies(
 			continue
 		}
 
-		providerSessionData, ok := cookie.Get(ThandCookieAttributeSessionName).(string)
+		providerSessionData := cookie.Get(ThandCookieAttributeSessionName)
 
-		if !ok {
+		if providerSessionData == nil {
 			continue
 		}
 
@@ -502,9 +502,19 @@ func (s *Server) handleAgentMode(c *gin.Context) {
 	c.Next()
 }
 
-func getDecodedSession(encryptor models.EncryptionImpl, session string) (*models.ExportableSession, error) {
+func getDecodedSession(encryptor models.EncryptionImpl, sessionData interface{}) (*models.ExportableSession, error) {
 
-	localSession, err := models.DecodedLocalSession(session)
+	var localSession *models.LocalSession
+	var err error
+
+	switch v := sessionData.(type) {
+	case string:
+		localSession, err = models.DecodedLocalSession(v)
+	case []byte:
+		localSession, err = models.DecodedLocalSessionBytes(v)
+	default:
+		return nil, fmt.Errorf("invalid session data type: %T", sessionData)
+	}
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode local session: %w", err)

@@ -58,7 +58,6 @@ require (
 	github.com/itchyny/gojq v0.12.17
 	github.com/kardianos/service v1.2.4
 	github.com/microsoftgraph/msgraph-sdk-go v1.91.0
-	github.com/mitchellh/mapstructure v1.5.0
 	github.com/okta/okta-sdk-golang/v2 v2.20.0
 	github.com/senseyeio/duration v0.0.0-20180430131211-7c2a214ada46
 	github.com/serverlessworkflow/sdk-go/v3 v3.2.0
@@ -251,6 +250,7 @@ require (
 	github.com/microsoftgraph/msgraph-sdk-go-core v1.4.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/hashstructure/v2 v2.0.2 // indirect
+	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/sys/atomicwriter v0.1.0 // indirect
 	github.com/moby/term v0.5.2 // indirect

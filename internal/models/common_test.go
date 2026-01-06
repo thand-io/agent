@@ -100,7 +100,7 @@ func TestEncodingWrapper_Encode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			encoded := tt.data.Encode()
+			encoded := tt.data.EncodeBase64()
 
 			// Check that encoding returns a non-empty string
 			if len(encoded) == 0 {
@@ -167,7 +167,7 @@ func TestEncodingWrapper_Decode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// First encode the data
-			encoded := tt.data.Encode()
+			encoded := tt.data.EncodeBase64()
 
 			// Then decode it
 			var wrapper EncodingWrapper
@@ -265,7 +265,7 @@ func TestEncodingWrapper_EncodeDecodeRoundTrip(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Encode
-			encoded := tt.data.Encode()
+			encoded := tt.data.EncodeBase64()
 
 			// Decode
 			var wrapper EncodingWrapper
@@ -343,7 +343,7 @@ func BenchmarkEncodingWrapper_Encode(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = data.Encode()
+		_ = data.EncodeBase64()
 	}
 }
 
@@ -362,7 +362,7 @@ func BenchmarkEncodingWrapper_Decode(b *testing.B) {
 			},
 		},
 	}
-	encoded := data.Encode()
+	encoded := data.EncodeBase64()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
