@@ -134,13 +134,14 @@
                     <li><a href="/providers">Providers</a></li>
                     <li><a href="/executions">Executions</a></li>
                     <li class="nav-divider"></li>
-                    <li><a href="/elevate" class="nav-button">Request Elevation</a></li>
+                    <li><a href="/elevate" class="nav-button primary">Request Elevation</a></li>
                 </ul>
             </div>
             <div class="nav-right">
                 {{if .User}}
                     <div class="user-dropdown" x-data="userDropdown" @click.away="open = false">
                         <button class="nav-button user-button" 
+                                :class="statusClass"
                                 @click.prevent="handleButtonClick()">
                             <span class="status-indicator" 
                                   :class="statusClass"
@@ -151,6 +152,7 @@
                         </button>
                         <div class="dropdown-menu" 
                              :class="{ 'show': open }">
+                            <a href="/auth" class="dropdown-item">Authenticate</a>
                             <a href="/user" class="dropdown-item">Profile</a>
                             <button class="dropdown-item" @click="logout()">Logout all</button>
                             <div class="dropdown-divider"></div>

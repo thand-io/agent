@@ -613,7 +613,6 @@ func (c *Config) syncWithEndpoint(loginUrl string, authentication *model.Referen
 	if preflightRes.StatusCode() != 200 {
 		logrus.WithFields(logrus.Fields{
 			"status": preflightRes.Status(),
-			"body":   string(preflightRes.Body()),
 		}).Errorln("Preflight request failed")
 		return nil, fmt.Errorf("preflight %s failed with status: %s", loginUrl+"/preflight", preflightRes.Status())
 	}
@@ -650,7 +649,6 @@ func (c *Config) syncWithEndpoint(loginUrl string, authentication *model.Referen
 	if registerRes.StatusCode() != 200 {
 		logrus.WithFields(logrus.Fields{
 			"status": registerRes.Status(),
-			"body":   string(registerRes.Body()),
 		}).Errorln("Registration request failed")
 		return nil, fmt.Errorf("registration request %s failed with status: %s", loginUrl+"/register", registerRes.Status())
 	}

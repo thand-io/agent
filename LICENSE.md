@@ -1,6 +1,6 @@
 Business Source License 1.1
 
-Copyright (c) 2025 Thand, Inc.
+Copyright (c) 2026 Thand, Inc.
 
 The use of this software is governed by the Business Source License included in the LICENSE file and at https://mariadb.com/bsl11.
 
@@ -29,11 +29,6 @@ Hosting or using the Licensed Work(s) for internal purposes within an organizati
 ## Change License
 
 On the Change Date, the Licensed Work will be made available under the Apache License, Version 2.0.
-
-## Definitions
-
-- **Production Use**: Any use of the Licensed Work to provide services to third parties, or for internal business operations beyond evaluation, testing, or development.
-- **Annual Recurring Revenue (ARR)**: The total recurring revenue normalized to a one-year period, including all subscription fees, recurring service fees, and other predictable revenue streams.
 
 ## Notices
 

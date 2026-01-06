@@ -516,7 +516,6 @@ func (t *thandTask) scheduleRevocation(
 					if response.StatusCode() != http.StatusOK {
 						log.WithFields(models.Fields{
 							"status_code": response.StatusCode(),
-							"body":        response.Body(),
 						}).Error("Revoke endpoint returned non-200 status")
 						return
 					}

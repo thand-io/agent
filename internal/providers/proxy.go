@@ -174,7 +174,6 @@ func (p *remoteProviderProxy) proxyRequest(
 	if resp.IsError() {
 		logrus.WithFields(logrus.Fields{
 			"provider": p.GetName(),
-			"body":     string(resp.Body()),
 		}).Error("Failed to authorize session")
 		return fmt.Errorf("failed to authorize session: %s", resp.Error())
 	}
