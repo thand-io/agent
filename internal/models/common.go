@@ -35,7 +35,7 @@ func (e EncodingWrapper) EncodeAndEncrypt(encryptor EncryptionImpl) string {
 }
 
 func (e EncodingWrapper) EncodeBase64() string {
-	return e.EncodeBase64()
+	return e.encodeBase64()
 }
 
 func (e EncodingWrapper) EncodeBytes() []byte {

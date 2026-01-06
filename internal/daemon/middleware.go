@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"slices"
@@ -470,13 +471,19 @@ func (s *Server) handleAgentMode(c *gin.Context) {
 		}
 
 		// Check if the cookie already has the same session data to avoid redirect loops
-		existingSession, ok := cookie.Get(ThandCookieAttributeSessionName).(string)
-		newSession := remoteSession.GetEncodedLocalSession()
+		existingSession := cookie.Get(ThandCookieAttributeSessionName)
+		newSession := remoteSession.GetEncodedLocalSessionBytes()
 
-		if ok && existingSession == newSession {
-			// Session already set, no need to redirect
-			continue
+		if existingBytes, ok := existingSession.([]byte); ok {
+			if bytes.Equal(existingBytes, newSession) {
+				// Session already set, no need to redirect
+				continue
+			}
 		}
+
+		// Also check valid string session for backward compatibility (though we interpret equality strictly now)
+		// If existingSession is a string, it means it's the old format. We want to update it to bytes.
+		// So we don't "continue" here.
 
 		cookie.Set(ThandCookieAttributeSessionName, newSession)
 
