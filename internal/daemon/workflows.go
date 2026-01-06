@@ -262,7 +262,5 @@ func (s *Server) cancelRunningWorkflow(c *gin.Context) {
 			"status":  "ok",
 			"message": "Workflow termination signal sent",
 		})
-
 	}
-
 }

@@ -2,7 +2,7 @@ package functions
 
 import (
 	"github.com/serverlessworkflow/sdk-go/v3/model"
-	"github.com/thand-io/agent/internal/models"
+	"github.com/thand-io/agent/internal/workflows/models"
 )
 
 type FunctionCollection interface {

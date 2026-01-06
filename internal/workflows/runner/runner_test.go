@@ -8,21 +8,21 @@ import (
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/serverlessworkflow/sdk-go/v3/parser"
 	"github.com/stretchr/testify/assert"
-	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
+	"github.com/thand-io/agent/internal/workflows/config"
 	"github.com/thand-io/agent/internal/workflows/functions"
 	"github.com/thand-io/agent/internal/workflows/tasks"
 )
 
 func NewDefaultRunner(workflow *model.Workflow) (*ResumableWorkflowRunner, error) {
 
-	config := config.DefaultConfig()
-
 	// create functions registry
 	functions := functions.NewFunctionRegistry(config)
 
 	// create tasks registry
 	taskRegistry := tasks.NewTaskRegistry(config)
+
+	config := config.NewConfigService(functions, taskRegistry)
 
 	wkflw, err := models.NewWorkflowContext(&models.Workflow{
 		Name:        workflow.Document.Name,
@@ -35,7 +35,7 @@ func NewDefaultRunner(workflow *model.Workflow) (*ResumableWorkflowRunner, error
 		return nil, err
 	}
 
-	return NewResumableRunner(config, functions, taskRegistry, wkflw), nil
+	return NewResumableRunner(config, wkflw), nil
 }
 
 // runWorkflowTest is a reusable test function for workflows

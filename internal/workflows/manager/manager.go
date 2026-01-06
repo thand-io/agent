@@ -11,14 +11,9 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	models "github.com/thand-io/agent/internal/models"
+	"github.com/thand-io/agent/internal/workflows/config"
 	"github.com/thand-io/agent/internal/workflows/functions"
-	providerAws "github.com/thand-io/agent/internal/workflows/functions/providers/aws"
-	providerGcp "github.com/thand-io/agent/internal/workflows/functions/providers/gcp"
-	providerSlack "github.com/thand-io/agent/internal/workflows/functions/providers/slack"
-	providerThand "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 	"github.com/thand-io/agent/internal/workflows/runner"
-	"github.com/thand-io/agent/internal/workflows/tasks"
-	taskThand "github.com/thand-io/agent/internal/workflows/tasks/providers/thand"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
@@ -26,56 +21,30 @@ import (
 
 // WorkflowManager manages workflow lifecycle and execution using the official SDK
 type WorkflowManager struct {
-	config    models.ConfigImpl
-	functions *functions.FunctionRegistry
-	tasks     *tasks.TaskRegistry
+	config config.Config
 }
 
 // NewWorkflowManager creates a new workflow manager
-func NewWorkflowManager(cfg models.ConfigImpl) *WorkflowManager {
-
-	wm := WorkflowManager{
-		config:    cfg,
-		functions: functions.NewFunctionRegistry(cfg),
-		tasks:     tasks.NewTaskRegistry(cfg),
+func NewWorkflowManager(cfg config.Config) *WorkflowManager {
+	return &WorkflowManager{
+		config: cfg,
 	}
+}
 
-	// Register all custom tasks
-	for _, task := range []tasks.TaskCollection{
-		taskThand.NewThandCollection(cfg),
-	} {
-		task.RegisterTasks(wm.tasks)
-	}
+func (m *WorkflowManager) HasTemporal() bool {
+	return m.config.HasTemporal()
+}
 
-	// Register all built-in function providers
-	for _, provider := range []functions.FunctionCollection{
-		providerThand.NewThandCollection(cfg),
-		providerSlack.NewSlackCollection(cfg),
-		providerGcp.NewGCPCollection(cfg),
-		providerAws.NewAWSCollection(cfg),
-	} {
-		provider.RegisterFunctions(wm.functions)
-	}
+func (m *WorkflowManager) GetTemporal() models.TemporalImpl {
+	return m.config.GetTemporal()
+}
 
-	// If we have temporal configured, then we can register
-	// all the activities and workflows
+func (m *WorkflowManager) RegisterFunction(handler functions.Function) {
+	m.config.GetFunctionRegistry().RegisterFunction(handler)
+}
 
-	if cfg.GetServices().HasTemporal() {
-
-		// Register our activities
-		err := wm.registerActivities()
-		if err != nil {
-			logrus.WithError(err).Error("Failed to register activities")
-		}
-
-		// Register our workflows
-		err = wm.registerWorkflows()
-		if err != nil {
-			logrus.WithError(err).Error("Failed to register workflows")
-		}
-	}
-
-	return &wm
+func (m *WorkflowManager) GetFunction(name string) (functions.Function, bool) {
+	return m.config.GetFunctionRegistry().GetFunction(name)
 }
 
 // CreateWorkflow creates a workflow from a model.Workflow instance
@@ -262,12 +231,9 @@ func (m *WorkflowManager) ResumeWorkflow(
 
 	ctx := result.GetContext()
 
-	// Check if workfow has already been registered on temporal
-	serviceClient := m.config.GetServices()
-
 	// If we have temporal configured with a client, then we can resume the workflow
 	// from the workflow ID or create one if the workflow ID does not exist
-	if serviceClient.HasTemporal() && serviceClient.GetTemporal().HasClient() {
+	if m.HasTemporal() && m.GetTemporal().HasClient() {
 
 		// Check the workflow task
 		err := m.Hydrate(result)
@@ -276,7 +242,7 @@ func (m *WorkflowManager) ResumeWorkflow(
 			return nil, fmt.Errorf("failed to hydrate workflow task: %w for resumption", err)
 		}
 
-		temporalService := serviceClient.GetTemporal()
+		temporalService := m.GetTemporal()
 		temporalClient := temporalService.GetClient()
 
 		_, err = temporalClient.DescribeWorkflow(ctx, result.WorkflowID, models.TemporalEmptyRunId)
@@ -354,18 +320,18 @@ func (m *WorkflowManager) ResumeWorkflowTask(
 // createCustomRunner creates a workflow runner that can handle custom functions
 func (m *WorkflowManager) createCustomRunner(workflow *models.WorkflowTask) (*runner.ResumableWorkflowRunner, error) {
 	// Create our custom resumable runner instead of the default runner
-	return runner.NewResumableRunner(m.config, m.functions, m.tasks, workflow), nil
+	return runner.NewResumableRunner(m.config, workflow), nil
 }
 
 // RegisterCustomFunction allows external code to register additional functions
 func (m *WorkflowManager) RegisterCustomFunction(handler functions.Function) {
-	m.functions.RegisterFunction(handler)
+	m.RegisterFunction(handler)
 	logrus.WithField("function", handler.GetName()).Info("Registered external custom function")
 }
 
 // GetRegisteredFunctions returns all currently registered functions
 func (m *WorkflowManager) GetRegisteredFunctions() []string {
-	return m.functions.GetRegisteredFunctions()
+	return m.GetRegisteredFunctions()
 }
 
 func (m *WorkflowManager) createTemporalWorkflow(workflowTask *models.WorkflowTask) error {
@@ -375,9 +341,7 @@ func (m *WorkflowManager) createTemporalWorkflow(workflowTask *models.WorkflowTa
 		"workflow_id": workflowTask.WorkflowID,
 	}).Info("Starting new workflow execution")
 
-	serviceClient := m.config.GetServices()
-
-	temporalService := serviceClient.GetTemporal()
+	temporalService := m.GetTemporal()
 	temporalClient := temporalService.GetClient()
 
 	elevationRequest, err := workflowTask.GetContextAsElevationRequest()

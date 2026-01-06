@@ -15,11 +15,11 @@ import (
 
 func (m *WorkflowManager) registerActivities() error {
 
-	if !m.config.GetServices().HasTemporal() {
+	if !m.HasTemporal() {
 		return fmt.Errorf("temporal service not configured")
 	}
 
-	temporalService := m.config.GetServices().GetTemporal()
+	temporalService := m.config.GetTemporal()
 
 	if temporalService == nil {
 		return fmt.Errorf("temporal service not available")
@@ -31,7 +31,7 @@ func (m *WorkflowManager) registerActivities() error {
 
 	worker := temporalService.GetWorker()
 
-	for _, functionName := range m.functions.GetRegisteredFunctions() {
+	for _, functionName := range m.GetRegisteredFunctions() {
 
 		logrus.WithField("function", functionName).Infof("Registering activity for function: %s", functionName)
 
@@ -60,7 +60,7 @@ func (m *WorkflowManager) registerActivities() error {
 				Input:      input,
 			})
 
-			caller, foundCaller := m.functions.GetFunction(fn)
+			caller, foundCaller := m.GetFunction(fn)
 
 			if !foundCaller {
 				return nil, fmt.Errorf("function not found: %s", fn)

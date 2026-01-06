@@ -16,11 +16,11 @@ import (
 )
 
 func (m *WorkflowManager) registerWorkflows() error {
-	if !m.config.GetServices().HasTemporal() {
+	if !m.HasTemporal() {
 		return fmt.Errorf("temporal service not configured")
 	}
 
-	temporalService := m.config.GetServices().GetTemporal()
+	temporalService := m.GetTemporal()
 	if temporalService == nil {
 		return fmt.Errorf("temporal service not available")
 	}
@@ -186,7 +186,7 @@ func (m *WorkflowManager) runCleanup(
 		}
 
 		// Run the revocation task
-		revokeTask, foundTask := m.tasks.GetTaskHandler(revocationTask)
+		revokeTask, foundTask := m.config.GetTaskRegistry().GetTaskHandler(revocationTask)
 
 		if !foundTask {
 			log.Error("Failed to get revoke task handler for cleanup")

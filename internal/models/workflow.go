@@ -8,6 +8,7 @@ import (
 	"github.com/hashicorp/go-version"
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
+	workflowModels "github.com/thand-io/agent/internal/workflows/models"
 )
 
 type Workflow struct {
@@ -87,11 +88,11 @@ type WorkflowResponse struct {
 }
 
 type WorkflowRequest struct {
-	Task *WorkflowTask `json:"task"`
-	Url  string        `json:"url"`
+	Task *workflowModels.WorkflowTask `json:"task"`
+	Url  string                       `json:"url"`
 }
 
-func (r *WorkflowRequest) GetTask() *WorkflowTask {
+func (r *WorkflowRequest) GetTask() *workflowModels.WorkflowTask {
 	return r.Task
 }
 
@@ -130,7 +131,7 @@ type WorkflowExecutionInfo struct {
 
 // TaskHandler defines the signature for task execution functions
 type TaskHandler func(
-	workflowTask *WorkflowTask,
+	workflowTask *workflowModels.WorkflowTask,
 	task *model.TaskItem,
 	input any,
 ) (any, error)

@@ -48,7 +48,7 @@ var staticFiles embed.FS
 
 func NewServer(cfg *config.Config) *Server {
 
-	workflows := manager.NewWorkflowManager(cfg)
+	workflows := createWorkflowService(cfg)
 
 	// Create template functions
 	funcMap := template.FuncMap{

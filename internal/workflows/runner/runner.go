@@ -71,11 +71,9 @@ func (m *ResumableWorkflowRunner) GetWorkflow() *model.Workflow {
 }
 
 // NewResumableRunner creates a new resumable workflow runner
-func NewResumableRunner(config models.ConfigImpl, functions *functions.FunctionRegistry, tasks *tasks.TaskRegistry, workflow *models.WorkflowTask) *ResumableWorkflowRunner {
+func NewResumableRunner(config Config, workflow *models.WorkflowTask) *ResumableWorkflowRunner {
 	return &ResumableWorkflowRunner{
 		config:       config,
-		functions:    functions,
-		tasks:        tasks,
 		workflowTask: workflow,
 	}
 }
