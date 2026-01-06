@@ -31,7 +31,6 @@ import (
 	"time"
 
 	"github.com/gin-contrib/sessions"
-	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	swaggerFiles "github.com/swaggo/files"
@@ -698,21 +697,4 @@ func (s *Server) getFavicon(c *gin.Context) {
 
 func (s *Server) getStyle(c *gin.Context) {
 	c.FileFromFS("static/styles.css", http.FS(staticFiles))
-}
-
-// In your server setup
-func (s *Server) getSessionStore(secret string) sessions.Store {
-
-	domain := s.Config.GetLocalHostname()
-
-	store := cookie.NewStore([]byte(secret))
-	store.Options(sessions.Options{
-		Path:     "/",
-		Domain:   domain,
-		MaxAge:   86400 * 7, // 7 days
-		HttpOnly: true,
-		Secure:   true,                 // Set to true in production with HTTPS
-		SameSite: http.SameSiteLaxMode, // Needed for OAuth2 redirects
-	})
-	return store
 }

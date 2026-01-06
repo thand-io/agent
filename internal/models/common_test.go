@@ -1,6 +1,7 @@
 package models
 
 import (
+	"context"
 	"testing"
 )
 
@@ -19,11 +20,11 @@ func (r localEncrypt) Shutdown() error {
 	return nil
 }
 
-func (r localEncrypt) Decrypt(data []byte) ([]byte, error) {
+func (r localEncrypt) Decrypt(ctx context.Context, data []byte) ([]byte, error) {
 	return data, nil
 }
 
-func (r localEncrypt) Encrypt(data []byte) ([]byte, error) {
+func (r localEncrypt) Encrypt(ctx context.Context, data []byte) ([]byte, error) {
 	return data, nil
 }
 
@@ -100,7 +101,7 @@ func TestEncodingWrapper_Encode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			encoded := tt.data.Encode()
+			encoded := tt.data.EncodeBase64()
 
 			// Check that encoding returns a non-empty string
 			if len(encoded) == 0 {
@@ -167,7 +168,7 @@ func TestEncodingWrapper_Decode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// First encode the data
-			encoded := tt.data.Encode()
+			encoded := tt.data.EncodeBase64()
 
 			// Then decode it
 			var wrapper EncodingWrapper
@@ -265,7 +266,7 @@ func TestEncodingWrapper_EncodeDecodeRoundTrip(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Encode
-			encoded := tt.data.Encode()
+			encoded := tt.data.EncodeBase64()
 
 			// Decode
 			var wrapper EncodingWrapper
@@ -343,7 +344,7 @@ func BenchmarkEncodingWrapper_Encode(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = data.Encode()
+		_ = data.EncodeBase64()
 	}
 }
 
@@ -362,11 +363,150 @@ func BenchmarkEncodingWrapper_Decode(b *testing.B) {
 			},
 		},
 	}
-	encoded := data.Encode()
+	encoded := data.EncodeBase64()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		var wrapper EncodingWrapper
 		_, _ = wrapper.Decode(encoded)
+	}
+}
+
+func TestEncodingWrapper_EncodeBytes(t *testing.T) {
+
+	tests := []struct {
+		name string
+		data EncodingWrapper
+	}{
+		{
+			name: "encode workflow task",
+			data: EncodingWrapper{
+				Type: ENCODED_WORKFLOW_TASK,
+				Data: map[string]any{
+					"id":   "task-123",
+					"name": "test task",
+				},
+			},
+		},
+		{
+			name: "encode session data",
+			data: EncodingWrapper{
+				Type: ENCODED_SESSION,
+				Data: map[string]any{
+					"session_id": "sess-456",
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			encoded := tt.data.EncodeBytes()
+
+			// Check that encoding returns non-empty bytes
+			if len(encoded) == 0 {
+				t.Error("EncodeBytes() returned empty byte slice")
+			}
+		})
+	}
+}
+
+func TestEncodingWrapper_DecodeBytes(t *testing.T) {
+	tests := []struct {
+		name    string
+		data    EncodingWrapper
+		wantErr bool
+	}{
+		{
+			name: "decode workflow task",
+			data: EncodingWrapper{
+				Type: ENCODED_WORKFLOW_TASK,
+				Data: map[string]any{
+					"id":   "task-123",
+					"name": "test task",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "decode empty data",
+			data: EncodingWrapper{
+				Type: "empty",
+				Data: nil,
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// First encode the data
+			encoded := tt.data.EncodeBytes()
+
+			// Then decode it
+			var wrapper EncodingWrapper
+			decoded, err := wrapper.DecodeBytes(encoded)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("DecodeBytes() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if !tt.wantErr {
+				if decoded == nil {
+					t.Error("DecodeBytes() returned nil")
+					return
+				}
+
+				if decoded.Type != tt.data.Type {
+					t.Errorf("DecodeBytes() Type = %v, want %v", decoded.Type, tt.data.Type)
+				}
+			}
+		})
+	}
+}
+
+func TestEncodingWrapper_EncodeAndEncrypt(t *testing.T) {
+	data := EncodingWrapper{
+		Type: ENCODED_WORKFLOW_TASK,
+		Data: map[string]any{
+			"id":   "task-encrypt",
+			"name": "encrypted task",
+		},
+	}
+
+	encoded := data.EncodeAndEncrypt(encryptor)
+
+	if len(encoded) == 0 {
+		t.Error("EncodeAndEncrypt() returned empty string")
+	}
+}
+
+func TestEncodingWrapper_DecodeAndDecrypt(t *testing.T) {
+	data := EncodingWrapper{
+		Type: ENCODED_WORKFLOW_TASK,
+		Data: map[string]any{
+			"id":   "task-encrypt-decode",
+			"name": "encrypted task for decode",
+		},
+	}
+
+	encoded := data.EncodeAndEncrypt(encryptor)
+
+	var wrapper EncodingWrapper
+	decoded, err := wrapper.DecodeAndDecrypt(encoded, encryptor)
+
+	if err != nil {
+		t.Errorf("DecodeAndDecrypt() error = %v", err)
+		return
+	}
+
+	if decoded == nil {
+		t.Error("DecodeAndDecrypt() returned nil")
+		return
+	}
+
+	if decoded.Type != data.Type {
+		t.Errorf("DecodeAndDecrypt() Type = %v, want %v", decoded.Type, data.Type)
 	}
 }

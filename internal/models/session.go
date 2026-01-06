@@ -116,11 +116,33 @@ func (s *LocalSession) GetEncodedLocalSession() string {
 	return EncodingWrapper{
 		Type: ENCODED_SESSION_LOCAL,
 		Data: s,
-	}.Encode()
+	}.EncodeBase64()
+}
+
+func (s *LocalSession) GetEncodedLocalSessionBytes() []byte {
+	return EncodingWrapper{
+		Type: ENCODED_SESSION_LOCAL,
+		Data: s,
+	}.EncodeBytes()
 }
 
 func DecodedLocalSession(input string) (*LocalSession, error) {
 	wrapper, err := EncodingWrapper{}.Decode(input)
+	if err != nil {
+		return nil, err
+	}
+
+	if wrapper.Type != ENCODED_SESSION_LOCAL {
+		return nil, fmt.Errorf("invalid session type: %s", wrapper.Type)
+	}
+
+	var session *LocalSession
+	common.ConvertMapToInterface(wrapper.Data.(map[string]any), &session)
+	return session, nil
+}
+
+func DecodedLocalSessionBytes(input []byte) (*LocalSession, error) {
+	wrapper, err := EncodingWrapper{}.DecodeBytes(input)
 	if err != nil {
 		return nil, err
 	}

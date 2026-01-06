@@ -31,14 +31,24 @@ type EncodingWrapper struct {
 }
 
 func (e EncodingWrapper) EncodeAndEncrypt(encryptor EncryptionImpl) string {
-	return e.encode(encryptor)
+	return e.encodeBase64(encryptor)
 }
 
-func (e EncodingWrapper) Encode() string {
-	return e.encode()
+func (e EncodingWrapper) EncodeBase64() string {
+	return e.encodeBase64()
 }
 
-func (e EncodingWrapper) encode(modifiers ...EncryptionImpl) string {
+func (e EncodingWrapper) EncodeBytes() []byte {
+	return e.encodeBytes()
+}
+
+func (e EncodingWrapper) encodeBase64(modifiers ...EncryptionImpl) string {
+	finalData := e.encodeBytes(modifiers...)
+	// base64 encode the data
+	return base64.StdEncoding.EncodeToString(finalData)
+}
+
+func (e EncodingWrapper) encodeBytes(modifiers ...EncryptionImpl) []byte {
 
 	// encode workflow to JSON
 	data, err := json.Marshal(e)
@@ -80,10 +90,7 @@ func (e EncodingWrapper) encode(modifiers ...EncryptionImpl) string {
 
 	}
 
-	// base64 encode the data
-	encoded := base64.StdEncoding.EncodeToString(finalData)
-
-	return encoded
+	return finalData
 }
 
 func (e EncodingWrapper) DecodeAndDecrypt(input string, decryptor EncryptionImpl) (*EncodingWrapper, error) {
@@ -94,15 +101,21 @@ func (e EncodingWrapper) Decode(input string) (*EncodingWrapper, error) {
 	return e.decode(input)
 }
 
-func (e EncodingWrapper) decode(input string, modifiers ...EncryptionImpl) (*EncodingWrapper, error) {
+func (e EncodingWrapper) DecodeBytes(input []byte) (*EncodingWrapper, error) {
+	return e.decodeBytes(input)
+}
 
+func (e EncodingWrapper) decode(input string, modifiers ...EncryptionImpl) (*EncodingWrapper, error) {
 	decoded, err := base64.StdEncoding.DecodeString(input)
 
 	if err != nil {
 		return nil, err
 	}
+	return e.decodeBytes(decoded, modifiers...)
+}
 
-	decodedData := decoded
+func (e EncodingWrapper) decodeBytes(input []byte, modifiers ...EncryptionImpl) (*EncodingWrapper, error) {
+	decodedData := input
 	ctx := context.Background()
 
 	// Filter out empty modifiers
