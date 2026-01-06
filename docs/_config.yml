@@ -54,7 +54,7 @@ callouts:
     color: red
 
 # Footer content appears at the bottom of every page's main content
-footer_content: "Copyright &copy; 2025 thand-io. Distributed under the <a href=\"https://github.com/thand-io/agent/tree/main/LICENSE.md\">BSL 1.1 License</a>."
+footer_content: "Copyright &copy; 2026 thand-io. Distributed under the <a href=\"https://github.com/thand-io/agent/tree/main/LICENSE.md\">BSL 1.1 License</a>."
 
 # Footer last modified timestamp
 last_edit_timestamp: true # show or hide edit time - page must have `last_modified_date` defined in the frontmatter
