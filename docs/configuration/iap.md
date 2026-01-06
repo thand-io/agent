@@ -150,10 +150,6 @@ server:
     path: "/health"  # This endpoint is exempt from auth requirements
 ```
 
-### External Identities
-
-If you're using IAP with external identity providers (via Identity Platform), the JWT will include additional claims in the `gcip` field with provider-specific information.
-
 ## Troubleshooting
 
 ### "IAP JWT found but no GCP IAP provider configured"

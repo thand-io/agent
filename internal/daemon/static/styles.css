@@ -91,6 +91,7 @@ nav {
 
 .logo a:link, .logo a:visited {
     text-decoration: none;
+    color: hsl(var(--foreground));
 }
 
 .nav-links-left {
@@ -125,12 +126,23 @@ nav {
     text-decoration: none;
     font-size: 0.875rem;
     line-height: 1.25rem;
-    transition: color 0.2s;
+    transition: all 0.2s;
 }
 
 .nav-button:hover {
     opacity: 0.9;
     color: hsl(var(--primary));
+}
+
+.nav-button.primary {
+    background-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    border-color: hsl(var(--primary));
+}
+
+.nav-button.primary:hover {
+    color: hsl(var(--primary-foreground));
+    opacity: 0.9;
 }
 
 /* Header user dropdown */
@@ -160,6 +172,14 @@ nav {
 .nav-right .user-dropdown .user-button:hover {
     opacity: 0.9;
     color: hsl(var(--primary));
+}
+
+.nav-right .user-dropdown .user-button.status-active {
+    border-color: #10b981;
+}
+
+.nav-right .user-dropdown .user-button.status-inactive {
+    border-color: #fbbf24;
 }
 
 .nav-right .user-dropdown .status-indicator {
