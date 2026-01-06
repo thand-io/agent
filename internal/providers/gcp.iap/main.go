@@ -2,7 +2,6 @@ package gcpiap
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -28,17 +27,15 @@ const (
 
 // IAPClaims represents the claims in an IAP JWT
 type IAPClaims struct {
-	Email        string `json:"email"`
-	Subject      string `json:"sub"`
-	HostedDomain string `json:"hd,omitempty"`
-	GoogleClaims string `json:"google,omitempty"`
-	GCIP         string `json:"gcip,omitempty"` // For external identities
-}
-
-// IAPGoogleClaims represents the nested Google claims in an IAP JWT
-type IAPGoogleClaims struct {
-	AccessLevels []string `json:"access_levels,omitempty"`
-	DeviceID     string   `json:"device_id,omitempty"`
+	Audience        string `json:"aud"`
+	AuthorizedParty string `json:"azp"`
+	Email           string `json:"email"`
+	ExpiresAt       int64  `json:"exp"`
+	HostedDomain    string `json:"hd,omitempty"`
+	IdentitySource  string `json:"identity_source"`
+	IssuedAt        int64  `json:"iat"`
+	Issuer          string `json:"iss"`
+	Subject         string `json:"sub"`
 }
 
 // gcpIAPProvider implements the ProviderImpl interface for GCP IAP
@@ -232,17 +229,16 @@ func (p *gcpIAPProvider) VerifyIAPJWT(ctx context.Context, tokenString string) (
 	// Parse the payload into our claims structure
 	claims := &IAPClaims{}
 
-	// Marshal and unmarshal to convert map to struct
-	logrus.WithField("claims_count", len(payload.Claims)).Debugln("Parsing payload claims")
-	payloadBytes, err := json.Marshal(payload.Claims)
-	if err != nil {
-		logrus.WithError(err).Errorln("Failed to marshal payload")
-		return nil, time.Time{}, fmt.Errorf("failed to marshal payload: %w", err)
-	}
+	logrus.WithFields(logrus.Fields{
+		"claims": payload.Claims,
+	}).Debugln("Parsing payload claims")
 
-	if err := json.Unmarshal(payloadBytes, claims); err != nil {
-		logrus.WithError(err).Errorln("Failed to unmarshal claims")
-		return nil, time.Time{}, fmt.Errorf("failed to unmarshal claims: %w", err)
+	// Convert the map claims to our struct
+	err = common.ConvertMapToInterface(payload.Claims, claims)
+
+	if err != nil {
+		logrus.WithError(err).Errorln("Failed to parse JWT claims")
+		return nil, time.Time{}, fmt.Errorf("failed to parse JWT claims: %w", err)
 	}
 
 	logrus.WithFields(logrus.Fields{
@@ -310,18 +306,6 @@ func (p *gcpIAPProvider) ConvertIAPClaimsToSession(ctx context.Context, claims *
 		// Simple name extraction from email
 		user.Name = common.ExtractNameFromEmail(claims.Email)
 		user.Username = common.ExtractUsernameFromEmail(claims.Email)
-	}
-
-	// Parse Google claims if present
-	if len(claims.GoogleClaims) != 0 {
-		logrus.Debugln("Parsing Google claims")
-		var googleClaims IAPGoogleClaims
-		if err := json.Unmarshal([]byte(claims.GoogleClaims), &googleClaims); err == nil {
-			logrus.WithField("access_levels", googleClaims.AccessLevels).
-				Debugln("IAP access levels found")
-		} else {
-			logrus.WithError(err).Warnln("Failed to parse Google claims")
-		}
 	}
 
 	// Check for hosted domain

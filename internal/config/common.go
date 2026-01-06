@@ -61,7 +61,6 @@ func loadDataFromSource[
 			logrus.WithFields(logrus.Fields{
 				"url":    uri.Endpoint.String(),
 				"status": resp.StatusCode(),
-				"body":   string(data),
 			}).Errorln("Failed to fetch from URL")
 			return nil, fmt.Errorf("failed to fetch from URL %s: status %d", uri.Endpoint.String(), resp.StatusCode())
 		}

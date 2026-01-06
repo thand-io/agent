@@ -12,6 +12,8 @@
     --border: 240 5.9% 90%;
     --input: 240 5.9% 90%;
     --ring: 240 10% 3.9%;
+    --status-active: 160 84% 39%;
+    --status-inactive: 43 96% 56%;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -29,6 +31,8 @@
         --border: 240 3.7% 15.9%;
         --input: 240 3.7% 15.9%;
         --ring: 240 4.9% 83.9%;
+        --status-active: 160 84% 45%;
+        --status-inactive: 43 96% 65%;
     }
 }
 
@@ -91,6 +95,7 @@ nav {
 
 .logo a:link, .logo a:visited {
     text-decoration: none;
+    color: hsl(var(--foreground));
 }
 
 .nav-links-left {
@@ -125,12 +130,23 @@ nav {
     text-decoration: none;
     font-size: 0.875rem;
     line-height: 1.25rem;
-    transition: color 0.2s;
+    transition: all 0.2s;
 }
 
 .nav-button:hover {
     opacity: 0.9;
     color: hsl(var(--primary));
+}
+
+.nav-button.primary {
+    background-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    border-color: hsl(var(--primary));
+}
+
+.nav-button.primary:hover {
+    color: hsl(var(--primary-foreground));
+    opacity: 0.9;
 }
 
 /* Header user dropdown */
@@ -162,6 +178,14 @@ nav {
     color: hsl(var(--primary));
 }
 
+.nav-right .user-dropdown .user-button.status-active {
+    border-color: hsl(var(--status-active));
+}
+
+.nav-right .user-dropdown .user-button.status-inactive {
+    border-color: hsl(var(--status-inactive));
+}
+
 .nav-right .user-dropdown .status-indicator {
     width: 4px;
     position: absolute;
@@ -172,11 +196,11 @@ nav {
 }
 
 .nav-right .user-dropdown .status-indicator.status-active {
-    background-color: #10b981;
+    background-color: hsl(var(--status-active));
 }
 
 .nav-right .user-dropdown .status-indicator.status-inactive {
-    background-color: #fbbf24;
+    background-color: hsl(var(--status-inactive));
 }
 
 .nav-right .user-dropdown .dropdown-arrow {
@@ -417,7 +441,7 @@ main {
     width: 0.5rem;
     height: 0.5rem;
     border-radius: 50%;
-    background-color: #10b981;
+    background-color: hsl(var(--status-active));
 }
 
 .status-dot.offline {
@@ -430,7 +454,7 @@ main {
 }
 
 .status-dot.success {
-    background-color: #10b981;
+    background-color: hsl(var(--status-active));
 }
 
 .status-dot.error {
