@@ -42,8 +42,6 @@ func (s *Server) setAuthCookie(c *gin.Context, authProvider string, localSession
 		return fmt.Errorf("encoded session size exceeds cookie limit")
 	}
 
-	fmt.Println("Encoded cookie size:", len(getEncodedCookie))
-
 	providerCookie := sessions.DefaultMany(c, CreateCookieName(authProvider))
 	providerCookie.Set(ThandCookieAttributeSessionName, getEncodedCookie)
 	err := providerCookie.Save()
