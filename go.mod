@@ -55,7 +55,7 @@ require (
 	github.com/hashicorp/go-version v1.8.0
 	github.com/hashicorp/vault/api v1.22.0
 	github.com/inconshreveable/go-update v0.0.0-20160112193335-8152e7eb6ccf
-	github.com/itchyny/gojq v0.12.17
+	github.com/itchyny/gojq v0.12.18
 	github.com/kardianos/service v1.2.4
 	github.com/microsoftgraph/msgraph-sdk-go v1.91.0
 	github.com/okta/okta-sdk-golang/v2 v2.20.0
