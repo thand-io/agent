@@ -12,7 +12,6 @@ import (
 	"github.com/thand-io/agent/sdk/workflows/config"
 	"github.com/thand-io/agent/sdk/workflows/functions"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
-	"github.com/thand-io/agent/sdk/workflows/tasks"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
@@ -54,19 +53,11 @@ func (m *WorkflowManager) GetTemporal() models.TemporalImpl {
 }
 
 func (m *WorkflowManager) RegisterFunction(handler functions.Function) {
-	m.config.GetFunctionRegistry().RegisterFunction(handler)
+	m.config.RegisterFunction(handler)
 }
 
 func (m *WorkflowManager) GetFunction(name string) (functions.Function, bool) {
-	return m.config.GetFunctionRegistry().GetFunction(name)
-}
-
-func (m *WorkflowManager) GetFunctionRegistry() *functions.FunctionRegistry {
-	return m.config.GetFunctionRegistry()
-}
-
-func (m *WorkflowManager) GetTaskRegistry() *tasks.TaskRegistry {
-	return m.config.GetTaskRegistry()
+	return m.config.GetFunction(name)
 }
 
 // ResumeWorkflow resumes workflow execution from client-provided state
@@ -92,6 +83,7 @@ func (m *WorkflowManager) ResumeWorkflow(
 func (m *WorkflowManager) ResumeWorkflowTask(
 	workflowTask sdkWorkflowsModel.WorkflowTask,
 ) (sdkWorkflowsModel.WorkflowTask, error) {
+
 	return ResumeWorkflowTask(
 		m.config,
 		workflowTask,
@@ -100,24 +92,31 @@ func (m *WorkflowManager) ResumeWorkflowTask(
 
 func (m *WorkflowManager) resumeTemporalWorkflowTask(
 	ctx context.Context,
-	result sdkWorkflowsModel.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTask,
 ) (sdkWorkflowsModel.WorkflowTask, error) {
 
 	// Check the workflow task
-	if result.HasState() {
-		result.ClearTaskContext()
+	if err := m.config.HydrateWorkflowTask(workflowTask); err != nil {
+		return nil, err
+	}
+
+	// Create a new task state if it does not exist
+	// This is important as we might be in the middle of a workflow and
+	// the state might not have been initialised yet
+	if !workflowTask.HasState() {
+		workflowTask.ClearTaskContext()
 	}
 
 	temporalService := m.GetTemporal()
 	temporalClient := temporalService.GetClient()
 
 	_, err := temporalClient.DescribeWorkflow(
-		ctx, result.GetWorkflowID(), sdkWorkflowsModel.TemporalEmptyRunId)
+		ctx, workflowTask.GetWorkflowID(), sdkWorkflowsModel.TemporalEmptyRunId)
 
 	if err != nil {
 
 		// Not found, so start a new workflow execution
-		err := m.createTemporalWorkflow(result)
+		err := m.createTemporalWorkflow(workflowTask)
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to create temporal workflow: %w", err)
@@ -127,14 +126,14 @@ func (m *WorkflowManager) resumeTemporalWorkflowTask(
 
 	// Lets signal the workflow to continue
 	err = temporalClient.SignalWorkflow(
-		ctx, result.GetWorkflowID(), sdkWorkflowsModel.TemporalEmptyRunId,
-		sdkWorkflowsModel.TemporalResumeSignalName, result)
+		ctx, workflowTask.GetWorkflowID(), sdkWorkflowsModel.TemporalEmptyRunId,
+		sdkWorkflowsModel.TemporalResumeSignalName, workflowTask)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to signal workflow: %w", err)
 	}
 
-	return result, nil
+	return workflowTask, nil
 }
 
 // RegisterCustomFunction allows external code to register additional functions

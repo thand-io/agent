@@ -42,6 +42,7 @@ type WorkflowTask interface {
 	SetLocalExprVars(vars map[string]any)
 	RemoveLocalExprVars(keys ...string)
 	GetWorkflowDef() *model.Workflow
+	SetWorkflowDef(workflowDef *model.Workflow)
 	SetTaskReferenceFromName(taskName string) error
 
 	HasEntrypoint() bool

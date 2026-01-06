@@ -15,7 +15,7 @@ import (
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
-func NewWorkflowContext(workflow *Workflow) (*ThandWorkflowTask, error) {
+func NewThandWorkflowContext(workflow *Workflow) (*ThandWorkflowTask, error) {
 
 	workflowID := fmt.Sprintf("wf_%d", time.Now().UTC().UnixNano())
 

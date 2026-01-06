@@ -107,6 +107,7 @@ func (m *ThandWorkflowManager) createElevationWorkflowHandler() func(workflow.Co
 			log.Error("Failed to set get workflow task query handler", "Error", err)
 			return nil, err
 		}
+
 		// Setup signal channels and handlers
 		resumeSignal, terminateSignal := sdkWorkflows.SetupSignalChannels(cancelCtx)
 		sdkWorkflows.SetupTerminationHandler(rootCtx, terminateSignal, cancelHandler, &terminationRequest)

@@ -183,7 +183,7 @@ func (r *ThandWorkflowTask) SetRole(role *Role) {
 }
 
 // Helper methods for TaskSupport
-func (r *ThandWorkflowTask) SetWorkflowDsl(workflow *model.Workflow) {
+func (r *ThandWorkflowTask) SetWorkflowDef(workflow *model.Workflow) {
 	r.Workflow = workflow
 }
 

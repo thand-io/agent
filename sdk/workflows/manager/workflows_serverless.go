@@ -247,28 +247,37 @@ func (m *serverlessWorkflow) shouldContinueAsNew(ctx workflow.Context) bool {
 // This maybe called as part of a temporal workflow or directly
 func ResumeWorkflowTask(
 	config config.Config,
-	result sdkWorkflowsModel.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTask,
 ) (sdkWorkflowsModel.WorkflowTask, error) {
 
-	// Check the workflow task
-	if !result.HasState() {
-		result.ClearTaskContext()
+	// Hydrate the workflow task
+	err := config.HydrateWorkflowTask(workflowTask)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to hydrate resumed workflow task: %w", err)
+	}
+
+	// Create a new task state if it does not exist
+	// This is important as we might be in the middle of a workflow and
+	// the state might not have been initialised yet
+	if !workflowTask.HasState() {
+		workflowTask.ClearTaskContext()
 	}
 
 	// Set status to pending if not already set
-	if !result.HasStatus() {
-		result.SetStatus(swctx.PendingStatus)
+	if !workflowTask.HasStatus() {
+		workflowTask.SetStatus(swctx.PendingStatus)
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"workflow_id": result.GetWorkflowID(),
+		"workflow_id": workflowTask.GetWorkflowID(),
 	}).Info("Resuming workflow")
 
 	// Create runner
-	runner := runner.NewResumableRunner(config, result)
+	runner := runner.NewResumableRunner(config, workflowTask)
 
 	// Resume from saved state
-	_, err := runner.Run(result.GetInput())
+	_, err = runner.Run(workflowTask.GetInput())
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to resume workflow: %w", err)
@@ -276,5 +285,5 @@ func ResumeWorkflowTask(
 
 	// Merge the output with the input based on any handlers
 
-	return result, err
+	return workflowTask, err
 }
