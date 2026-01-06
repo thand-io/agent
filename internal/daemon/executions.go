@@ -12,6 +12,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 
 	"go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -230,7 +231,7 @@ func (s *Server) getWorkflowExecutionState(c *gin.Context, workflowID string) (*
 	temporalClient := temporal.GetClient()
 
 	// Get the workflow execution information
-	wkflw, err := temporalClient.DescribeWorkflowExecution(ctx, workflowID, models.TemporalEmptyRunId)
+	wkflw, err := temporalClient.DescribeWorkflowExecution(ctx, workflowID, sdkWorkflowsModel.TemporalEmptyRunId)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get workflow state: %w", err)
@@ -244,7 +245,7 @@ func (s *Server) getWorkflowExecutionState(c *gin.Context, workflowID string) (*
 
 	workflowExecInfo := s.workflowExecutionInfo(wklwInfo)
 
-	var workflowTask models.WorkflowTask
+	var workflowTask models.ThandWorkflowTask
 
 	// If workflow hasn't completed, query for the current state
 	if workflowExecInfo.CloseTime == nil {
@@ -255,7 +256,7 @@ func (s *Server) getWorkflowExecutionState(c *gin.Context, workflowID string) (*
 
 		queryResponse, err := temporalClient.QueryWorkflowWithOptions(timeoutCtx, &client.QueryWorkflowWithOptionsRequest{
 			WorkflowID:           workflowID,
-			RunID:                models.TemporalEmptyRunId,
+			RunID:                sdkWorkflowsModel.TemporalEmptyRunId,
 			QueryType:            models.TemporalGetWorkflowTaskQueryName,
 			QueryRejectCondition: enums.QUERY_REJECT_CONDITION_NONE,
 			Args:                 nil,
@@ -313,7 +314,7 @@ func (s *Server) getWorkflowExecutionState(c *gin.Context, workflowID string) (*
 		// Get history for failed workflows to extract detailed failure information
 
 		iter := temporalClient.GetWorkflowHistory(
-			ctx, workflowID, models.TemporalEmptyRunId,
+			ctx, workflowID, sdkWorkflowsModel.TemporalEmptyRunId,
 			false, enums.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT)
 
 		// Iterate through history events to find the failure
@@ -351,7 +352,7 @@ func (s *Server) getWorkflowExecutionState(c *gin.Context, workflowID string) (*
 		// Otherwise if the workflow has completed then get the last output
 
 		fut := temporalClient.GetWorkflow(
-			ctx, workflowID, models.TemporalEmptyRunId)
+			ctx, workflowID, sdkWorkflowsModel.TemporalEmptyRunId)
 
 		err := fut.Get(ctx, &workflowTask)
 
@@ -577,8 +578,8 @@ func (s *Server) signalRunningWorkflow(c *gin.Context) {
 
 	// Lets signal the workflow to continue
 	err = temporalClient.SignalWorkflow(
-		ctx, workflowId, models.TemporalEmptyRunId,
-		models.TemporalEventSignalName, signal)
+		ctx, workflowId, sdkWorkflowsModel.TemporalEmptyRunId,
+		sdkWorkflowsModel.TemporalEventSignalName, signal)
 
 	if err != nil {
 		s.getErrorPage(c, http.StatusInternalServerError, "Failed to signal workflow", err)

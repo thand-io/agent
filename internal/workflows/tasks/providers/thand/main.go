@@ -6,8 +6,9 @@ import (
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
-	"github.com/thand-io/agent/internal/workflows/tasks"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
+	sdkModel "github.com/thand-io/agent/sdk/workflows/models"
+	"github.com/thand-io/agent/sdk/workflows/tasks"
 )
 
 type thandCollection struct {
@@ -78,7 +79,7 @@ func (f *thandTask) GetVersion() string {
 
 // Execute executes the Thand approvals task
 func (t *thandTask) Execute(
-	workflowTask *models.WorkflowTask,
+	workflowTask sdkModel.WorkflowTask,
 	task *model.TaskItem,
 	input any,
 ) (any, error) {
@@ -92,6 +93,13 @@ func (t *thandTask) Execute(
 
 	if !ok {
 		return nil, fmt.Errorf("invalid task type for ServerlessThandTask")
+	}
+
+	// Convert the workflow task to our Thand workflow task type
+	thandWorkflowTask, ok := workflowTask.(*models.ThandWorkflowTask)
+
+	if !ok {
+		return nil, fmt.Errorf("workflow task is not of type ThandWorkflowTask")
 	}
 
 	// Create a copy to preserve the original workflow intent
@@ -120,19 +128,19 @@ func (t *thandTask) Execute(
 
 	switch interpolatedTask.Thand {
 	case ThandApprovalsTask:
-		return t.executeApprovalsTask(workflowTask, taskName, &interpolatedTask, input)
+		return t.executeApprovalsTask(thandWorkflowTask, taskName, &interpolatedTask, input)
 	case ThandAuthorizeTask:
-		return t.executeAuthorizeTask(workflowTask, taskName, &interpolatedTask)
+		return t.executeAuthorizeTask(thandWorkflowTask, taskName, &interpolatedTask)
 	case ThandValidateTask:
-		return t.executeValidateTask(workflowTask, &interpolatedTask, input)
+		return t.executeValidateTask(thandWorkflowTask, &interpolatedTask, input)
 	case ThandNotifyTask:
-		return t.executeNotifyTask(workflowTask, taskName, &interpolatedTask)
+		return t.executeNotifyTask(thandWorkflowTask, taskName, &interpolatedTask)
 	case ThandRevokeTask:
-		return t.executeRevokeTask(workflowTask, taskName, &interpolatedTask)
+		return t.executeRevokeTask(thandWorkflowTask, taskName, &interpolatedTask)
 	case ThandMonitorTask:
-		return t.executeMonitorTask(workflowTask, taskName, &interpolatedTask, input)
+		return t.executeMonitorTask(thandWorkflowTask, taskName, &interpolatedTask, input)
 	case ThandFormTask:
-		return t.executeFormTask(workflowTask, taskName, &interpolatedTask)
+		return t.executeFormTask(thandWorkflowTask, taskName, &interpolatedTask)
 	default:
 		return nil, fmt.Errorf("unknown thand task type: %s", interpolatedTask.Thand)
 	}

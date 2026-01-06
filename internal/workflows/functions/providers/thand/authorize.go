@@ -8,7 +8,9 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
-	"github.com/thand-io/agent/internal/workflows/functions"
+	"github.com/thand-io/agent/sdk/workflows/functions"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
+	workflowModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 const ThandAuthorizeFunction = "thand.authorize"
@@ -45,7 +47,7 @@ func (t *authorizeFunction) GetOptionalParameters() map[string]any {
 
 // ValidateRequest validates the input parameters
 func (t *authorizeFunction) ValidateRequest(
-	workflowTask *models.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTask,
 	call *model.CallFunction,
 	input any,
 ) error {
@@ -63,7 +65,7 @@ func (r *ThandAuthorizeRequest) IsValid() bool {
 
 // Execute performs the authorization logic
 func (t *authorizeFunction) Execute(
-	workflowTask *models.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTask,
 	call *model.CallFunction,
 	input any,
 ) (any, error) {
@@ -79,12 +81,12 @@ func (t *authorizeFunction) Execute(
 
 // validateAndParseRequests validates and parses the incoming requests
 func (t *authorizeFunction) validateAndParseRequests(
-	workflowTask *models.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTask,
 	call *model.CallFunction,
 	input any,
 ) (*ThandAuthorizeRequest, error) {
 
-	elevationRequest, err := workflowTask.GetContextAsElevationRequest()
+	elevationRequest, err := workflowTask.(*models.ThandWorkflowTask).GetContextAsElevationRequest()
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get elevation request from context: %w", err)
@@ -119,7 +121,7 @@ func (t *authorizeFunction) validateAndParseRequests(
 
 // executeAuthorization performs the main authorization workflow
 func (t *authorizeFunction) executeAuthorization(
-	workflowTask *models.WorkflowTask,
+	workflowTask workflowModel.WorkflowTask,
 	elevateRequest *ThandAuthorizeRequest,
 ) (any, error) {
 

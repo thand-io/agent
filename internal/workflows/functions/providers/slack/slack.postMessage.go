@@ -5,7 +5,8 @@ import (
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/thand-io/agent/internal/models"
-	"github.com/thand-io/agent/internal/workflows/functions"
+	"github.com/thand-io/agent/sdk/workflows/functions"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 // SlackFunction implements Slack notification functionality
@@ -38,7 +39,7 @@ func (t *slackFunction) GetOptionalParameters() map[string]any {
 
 // ValidateRequest validates the input parameters
 func (t *slackFunction) ValidateRequest(
-	workflowTask *models.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTask,
 	call *model.CallFunction,
 	input any,
 ) error {
@@ -54,7 +55,7 @@ func (t *slackFunction) ValidateRequest(
 
 // Execute performs the Slack notification logic
 func (t *slackFunction) Execute(
-	workflowTask *models.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTask,
 	call *model.CallFunction,
 	req any,
 ) (any, error) {

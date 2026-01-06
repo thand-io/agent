@@ -10,7 +10,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
-	"github.com/thand-io/agent/internal/workflows/functions"
+	"github.com/thand-io/agent/sdk/workflows/functions"
+	workflowModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 const ThandNotifyFunction = "thand.notify"
@@ -49,7 +50,7 @@ func (t *notifyFunction) GetOptionalParameters() map[string]any {
 
 // ValidateRequest validates the input parameters
 func (t *notifyFunction) ValidateRequest(
-	workflowTask *models.WorkflowTask,
+	workflowTask workflowModel.WorkflowTask,
 	call *model.CallFunction,
 	input any,
 ) error {
@@ -63,8 +64,14 @@ func (t *notifyFunction) ValidateRequest(
 	var notificationReq NotifierRequest
 	common.ConvertMapToInterface(call.With, &notificationReq)
 
+	thandWorkflowTask, ok := workflowTask.(*models.ThandWorkflowTask)
+
+	if !ok {
+		return fmt.Errorf("workflow task is not of type ThandWorkflowTask")
+	}
+
 	// Get requesting user info
-	requestingUser := workflowTask.GetUser()
+	requestingUser := thandWorkflowTask.GetUser()
 
 	if requestingUser == nil {
 		return errors.New("requesting user cannot be nil")
@@ -165,7 +172,7 @@ func (r *NotifierRequest) AsMap() map[string]any {
 
 // Execute performs the validation logic
 func (t *notifyFunction) Execute(
-	workflowTask *models.WorkflowTask,
+	workflowTask workflowModel.WorkflowTask,
 	call *model.CallFunction,
 	input any,
 ) (any, error) {
@@ -187,7 +194,13 @@ func (t *notifyFunction) Execute(
 		return nil, errors.New("elevation request is not valid")
 	}
 
-	elevationReq, err := workflowTask.GetContextAsElevationRequest()
+	thandWorkflowTask, ok := workflowTask.(*models.ThandWorkflowTask)
+
+	if !ok {
+		return nil, fmt.Errorf("workflow task is not of type ThandWorkflowTask")
+	}
+
+	elevationReq, err := thandWorkflowTask.GetContextAsElevationRequest()
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get elevation request from input: %w", err)

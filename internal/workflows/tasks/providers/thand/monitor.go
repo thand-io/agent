@@ -5,10 +5,11 @@ import (
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/serverlessworkflow/sdk-go/v3/model"
+	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
-	"github.com/thand-io/agent/internal/models"
-	runner "github.com/thand-io/agent/internal/workflows/runner"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
+	runner "github.com/thand-io/agent/sdk/workflows/runner"
 )
 
 const ThandMonitorTask = "monitor"
@@ -20,7 +21,7 @@ type MonitorRequest struct {
 
 // ThandMonitorTask represents a custom task for Thand monitoring
 func (t *thandTask) executeMonitorTask(
-	workflowTask *models.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTask,
 	taskName string,
 	call *taskModel.ThandTask,
 	input any) (any, error) {
@@ -39,7 +40,7 @@ func (t *thandTask) executeMonitorTask(
 
 	log := workflowTask.GetLogger()
 
-	log.WithFields(models.Fields{
+	log.WithFields(logrus.Fields{
 		"task_name": taskName,
 		"mode":      monitorReq.Mode,
 		"threshold": monitorReq.Threshold,
@@ -60,7 +61,7 @@ func (t *thandTask) executeMonitorTask(
 	}, input)
 
 	if err != nil {
-		log.WithError(err).WithFields(models.Fields{
+		log.WithError(err).WithFields(logrus.Fields{
 			"taskName": taskName,
 		}).Error("Failed to listen for Thand alert")
 

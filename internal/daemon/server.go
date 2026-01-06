@@ -48,7 +48,12 @@ var staticFiles embed.FS
 
 func NewServer(cfg *config.Config) *Server {
 
-	workflows := createWorkflowService(cfg)
+	workflows, err := manager.NewThandWorkflowManager(cfg)
+
+	if err != nil {
+		logrus.WithError(err).Fatal("Failed to create workflow manager")
+		return nil
+	}
 
 	// Create template functions
 	funcMap := template.FuncMap{
@@ -83,7 +88,7 @@ type Server struct {
 	Config          *config.Config
 	TemplateEngine  *template.Template
 	StartTime       time.Time
-	Workflows       *manager.WorkflowManager
+	Workflows       *manager.ThandWorkflowManager
 	TotalRequests   int64
 	ElevateRequests int64
 	server          *http.Server

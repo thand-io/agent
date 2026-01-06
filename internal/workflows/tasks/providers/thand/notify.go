@@ -43,7 +43,7 @@ type temporalNotifyResult struct {
 }
 
 func (t *thandTask) executeNotifyTask(
-	workflowTask *models.WorkflowTask,
+	workflowTask *models.ThandWorkflowTask,
 	taskName string,
 	call *taskModel.ThandTask,
 ) (any, error) {
@@ -89,7 +89,7 @@ func (t *thandTask) executeNotifyTask(
 }
 
 func (t *thandTask) executeNotify(
-	workflowTask *models.WorkflowTask,
+	workflowTask *models.ThandWorkflowTask,
 	taskName string,
 	notify NotifierImpl,
 ) (any, error) {
@@ -103,7 +103,7 @@ func (t *thandTask) executeNotify(
 		return nil, errors.New("notifier 'to' field cannot be empty")
 	}
 
-	log.WithFields(models.Fields{
+	log.WithFields(logrus.Fields{
 		"recipients": recipients,
 		"count":      len(recipients),
 	}).Info("Preparing to send notifications")
@@ -130,7 +130,7 @@ func (t *thandTask) executeNotify(
 			Provider:  notify.GetProviderName(),
 		})
 
-		log.WithFields(models.Fields{
+		log.WithFields(logrus.Fields{
 			"recipient": recipientId,
 			"provider":  notify.GetProviderName(),
 		}).Debug("Prepared notification task")
@@ -173,7 +173,7 @@ func (t *thandTask) executeNotify(
 	}
 
 	if hasErrors {
-		log.WithFields(models.Fields{
+		log.WithFields(logrus.Fields{
 			"success": successCount,
 			"total":   len(notifyResults),
 		}).Warn("Some notifications failed")
@@ -198,7 +198,7 @@ func hasMatchingProvider(notificationReq thandFunction.NotifierRequest, notifier
 
 // executeNotifyTemporalParallel executes notification tasks in parallel using Temporal
 func (t *thandTask) executeNotifyTemporalParallel(
-	workflowTask *models.WorkflowTask,
+	workflowTask *models.ThandWorkflowTask,
 	taskName string,
 	notifyTasks []notifyTask,
 ) ([]notifyResult, error) {
@@ -283,7 +283,7 @@ func (t *thandTask) executeNotifyTemporalParallel(
 
 // executeNotifyGoParallel executes notification tasks in parallel using Go routines and WaitGroup
 func (t *thandTask) executeNotifyGoParallel(
-	workflowTask *models.WorkflowTask,
+	workflowTask *models.ThandWorkflowTask,
 	notifyTasks []notifyTask,
 ) ([]notifyResult, error) {
 

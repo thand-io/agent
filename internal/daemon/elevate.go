@@ -257,7 +257,7 @@ func (s *Server) elevate(c *gin.Context, request models.ElevateRequest) {
 		}
 	}
 
-	workflowTask, err := s.Workflows.CreateWorkflow(ctx, request)
+	workflowTask, err := s.Workflows.CreateElevationWorkflow(ctx, request)
 
 	if err != nil {
 		s.getErrorPage(c, http.StatusBadRequest, "Failed to execute workflow", err)
@@ -444,7 +444,7 @@ func (s *Server) getElevateAuthOAuth2(c *gin.Context) {
 
 }
 
-func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.WorkflowTask) {
+func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.ThandWorkflowTask) {
 
 	// Get user context
 	if !s.Config.IsServer() {
@@ -506,15 +506,21 @@ func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.WorkflowTask) {
 		return
 	}
 
+	thandWorkflowTask, ok := workflowTask.(*models.ThandWorkflowTask)
+
+	if !ok {
+		s.getErrorPage(c, http.StatusInternalServerError, "Workflow task is not of type ThandWorkflowTask")
+		return
+	}
+
 	logrus.WithFields(logrus.Fields{
-		"task_name": workflowTask.GetTaskReference(),
-		"state":     workflowTask.GetEncodedTask(s.GetConfig().GetServices().GetEncryption()),
+		"task_name": thandWorkflowTask.GetTaskReference(),
 	}).Info("Workflow is still running, redirecting to resume")
 
-	if workflowTask.GetStatus() == ctx.RunningStatus {
+	if thandWorkflowTask.GetStatus() == ctx.RunningStatus {
 
 		c.Redirect(http.StatusTemporaryRedirect,
-			s.Config.GetResumeCallbackUrl(workflowTask),
+			s.Config.GetResumeCallbackUrl(thandWorkflowTask),
 		)
 
 	} else if s.canAcceptHtml(c) {
@@ -526,9 +532,9 @@ func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.WorkflowTask) {
 			TemplateData: s.GetTemplateData(c),
 			ExecutionStatePageResponse: ExecutionStatePageResponse{
 				Execution: &models.WorkflowExecutionInfo{
-					WorkflowID: workflowTask.WorkflowID,
+					WorkflowID: thandWorkflowTask.GetWorkflowID(),
 				},
-				Workflow: workflowTask.GetWorkflowDef(),
+				Workflow: thandWorkflowTask.GetWorkflowDef(),
 			},
 		}
 
@@ -537,9 +543,9 @@ func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.WorkflowTask) {
 	} else {
 
 		c.JSON(http.StatusOK, models.ElevateResponse{
-			WorkflowId: workflowTask.WorkflowID,
-			Status:     workflowTask.GetStatus(),
-			Output:     workflowTask.GetOutputAsMap(),
+			WorkflowId: thandWorkflowTask.GetWorkflowID(),
+			Status:     thandWorkflowTask.GetStatus(),
+			Output:     thandWorkflowTask.GetOutputAsMap(),
 		})
 
 	}

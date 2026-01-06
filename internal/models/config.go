@@ -12,9 +12,9 @@ type ConfigImpl interface {
 	GetServices() ServicesClientImpl
 	GetEnvironment() EnvironmentConfig
 
-	GetResumeCallbackUrl(workflowTask *WorkflowTask) string
+	GetResumeCallbackUrl(workflowTask *ThandWorkflowTask) string
 	GetAuthCallbackUrl(providerName string) string
-	GetSignalCallbackUrl(workflowTask *WorkflowTask) string
+	GetSignalCallbackUrl(workflowTask *ThandWorkflowTask) string
 	GetLoginServerUrl() string
 	GetLocalServerUrl() string
 

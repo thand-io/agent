@@ -17,7 +17,7 @@ import (
 // revokeNotifier handles notifications sent to users after their access has been revoked
 type revokeNotifier struct {
 	config       models.ConfigImpl
-	workflowTask *models.WorkflowTask
+	workflowTask *models.ThandWorkflowTask
 	elevationReq *models.ElevateRequestInternal
 	req          *thandFunction.NotifierRequest
 	providerKey  string
@@ -27,7 +27,7 @@ type revokeNotifier struct {
 // NewRevokeNotifier creates a new notifier for sending revocation notifications
 func NewRevokeNotifier(
 	config models.ConfigImpl,
-	workflowTask *models.WorkflowTask,
+	workflowTask *models.ThandWorkflowTask,
 	elevationReq *models.ElevateRequestInternal,
 	req *thandFunction.NotifierRequest,
 	providerKey string,

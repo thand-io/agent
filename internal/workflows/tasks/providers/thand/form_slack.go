@@ -130,7 +130,7 @@ func (f *formNotifier) addFormBlocksSection(blocks *[]slack.Block) {
 }
 
 // addFormActionSection adds the action button to open the form
-func (f *formNotifier) addFormActionSection(blocks *[]slack.Block, workflowTask *models.WorkflowTask) {
+func (f *formNotifier) addFormActionSection(blocks *[]slack.Block, workflowTask *models.ThandWorkflowTask) {
 	submitLabel := f.req.SubmitLabel
 	if len(submitLabel) == 0 {
 		submitLabel = "Open Form"
@@ -171,7 +171,7 @@ func (f *formNotifier) addFormActionSection(blocks *[]slack.Block, workflowTask 
 }
 
 // createFormUrl creates the URL to the HTML form page
-func (f *formNotifier) createFormUrl(workflowTask *models.WorkflowTask) string {
+func (f *formNotifier) createFormUrl(workflowTask *models.ThandWorkflowTask) string {
 	// Get the form page URL from config
 	// The form page is at /execution/:workflowId/form
 	baseURL := f.config.GetLoginServerUrl()

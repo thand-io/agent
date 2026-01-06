@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/thand-io/agent/internal/models"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 type ExecutionStatePageData struct {
@@ -223,7 +224,7 @@ func (s *Server) cancelRunningWorkflow(c *gin.Context) {
 
 	temporalClient := services.GetTemporal().GetClient()
 
-	workflowRun, err := temporalClient.DescribeWorkflow(c, workflowId, models.TemporalEmptyRunId)
+	workflowRun, err := temporalClient.DescribeWorkflow(c, workflowId, sdkWorkflowsModel.TemporalEmptyRunId)
 
 	if err != nil {
 		s.getErrorPage(c, http.StatusNotFound, "Failed to find running workflow", err)
@@ -244,7 +245,7 @@ func (s *Server) cancelRunningWorkflow(c *gin.Context) {
 		return
 	}
 
-	err = temporalClient.CancelWorkflow(c, workflowId, models.TemporalEmptyRunId)
+	err = temporalClient.CancelWorkflow(c, workflowId, sdkWorkflowsModel.TemporalEmptyRunId)
 
 	if err != nil {
 		s.getErrorPage(c, http.StatusInternalServerError, "Failed to signal workflow for termination", err)

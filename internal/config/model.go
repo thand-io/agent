@@ -477,7 +477,7 @@ func (c *Config) GetAuthCallbackUrl(providerName string) string {
 	)
 }
 
-func (c *Config) GetResumeCallbackUrl(workflowTask *models.WorkflowTask) string {
+func (c *Config) GetResumeCallbackUrl(workflowTask *models.ThandWorkflowTask) string {
 
 	queryParams := url.Values{
 		"state": {workflowTask.GetEncodedTask(
@@ -493,11 +493,11 @@ func (c *Config) GetResumeCallbackUrl(workflowTask *models.WorkflowTask) string 
 	))
 }
 
-func (c *Config) GetSignalCallbackUrl(workflowTask *models.WorkflowTask) string {
+func (c *Config) GetSignalCallbackUrl(workflowTask *models.ThandWorkflowTask) string {
 
 	encodedInput := models.EncodingWrapper{
 		Type: models.ENCODED_WORKFLOW_SIGNAL,
-		Data: workflowTask.Input,
+		Data: workflowTask.GetInput(),
 	}.EncodeAndEncrypt(c.servicesClient.GetEncryption())
 
 	queryParams := url.Values{
@@ -508,7 +508,7 @@ func (c *Config) GetSignalCallbackUrl(workflowTask *models.WorkflowTask) string 
 
 	return c.GetCallbackUrl(fmt.Sprintf(
 		"/execution/%s/signal?%s",
-		workflowTask.WorkflowID,
+		workflowTask.GetWorkflowID(),
 		queryParams.Encode(),
 	))
 }

@@ -2,7 +2,7 @@ package gcp
 
 import (
 	"github.com/thand-io/agent/internal/models"
-	"github.com/thand-io/agent/internal/workflows/functions"
+	"github.com/thand-io/agent/sdk/workflows/functions"
 )
 
 type gcpCollection struct {

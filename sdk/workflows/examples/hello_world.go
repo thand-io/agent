@@ -4,6 +4,7 @@ import (
 	"github.com/hashicorp/go-version"
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/thand-io/agent/internal/models"
+	"github.com/thand-io/agent/sdk/workflows/config"
 	manager "github.com/thand-io/agent/sdk/workflows/manager"
 )
 
@@ -38,26 +39,17 @@ var WorkflowHelloWorld = models.NewWorkflow(
 // State is relayed via redirect URLs handed back to the user.
 func HelloWorld() any {
 
-	cfg := NewConfig()
-
-	err := cfg.RegisterWorkflow(WorkflowHelloWorldName, WorkflowHelloWorld)
-
-	if err != nil {
-		panic(err)
-	}
+	newConfig := config.NewConfigService()
 
 	// Create workflow manager
-	workflowManager := manager.NewWorkflowManager(cfg)
-
-	// Get workflow by name, registered in our config
-	workflow, err := cfg.GetWorkflowByName(WorkflowHelloWorldName)
+	workflowManager, err := manager.NewWorkflowManager(newConfig)
 
 	if err != nil {
 		panic(err)
 	}
 
 	// Create new workflow task context
-	workflowTask, err := models.NewWorkflowContext(workflow)
+	workflowTask, err := models.NewWorkflowContext(WorkflowHelloWorld)
 
 	if err != nil {
 		panic(err)

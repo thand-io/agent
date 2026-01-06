@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/slack-go/slack"
 	"github.com/thand-io/agent/internal/models"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 // createSlackBlocks creates the Slack Block Kit blocks for the notification
@@ -325,7 +326,7 @@ func (a *approvalsNotifier) addIdentitiesSection(blocks *[]slack.Block, elevateR
 // addActionSection adds action buttons section based on approval requirements
 func (a *approvalsNotifier) addActionSection(
 	blocks *[]slack.Block,
-	workflowTask *models.WorkflowTask,
+	workflowTask *models.ThandWorkflowTask,
 	approvalNotifier *ApprovalNotifier,
 ) {
 	if approvalNotifier.Approvals > 0 {
@@ -380,7 +381,7 @@ func (a *approvalsNotifier) addActionSection(
 				slack.NewButtonBlockElement(
 					fmt.Sprintf(
 						"%s-%s-%s",
-						a.workflowTask.WorkflowID,
+						a.workflowTask.GetWorkflowID(),
 						a.workflowTask.GetTaskName(),
 						"approve",
 					),
@@ -395,7 +396,7 @@ func (a *approvalsNotifier) addActionSection(
 				slack.NewButtonBlockElement(
 					fmt.Sprintf(
 						"%s-%s-%s",
-						a.workflowTask.WorkflowID,
+						a.workflowTask.GetWorkflowID(),
 						a.workflowTask.GetTaskName(),
 						"deny",
 					),
@@ -410,7 +411,7 @@ func (a *approvalsNotifier) addActionSection(
 				slack.NewButtonBlockElement(
 					fmt.Sprintf(
 						"%s-%s-%s",
-						a.workflowTask.WorkflowID,
+						a.workflowTask.GetWorkflowID(),
 						a.workflowTask.GetTaskName(),
 						"view_request",
 					),
@@ -439,12 +440,12 @@ func (a *approvalsNotifier) addActionSection(
 	}
 }
 
-func (a *approvalsNotifier) createViewRequestUrl(workflowTask *models.WorkflowTask) string {
-	return fmt.Sprintf("%s/execution/%s", a.config.GetLoginServerUrl(), workflowTask.WorkflowID)
+func (a *approvalsNotifier) createViewRequestUrl(workflowTask sdkWorkflowsModel.WorkflowTask) string {
+	return fmt.Sprintf("%s/execution/%s", a.config.GetLoginServerUrl(), workflowTask.GetWorkflowID())
 }
 
 func (a *approvalsNotifier) createCallbackUrl(
-	workflowTask *models.WorkflowTask,
+	workflowTask *models.ThandWorkflowTask,
 	approvalNotifier *ApprovalNotifier,
 	approve bool,
 ) string {
@@ -463,7 +464,7 @@ func (a *approvalsNotifier) createCallbackUrl(
 	// event.SetExtension("user", "")
 
 	// Setup workflow for the next state
-	signaledWorkflow := workflowTask.Clone().(*models.WorkflowTask)
+	signaledWorkflow := workflowTask.Clone().(*models.ThandWorkflowTask)
 	signaledWorkflow.SetInput(&event)
 
 	if len(approvalNotifier.Entrypoint) > 0 {
