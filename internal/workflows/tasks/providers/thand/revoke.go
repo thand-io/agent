@@ -145,28 +145,40 @@ func (t *thandTask) executeRevocationTask(
 				continue
 			}
 
-			revokeReq := models.RevokeRoleRequest{
-				RoleRequest: &models.RoleRequest{
-					User:     user,
-					Role:     elevateRequest.Role,
-					Duration: &duration,
-				},
-				AuthorizeRoleResponse: authorizeResponse,
+			// Check if we have tenants specified in our request. If so, we need
+			// to create a revocation task for each identity and tenant combination
+			// if there are no tenants, we just create one task per identity
+			tenantsToProcess := elevateRequest.Tenants
+			if len(tenantsToProcess) == 0 {
+				tenantsToProcess = []string{""} // Use empty string to indicate no tenant
 			}
 
-			revokeTasks = append(revokeTasks, revokeTask{
-				ProviderName:      providerName,
-				Identity:          identity,
-				RevokeReq:         revokeReq,
-				AuthorizeResponse: authorizeResponse,
-			})
+			for _, tenantId := range tenantsToProcess {
+				revokeReq := models.RevokeRoleRequest{
+					RoleRequest: &models.RoleRequest{
+						User:     user,
+						Role:     elevateRequest.Role,
+						Duration: &duration,
+						Tenant:   tenantId,
+					},
+					AuthorizeRoleResponse: authorizeResponse,
+				}
 
-			log.WithFields(models.Fields{
-				"user":     identity,
-				"role":     elevateRequest.Role.GetName(),
-				"provider": providerName,
-				"duration": duration,
-			}).Info("Preparing revocation logic")
+				revokeTasks = append(revokeTasks, revokeTask{
+					ProviderName:      providerName,
+					Identity:          identity,
+					RevokeReq:         revokeReq,
+					AuthorizeResponse: authorizeResponse,
+				})
+
+				log.WithFields(models.Fields{
+					"user":     identity,
+					"role":     elevateRequest.Role.GetName(),
+					"provider": providerName,
+					"duration": duration,
+					"tenant":   tenantId,
+				}).Info("Preparing revocation logic")
+			}
 		}
 	}
 
