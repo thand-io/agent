@@ -460,12 +460,12 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models
 	}
 
 	// poll to verify deletion
-	// In a production system, you might want to implement polling with backoff here
+	// In a production system, you might want to implement polling
 	backoffDuration := 1 * time.Second
-	backoutLimit := 15
+	backoffLimit := 15
 	iter := 0
 	for {
-		if iter >= backoutLimit {
+		if iter >= backoffLimit {
 			return fmt.Errorf(
 				"timed out waiting for account assignment deletion for principalId %s in account %s",
 				principalId,
@@ -509,6 +509,8 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models
 				"targetAccountID": targetAccountID,
 			}).Info("Account assignment deletion succeeded")
 			return nil
+		default:
+			return fmt.Errorf("unknown status value %s", statusOutput.AccountAssignmentDeletionStatus.Status)
 		}
 	}
 }
