@@ -426,7 +426,7 @@ func (p *awsProvider) createAccountAssignment(ctx context.Context, instanceArn, 
 }
 
 // revokeRoleIdentityCenter removes role authorization for Identity Center users
-func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models.User, role *models.Role) error {
+func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models.User, role *models.Role, targetAccountID string) error {
 	// 1. Find the Identity Center instance
 	instanceArn, err := p.getIdentityCenterInstance(ctx)
 	if err != nil {
@@ -451,7 +451,7 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models
 		PermissionSetArn: aws.String(permissionSetArn),
 		PrincipalId:      aws.String(principalId),
 		PrincipalType:    types.PrincipalTypeUser,
-		TargetId:         aws.String(p.GetAccountID()),
+		TargetId:         aws.String(targetAccountID),
 		TargetType:       types.TargetTypeAwsAccount,
 	})
 
