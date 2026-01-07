@@ -466,14 +466,19 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models
 	iter := 0
 	for {
 		if iter >= backoutLimit {
-			return fmt.Errorf("timed out waiting for account assignment deletion for principalId %s in account %s", principalId, p.GetAccountID())
+			return fmt.Errorf(
+				"timed out waiting for account assignment deletion for principalId %s in account %s",
+				principalId,
+				p.GetAccountID(),
+			)
 		}
 		iter++
 		time.Sleep(backoffDuration)
-		statusOutput, err := p.ssoAdminService.DescribeAccountAssignmentDeletionStatus(ctx, &ssoadmin.DescribeAccountAssignmentDeletionStatusInput{
-			InstanceArn:                        aws.String(instanceArn),
-			AccountAssignmentDeletionRequestId: deleteOutput.AccountAssignmentDeletionStatus.RequestId,
-		})
+		statusOutput, err := p.ssoAdminService.DescribeAccountAssignmentDeletionStatus(
+			ctx, &ssoadmin.DescribeAccountAssignmentDeletionStatusInput{
+				InstanceArn:                        aws.String(instanceArn),
+				AccountAssignmentDeletionRequestId: deleteOutput.AccountAssignmentDeletionStatus.RequestId,
+			})
 		if err != nil {
 			return fmt.Errorf("failed to describe account assignment deletion status: %w", err)
 		}
@@ -484,10 +489,20 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models
 				"principalId":     *statusOutput.AccountAssignmentDeletionStatus.PrincipalId,
 				"targetAccountID": targetAccountID,
 				"failureReason":   *statusOutput.AccountAssignmentDeletionStatus.FailureReason,
-			}).Errorf("account assignment deletion failed for principalId %s in account %s", *statusOutput.AccountAssignmentDeletionStatus.PrincipalId, targetAccountID)
-			return fmt.Errorf("account assignment deletion failed for principalId %s in account %s", *statusOutput.AccountAssignmentDeletionStatus.PrincipalId, targetAccountID)
+			}).Errorf(
+				"account assignment deletion failed for principalId %s in account %s",
+				*statusOutput.AccountAssignmentDeletionStatus.PrincipalId,
+				targetAccountID,
+			)
+			return fmt.Errorf(
+				"account assignment deletion failed for principalId %s in account %s",
+				*statusOutput.AccountAssignmentDeletionStatus.PrincipalId,
+				targetAccountID,
+			)
+
 		case types.StatusValuesInProgress:
 			continue
+
 		case types.StatusValuesSucceeded:
 			logrus.WithFields(logrus.Fields{
 				"principalId":     *statusOutput.AccountAssignmentDeletionStatus.PrincipalId,
