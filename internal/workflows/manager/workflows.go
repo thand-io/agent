@@ -13,6 +13,7 @@ import (
 	models "github.com/thand-io/agent/internal/models"
 	thandModel "github.com/thand-io/agent/internal/workflows/tasks/model"
 	thandTask "github.com/thand-io/agent/internal/workflows/tasks/providers/thand"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 func (m *ThandWorkflowManager) registerThandWorkflows() error {
@@ -177,7 +178,9 @@ func (m *ThandWorkflowManager) runCleanup(
 
 	// Use a disconnected context for cleanup to ensure it runs even if workflow is cancelled
 	newCtx, _ := workflow.NewDisconnectedContext(rootCtx)
-	workflowTask = workflowTask.WithTemporalContext(newCtx).(*models.ElevateWorkflowTask)
+	newCopy := workflowTask.WithTemporalContext(newCtx).(*sdkWorkflowsModel.WorkflowTask)
+
+	workflowTask = models.NewElevateWorkflowTask(newCopy)
 
 	// If a termination request with entrypoint is provided then we need to use it
 	if terminationRequest != nil && len(terminationRequest.EntryPoint) > 0 {

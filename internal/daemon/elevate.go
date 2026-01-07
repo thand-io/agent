@@ -506,17 +506,14 @@ func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.ElevateWorkflow
 		return
 	}
 
-	// Create our elevate workflow task wrapper
-	elevateWorkflowTask := models.NewElevateWorkflowTask(workflowTask)
-
 	logrus.WithFields(logrus.Fields{
-		"task_name": elevateWorkflowTask.GetTaskReference(),
+		"task_name": workflowTask.GetTaskReference(),
 	}).Info("Workflow is still running, redirecting to resume")
 
-	if elevateWorkflowTask.GetStatus() == ctx.RunningStatus {
+	if workflowTask.GetStatus() == ctx.RunningStatus {
 
 		c.Redirect(http.StatusTemporaryRedirect,
-			s.Config.GetResumeCallbackUrl(elevateWorkflowTask),
+			s.Config.GetResumeCallbackUrl(workflowTask),
 		)
 
 	} else if s.canAcceptHtml(c) {

@@ -39,8 +39,14 @@ type ElevateWorkflowTask struct {
 }
 
 func NewElevateWorkflowTask(serverlessWorkflow sdkWorkflowsModel.WorkflowTaskSupport) *ElevateWorkflowTask {
-	return &ElevateWorkflowTask{
-		WorkflowTask: serverlessWorkflow.(*sdkWorkflowsModel.WorkflowTask),
+	if _, ok := serverlessWorkflow.(*sdkWorkflowsModel.WorkflowTask); ok {
+		return &ElevateWorkflowTask{
+			WorkflowTask: serverlessWorkflow.(*sdkWorkflowsModel.WorkflowTask),
+		}
+	} else if elevateTask, ok := serverlessWorkflow.(*ElevateWorkflowTask); ok {
+		return elevateTask
+	} else {
+		panic(fmt.Sprintf("unsupported workflow task type: %T", serverlessWorkflow))
 	}
 }
 
