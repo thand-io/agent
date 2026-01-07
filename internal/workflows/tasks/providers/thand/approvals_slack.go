@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/slack-go/slack"
 	"github.com/thand-io/agent/internal/models"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 // createSlackBlocks creates the Slack Block Kit blocks for the notification
@@ -91,7 +92,7 @@ func (a *approvalsNotifier) addRequestDetailsSection(blocks *[]slack.Block, elev
 		var providerNames []string
 		for _, providerID := range elevateRequest.Providers {
 			if provider, err := a.config.GetProviderByName(providerID); err == nil && provider != nil {
-				providerNames = append(providerNames, fmt.Sprintf("%s (%s)", provider.Name, providerID))
+				providerNames = append(providerNames, fmt.Sprintf("%s (%s)", provider.GetName(), providerID))
 			} else {
 				providerNames = append(providerNames, providerID)
 			}
@@ -463,16 +464,18 @@ func (a *approvalsNotifier) createCallbackUrl(
 	// event.SetExtension("user", "")
 
 	// Setup workflow for the next state
-	signaledWorkflow := workflowTask.Clone().(*models.ElevateWorkflowTask)
+	signaledWorkflow := workflowTask.Clone().(*sdkWorkflowsModel.WorkflowTask)
 	signaledWorkflow.SetInput(&event)
 
 	if len(approvalNotifier.Entrypoint) > 0 {
 		signaledWorkflow.SetEntrypoint(approvalNotifier.Entrypoint)
 	}
 
+	elevateWorkflow := models.NewElevateWorkflowTask(signaledWorkflow)
+
 	if workflowTask.HasTemporalContext() {
-		return a.config.GetSignalCallbackUrl(signaledWorkflow)
+		return a.config.GetSignalCallbackUrl(elevateWorkflow)
 	} else {
-		return a.config.GetResumeCallbackUrl(signaledWorkflow)
+		return a.config.GetResumeCallbackUrl(elevateWorkflow)
 	}
 }

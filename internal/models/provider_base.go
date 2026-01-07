@@ -209,7 +209,7 @@ func (p *BaseProvider) GetBaseRole() *Role {
 	return p.role
 }
 
-func (p *BaseProvider) Initialize(identifier string, provider Provider) error {
+func (p *BaseProvider) Initialize(identifier string, provider ProviderConfig) error {
 	// Initialize the provider
 	return nil
 }

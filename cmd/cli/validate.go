@@ -301,7 +301,7 @@ func validateAsWorkflow(path string, data []byte) validationResult {
 }
 
 // initializeProvider initializes a single provider for testing
-func initializeProvider(providerKey string, provider *models.Provider) error {
+func initializeProvider(providerKey string, provider *models.ProviderConfig) error {
 	// Create provider implementation instance
 	impl, err := providers.CreateInstance(strings.ToLower(provider.Provider))
 	if err != nil {
@@ -319,7 +319,6 @@ func initializeProvider(providerKey string, provider *models.Provider) error {
 		return fmt.Errorf("initialization failed: %w", err)
 	}
 
-	provider.SetClient(impl)
 	return nil
 }
 

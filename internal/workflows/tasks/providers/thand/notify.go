@@ -186,9 +186,9 @@ func hasMatchingProvider(notificationReq thandFunction.NotifierRequest, notifier
 
 	// filter out providers to see if the name matches
 	for _, provider := range notifierProviders {
-		if strings.Compare(provider.Name, notificationReq.Provider) == 0 {
+		if strings.Compare(provider.GetName(), notificationReq.Provider) == 0 {
 			return true
-		} else if strings.Compare(provider.Provider, notificationReq.Provider) == 0 {
+		} else if strings.Compare(provider.GetProvider(), notificationReq.Provider) == 0 {
 			return true
 		}
 	}
@@ -296,7 +296,7 @@ func (t *thandTask) executeNotifyGoParallel(
 			defer wg.Done()
 
 			// Get provider config
-			providerConfig, err := t.config.GetProviderByName(notifyTask.Provider)
+			provider, err := t.config.GetProviderByName(notifyTask.Provider)
 			if err != nil {
 				results[index] = notifyResult{
 					Recipient: notifyTask.Recipient,
@@ -306,7 +306,7 @@ func (t *thandTask) executeNotifyGoParallel(
 			}
 
 			// Send notification
-			err = providerConfig.GetClient().SendNotification(
+			err = provider.SendNotification(
 				workflowTask.GetContext(),
 				notifyTask.Payload,
 			)

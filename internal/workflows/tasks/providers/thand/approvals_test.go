@@ -768,7 +768,7 @@ func TestExecuteApprovalsTask_ProcessEvent(t *testing.T) {
 	approverID := "approver@example.com"
 
 	mockProvider := aws.NewMockAwsProvider()
-	provider := models.Provider{
+	provider := models.ProviderConfig{
 		Name:     "mock",
 		Provider: "aws",
 		Enabled:  true,

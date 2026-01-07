@@ -81,9 +81,9 @@ func (t *notifyFunction) ValidateRequest(
 
 	// filter out providers to see if the name matches
 	for _, provider := range notifierProviders {
-		if strings.Compare(provider.Name, notificationReq.Provider) == 0 {
+		if strings.Compare(provider.GetName(), notificationReq.Provider) == 0 {
 			return nil
-		} else if strings.Compare(provider.Provider, notificationReq.Provider) == 0 {
+		} else if strings.Compare(provider.GetProvider(), notificationReq.Provider) == 0 {
 			return nil
 		}
 	}
@@ -205,13 +205,13 @@ func (t *notifyFunction) Execute(
 	}
 
 	// Get server config to fetch provider
-	providerConfig, err := t.config.GetProviderByName(foundProvider)
+	provider, err := t.config.GetProviderByName(foundProvider)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get provider config: %w", err)
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"provider": providerConfig.Name,
+		"provider": provider.GetName(),
 	}).Info("Executing notification")
 
 	// Overwrite the notification request with the converted input
@@ -229,7 +229,7 @@ func (t *notifyFunction) Execute(
 		return nil, fmt.Errorf("failed to convert notification payload: %w", err)
 	}
 
-	err = providerConfig.GetClient().SendNotification(
+	err = provider.SendNotification(
 		workflowTask.GetContext(), notificationPayload)
 
 	if err != nil {

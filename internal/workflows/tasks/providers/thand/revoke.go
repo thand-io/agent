@@ -321,7 +321,7 @@ func executeGoRevokeParallel(
 				return
 			}
 
-			revokeOut, err := providerCall.GetClient().RevokeRole(
+			revokeOut, err := providerCall.RevokeRole(
 				workflowTask.GetContext(), &revokeTask.RevokeReq,
 			)
 

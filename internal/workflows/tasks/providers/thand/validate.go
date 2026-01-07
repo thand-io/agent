@@ -94,7 +94,7 @@ func (t *thandTask) executeValidateTask(
 
 	primaryProvider := elevateRequest.Providers[0]
 
-	providerCall, err := t.config.GetProviderByName(primaryProvider)
+	provider, err := t.config.GetProviderByName(primaryProvider)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get provider: %w", err)
 	}
@@ -102,7 +102,7 @@ func (t *thandTask) executeValidateTask(
 	responseOut := map[string]any{}
 
 	// Validate role
-	validateOut, err := models.ValidateRole(providerCall.GetClient(), elevateRequest)
+	validateOut, err := models.ValidateRole(provider, elevateRequest)
 
 	if err != nil {
 		return nil, err

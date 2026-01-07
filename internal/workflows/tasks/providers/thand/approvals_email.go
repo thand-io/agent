@@ -39,7 +39,7 @@ func (a *approvalsNotifier) createApprovalEmailBody() (string, string) {
 		var providerNames []string
 		for _, providerID := range elevateRequest.Providers {
 			if provider, err := a.config.GetProviderByName(providerID); err == nil && provider != nil {
-				providerNames = append(providerNames, fmt.Sprintf("%s (%s)", provider.Name, providerID))
+				providerNames = append(providerNames, fmt.Sprintf("%s (%s)", provider.GetName(), providerID))
 			} else {
 				providerNames = append(providerNames, providerID)
 			}

@@ -141,7 +141,7 @@ func (t *authorizeFunction) executeAuthorization(
 		"user_username": elevateRequest.RoleRequest.User.Username,
 	}).Info("About to call AuthorizeRole on provider")
 
-	authOut, err := providerCall.GetClient().AuthorizeRole(
+	authOut, err := provider.AuthorizeRole(
 		workflowTask.GetContext(), &models.AuthorizeRoleRequest{
 			RoleRequest: elevateRequest.RoleRequest,
 		},

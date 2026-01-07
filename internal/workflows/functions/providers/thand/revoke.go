@@ -126,7 +126,7 @@ func (t *revokeFunction) executeRevocation(
 		return nil, fmt.Errorf("failed to get provider: %w", err)
 	}
 
-	revokeOut, err := providerCall.GetClient().RevokeRole(
+	revokeOut, err := providerCall.RevokeRole(
 		workflowTask.GetContext(), &models.RevokeRoleRequest{
 			RoleRequest:           revokeRequest.RoleRequest,
 			AuthorizeRoleResponse: revokeRequest.AuthorizeRoleResponse,

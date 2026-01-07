@@ -174,9 +174,11 @@ func (c *Config) GetProvidersByCapabilityWithUser(user *models.User, capability 
 			continue
 		}
 
-		if provider.HasAnyCapability(capability...) {
-			providers[name] = provider
+		if len(capability) != 0 && !provider.HasAnyCapability(capability...) {
+			continue
 		}
+
+		providers[name] = provider
 	}
 	return providers
 }

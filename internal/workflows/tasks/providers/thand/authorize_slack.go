@@ -164,13 +164,6 @@ func (a *authorizerNotifier) addProviderAccessButton(
 			continue
 		}
 
-		providerClient := provider.GetClient()
-
-		if providerClient == nil {
-			logrus.Errorf("Provider '%s' has no client defined for access URL", providerName)
-			continue
-		}
-
 		// See if the user ids or emails match in the auth requests/responses
 
 		authRequest, foundReq := a.authRequests[toIdentity.GetId()]
@@ -181,7 +174,7 @@ func (a *authorizerNotifier) addProviderAccessButton(
 			continue
 		}
 
-		accessUrl := providerClient.GetAuthorizedAccessUrl(
+		accessUrl := provider.GetAuthorizedAccessUrl(
 			context.TODO(),
 			authRequest,
 			authResponse,

@@ -13,9 +13,9 @@ import (
 )
 
 type ConfigPatchRequest struct {
-	RoleConfig     *RoleConfig     `json:"roles,omitempty"`
-	WorkflowConfig *WorkflowConfig `json:"workflows,omitempty"`
-	ProviderConfig *ProviderConfig `json:"providers,omitempty"`
+	RoleConfig     *RoleConfig                `json:"roles,omitempty"`
+	WorkflowConfig *WorkflowConfig            `json:"workflows,omitempty"`
+	ProviderConfig *ProviderDefinitionsConfig `json:"providers,omitempty"`
 }
 
 func (c *Config) MergeConfiguration(config *RegistrationResponse) error {
@@ -183,7 +183,7 @@ func (c *Config) updateWorkflows(workflowConfig *WorkflowConfig) error {
 	return err
 }
 
-func (c *Config) updateProviders(providerConfig *ProviderConfig) error {
+func (c *Config) updateProviders(providerConfig *ProviderDefinitionsConfig) error {
 	_, err := c.ApplyProviders([]*models.ProviderDefinitions{{
 		Providers: providerConfig.Definitions,
 	}})

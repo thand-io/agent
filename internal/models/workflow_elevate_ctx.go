@@ -10,8 +10,9 @@ func NewElevationWorkflowContext(workflow *Workflow) (*ElevateWorkflowTask, erro
 		return nil, err
 	}
 
-	// Set the workflow name
-	newWorkflow.WorkflowName = workflow.GetName()
+	// Set the workflow identifier, this will be used to hydrate the
+	// workflow as it transitions through different states
+	newWorkflow.WorkflowName = workflow.GetIdentifier()
 
 	return NewElevateWorkflowTask(newWorkflow), nil
 }

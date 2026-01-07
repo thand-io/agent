@@ -139,12 +139,12 @@ func (t *thandTask) executeAuthorization(
 
 	for _, providerName := range elevateRequest.Providers {
 
-		providerCall, err := t.config.GetProviderByName(providerName)
+		provider, err := t.config.GetProviderByName(providerName)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get provider: %w", err)
 		}
 
-		validateOutput, err := t.validateRoleAndBuildOutput(providerCall, *elevateRequest)
+		validateOutput, err := t.validateRoleAndBuildOutput(provider, *elevateRequest)
 		if err != nil {
 			return nil, err
 		}
@@ -388,7 +388,7 @@ func (t *thandTask) executeGoParallel(
 				return
 			}
 
-			authOut, err := providerCall.GetClient().AuthorizeRole(
+			authOut, err := providerCall.AuthorizeRole(
 				workflowTask.GetContext(), &authTask.AuthRequest,
 			)
 
@@ -408,12 +408,12 @@ func (t *thandTask) executeGoParallel(
 
 // validateRoleAndBuildOutput validates the role and builds the initial model output
 func (t *thandTask) validateRoleAndBuildOutput(
-	providerCall *models.Provider,
+	provider models.Provider,
 	elevateRequest models.ElevateRequestInternal,
 ) (map[string]any, error) {
 	modelOutput := map[string]any{}
 
-	validateOut, err := models.ValidateRole(providerCall.GetClient(), elevateRequest)
+	validateOut, err := models.ValidateRole(provider, elevateRequest)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
 			"error": err,
@@ -448,8 +448,10 @@ func (t *thandTask) scheduleRevocation(
 
 	log := workflowTask.GetLogger()
 
-	newTask := workflowTask.Clone().(*models.ElevateWorkflowTask)
-	newTask.SetEntrypoint(revocationTask)
+	newWorkflowTask := workflowTask.Clone().(*sdkWorkflowsModel.WorkflowTask)
+	newWorkflowTask.SetEntrypoint(revocationTask)
+
+	newTask := models.NewElevateWorkflowTask(newWorkflowTask)
 
 	serviceClient := t.config.GetServices()
 
