@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/identitystore"
@@ -445,7 +446,7 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models
 	}
 
 	// 4. Delete the Account Assignment
-	_, err = p.ssoAdminService.DeleteAccountAssignment(ctx, &ssoadmin.DeleteAccountAssignmentInput{
+	deleteOutput, err := p.ssoAdminService.DeleteAccountAssignment(ctx, &ssoadmin.DeleteAccountAssignmentInput{
 		InstanceArn:      aws.String(instanceArn),
 		PermissionSetArn: aws.String(permissionSetArn),
 		PrincipalId:      aws.String(principalId),
@@ -458,7 +459,48 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models
 		return fmt.Errorf("failed to delete account assignment: %w", err)
 	}
 
-	return nil
+	logrus.WithFields(logrus.Fields{
+		"principalId":     *deleteOutput.AccountAssignmentDeletionStatus.PrincipalId,
+		"targetAccountID": p.GetAccountID(),
+	}).Info("Deleted account assignment")
+
+	// poll to verify deletion
+	// In a production system, you might want to implement polling with backoff here
+	backoffDuration := 1 * time.Second
+	backoutLimit := 15
+	iter := 0
+	for {
+		if iter >= backoutLimit {
+			return fmt.Errorf("timed out waiting for account assignment deletion for principalId %s in account %s", principalId, p.GetAccountID())
+		}
+		iter++
+		time.Sleep(backoffDuration)
+		statusOutput, err := p.ssoAdminService.DescribeAccountAssignmentDeletionStatus(ctx, &ssoadmin.DescribeAccountAssignmentDeletionStatusInput{
+			InstanceArn:                        aws.String(instanceArn),
+			AccountAssignmentDeletionRequestId: deleteOutput.AccountAssignmentDeletionStatus.RequestId,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to describe account assignment deletion status: %w", err)
+		}
+
+		switch statusOutput.AccountAssignmentDeletionStatus.Status {
+		case types.StatusValuesFailed:
+			logrus.WithFields(logrus.Fields{
+				"principalId":     *statusOutput.AccountAssignmentDeletionStatus.PrincipalId,
+				"targetAccountID": targetAccountID,
+				"failureReason":   *statusOutput.AccountAssignmentDeletionStatus.FailureReason,
+			}).Errorf("account assignment deletion failed for principalId %s in account %s", *statusOutput.AccountAssignmentDeletionStatus.PrincipalId, targetAccountID)
+			return fmt.Errorf("account assignment deletion failed for principalId %s in account %s", *statusOutput.AccountAssignmentDeletionStatus.PrincipalId, targetAccountID)
+		case types.StatusValuesInProgress:
+			continue
+		case types.StatusValuesSucceeded:
+			logrus.WithFields(logrus.Fields{
+				"principalId":     *statusOutput.AccountAssignmentDeletionStatus.PrincipalId,
+				"targetAccountID": targetAccountID,
+			}).Info("Account assignment deletion succeeded")
+			return nil
+		}
+	}
 }
 
 // findPermissionSetByName finds a permission set by name
