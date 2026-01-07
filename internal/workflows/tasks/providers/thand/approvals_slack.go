@@ -326,7 +326,7 @@ func (a *approvalsNotifier) addIdentitiesSection(blocks *[]slack.Block, elevateR
 // addActionSection adds action buttons section based on approval requirements
 func (a *approvalsNotifier) addActionSection(
 	blocks *[]slack.Block,
-	workflowTask *models.ThandWorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	approvalNotifier *ApprovalNotifier,
 ) {
 	if approvalNotifier.Approvals > 0 {
@@ -440,12 +440,12 @@ func (a *approvalsNotifier) addActionSection(
 	}
 }
 
-func (a *approvalsNotifier) createViewRequestUrl(workflowTask sdkWorkflowsModel.WorkflowTask) string {
+func (a *approvalsNotifier) createViewRequestUrl(workflowTask *sdkWorkflowsModel.WorkflowTask) string {
 	return fmt.Sprintf("%s/execution/%s", a.config.GetLoginServerUrl(), workflowTask.GetWorkflowID())
 }
 
 func (a *approvalsNotifier) createCallbackUrl(
-	workflowTask *models.ThandWorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	approvalNotifier *ApprovalNotifier,
 	approve bool,
 ) string {
@@ -464,7 +464,7 @@ func (a *approvalsNotifier) createCallbackUrl(
 	// event.SetExtension("user", "")
 
 	// Setup workflow for the next state
-	signaledWorkflow := workflowTask.Clone().(*models.ThandWorkflowTask)
+	signaledWorkflow := workflowTask.Clone().(*models.ElevateWorkflowTask)
 	signaledWorkflow.SetInput(&event)
 
 	if len(approvalNotifier.Entrypoint) > 0 {

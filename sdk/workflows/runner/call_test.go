@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
-	"github.com/thand-io/agent/internal/models"
 	slackProvider "github.com/thand-io/agent/internal/providers/slack"
 	"github.com/thand-io/agent/sdk/workflows/config"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
@@ -17,7 +16,7 @@ type MockFunction struct {
 	version     string
 	lastCall    *model.CallFunction
 	lastInput   any
-	lastTask    sdkWorkflowsModel.WorkflowTask
+	lastTask    *sdkWorkflowsModel.WorkflowTask
 }
 
 func NewMockFunction(name string) *MockFunction {
@@ -43,7 +42,7 @@ func (m *MockFunction) GetOptionalParameters() map[string]any {
 }
 
 func (m *MockFunction) ValidateRequest(
-	workflowTask sdkWorkflowsModel.WorkflowTask,
+	workflowTask *sdkWorkflowsModel.WorkflowTask,
 	call *model.CallFunction,
 	input any,
 ) error {
@@ -55,7 +54,7 @@ func (m *MockFunction) ValidateRequest(
 }
 
 func (m *MockFunction) Execute(
-	workflowTask sdkWorkflowsModel.WorkflowTask,
+	workflowTask *sdkWorkflowsModel.WorkflowTask,
 	call *model.CallFunction,
 	input any,
 ) (any, error) {
@@ -74,7 +73,7 @@ func TestExecuteCallFunction_MessageInterpolation(t *testing.T) {
 	cfg.RegisterFunction(mockFunction)
 
 	// Create a workflow task with user context
-	workflowTask := &models.WorkflowTask{
+	workflowTask := &sdkWorkflowsModel.WorkflowTask{
 		WorkflowID: "test-workflow",
 		Context: map[string]any{
 			"user": map[string]any{
@@ -166,7 +165,7 @@ func TestExecuteCallFunction_MultipleExpressions(t *testing.T) {
 	cfg.RegisterFunction(mockFunction)
 
 	// Create a workflow task with user context
-	workflowTask := &models.WorkflowTask{
+	workflowTask := &sdkWorkflowsModel.WorkflowTask{
 		WorkflowID: "test-workflow",
 		Context: map[string]any{
 			"user": map[string]any{

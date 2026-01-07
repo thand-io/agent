@@ -43,7 +43,7 @@ type temporalNotifyResult struct {
 }
 
 func (t *thandTask) executeNotifyTask(
-	workflowTask *models.ThandWorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	taskName string,
 	call *taskModel.ThandTask,
 ) (any, error) {
@@ -89,7 +89,7 @@ func (t *thandTask) executeNotifyTask(
 }
 
 func (t *thandTask) executeNotify(
-	workflowTask *models.ThandWorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	taskName string,
 	notify NotifierImpl,
 ) (any, error) {
@@ -198,7 +198,7 @@ func hasMatchingProvider(notificationReq thandFunction.NotifierRequest, notifier
 
 // executeNotifyTemporalParallel executes notification tasks in parallel using Temporal
 func (t *thandTask) executeNotifyTemporalParallel(
-	workflowTask *models.ThandWorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	taskName string,
 	notifyTasks []notifyTask,
 ) ([]notifyResult, error) {
@@ -283,7 +283,7 @@ func (t *thandTask) executeNotifyTemporalParallel(
 
 // executeNotifyGoParallel executes notification tasks in parallel using Go routines and WaitGroup
 func (t *thandTask) executeNotifyGoParallel(
-	workflowTask *models.ThandWorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	notifyTasks []notifyTask,
 ) ([]notifyResult, error) {
 

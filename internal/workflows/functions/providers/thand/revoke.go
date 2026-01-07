@@ -9,7 +9,7 @@ import (
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/sdk/workflows/functions"
-	workflowModel "github.com/thand-io/agent/sdk/workflows/models"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 const ThandRevokeFunction = "thand.revoke"
@@ -55,7 +55,7 @@ func (t *revokeFunction) GetOptionalParameters() map[string]any {
 
 // ValidateRequest validates the input parameters
 func (t *revokeFunction) ValidateRequest(
-	workflowTask workflowModel.WorkflowTask,
+	workflowTask *sdkWorkflowsModel.WorkflowTask,
 	call *model.CallFunction,
 	input any,
 ) error {
@@ -64,7 +64,7 @@ func (t *revokeFunction) ValidateRequest(
 
 // Execute performs the revocation logic
 func (t *revokeFunction) Execute(
-	workflowTask workflowModel.WorkflowTask,
+	workflowTask *sdkWorkflowsModel.WorkflowTask,
 	call *model.CallFunction,
 	input any,
 ) (any, error) {
@@ -80,17 +80,13 @@ func (t *revokeFunction) Execute(
 
 // validateAndParseRequests validates and parses the incoming requests
 func (t *revokeFunction) validateAndParseRequests(
-	workflowTask workflowModel.WorkflowTask,
+	workflowTask *sdkWorkflowsModel.WorkflowTask,
 	call *model.CallFunction,
 	input any,
 ) (*ThandRevokeRequest, error) {
 
 	// Cast to ThandWorkflowTask to access context methods
-	thandWorkflowTask, ok := workflowTask.(*models.ThandWorkflowTask)
-
-	if !ok {
-		return nil, fmt.Errorf("workflow task is not of type ThandWorkflowTask")
-	}
+	thandWorkflowTask := models.NewElevateWorkflowTask(workflowTask)
 
 	elevationRequest, err := thandWorkflowTask.GetContextAsElevationRequest()
 
@@ -120,7 +116,7 @@ func (t *revokeFunction) validateAndParseRequests(
 
 // executeRevocation performs the main revocation workflow
 func (t *revokeFunction) executeRevocation(
-	workflowTask workflowModel.WorkflowTask,
+	workflowTask *sdkWorkflowsModel.WorkflowTask,
 	revokeRequest *ThandRevokeRequest,
 ) (any, error) {
 

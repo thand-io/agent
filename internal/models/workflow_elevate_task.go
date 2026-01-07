@@ -32,18 +32,18 @@ const (
 	VarsContextApproved  = "approved"
 )
 
-// ThandWorkflowTask represents a task within a workflow and implements TaskSupport
-type ThandWorkflowTask struct {
-	*sdkWorkflowsModel.ServerlessWorkflowTask
+// ElevateWorkflowTask represents a task within a workflow and implements TaskSupport
+type ElevateWorkflowTask struct {
+	*sdkWorkflowsModel.WorkflowTask
 }
 
-func NewThandWorkflowTask(serverlessWorkflow *sdkWorkflowsModel.ServerlessWorkflowTask) *ThandWorkflowTask {
-	return &ThandWorkflowTask{
-		ServerlessWorkflowTask: serverlessWorkflow,
+func NewElevateWorkflowTask(serverlessWorkflow *sdkWorkflowsModel.WorkflowTask) *ElevateWorkflowTask {
+	return &ElevateWorkflowTask{
+		WorkflowTask: serverlessWorkflow,
 	}
 }
 
-func (r *ThandWorkflowTask) GetEncodedTask(encryptor EncryptionImpl) string {
+func (r *ElevateWorkflowTask) GetEncodedTask(encryptor EncryptionImpl) string {
 
 	// Tasks may contain sensitive data so always encrypt
 	return EncodingWrapper{
@@ -52,24 +52,24 @@ func (r *ThandWorkflowTask) GetEncodedTask(encryptor EncryptionImpl) string {
 	}.EncodeAndEncrypt(encryptor)
 }
 
-func (r *ThandWorkflowTask) SetUser(user *User) {
+func (r *ElevateWorkflowTask) SetUser(user *User) {
 	r.SetContextKeyValue(VarsContextUser, user.AsMap())
 }
 
-func (r *ThandWorkflowTask) SetRole(role *Role) {
+func (r *ElevateWorkflowTask) SetRole(role *Role) {
 	r.SetContextKeyValue(VarsContextRole, role.AsMap())
 }
 
 // Helper methods for TaskSupport
-func (r *ThandWorkflowTask) SetWorkflowDef(workflow *model.Workflow) {
+func (r *ElevateWorkflowTask) SetWorkflowDef(workflow *model.Workflow) {
 	r.Workflow = workflow
 }
 
-func (r *ThandWorkflowTask) SetContext(ctx any) {
+func (r *ElevateWorkflowTask) SetContext(ctx any) {
 	r.Context = ctx
 }
 
-func (r *ThandWorkflowTask) SetContextKeyValue(key string, value any) {
+func (r *ElevateWorkflowTask) SetContextKeyValue(key string, value any) {
 	if r.Context == nil {
 		r.Context = map[string]any{}
 	}
@@ -83,7 +83,7 @@ func (r *ThandWorkflowTask) SetContextKeyValue(key string, value any) {
 
 }
 
-func (r *ThandWorkflowTask) GetAuthenticationProvider() string {
+func (r *ElevateWorkflowTask) GetAuthenticationProvider() string {
 
 	elevationRequest, err := r.GetContextAsElevationRequest()
 
@@ -96,7 +96,7 @@ func (r *ThandWorkflowTask) GetAuthenticationProvider() string {
 
 }
 
-func (r *ThandWorkflowTask) GetTaskList() *model.TaskList {
+func (r *ElevateWorkflowTask) GetTaskList() *model.TaskList {
 	workflow := r.GetWorkflowDef()
 
 	if workflow == nil {
@@ -107,21 +107,21 @@ func (r *ThandWorkflowTask) GetTaskList() *model.TaskList {
 	return workflow.Do
 }
 
-func (r *ThandWorkflowTask) GetCurrentTaskItem() (int, *model.TaskItem) {
+func (r *ElevateWorkflowTask) GetCurrentTaskItem() (int, *model.TaskItem) {
 	taskList := r.GetTaskList()
 	currentState := r.GetTaskName()
 	return taskList.KeyAndIndex(currentState)
 
 }
 
-func (r *ThandWorkflowTask) GetNextTask() (int, *model.TaskItem) {
+func (r *ElevateWorkflowTask) GetNextTask() (int, *model.TaskItem) {
 	taskList := r.GetTaskList()
 	currentIndex, _ := r.GetCurrentTaskItem()
 	nextIndex, nextState := taskList.Next(currentIndex)
 	return nextIndex, nextState
 }
 
-func (r *ThandWorkflowTask) GetContextAsElevationRequest() (*ElevateRequestInternal, error) {
+func (r *ElevateWorkflowTask) GetContextAsElevationRequest() (*ElevateRequestInternal, error) {
 	var req ElevateRequestInternal
 	if err := common.ConvertInterfaceToInterface(r.GetInstanceCtx(), &req); err != nil {
 		return nil, fmt.Errorf("failed to decode context as ElevateRequestInternal: %w", err)
@@ -129,7 +129,7 @@ func (r *ThandWorkflowTask) GetContextAsElevationRequest() (*ElevateRequestInter
 	return &req, nil
 }
 
-func (r *ThandWorkflowTask) GetUser() *User {
+func (r *ElevateWorkflowTask) GetUser() *User {
 
 	req, err := r.GetContextAsElevationRequest()
 
@@ -141,7 +141,7 @@ func (r *ThandWorkflowTask) GetUser() *User {
 
 }
 
-func (r *ThandWorkflowTask) GetRole() *Role {
+func (r *ElevateWorkflowTask) GetRole() *Role {
 	req, err := r.GetContextAsElevationRequest()
 
 	if req == nil || err != nil {
@@ -151,7 +151,7 @@ func (r *ThandWorkflowTask) GetRole() *Role {
 	return req.Role
 }
 
-func (ctx *ThandWorkflowTask) IsApproved() *bool {
+func (ctx *ElevateWorkflowTask) IsApproved() *bool {
 
 	if context := ctx.GetContextAsMap(); len(context) > 0 {
 		if approved, ok := context[VarsContextApproved].(bool); ok {

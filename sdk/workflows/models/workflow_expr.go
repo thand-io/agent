@@ -21,7 +21,7 @@ import (
 	"github.com/thand-io/agent/internal/interpolate"
 )
 
-func (t *ServerlessWorkflowTask) TraverseAndEvaluateWithVars(node any, input any, variables map[string]any) (any, error) {
+func (t *WorkflowTask) TraverseAndEvaluateWithVars(node any, input any, variables map[string]any) (any, error) {
 	if err := t.mergeContextInVars(variables); err != nil {
 		return nil, err
 	}
@@ -29,11 +29,11 @@ func (t *ServerlessWorkflowTask) TraverseAndEvaluateWithVars(node any, input any
 }
 
 // TraverseAndEvaluate recursively processes and evaluates all expressions in a JSON-like structure
-func (t *ServerlessWorkflowTask) TraverseAndEvaluate(node any, input any) (any, error) {
+func (t *WorkflowTask) TraverseAndEvaluate(node any, input any) (any, error) {
 	return t.TraverseAndEvaluateWithVars(node, input, map[string]any{})
 }
 
-func (t *ServerlessWorkflowTask) mergeContextInVars(variables map[string]any) error {
+func (t *WorkflowTask) mergeContextInVars(variables map[string]any) error {
 	if variables == nil {
 		variables = make(map[string]any)
 	}
@@ -43,7 +43,7 @@ func (t *ServerlessWorkflowTask) mergeContextInVars(variables map[string]any) er
 	return nil
 }
 
-func (t *ServerlessWorkflowTask) TraverseAndEvaluateObj(runtimeExpr *model.ObjectOrRuntimeExpr, input any, taskName string) (output any, err error) {
+func (t *WorkflowTask) TraverseAndEvaluateObj(runtimeExpr *model.ObjectOrRuntimeExpr, input any, taskName string) (output any, err error) {
 	if runtimeExpr == nil {
 		return input, nil
 	}
@@ -54,7 +54,7 @@ func (t *ServerlessWorkflowTask) TraverseAndEvaluateObj(runtimeExpr *model.Objec
 	return output, nil
 }
 
-func (t *ServerlessWorkflowTask) TraverseAndEvaluateBool(runtimeExpr string, input any) (bool, error) {
+func (t *WorkflowTask) TraverseAndEvaluateBool(runtimeExpr string, input any) (bool, error) {
 	if len(runtimeExpr) == 0 {
 		return false, nil
 	}

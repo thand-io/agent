@@ -7,7 +7,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
-	sdkModel "github.com/thand-io/agent/sdk/workflows/models"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 	"github.com/thand-io/agent/sdk/workflows/tasks"
 )
 
@@ -79,7 +79,7 @@ func (f *thandTask) GetVersion() string {
 
 // Execute executes the Thand approvals task
 func (t *thandTask) Execute(
-	workflowTask sdkModel.WorkflowTask,
+	workflowTask *sdkWorkflowsModel.WorkflowTask,
 	task *model.TaskItem,
 	input any,
 ) (any, error) {
@@ -96,11 +96,7 @@ func (t *thandTask) Execute(
 	}
 
 	// Convert the workflow task to our Thand workflow task type
-	thandWorkflowTask, ok := workflowTask.(*models.ThandWorkflowTask)
-
-	if !ok {
-		return nil, fmt.Errorf("workflow task is not of type ThandWorkflowTask")
-	}
+	thandWorkflowTask := models.NewElevateWorkflowTask(workflowTask)
 
 	// Create a copy to preserve the original workflow intent
 	interpolatedTask := *thandTask

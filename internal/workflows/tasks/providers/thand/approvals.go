@@ -40,7 +40,7 @@ func (n *ApprovalsTask) AsMap() map[string]any {
 }
 
 func (t *thandTask) executeApprovalsTask(
-	workflowTask *models.ThandWorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	taskName string,
 	call *taskModel.ThandTask,
 	input any) (any, error) {
@@ -359,7 +359,7 @@ func (t *thandTask) executeApprovalsTask(
 // evaluateApprovalSwitch evaluates the approval logic using a switch task
 // to determine if the request should be approved, denied, or loop back for more approvals
 func (t *thandTask) evaluateApprovalSwitch(
-	workflowTask *models.ThandWorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	taskName string,
 	approvals map[string]any,
 	requiredApprovals int,
@@ -404,7 +404,7 @@ func (t *thandTask) evaluateApprovalSwitch(
 }
 
 func (t *thandTask) makeApprovalNotifications(
-	workflowTask *models.ThandWorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	taskName string,
 	approvalsTask *ApprovalsTask,
 	elevationRequest *models.ElevateRequestInternal,
@@ -502,7 +502,7 @@ func (t *thandTask) makeApprovalNotifications(
 
 // notifyApprovalRejection sends a notification to the approver when their approval is rejected
 func (t *thandTask) notifyApprovalRejection(
-	workflowTask *models.ThandWorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	taskName string,
 	approverUser *models.User,
 	approvalsTask *ApprovalsTask,

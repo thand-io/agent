@@ -44,8 +44,8 @@ func (m *WorkflowManager) registerWorkflows() error {
 }
 
 // createPrimaryWorkflowHandler creates the main workflow handler function
-func (m *WorkflowManager) CreateServerlessWorkflowHandler() func(workflow.Context, sdkWorkflowsModel.WorkflowTask) (sdkWorkflowsModel.WorkflowTask, error) {
-	return func(rootCtx workflow.Context, workflowTask sdkWorkflowsModel.WorkflowTask) (outputTask sdkWorkflowsModel.WorkflowTask, outputError error) {
+func (m *WorkflowManager) CreateServerlessWorkflowHandler() func(workflow.Context, *sdkWorkflowsModel.WorkflowTask) (*sdkWorkflowsModel.WorkflowTask, error) {
+	return func(rootCtx workflow.Context, workflowTask *sdkWorkflowsModel.WorkflowTask) (outputTask *sdkWorkflowsModel.WorkflowTask, outputError error) {
 
 		log := workflow.GetLogger(rootCtx)
 		log.Info("Primary workflow execution started")
@@ -109,9 +109,9 @@ func (m *WorkflowManager) CreateServerlessWorkflowHandler() func(workflow.Contex
 
 func SetupGetWorkflowTaskQueryHandler(
 	ctx workflow.Context,
-	workflowTask sdkWorkflowsModel.WorkflowTask,
+	workflowTask *sdkWorkflowsModel.WorkflowTask,
 ) error {
-	return workflow.SetQueryHandler(ctx, models.TemporalGetWorkflowTaskQueryName, func() (sdkWorkflowsModel.WorkflowTask, error) {
+	return workflow.SetQueryHandler(ctx, models.TemporalGetWorkflowTaskQueryName, func() (*sdkWorkflowsModel.WorkflowTask, error) {
 		log := workflow.GetLogger(ctx)
 		log.Info("GetWorkflowTask query received",
 			"WorkflowID", workflowTask.GetWorkflowID(),
@@ -162,7 +162,7 @@ func SetupTerminationHandler(
 func SetupWorkflowSelector(
 	ctx workflow.Context,
 	resumeSignal workflow.ReceiveChannel,
-	workflowTask sdkWorkflowsModel.WorkflowTask,
+	workflowTask *sdkWorkflowsModel.WorkflowTask,
 ) workflow.Selector {
 	workflowSelector := workflow.NewSelector(ctx)
 	log := workflow.GetLogger(ctx)

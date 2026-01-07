@@ -17,6 +17,7 @@ import (
 	providerSlack "github.com/thand-io/agent/internal/workflows/functions/providers/slack"
 	providerThand "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 	taskThand "github.com/thand-io/agent/internal/workflows/tasks/providers/thand"
+	sdkModels "github.com/thand-io/agent/sdk/models"
 	sdkWorkflowsConfig "github.com/thand-io/agent/sdk/workflows/config"
 	"github.com/thand-io/agent/sdk/workflows/functions"
 	workflowSdk "github.com/thand-io/agent/sdk/workflows/manager"
@@ -200,7 +201,7 @@ func (m *ThandWorkflowManager) executeElevationWorkflow(
 	// Convert input to map
 	internalContext := request.AsMap()
 
-	workflowTask, err := models.NewThandWorkflowContext(workflow)
+	workflowTask, err := models.NewElevationWorkflowContext(workflow)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create workflow context: %w", err)
@@ -284,8 +285,8 @@ func (m *ThandWorkflowManager) executeElevationWorkflow(
 }
 
 func (m *ThandWorkflowManager) ResumeWorkflow(
-	workflowTask *models.ThandWorkflowTask,
-) (sdkWorkflowsModel.WorkflowTask, error) {
+	workflowTask *models.ElevateWorkflowTask,
+) (*models.ElevateWorkflowTask, error) {
 
 	ctx := workflowTask.GetContext()
 
@@ -345,13 +346,13 @@ func (m *ThandWorkflowManager) ResumeWorkflow(
 }
 
 func (m *ThandWorkflowManager) ResumeWorkflowTask(
-	workflowTask *models.ThandWorkflowTask,
-) (sdkWorkflowsModel.WorkflowTask, error) {
+	workflowTask *models.ElevateWorkflowTask,
+) (*models.ElevateWorkflowTask, error) {
 	result, err := m.workflowManager.ResumeWorkflowTask(workflowTask)
 	return result, err
 }
 
-func (m *ThandWorkflowManager) createTemporalWorkflow(workflowTask *models.ThandWorkflowTask) error {
+func (m *ThandWorkflowManager) createTemporalWorkflow(workflowTask *models.ElevateWorkflowTask) error {
 	// Not found, so start a new workflow execution
 
 	logrus.WithFields(logrus.Fields{
@@ -412,7 +413,7 @@ func (m *ThandWorkflowManager) createTemporalWorkflow(workflowTask *models.Thand
 	if !temporalService.IsVersioningDisabled() {
 		workflowOptions.VersioningOverride = &client.PinnedVersioningOverride{
 			Version: worker.WorkerDeploymentVersion{
-				DeploymentName: models.TemporalDeploymentName,
+				DeploymentName: sdkModels.TemporalDeploymentName,
 				BuildID:        common.GetBuildIdentifier(),
 			},
 		}

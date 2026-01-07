@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
-	"github.com/thand-io/agent/internal/models"
+	"github.com/thand-io/agent/sdk/models"
 	"github.com/thand-io/agent/sdk/workflows/functions"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 	"github.com/thand-io/agent/sdk/workflows/tasks"
@@ -14,7 +14,7 @@ import (
 
 type Config interface {
 	HasTemporal() bool
-	GetTemporal() models.TemporalImpl
+	GetTemporal() models.TemporalService
 
 	GetFunctionRegistry() *functions.FunctionRegistry
 	RegisterFunction(f functions.Function) error
@@ -25,11 +25,11 @@ type Config interface {
 	GetTask(taskItem *model.TaskItem) (tasks.Task, bool)
 
 	RegisterWorkflow(name string, workflow model.Workflow) error
-	HydrateWorkflowTask(workflowTask sdkWorkflowsModel.WorkflowTask) error
+	HydrateWorkflowTask(workflowTask sdkWorkflowsModel.WorkflowTaskSupport) error
 }
 
 type configService struct {
-	temporal  models.TemporalImpl
+	temporal  models.TemporalService
 	functions *functions.FunctionRegistry
 	workflows map[string]model.Workflow
 	tasks     *tasks.TaskRegistry
@@ -73,7 +73,7 @@ func (c *configService) GetWorkflow(name string) (model.Workflow, bool) {
 	return workflow, exists
 }
 
-func (c *configService) WithTemporal(temporal models.TemporalImpl) *configService {
+func (c *configService) WithTemporal(temporal models.TemporalService) *configService {
 	c.temporal = temporal
 	return c
 }
@@ -82,7 +82,7 @@ func (c *configService) HasTemporal() bool {
 	return true
 }
 
-func (c *configService) GetTemporal() models.TemporalImpl {
+func (c *configService) GetTemporal() models.TemporalService {
 	return c.temporal
 }
 
@@ -102,7 +102,7 @@ func (c *configService) GetFunctionRegistry() *functions.FunctionRegistry {
 	return c.functions
 }
 
-func (c *configService) HydrateWorkflowTask(workflowTask sdkWorkflowsModel.WorkflowTask) error {
+func (c *configService) HydrateWorkflowTask(workflowTask sdkWorkflowsModel.WorkflowTaskSupport) error {
 
 	if workflowTask.GetWorkflowDef() == nil {
 
@@ -115,13 +115,6 @@ func (c *configService) HydrateWorkflowTask(workflowTask sdkWorkflowsModel.Workf
 		// TODO: Clone the workflow definition to avoid mutations
 		workflowTask.SetWorkflowDef(&workflowDsl)
 
-	}
-
-	// Create a new task state if it does not exist
-	// This is important as we might be in the middle of a workflow and
-	// the state might not have been initialised yet
-	if !workflowTask.HasState() {
-		workflowTask.ClearTaskContext()
 	}
 
 	return nil

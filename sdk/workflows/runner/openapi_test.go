@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
-	"github.com/thand-io/agent/internal/models"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 // getTestOpenAPIDoc returns the test OpenAPI document template
@@ -448,7 +448,7 @@ func TestExecuteOpenAPIFunction(t *testing.T) {
 	runner := &ResumableWorkflowRunner{}
 
 	// Initialize the workflow task to avoid nil pointer
-	runner.workflowTask = &models.WorkflowTask{}
+	runner.workflowTask = &sdkWorkflowsModel.WorkflowTask{}
 
 	// Test missing operationId
 	call := &model.CallOpenAPI{

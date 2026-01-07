@@ -5,7 +5,7 @@ import (
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
-	"github.com/thand-io/agent/sdk/workflows/models"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 func (d *ResumableWorkflowRunner) executeSwitchTask(
@@ -24,7 +24,7 @@ func (d *ResumableWorkflowRunner) executeSwitchTask(
 }
 
 func SwitchTaskHandler(
-	workflowTask models.WorkflowTask,
+	workflowTask *sdkWorkflowsModel.WorkflowTask,
 	input any,
 	taskKey string,
 	switchTask *model.SwitchTask,

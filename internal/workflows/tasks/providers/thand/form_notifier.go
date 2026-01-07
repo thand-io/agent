@@ -26,7 +26,7 @@ type FormNotifierConfig struct {
 
 type formNotifier struct {
 	config       models.ConfigImpl
-	workflowTask *models.ThandWorkflowTask
+	workflowTask *models.ElevateWorkflowTask
 	elevationReq *models.ElevateRequestInternal
 	req          *FormNotifierConfig
 }
@@ -34,7 +34,7 @@ type formNotifier struct {
 // NewFormNotifier creates a new form notifier
 func NewFormNotifier(
 	config models.ConfigImpl,
-	workflowTask *models.ThandWorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	elevationReq *models.ElevateRequestInternal,
 	req *FormNotifierConfig,
 ) NotifierImpl {

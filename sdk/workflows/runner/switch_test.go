@@ -6,8 +6,8 @@ import (
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/sdk/workflows/config"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 func TestEvaluateSwitchTask_StringMatching(t *testing.T) {
@@ -73,7 +73,7 @@ func TestEvaluateSwitchTask_StringMatching(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a test runner
 			cfg := config.NewConfigService()
-			workflowTask := &models.WorkflowTask{
+			workflowTask := &sdkWorkflowsModel.WorkflowTask{
 				WorkflowID: "test-workflow",
 			}
 
@@ -192,7 +192,7 @@ func TestEvaluateSwitchTask_NumericComparison(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a test runner
 			cfg := config.NewConfigService()
-			workflowTask := &models.WorkflowTask{
+			workflowTask := &sdkWorkflowsModel.WorkflowTask{
 				WorkflowID: "test-workflow",
 			}
 
@@ -299,7 +299,7 @@ func TestEvaluateSwitchTask_BooleanConditions(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a test runner
 			cfg := config.NewConfigService()
-			workflowTask := &models.WorkflowTask{
+			workflowTask := &sdkWorkflowsModel.WorkflowTask{
 				WorkflowID: "test-workflow",
 			}
 
@@ -394,7 +394,7 @@ func TestEvaluateSwitchTask_NestedObjectAccess(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a test runner
 			cfg := config.NewConfigService()
-			workflowTask := &models.WorkflowTask{
+			workflowTask := &sdkWorkflowsModel.WorkflowTask{
 				WorkflowID: "test-workflow",
 			}
 
@@ -436,7 +436,7 @@ func TestEvaluateSwitchTask_NestedObjectAccess(t *testing.T) {
 func TestEvaluateSwitchTask_DefaultCase(t *testing.T) {
 	// Create a test runner
 	cfg := config.NewConfigService()
-	workflowTask := &models.WorkflowTask{
+	workflowTask := &sdkWorkflowsModel.WorkflowTask{
 		WorkflowID: "test-workflow",
 	}
 
@@ -496,7 +496,7 @@ func TestEvaluateSwitchTask_DefaultCase(t *testing.T) {
 func TestEvaluateSwitchTask_FirstMatchWins(t *testing.T) {
 	// Create a test runner
 	cfg := config.NewConfigService()
-	workflowTask := &models.WorkflowTask{
+	workflowTask := &sdkWorkflowsModel.WorkflowTask{
 		WorkflowID: "test-workflow",
 	}
 
@@ -548,7 +548,7 @@ func TestEvaluateSwitchTask_FirstMatchWins(t *testing.T) {
 func TestEvaluateSwitchTask_ErrorCases(t *testing.T) {
 	// Create a test runner
 	cfg := config.NewConfigService()
-	workflowTask := &models.WorkflowTask{
+	workflowTask := &sdkWorkflowsModel.WorkflowTask{
 		WorkflowID: "test-workflow",
 	}
 

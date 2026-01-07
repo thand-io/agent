@@ -24,7 +24,7 @@ func NewServerlessWorkflow(config config.Config) *serverlessWorkflow {
 	}
 }
 
-func (m *serverlessWorkflow) Run(cancelCtx workflow.Context, workflowSelector workflow.Selector, workflowTask sdkWorkflowsModel.WorkflowTask) (outputTask sdkWorkflowsModel.WorkflowTask, outputError error) {
+func (m *serverlessWorkflow) Run(cancelCtx workflow.Context, workflowSelector workflow.Selector, workflowTask *sdkWorkflowsModel.WorkflowTask) (outputTask *sdkWorkflowsModel.WorkflowTask, outputError error) {
 
 	// Execute main workflow loop
 	return m.executeWorkflowLoop(cancelCtx, workflowSelector, workflowTask)
@@ -35,8 +35,8 @@ func (m *serverlessWorkflow) Run(cancelCtx workflow.Context, workflowSelector wo
 func (m *serverlessWorkflow) executeWorkflowLoop(
 	cancelCtx workflow.Context,
 	workflowSelector workflow.Selector,
-	workflowTask sdkWorkflowsModel.WorkflowTask,
-) (sdkWorkflowsModel.WorkflowTask, error) {
+	workflowTask *sdkWorkflowsModel.WorkflowTask,
+) (*sdkWorkflowsModel.WorkflowTask, error) {
 
 	log := workflow.GetLogger(cancelCtx)
 
@@ -137,7 +137,7 @@ func (m *serverlessWorkflow) waitForSignal(cancelCtx workflow.Context, workflowS
 
 // executeWorkflowStep executes a single workflow step and handles the result
 func (m *serverlessWorkflow) executeWorkflowStep(
-	ctx workflow.Context, workflowTask sdkWorkflowsModel.WorkflowTask) (sdkWorkflowsModel.WorkflowTask, error) {
+	ctx workflow.Context, workflowTask *sdkWorkflowsModel.WorkflowTask) (*sdkWorkflowsModel.WorkflowTask, error) {
 	log := workflow.GetLogger(ctx)
 
 	log.Info("Starting workflow execution")
@@ -158,8 +158,8 @@ func (m *serverlessWorkflow) executeWorkflowStep(
 
 // handleWorkflowStatus handles different workflow status cases
 func (m *serverlessWorkflow) handleWorkflowStatus(
-	workflowTask sdkWorkflowsModel.WorkflowTask,
-) (sdkWorkflowsModel.WorkflowTask, error) {
+	workflowTask *sdkWorkflowsModel.WorkflowTask,
+) (*sdkWorkflowsModel.WorkflowTask, error) {
 
 	log := workflowTask.GetLogger()
 
@@ -195,7 +195,7 @@ func (m *serverlessWorkflow) handleWorkflowStatus(
 
 func (m *serverlessWorkflow) StartWorkflow(
 	ctx workflow.Context,
-	workflowTask sdkWorkflowsModel.WorkflowTask,
+	workflowTask *sdkWorkflowsModel.WorkflowTask,
 ) workflow.Future {
 
 	log := workflowTask.GetLogger()
@@ -247,8 +247,8 @@ func (m *serverlessWorkflow) shouldContinueAsNew(ctx workflow.Context) bool {
 // This maybe called as part of a temporal workflow or directly
 func ResumeWorkflowTask(
 	config config.Config,
-	workflowTask sdkWorkflowsModel.WorkflowTask,
-) (sdkWorkflowsModel.WorkflowTask, error) {
+	workflowTask *sdkWorkflowsModel.WorkflowTask,
+) (*sdkWorkflowsModel.WorkflowTask, error) {
 
 	// Hydrate the workflow task
 	err := config.HydrateWorkflowTask(workflowTask)

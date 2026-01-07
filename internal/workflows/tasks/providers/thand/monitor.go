@@ -7,8 +7,8 @@ import (
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
+	"github.com/thand-io/agent/internal/models"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
-	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 	runner "github.com/thand-io/agent/sdk/workflows/runner"
 )
 
@@ -21,7 +21,7 @@ type MonitorRequest struct {
 
 // ThandMonitorTask represents a custom task for Thand monitoring
 func (t *thandTask) executeMonitorTask(
-	workflowTask sdkWorkflowsModel.WorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	taskName string,
 	call *taskModel.ThandTask,
 	input any) (any, error) {

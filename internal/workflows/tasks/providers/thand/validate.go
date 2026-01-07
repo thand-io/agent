@@ -20,7 +20,7 @@ var VALIDATOR_LLM = "llm"
 
 // ThandValidateTask represents a custom task for Thand validation
 func (t *thandTask) executeValidateTask(
-	workflowTask *models.ThandWorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	call *taskModel.ThandTask,
 	input any) (any, error) {
 

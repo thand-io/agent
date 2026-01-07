@@ -5,15 +5,15 @@ import (
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/stretchr/testify/assert"
-	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/sdk/workflows/config"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 func TestExecuteEmitTask_NonTemporal(t *testing.T) {
 	// Create a test runner without temporal context
 	cfg := config.NewConfigService()
 
-	workflowTask := &models.WorkflowTask{
+	workflowTask := &sdkWorkflowsModel.WorkflowTask{
 		WorkflowID: "test-workflow",
 	}
 
@@ -48,7 +48,7 @@ func TestExecuteEmitTask_NonTemporal(t *testing.T) {
 func TestCreateCloudEventFromEmit(t *testing.T) {
 	// Create a test runner
 	cfg := config.NewConfigService()
-	workflowTask := &models.WorkflowTask{
+	workflowTask := &sdkWorkflowsModel.WorkflowTask{
 		WorkflowID: "test-workflow",
 	}
 
@@ -111,7 +111,7 @@ func TestCreateCloudEventFromEmit(t *testing.T) {
 func TestCreateCloudEventFromEmit_MissingRequiredFields(t *testing.T) {
 	// Create a test runner
 	cfg := config.NewConfigService()
-	workflowTask := &models.WorkflowTask{
+	workflowTask := &sdkWorkflowsModel.WorkflowTask{
 		WorkflowID: "test-workflow",
 	}
 

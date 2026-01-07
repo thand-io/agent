@@ -10,7 +10,6 @@ import (
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/sdk/workflows/functions"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
-	workflowModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 const ThandAuthorizeFunction = "thand.authorize"
@@ -47,7 +46,7 @@ func (t *authorizeFunction) GetOptionalParameters() map[string]any {
 
 // ValidateRequest validates the input parameters
 func (t *authorizeFunction) ValidateRequest(
-	workflowTask sdkWorkflowsModel.WorkflowTask,
+	workflowTask *sdkWorkflowsModel.WorkflowTask,
 	call *model.CallFunction,
 	input any,
 ) error {
@@ -65,7 +64,7 @@ func (r *ThandAuthorizeRequest) IsValid() bool {
 
 // Execute performs the authorization logic
 func (t *authorizeFunction) Execute(
-	workflowTask sdkWorkflowsModel.WorkflowTask,
+	workflowTask *sdkWorkflowsModel.WorkflowTask,
 	call *model.CallFunction,
 	input any,
 ) (any, error) {
@@ -81,12 +80,12 @@ func (t *authorizeFunction) Execute(
 
 // validateAndParseRequests validates and parses the incoming requests
 func (t *authorizeFunction) validateAndParseRequests(
-	workflowTask sdkWorkflowsModel.WorkflowTask,
+	workflowTask *sdkWorkflowsModel.WorkflowTask,
 	call *model.CallFunction,
 	input any,
 ) (*ThandAuthorizeRequest, error) {
 
-	elevationRequest, err := workflowTask.(*models.ThandWorkflowTask).GetContextAsElevationRequest()
+	elevationRequest, err := models.NewElevateWorkflowTask(workflowTask).GetContextAsElevationRequest()
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get elevation request from context: %w", err)
@@ -121,7 +120,7 @@ func (t *authorizeFunction) validateAndParseRequests(
 
 // executeAuthorization performs the main authorization workflow
 func (t *authorizeFunction) executeAuthorization(
-	workflowTask workflowModel.WorkflowTask,
+	workflowTask *sdkWorkflowsModel.WorkflowTask,
 	elevateRequest *ThandAuthorizeRequest,
 ) (any, error) {
 

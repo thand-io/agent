@@ -23,7 +23,7 @@ type Task interface {
 	// Execute performs the main Function logic
 	// Security: All inputs should be pre-validated by ValidateRequest
 	Execute(
-		workflowTask sdkWorkflowsModel.WorkflowTask,
+		workflowTask *sdkWorkflowsModel.WorkflowTask,
 		task *model.TaskItem,
 		input any,
 	) (any, error)

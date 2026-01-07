@@ -87,11 +87,11 @@ type WorkflowResponse struct {
 }
 
 type WorkflowRequest struct {
-	Task *ThandWorkflowTask `json:"task"`
-	Url  string             `json:"url"`
+	Task *ElevateWorkflowTask `json:"task"`
+	Url  string               `json:"url"`
 }
 
-func (r *WorkflowRequest) GetTask() *ThandWorkflowTask {
+func (r *WorkflowRequest) GetTask() *ElevateWorkflowTask {
 	return r.Task
 }
 
@@ -130,7 +130,7 @@ type WorkflowExecutionInfo struct {
 
 // TaskHandler defines the signature for task execution functions
 type TaskHandler func(
-	workflowTask *ThandWorkflowTask,
+	workflowTask *ElevateWorkflowTask,
 	task *model.TaskItem,
 	input any,
 ) (any, error)

@@ -27,7 +27,7 @@ func (r *ResumableWorkflowRunner) executeListenTask(
 }
 
 func ListenTaskHandler(
-	workflowTask models.WorkflowTask,
+	workflowTask *sdkWorkflowsModel.WorkflowTask,
 	taskName string,
 	listen *model.ListenTask,
 	input any,
@@ -226,7 +226,7 @@ func ListenTaskHandler(
 }
 
 func handleListenTask(
-	workflowTask sdkWorkflowsModel.WorkflowTask,
+	workflowTask *sdkWorkflowsModel.WorkflowTask,
 	taskName string,
 	listen *model.ListenTask,
 	input any,
@@ -310,7 +310,7 @@ func handleListenTask(
 }
 
 func evaluateUntilEventFilter(
-	workflowTask sdkWorkflowsModel.WorkflowTask,
+	workflowTask *sdkWorkflowsModel.WorkflowTask,
 	listenUntil *model.EventConsumptionUntil,
 	signal cloudevents.Event,
 ) bool {
@@ -340,7 +340,7 @@ func evaluateListenEvent(with *model.EventProperties, signal cloudevents.Event) 
 	return strings.Compare(with.Type, signal.Type()) == 0
 }
 
-func evaluateListenFilter(workflowTask sdkWorkflowsModel.WorkflowTask, eventFilter *model.EventFilter, signal cloudevents.Event) bool {
+func evaluateListenFilter(workflowTask *sdkWorkflowsModel.WorkflowTask, eventFilter *model.EventFilter, signal cloudevents.Event) bool {
 
 	if eventFilter.With != nil {
 
@@ -351,7 +351,7 @@ func evaluateListenFilter(workflowTask sdkWorkflowsModel.WorkflowTask, eventFilt
 	return false
 }
 
-func evaluateAnyListener(workflowTask sdkWorkflowsModel.WorkflowTask, anyListener []*model.EventFilter, signal cloudevents.Event) bool {
+func evaluateAnyListener(workflowTask *sdkWorkflowsModel.WorkflowTask, anyListener []*model.EventFilter, signal cloudevents.Event) bool {
 
 	for _, eventFilter := range anyListener {
 
@@ -364,7 +364,7 @@ func evaluateAnyListener(workflowTask sdkWorkflowsModel.WorkflowTask, anyListene
 	return false
 }
 
-func evaluateAllListener(workflowTask sdkWorkflowsModel.WorkflowTask, allListener []*model.EventFilter, signal cloudevents.Event) bool {
+func evaluateAllListener(workflowTask *sdkWorkflowsModel.WorkflowTask, allListener []*model.EventFilter, signal cloudevents.Event) bool {
 
 	for _, eventFilter := range allListener {
 

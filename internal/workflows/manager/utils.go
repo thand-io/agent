@@ -10,7 +10,7 @@ import (
 func CreateWorkflowFromEncodedTask(
 	encryption models.EncryptionImpl,
 	encodedTask string,
-) (*models.ThandWorkflowTask, error) {
+) (*models.ElevateWorkflowTask, error) {
 
 	// Tasks may contain sensitive information, ensure encryption is used
 	decodedTask, err := models.EncodingWrapper{}.DecodeAndDecrypt(encodedTask, encryption)
@@ -23,7 +23,7 @@ func CreateWorkflowFromEncodedTask(
 		return nil, fmt.Errorf("invalid workflow state type: %s", decodedTask.Type)
 	}
 
-	var result models.ThandWorkflowTask
+	var result models.ElevateWorkflowTask
 	common.ConvertMapToInterface(decodedTask.Data.(map[string]any), &result)
 
 	return &result, nil

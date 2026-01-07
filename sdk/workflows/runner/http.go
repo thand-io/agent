@@ -10,7 +10,7 @@ import (
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
-	"github.com/thand-io/agent/internal/models"
+	sdkModels "github.com/thand-io/agent/sdk/models"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -92,7 +92,7 @@ func (r *ResumableWorkflowRunner) executeHttpFunction(
 		// Execute the HTTP request within a Temporal activity
 		fut := workflow.ExecuteActivity(
 			workflowTask.GetTemporalContext(),
-			models.TemporalHttpActivityName,
+			sdkModels.TemporalHttpActivityName,
 			httpCall,
 			finalURL,
 		)

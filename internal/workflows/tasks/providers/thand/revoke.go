@@ -28,7 +28,7 @@ func (t *RevokeTask) HasNotifiers() bool {
 
 // ThandRevokeTask represents a custom task for Thand revocation
 func (t *thandTask) executeRevokeTask(
-	workflowTask *models.ThandWorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	taskName string,
 	call *taskModel.ThandTask) (any, error) {
 
@@ -75,7 +75,7 @@ type temporalRevokeResult struct {
 }
 
 func (t *thandTask) executeRevocationTask(
-	workflowTask *models.ThandWorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	taskName string,
 	call *taskModel.ThandTask,
 	elevateRequest *models.ElevateRequestInternal,
@@ -233,7 +233,7 @@ func (t *thandTask) executeRevocationTask(
 
 // executeTemporalRevokeParallel executes revocation tasks in parallel using Temporal
 func executeTemporalRevokeParallel(
-	workflowTask sdkWorkflowsModel.WorkflowTask,
+	workflowTask *sdkWorkflowsModel.WorkflowTask,
 	taskName string,
 	call *taskModel.ThandTask,
 	revokeTasks []revokeTask,
@@ -299,7 +299,7 @@ func executeTemporalRevokeParallel(
 // executeGoRevokeParallel executes revocation tasks in parallel using Go routines and WaitGroup
 func executeGoRevokeParallel(
 	config models.ConfigImpl,
-	workflowTask sdkWorkflowsModel.WorkflowTask,
+	workflowTask *sdkWorkflowsModel.WorkflowTask,
 	revokeTasks []revokeTask,
 ) ([]revokeResult, error) {
 
@@ -340,7 +340,7 @@ func executeGoRevokeParallel(
 
 // makeRevocationNotifications sends notifications about access revocation
 func (t *thandTask) makeRevocationNotifications(
-	workflowTask *models.ThandWorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	taskName string,
 	revokeTask *RevokeTask,
 	elevateRequest *models.ElevateRequestInternal,

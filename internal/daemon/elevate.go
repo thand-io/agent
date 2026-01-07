@@ -506,21 +506,16 @@ func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.ThandWorkflowTa
 		return
 	}
 
-	thandWorkflowTask, ok := workflowTask.(*models.ThandWorkflowTask)
-
-	if !ok {
-		s.getErrorPage(c, http.StatusInternalServerError, "Workflow task is not of type ThandWorkflowTask")
-		return
-	}
+	elevateWorkflowTask := models.NewElevateWorkflowTask(workflowTask)
 
 	logrus.WithFields(logrus.Fields{
-		"task_name": thandWorkflowTask.GetTaskReference(),
+		"task_name": elevateWorkflowTask.GetTaskReference(),
 	}).Info("Workflow is still running, redirecting to resume")
 
-	if thandWorkflowTask.GetStatus() == ctx.RunningStatus {
+	if elevateWorkflowTask.GetStatus() == ctx.RunningStatus {
 
 		c.Redirect(http.StatusTemporaryRedirect,
-			s.Config.GetResumeCallbackUrl(thandWorkflowTask),
+			s.Config.GetResumeCallbackUrl(elevateWorkflowTask),
 		)
 
 	} else if s.canAcceptHtml(c) {

@@ -23,7 +23,7 @@ type Function interface {
 	// ValidateRequest validates the input parameters for this Function
 	// Security: This method should perform thorough input validation
 	ValidateRequest(
-		workflowTask sdkWorkflowsModel.WorkflowTask,
+		workflowTask *sdkWorkflowsModel.WorkflowTask,
 		call *model.CallFunction,
 		input any,
 	) error
@@ -31,7 +31,7 @@ type Function interface {
 	// Execute performs the main Function logic
 	// Security: All inputs should be pre-validated by ValidateRequest
 	Execute(
-		workflowTask sdkWorkflowsModel.WorkflowTask,
+		workflowTask *sdkWorkflowsModel.WorkflowTask,
 		call *model.CallFunction,
 		input any,
 	) (any, error)

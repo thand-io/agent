@@ -36,7 +36,7 @@ func (t *AuthorizeTask) HasNotifiers() bool {
 }
 
 func (t *thandTask) executeAuthorizeTask(
-	workflowTask *models.ThandWorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	taskName string,
 	call *taskModel.ThandTask) (any, error) {
 
@@ -95,7 +95,7 @@ type temporalAuthResult struct {
 
 // executeAuthorization performs the main authorization workflow
 func (t *thandTask) executeAuthorization(
-	workflowTask *models.ThandWorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	taskName string,
 	call *taskModel.ThandTask,
 	elevateRequest *models.ElevateRequestInternal,
@@ -298,7 +298,7 @@ func (t *thandTask) executeAuthorization(
 
 // executeTemporalParallel executes authorization tasks in parallel using Temporal
 func (t *thandTask) executeTemporalParallel(
-	workflowTask sdkWorkflowsModel.WorkflowTask,
+	workflowTask *sdkWorkflowsModel.WorkflowTask,
 	taskName string,
 	call *taskModel.ThandTask,
 	authTasks []authTask,
@@ -365,7 +365,7 @@ func (t *thandTask) executeTemporalParallel(
 
 // executeGoParallel executes authorization tasks in parallel using Go routines and WaitGroup
 func (t *thandTask) executeGoParallel(
-	workflowTask *models.ThandWorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	authTasks []authTask,
 ) ([]authResult, error) {
 
@@ -441,14 +441,14 @@ func (t *thandTask) GetExport() *model.Export {
 
 // Add to your function
 func (t *thandTask) scheduleRevocation(
-	workflowTask *models.ThandWorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	revocationTask string,
 	revocationAt time.Time,
 ) error {
 
 	log := workflowTask.GetLogger()
 
-	newTask := workflowTask.Clone().(*models.ThandWorkflowTask)
+	newTask := workflowTask.Clone().(*models.ElevateWorkflowTask)
 	newTask.SetEntrypoint(revocationTask)
 
 	serviceClient := t.config.GetServices()
@@ -546,7 +546,7 @@ func (t *thandTask) scheduleRevocation(
 }
 
 func (t *thandTask) makeAuthorizationNotifications(
-	workflowTask *models.ThandWorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	taskName string,
 	authorizeTask *AuthorizeTask,
 	elevateRequest *models.ElevateRequestInternal,

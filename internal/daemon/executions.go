@@ -245,7 +245,7 @@ func (s *Server) getWorkflowExecutionState(c *gin.Context, workflowID string) (*
 
 	workflowExecInfo := s.workflowExecutionInfo(wklwInfo)
 
-	var workflowTask models.ThandWorkflowTask
+	var workflowTask models.ElevateWorkflowTask
 
 	// If workflow hasn't completed, query for the current state
 	if workflowExecInfo.CloseTime == nil {

@@ -14,15 +14,23 @@ import (
 	"github.com/thand-io/agent/internal/common"
 )
 
-func NewThandWorkflowContext(name string, workflow *model.Workflow) (*ServerlessWorkflowTask, error) {
+func NewWorkflowContext(workflow *model.Workflow) (*WorkflowTask, error) {
 
 	workflowID := fmt.Sprintf("wf_%d", time.Now().UTC().UnixNano())
 
-	workflowCtx := ServerlessWorkflowTask{
+	if workflow == nil {
+		return nil, fmt.Errorf("workflow definition cannot be nil")
+	}
+
+	if len(workflow.Document.Name) == 0 {
+		workflow.Document.Name = workflowID
+	}
+
+	workflowCtx := WorkflowTask{
 		state:           NewWorkflowTaskState(),
 		Status:          swctx.PendingStatus,
 		WorkflowID:      workflowID,
-		WorkflowName:    name,
+		WorkflowName:    workflow.Document.Name,
 		Workflow:        workflow,
 		Context:         map[string]any{},
 		internalContext: context.Background(),
@@ -31,13 +39,27 @@ func NewThandWorkflowContext(name string, workflow *model.Workflow) (*Serverless
 	return &workflowCtx, nil
 }
 
+// WithWorkflowContext adds the workflowContext to a parent context
+func WithWorkflowContext(parent context.Context, wfCtx swctx.WorkflowContext) context.Context {
+	return context.WithValue(parent, runnerCtxKey, wfCtx)
+}
+
+// GetWorkflowContext retrieves the workflowContext from a context
+func GetWorkflowContext(ctx context.Context) (swctx.WorkflowContext, error) {
+	wfCtx, ok := ctx.Value(runnerCtxKey).(*WorkflowTask)
+	if !ok {
+		return nil, swctx.ErrWorkflowContextNotFound
+	}
+	return wfCtx, nil
+}
+
 // Clone creates a deep copy of the WorkflowTask for safe concurrent use.
 // Each clone gets its own mutex and state to prevent data races in forked workflows.
-func (ctx *ServerlessWorkflowTask) Clone() swctx.WorkflowContext {
+func (ctx *WorkflowTask) Clone() swctx.WorkflowContext {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 
-	return &ServerlessWorkflowTask{
+	return &WorkflowTask{
 		// Deep clone mutable fields
 		Input:            utils.DeepCloneValue(ctx.Input),
 		Output:           utils.DeepCloneValue(ctx.Output),
@@ -55,7 +77,7 @@ func (ctx *ServerlessWorkflowTask) Clone() swctx.WorkflowContext {
 }
 
 // cloneState creates a deep copy of the workflow task state.
-func (ctx *ServerlessWorkflowTask) cloneState() *WorkflowTaskState {
+func (ctx *WorkflowTask) cloneState() *WorkflowTaskState {
 	if ctx.state == nil {
 		return NewWorkflowTaskState()
 	}
@@ -68,7 +90,7 @@ func (ctx *ServerlessWorkflowTask) cloneState() *WorkflowTaskState {
 }
 
 // cloneTasksStatusPhase creates a deep copy of task status phases.
-func (ctx *ServerlessWorkflowTask) cloneTasksStatusPhase() map[string][]swctx.StatusPhaseLog {
+func (ctx *WorkflowTask) cloneTasksStatusPhase() map[string][]swctx.StatusPhaseLog {
 	result := make(map[string][]swctx.StatusPhaseLog, len(ctx.TasksStatusPhase))
 	for taskName, logs := range ctx.TasksStatusPhase {
 		result[taskName] = append([]swctx.StatusPhaseLog(nil), logs...)
@@ -76,25 +98,25 @@ func (ctx *ServerlessWorkflowTask) cloneTasksStatusPhase() map[string][]swctx.St
 	return result
 }
 
-func (ctx *ServerlessWorkflowTask) SetStartedAt(t time.Time) {
+func (ctx *WorkflowTask) SetStartedAt(t time.Time) {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 	ctx.StartedAt = t
 }
 
-func (ctx *ServerlessWorkflowTask) SetRawInput(input any) {
+func (ctx *WorkflowTask) SetRawInput(input any) {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 	ctx.state.Input = input
 }
 
-func (ctx *ServerlessWorkflowTask) SetRawOutput(output any) {
+func (ctx *WorkflowTask) SetRawOutput(output any) {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 	ctx.state.Output = output
 }
 
-func (ctx *ServerlessWorkflowTask) AddLocalExprVars(vars map[string]any) {
+func (ctx *WorkflowTask) AddLocalExprVars(vars map[string]any) {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 	if ctx.localExprVars == nil {
@@ -103,7 +125,7 @@ func (ctx *ServerlessWorkflowTask) AddLocalExprVars(vars map[string]any) {
 	maps.Copy(ctx.localExprVars, vars)
 }
 
-func (ctx *ServerlessWorkflowTask) RemoveLocalExprVars(keys ...string) {
+func (ctx *WorkflowTask) RemoveLocalExprVars(keys ...string) {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 
@@ -116,14 +138,14 @@ func (ctx *ServerlessWorkflowTask) RemoveLocalExprVars(keys ...string) {
 	}
 }
 
-func (ctx *ServerlessWorkflowTask) SetLocalExprVars(vars map[string]any) {
+func (ctx *WorkflowTask) SetLocalExprVars(vars map[string]any) {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 	ctx.localExprVars = vars
 }
 
 // GetVars returns all available variables for expression evaluation
-func (ctx *ServerlessWorkflowTask) GetVars() map[string]any {
+func (ctx *WorkflowTask) GetVars() map[string]any {
 	workflow := ctx.getWorkflowDefAsMap()
 
 	vars := map[string]any{
@@ -149,7 +171,7 @@ func (ctx *ServerlessWorkflowTask) GetVars() map[string]any {
 }
 
 // getWorkflowDefAsMap safely converts workflow definition to map
-func (ctx *ServerlessWorkflowTask) getWorkflowDefAsMap() map[string]any {
+func (ctx *WorkflowTask) getWorkflowDefAsMap() map[string]any {
 	if wkflw := ctx.GetWorkflowDef(); wkflw != nil {
 		if found, err := wkflw.AsMap(); err == nil {
 			return found
@@ -158,7 +180,7 @@ func (ctx *ServerlessWorkflowTask) getWorkflowDefAsMap() map[string]any {
 	return map[string]any{}
 }
 
-func (ctx *ServerlessWorkflowTask) SetStatus(status swctx.StatusPhase) {
+func (ctx *WorkflowTask) SetStatus(status swctx.StatusPhase) {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 	if ctx.StatusPhase == nil {
@@ -168,14 +190,14 @@ func (ctx *ServerlessWorkflowTask) SetStatus(status swctx.StatusPhase) {
 }
 
 // SetInstanceCtx safely sets the `$context` value
-func (ctx *ServerlessWorkflowTask) SetInstanceCtx(value any) {
+func (ctx *WorkflowTask) SetInstanceCtx(value any) {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 	ctx.Context = value
 }
 
 // GetInstanceCtx safely retrieves the `$context` value
-func (ctx *ServerlessWorkflowTask) GetInstanceCtx() any {
+func (ctx *WorkflowTask) GetInstanceCtx() any {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 	if ctx.Context == nil {
@@ -185,28 +207,28 @@ func (ctx *ServerlessWorkflowTask) GetInstanceCtx() any {
 }
 
 // SetInput safely sets the input
-func (ctx *ServerlessWorkflowTask) SetInput(input any) {
+func (ctx *WorkflowTask) SetInput(input any) {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 	ctx.Input = input
 }
 
 // GetInput safely retrieves the input
-func (ctx *ServerlessWorkflowTask) GetInput() any {
+func (ctx *WorkflowTask) GetInput() any {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 	return ctx.Input
 }
 
 // SetOutput safely sets the output
-func (ctx *ServerlessWorkflowTask) SetOutput(output any) {
+func (ctx *WorkflowTask) SetOutput(output any) {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 	ctx.Output = output
 }
 
 // GetOutput safely retrieves the output
-func (ctx *ServerlessWorkflowTask) GetOutput() any {
+func (ctx *WorkflowTask) GetOutput() any {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 	return ctx.Output
@@ -214,7 +236,7 @@ func (ctx *ServerlessWorkflowTask) GetOutput() any {
 
 // GetInputAsMap safely retrieves the input as a map[string]any.
 // If input is not a map, it wraps it in a map with "input" as the key.
-func (ctx *ServerlessWorkflowTask) GetInputAsMap() map[string]any {
+func (ctx *WorkflowTask) GetInputAsMap() map[string]any {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 
@@ -229,7 +251,7 @@ func (ctx *ServerlessWorkflowTask) GetInputAsMap() map[string]any {
 	return map[string]any{"input": ctx.Input}
 }
 
-func (ctx *ServerlessWorkflowTask) GetInputAsCloudEvent() *cloudevents.Event {
+func (ctx *WorkflowTask) GetInputAsCloudEvent() *cloudevents.Event {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 
@@ -259,7 +281,7 @@ func (ctx *ServerlessWorkflowTask) GetInputAsCloudEvent() *cloudevents.Event {
 	return &event
 }
 
-func (ctx *ServerlessWorkflowTask) GetContextAsMap() map[string]any {
+func (ctx *WorkflowTask) GetContextAsMap() map[string]any {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 
@@ -276,7 +298,7 @@ func (ctx *ServerlessWorkflowTask) GetContextAsMap() map[string]any {
 
 // GetOutputAsMap safely retrieves the output as a map[string]any.
 // If output is not a map, it wraps it in a map with "output" as the key.
-func (ctx *ServerlessWorkflowTask) GetOutputAsMap() map[string]any {
+func (ctx *WorkflowTask) GetOutputAsMap() map[string]any {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 
@@ -291,7 +313,7 @@ func (ctx *ServerlessWorkflowTask) GetOutputAsMap() map[string]any {
 	return map[string]any{"output": ctx.Output}
 }
 
-func (ctx *ServerlessWorkflowTask) SetTaskStatus(task string, status swctx.StatusPhase) {
+func (ctx *WorkflowTask) SetTaskStatus(task string, status swctx.StatusPhase) {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 
@@ -308,53 +330,53 @@ func (ctx *ServerlessWorkflowTask) SetTaskStatus(task string, status swctx.Statu
 	ctx.TasksStatusPhase[task] = append(ctx.TasksStatusPhase[task], swctx.NewStatusPhaseLog(status))
 }
 
-func (ctx *ServerlessWorkflowTask) SetTaskRawInput(input any) {
+func (ctx *WorkflowTask) SetTaskRawInput(input any) {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 
 	ctx.state.Input = input
 }
 
-func (ctx *ServerlessWorkflowTask) SetTaskRawOutput(output any) {
+func (ctx *WorkflowTask) SetTaskRawOutput(output any) {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 
 	ctx.state.Output = output
 }
 
-func (ctx *ServerlessWorkflowTask) SetTaskDef(def model.Task) error {
+func (ctx *WorkflowTask) SetTaskDef(def model.Task) error {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 	ctx.state.Definition = def
 	return nil
 }
 
-func (ctx *ServerlessWorkflowTask) SetTaskStartedAt(startedAt time.Time) {
+func (ctx *WorkflowTask) SetTaskStartedAt(startedAt time.Time) {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 	ctx.state.StartedAt = startedAt
 }
 
-func (ctx *ServerlessWorkflowTask) SetTaskName(name string) {
+func (ctx *WorkflowTask) SetTaskName(name string) {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 	ctx.state.Name = name
 	ctx.Entrypoint = name
 }
 
-func (ctx *ServerlessWorkflowTask) SetTaskReference(ref string) {
+func (ctx *WorkflowTask) SetTaskReference(ref string) {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 	ctx.state.Reference = ref
 }
 
-func (ctx *ServerlessWorkflowTask) GetTaskReference() string {
+func (ctx *WorkflowTask) GetTaskReference() string {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 	return ctx.state.Reference
 }
 
-func (ctx *ServerlessWorkflowTask) ClearTaskContext() {
+func (ctx *WorkflowTask) ClearTaskContext() {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 	ctx.state = NewWorkflowTaskState()

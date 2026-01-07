@@ -8,20 +8,15 @@ import (
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/serverlessworkflow/sdk-go/v3/parser"
 	"github.com/stretchr/testify/assert"
-	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/sdk/workflows/config"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 func NewDefaultRunner(workflow *model.Workflow) (*ResumableWorkflowRunner, error) {
 
 	config := config.NewConfigService()
 
-	wkflw, err := models.NewWorkflowContext(&models.Workflow{
-		Name:        workflow.Document.Name,
-		Description: workflow.Document.Summary,
-		Workflow:    workflow,
-		Enabled:     true,
-	})
+	wkflw, err := sdkWorkflowsModel.NewWorkflowContext(workflow)
 
 	if err != nil {
 		return nil, err

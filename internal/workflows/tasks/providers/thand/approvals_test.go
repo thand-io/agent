@@ -172,7 +172,7 @@ func TestEvaluateApprovalSwitch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a workflow task with the approvals context
-			workflowTask := &models.ThandWorkflowTask{
+			workflowTask := &models.ElevateWorkflowTask{
 				WorkflowID:   "test-workflow",
 				WorkflowName: "Test Workflow",
 			} // Set the context with approvals
@@ -203,7 +203,7 @@ func TestEvaluateApprovalSwitch(t *testing.T) {
 
 // TestEvaluateApprovalSwitchProgression tests the progression of approvals over time
 func TestEvaluateApprovalSwitchProgression(t *testing.T) {
-	workflowTask := &models.ThandWorkflowTask{
+	workflowTask := &models.ElevateWorkflowTask{
 		WorkflowID:   "test-workflow",
 		WorkflowName: "Test Workflow",
 	}
@@ -274,7 +274,7 @@ func TestEvaluateApprovalSwitchProgression(t *testing.T) {
 
 // TestEvaluateApprovalSwitchDenialProgression tests that a denial stops the process
 func TestEvaluateApprovalSwitchDenialProgression(t *testing.T) {
-	workflowTask := &models.ThandWorkflowTask{
+	workflowTask := &models.ElevateWorkflowTask{
 		WorkflowID:   "test-workflow",
 		WorkflowName: "Test Workflow",
 	}
@@ -802,7 +802,7 @@ func TestExecuteApprovalsTask_ProcessEvent(t *testing.T) {
 	}
 
 	// Setup WorkflowTask with ElevationRequest context
-	workflowTask := &models.ThandWorkflowTask{
+	workflowTask := &models.ElevateWorkflowTask{
 		WorkflowID:   "test-workflow",
 		WorkflowName: "Test Workflow",
 		Context: map[string]any{
@@ -892,7 +892,7 @@ func TestExecuteApprovalsTask_SelfApprovalDenied(t *testing.T) {
 		},
 	}
 
-	workflowTask := &models.ThandWorkflowTask{
+	workflowTask := &models.ElevateWorkflowTask{
 		WorkflowID: "test-workflow",
 		Context: map[string]any{
 			"user":      map[string]any{"id": requesterID, "email": requesterID},
@@ -970,7 +970,7 @@ func TestExecuteApprovalsTask_NonExistentIdentity(t *testing.T) {
 	}
 
 	// Setup WorkflowTask with ElevationRequest context
-	workflowTask := &models.ThandWorkflowTask{
+	workflowTask := &models.ElevateWorkflowTask{
 		WorkflowID:   "test-workflow",
 		WorkflowName: "Test Workflow",
 		Context: map[string]any{
@@ -1067,7 +1067,7 @@ func TestExecuteApprovalsTask_Denial(t *testing.T) {
 	}
 
 	// Setup WorkflowTask with ElevationRequest context
-	workflowTask := &models.ThandWorkflowTask{
+	workflowTask := &models.ElevateWorkflowTask{
 		WorkflowID:   "test-workflow",
 		WorkflowName: "Test Workflow",
 		Context: map[string]any{
@@ -1174,7 +1174,7 @@ func TestExecuteApprovalsTask_ApprovalThenDenial(t *testing.T) {
 
 	// Setup WorkflowTask with ElevationRequest context
 	// Pre-populate with one approval
-	workflowTask := &models.ThandWorkflowTask{
+	workflowTask := &models.ElevateWorkflowTask{
 		WorkflowID:   "test-workflow",
 		WorkflowName: "Test Workflow",
 		Context: map[string]any{

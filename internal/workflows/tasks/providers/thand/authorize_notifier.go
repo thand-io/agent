@@ -17,7 +17,7 @@ import (
 // authorizerNotifier handles notifications sent to users after their access request has been approved
 type authorizerNotifier struct {
 	config        models.ConfigImpl
-	workflowTask  *models.ThandWorkflowTask
+	workflowTask  *models.ElevateWorkflowTask
 	elevationReq  *models.ElevateRequestInternal
 	req           *thandFunction.NotifierRequest
 	providerKey   string
@@ -28,7 +28,7 @@ type authorizerNotifier struct {
 // NewAuthorizerNotifier creates a new notifier for sending approval confirmation notifications
 func NewAuthorizerNotifier(
 	config models.ConfigImpl,
-	workflowTask *models.ThandWorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	elevationReq *models.ElevateRequestInternal,
 	req *thandFunction.NotifierRequest,
 	providerKey string,

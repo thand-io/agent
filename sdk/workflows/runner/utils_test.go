@@ -6,8 +6,8 @@ import (
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/sdk/workflows/config"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 // TestProcessTaskOutput tests the processTaskOutput function which transforms
@@ -31,12 +31,7 @@ func TestProcessTaskOutput_TransformToApprovalsList(t *testing.T) {
 	}
 
 	// Create a workflow context
-	workflowCtx, err := models.NewWorkflowContext(&models.Workflow{
-		Name:        workflow.Document.Name,
-		Description: "Test workflow",
-		Workflow:    workflow,
-		Enabled:     true,
-	})
+	workflowCtx, err := sdkWorkflowsModel.NewWorkflowContext(workflow)
 	require.NoError(t, err)
 
 	// Create the runner
@@ -87,12 +82,7 @@ func TestProcessTaskOutput_TransformToApprovalsListWithExport(t *testing.T) {
 	}
 
 	// Create a workflow context
-	workflowCtx, err := models.NewWorkflowContext(&models.Workflow{
-		Name:        workflow.Document.Name,
-		Description: "Test workflow",
-		Workflow:    workflow,
-		Enabled:     true,
-	})
+	workflowCtx, err := sdkWorkflowsModel.NewWorkflowContext(workflow)
 	require.NoError(t, err)
 
 	// Create the runner
@@ -171,12 +161,7 @@ func TestProcessTaskOutput_WithoutOutput(t *testing.T) {
 	}
 
 	// Create a workflow context
-	workflowCtx, err := models.NewWorkflowContext(&models.Workflow{
-		Name:        workflow.Document.Name,
-		Description: "Test workflow",
-		Workflow:    workflow,
-		Enabled:     true,
-	})
+	workflowCtx, err := sdkWorkflowsModel.NewWorkflowContext(workflow)
 	require.NoError(t, err)
 
 	// Create the runner
@@ -213,12 +198,7 @@ func TestProcessTaskOutput_TransformStructure(t *testing.T) {
 	}
 
 	// Create a workflow context
-	workflowCtx, err := models.NewWorkflowContext(&models.Workflow{
-		Name:        workflow.Document.Name,
-		Description: "Test workflow",
-		Workflow:    workflow,
-		Enabled:     true,
-	})
+	workflowCtx, err := sdkWorkflowsModel.NewWorkflowContext(workflow)
 	require.NoError(t, err)
 
 	// Create the runner
@@ -269,12 +249,7 @@ func TestProcessTaskOutput_IdentityTransform(t *testing.T) {
 	}
 
 	// Create a workflow context
-	workflowCtx, err := models.NewWorkflowContext(&models.Workflow{
-		Name:        workflow.Document.Name,
-		Description: "Test workflow",
-		Workflow:    workflow,
-		Enabled:     true,
-	})
+	workflowCtx, err := sdkWorkflowsModel.NewWorkflowContext(workflow)
 	require.NoError(t, err)
 
 	// Create the runner

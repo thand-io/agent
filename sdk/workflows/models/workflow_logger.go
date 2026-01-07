@@ -7,7 +7,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-func (r *ServerlessWorkflowTask) GetLogger() *LogBuilder {
+func (r *WorkflowTask) GetLogger() *LogBuilder {
 	var logger log.Logger
 	if r.HasTemporalContext() {
 		logger = workflow.GetLogger(r.GetTemporalContext())

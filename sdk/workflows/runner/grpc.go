@@ -7,7 +7,7 @@ import (
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
-	"github.com/thand-io/agent/internal/models"
+	sdkModels "github.com/thand-io/agent/sdk/models"
 	"go.temporal.io/sdk/workflow"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -63,7 +63,7 @@ func (r *ResumableWorkflowRunner) executeGRPCFunction(
 		// Execute as Temporal activity
 		fut := workflow.ExecuteActivity(
 			workflowTask.GetTemporalContext(),
-			models.TemporalGrpcActivityName,
+			sdkModels.TemporalGrpcActivityName,
 			grpcCall,
 			finalInput,
 		)

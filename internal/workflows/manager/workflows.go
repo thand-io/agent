@@ -51,8 +51,8 @@ func (m *ThandWorkflowManager) registerThandWorkflows() error {
 func (m *ThandWorkflowManager) createElevationWorkflowHandler() func(workflow.Context, *models.ThandWorkflowTask) (*models.ThandWorkflowTask, error) {
 	return func(
 		rootCtx workflow.Context,
-		workflowTask *models.ThandWorkflowTask,
-	) (outputTask *models.ThandWorkflowTask, outputError error) {
+		workflowTask *models.ElevateWorkflowTask,
+	) (outputTask *models.ElevateWorkflowTask, outputError error) {
 
 		log := workflow.GetLogger(rootCtx)
 		log.Info("Primary workflow execution started")
@@ -133,7 +133,7 @@ func (m *ThandWorkflowManager) createElevationWorkflowHandler() func(workflow.Co
 
 // setupQueryHandler sets up the query handler for the workflow
 func SetupIsApprovedQueryHandler(
-	ctx workflow.Context, workflowTask *models.ThandWorkflowTask) error {
+	ctx workflow.Context, workflowTask *models.ElevateWorkflowTask) error {
 	return workflow.SetQueryHandler(ctx, models.TemporalIsApprovedQueryName, func() (*bool, error) {
 		log := workflow.GetLogger(ctx)
 		log.Info("IsApproved query received",
@@ -146,7 +146,7 @@ func SetupIsApprovedQueryHandler(
 // runCleanup executes the cleanup activity and returns any cleanup-specific errors
 func (m *ThandWorkflowManager) runCleanup(
 	rootCtx workflow.Context,
-	workflowTask *models.ThandWorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	terminationRequest *models.TemporalTerminationRequest,
 ) error {
 
@@ -177,7 +177,7 @@ func (m *ThandWorkflowManager) runCleanup(
 
 	// Use a disconnected context for cleanup to ensure it runs even if workflow is cancelled
 	newCtx, _ := workflow.NewDisconnectedContext(rootCtx)
-	workflowTask = workflowTask.WithTemporalContext(newCtx).(*models.ThandWorkflowTask)
+	workflowTask = workflowTask.WithTemporalContext(newCtx)
 
 	// If a termination request with entrypoint is provided then we need to use it
 	if terminationRequest != nil && len(terminationRequest.EntryPoint) > 0 {

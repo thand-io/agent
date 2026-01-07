@@ -72,28 +72,12 @@ func (c *thandWorkflowConfig) RegisterWorkflow(name string, workflow model.Workf
 // HydrateWorkflowTask ensures that the workflow task has its workflow definition loaded
 // and its state initialised.
 func (c *thandWorkflowConfig) HydrateWorkflowTask(
-	workflowTask sdkWorkflowsModel.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 ) error {
 
 	if workflowTask.GetWorkflowDef() == nil {
 
-		thandWorkflowTask, ok := workflowTask.(*models.ThandWorkflowTask)
-
-		if !ok {
-			return fmt.Errorf("workflow task is not of type ThandWorkflowTask")
-		}
-
-		elevationRequest, err := thandWorkflowTask.GetContextAsElevationRequest()
-
-		if err != nil {
-			return fmt.Errorf("failed to get context as ElevateRequestInternal: %w", err)
-		}
-
-		if !elevationRequest.IsValid() {
-			return fmt.Errorf("invalid elevation request")
-		}
-
-		workflowDsl, err := c.GetConfig().GetWorkflowByName(elevationRequest.Workflow)
+		workflowDsl, err := c.GetConfig().GetWorkflowByName(workflowTask.GetName())
 
 		if err != nil {
 			return fmt.Errorf("failed to load workflow: %w", err)
