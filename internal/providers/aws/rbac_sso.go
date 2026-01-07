@@ -459,11 +459,6 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models
 		return fmt.Errorf("failed to delete account assignment: %w", err)
 	}
 
-	logrus.WithFields(logrus.Fields{
-		"principalId":     *deleteOutput.AccountAssignmentDeletionStatus.PrincipalId,
-		"targetAccountID": p.GetAccountID(),
-	}).Info("Deleted account assignment")
-
 	// poll to verify deletion
 	// In a production system, you might want to implement polling with backoff here
 	backoffDuration := 1 * time.Second
