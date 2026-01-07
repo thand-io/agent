@@ -14,7 +14,7 @@ import (
 func TestGCPProviderPermissions(t *testing.T) {
 
 	// Create minimal config for initialization
-	testConfig := models.Provider{
+	testConfig := models.ProviderConfig{
 		Name:        "test-gcp",
 		Description: "Test GCP provider",
 		Provider:    "gcp",
@@ -119,7 +119,7 @@ func TestGCPProviderPermissions(t *testing.T) {
 func TestGCPProviderRoles(t *testing.T) {
 
 	// Create minimal config for initialization
-	testConfig := models.Provider{
+	testConfig := models.ProviderConfig{
 		Name:        "test-gcp",
 		Description: "Test GCP provider",
 		Provider:    "gcp",

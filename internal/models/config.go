@@ -32,7 +32,7 @@ type ConfigImpl interface {
 	GetWorkflowFromElevationRequest(elevationRequest *ElevateRequest) (*Workflow, error)
 
 	// Providers
-	GetProviderByName(name string) (*Provider, error)
+	GetProviderByName(name string) (Provider, error)
 	GetProvidersByCapability(capability ...ProviderCapability) map[string]Provider
 	GetProvidersByCapabilityWithUser(user *User, capability ...ProviderCapability) map[string]Provider
 }

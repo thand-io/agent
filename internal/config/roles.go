@@ -150,7 +150,7 @@ func (c *Config) ApplyRoles(foundRoles []*models.RoleDefinitions) (map[string]mo
 		if err := role.Validate(); err != nil {
 			logrus.WithError(err).Errorln("Role definition validation failed")
 			continue
-		}		
+		}
 
 		for roleKey, r := range role.Roles {
 			if !r.Enabled {
@@ -166,6 +166,8 @@ func (c *Config) ApplyRoles(foundRoles []*models.RoleDefinitions) (map[string]mo
 			if r.Version == nil {
 				r.Version = role.Version
 			}
+
+			r.Identifier = roleKey
 
 			if len(r.Name) == 0 {
 				r.Name = roleKey

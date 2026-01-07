@@ -24,7 +24,7 @@ func (d *ResumableWorkflowRunner) executeSwitchTask(
 }
 
 func SwitchTaskHandler(
-	workflowTask *sdkWorkflowsModel.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	input any,
 	taskKey string,
 	switchTask *model.SwitchTask,

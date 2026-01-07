@@ -16,7 +16,7 @@ type MockFunction struct {
 	version     string
 	lastCall    *model.CallFunction
 	lastInput   any
-	lastTask    *sdkWorkflowsModel.WorkflowTask
+	lastTask    sdkWorkflowsModel.WorkflowTaskSupport
 }
 
 func NewMockFunction(name string) *MockFunction {
@@ -42,7 +42,7 @@ func (m *MockFunction) GetOptionalParameters() map[string]any {
 }
 
 func (m *MockFunction) ValidateRequest(
-	workflowTask *sdkWorkflowsModel.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	call *model.CallFunction,
 	input any,
 ) error {
@@ -54,7 +54,7 @@ func (m *MockFunction) ValidateRequest(
 }
 
 func (m *MockFunction) Execute(
-	workflowTask *sdkWorkflowsModel.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	call *model.CallFunction,
 	input any,
 ) (any, error) {

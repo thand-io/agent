@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
 var loginCmd = &cobra.Command{
@@ -83,7 +84,7 @@ func init() {
 
 func createAuthCode() string {
 	code := models.EncodingWrapper{
-		Type: models.ENCODED_SESSION_CODE,
+		Type: sdkConstants.ENCODED_SESSION_CODE,
 		Data: models.NewCodeWrapper(
 			cfg.GetLoginServerUrl(),
 		),

@@ -36,7 +36,7 @@ type awsProvider struct {
 
 }
 
-func (p *awsProvider) Initialize(identifier string, provider models.Provider) error {
+func (p *awsProvider) Initialize(identifier string, provider models.ProviderConfig) error {
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,

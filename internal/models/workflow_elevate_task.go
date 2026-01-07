@@ -20,6 +20,7 @@ import (
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
@@ -37,17 +38,21 @@ type ElevateWorkflowTask struct {
 	*sdkWorkflowsModel.WorkflowTask
 }
 
-func NewElevateWorkflowTask(serverlessWorkflow *sdkWorkflowsModel.WorkflowTask) *ElevateWorkflowTask {
+func NewElevateWorkflowTask(serverlessWorkflow sdkWorkflowsModel.WorkflowTaskSupport) *ElevateWorkflowTask {
 	return &ElevateWorkflowTask{
-		WorkflowTask: serverlessWorkflow,
+		WorkflowTask: serverlessWorkflow.(*sdkWorkflowsModel.WorkflowTask),
 	}
+}
+
+func (r *ElevateWorkflowTask) GetWorkflowTask() *sdkWorkflowsModel.WorkflowTask {
+	return r.WorkflowTask
 }
 
 func (r *ElevateWorkflowTask) GetEncodedTask(encryptor EncryptionImpl) string {
 
 	// Tasks may contain sensitive data so always encrypt
 	return EncodingWrapper{
-		Type: ENCODED_WORKFLOW_TASK,
+		Type: sdkConstants.ENCODED_WORKFLOW_TASK,
 		Data: r,
 	}.EncodeAndEncrypt(encryptor)
 }

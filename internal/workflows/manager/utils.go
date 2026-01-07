@@ -5,6 +5,7 @@ import (
 
 	"github.com/thand-io/agent/internal/common"
 	models "github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
 func CreateWorkflowFromEncodedTask(
@@ -19,7 +20,7 @@ func CreateWorkflowFromEncodedTask(
 		return nil, fmt.Errorf("failed to decode workflow state: %w", err)
 	}
 
-	if decodedTask.Type != models.ENCODED_WORKFLOW_TASK {
+	if decodedTask.Type != sdkConstants.ENCODED_WORKFLOW_TASK {
 		return nil, fmt.Errorf("invalid workflow state type: %s", decodedTask.Type)
 	}
 

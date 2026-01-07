@@ -388,7 +388,7 @@ func (s *Server) getElevateAuthOAuth2(c *gin.Context) {
 		return
 	}
 
-	session, err := authProviderInstance.GetClient().CreateSession(ctx, &models.AuthorizeUser{
+	session, err := authProviderInstance.CreateSession(ctx, &models.AuthorizeUser{
 		Code:        code,
 		State:       state,
 		RedirectUri: s.Config.GetAuthCallbackUrl(authProvider),
@@ -444,7 +444,7 @@ func (s *Server) getElevateAuthOAuth2(c *gin.Context) {
 
 }
 
-func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.ThandWorkflowTask) {
+func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.ElevateWorkflowTask) {
 
 	// Get user context
 	if !s.Config.IsServer() {
@@ -506,6 +506,7 @@ func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.ThandWorkflowTa
 		return
 	}
 
+	// Create our elevate workflow task wrapper
 	elevateWorkflowTask := models.NewElevateWorkflowTask(workflowTask)
 
 	logrus.WithFields(logrus.Fields{
@@ -527,9 +528,9 @@ func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.ThandWorkflowTa
 			TemplateData: s.GetTemplateData(c),
 			ExecutionStatePageResponse: ExecutionStatePageResponse{
 				Execution: &models.WorkflowExecutionInfo{
-					WorkflowID: thandWorkflowTask.GetWorkflowID(),
+					WorkflowID: workflowTask.GetWorkflowID(),
 				},
-				Workflow: thandWorkflowTask.GetWorkflowDef(),
+				Workflow: workflowTask.GetWorkflowDef(),
 			},
 		}
 
@@ -538,13 +539,11 @@ func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.ThandWorkflowTa
 	} else {
 
 		c.JSON(http.StatusOK, models.ElevateResponse{
-			WorkflowId: thandWorkflowTask.GetWorkflowID(),
-			Status:     thandWorkflowTask.GetStatus(),
-			Output:     thandWorkflowTask.GetOutputAsMap(),
+			WorkflowId: workflowTask.GetWorkflowID(),
+			Status:     workflowTask.GetStatus(),
+			Output:     workflowTask.GetOutputAsMap(),
 		})
-
 	}
-
 }
 
 // getElevateLLM handles POST /elevate/llm?reason=I need access to aws

@@ -13,7 +13,7 @@ import (
 
 // Helper function to create a BaseProvider with identity support
 func newTestProviderWithIdentities() *BaseProvider {
-	provider := Provider{
+	provider := ProviderConfig{
 		Name:        "test-provider",
 		Description: "Test Provider",
 		Provider:    "test",
@@ -234,7 +234,7 @@ func TestBaseProvider_GetIdentity(t *testing.T) {
 
 func TestBaseProvider_GetIdentity_WithoutCapability(t *testing.T) {
 	// Create provider without identity capability
-	p := NewBaseProvider("test", Provider{Name: "test"}, NewProviderCapabilities())
+	p := NewBaseProvider("test", ProviderConfig{Name: "test"}, NewProviderCapabilities())
 
 	ctx := context.Background()
 	identity, err := p.GetIdentity(ctx, "user1")
@@ -322,7 +322,7 @@ func TestBaseProvider_ListIdentities(t *testing.T) {
 }
 
 func TestBaseProvider_ListIdentities_WithoutCapability(t *testing.T) {
-	p := NewBaseProvider("test", Provider{Name: "test"}, NewProviderCapabilities())
+	p := NewBaseProvider("test", ProviderConfig{Name: "test"}, NewProviderCapabilities())
 
 	ctx := context.Background()
 	results, err := p.ListIdentities(ctx, nil)
@@ -333,7 +333,7 @@ func TestBaseProvider_ListIdentities_WithoutCapability(t *testing.T) {
 
 func TestBaseProvider_ListIdentities_Search(t *testing.T) {
 
-	p := NewBaseProvider("test", Provider{
+	p := NewBaseProvider("test", ProviderConfig{
 		Name: "Test Provider",
 	}, NewProviderCapabilities().WithDefaultIdentitiesConfiguration())
 

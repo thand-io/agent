@@ -19,7 +19,7 @@ func NewMockAzureProvider() *azureProviderMock {
 }
 
 // Initialize loads permissions and roles without connecting to Azure
-func (p *azureProviderMock) Initialize(identifier string, provider models.Provider) error {
+func (p *azureProviderMock) Initialize(identifier string, provider models.ProviderConfig) error {
 	// Initialize the embedded azureProvider struct
 	p.azureProvider = &azureProvider{}
 

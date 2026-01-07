@@ -26,7 +26,7 @@ type oauth2Provider struct {
 	oauthConfig *oauth2.Config
 }
 
-func (p *oauth2Provider) Initialize(identifier string, provider models.Provider) error {
+func (p *oauth2Provider) Initialize(identifier string, provider models.ProviderConfig) error {
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,

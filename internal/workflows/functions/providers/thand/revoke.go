@@ -55,7 +55,7 @@ func (t *revokeFunction) GetOptionalParameters() map[string]any {
 
 // ValidateRequest validates the input parameters
 func (t *revokeFunction) ValidateRequest(
-	workflowTask *sdkWorkflowsModel.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	call *model.CallFunction,
 	input any,
 ) error {
@@ -64,7 +64,7 @@ func (t *revokeFunction) ValidateRequest(
 
 // Execute performs the revocation logic
 func (t *revokeFunction) Execute(
-	workflowTask *sdkWorkflowsModel.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	call *model.CallFunction,
 	input any,
 ) (any, error) {
@@ -80,7 +80,7 @@ func (t *revokeFunction) Execute(
 
 // validateAndParseRequests validates and parses the incoming requests
 func (t *revokeFunction) validateAndParseRequests(
-	workflowTask *sdkWorkflowsModel.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	call *model.CallFunction,
 	input any,
 ) (*ThandRevokeRequest, error) {
@@ -116,7 +116,7 @@ func (t *revokeFunction) validateAndParseRequests(
 
 // executeRevocation performs the main revocation workflow
 func (t *revokeFunction) executeRevocation(
-	workflowTask *sdkWorkflowsModel.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	revokeRequest *ThandRevokeRequest,
 ) (any, error) {
 

@@ -37,7 +37,7 @@ func (c *Config) GetTenant(tenant string) (*models.ProviderTenant, error) {
 			return nil, fmt.Errorf("provider '%s' not found: %w", providerID, err)
 		}
 
-		result, err := provider.GetClient().GetTenant(ctx, tenantKey)
+		result, err := provider.GetTenant(ctx, tenantKey)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get tenant '%s' from provider '%s': %w", tenantKey, providerID, err)
 		}
@@ -63,10 +63,10 @@ func (c *Config) GetTenant(tenant string) (*models.ProviderTenant, error) {
 		go func(p models.Provider) {
 			defer wg.Done()
 
-			result, err := p.GetClient().GetTenant(ctx, tenantKey)
+			result, err := p.GetTenant(ctx, tenantKey)
 			if err != nil {
 				logrus.WithError(err).WithFields(logrus.Fields{
-					"provider": p.Name,
+					"provider": p.GetIdentifier(),
 					"tenant":   tenantKey,
 				}).Debug("Failed to get tenant from provider")
 				return

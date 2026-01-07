@@ -14,7 +14,7 @@ import (
 func TestAzureProviderPermissions(t *testing.T) {
 
 	// Create minimal config for initialization
-	testConfig := models.Provider{
+	testConfig := models.ProviderConfig{
 		Name:        "test-azure",
 		Description: "Test Azure provider",
 		Provider:    "azure",
@@ -100,7 +100,7 @@ func TestAzureProviderPermissions(t *testing.T) {
 func TestAzureProviderRoles(t *testing.T) {
 
 	// Create minimal config for initialization
-	testConfig := models.Provider{
+	testConfig := models.ProviderConfig{
 		Name:        "test-azure",
 		Description: "Test Azure provider",
 		Provider:    "azure",

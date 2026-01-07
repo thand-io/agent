@@ -19,7 +19,7 @@ func NewMockGcpProvider() *gcpProviderMock {
 }
 
 // Initialize loads permissions and roles without connecting to GCP
-func (p *gcpProviderMock) Initialize(identifier string, provider models.Provider) error {
+func (p *gcpProviderMock) Initialize(identifier string, provider models.ProviderConfig) error {
 	// Initialize the embedded gcpProvider struct
 	p.gcpProvider = &gcpProvider{}
 

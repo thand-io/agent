@@ -12,6 +12,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 
 	"go.temporal.io/api/enums/v1"
@@ -541,7 +542,7 @@ func (s *Server) signalRunningWorkflow(c *gin.Context) {
 		return
 	}
 
-	if decodedTask.Type != models.ENCODED_WORKFLOW_SIGNAL {
+	if decodedTask.Type != sdkConstants.ENCODED_WORKFLOW_SIGNAL {
 		s.getErrorPage(c, http.StatusBadRequest, fmt.Sprintf("invalid workflow state type: %s", decodedTask.Type), nil)
 		return
 	}

@@ -73,7 +73,7 @@ func (r *ResumableWorkflowRunner) executeForkTaskTemporal(
 			clonedWF := parentWF.Clone()
 
 			// Cast back to *WorkflowTask and set temporal context
-			childWF, ok := clonedWF.(*sdkWorkflowsModel.WorkflowTask)
+			childWF, ok := clonedWF.(sdkWorkflowsModel.WorkflowTaskSupport)
 			if !ok {
 				resultCh.Send(ctx, branchResult{index: i, err: fmt.Errorf("failed to cast cloned workflow to *WorkflowTask")})
 				return

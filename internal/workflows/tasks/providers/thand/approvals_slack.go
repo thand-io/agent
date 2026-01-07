@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/slack-go/slack"
 	"github.com/thand-io/agent/internal/models"
-	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 // createSlackBlocks creates the Slack Block Kit blocks for the notification
@@ -440,7 +439,7 @@ func (a *approvalsNotifier) addActionSection(
 	}
 }
 
-func (a *approvalsNotifier) createViewRequestUrl(workflowTask *sdkWorkflowsModel.WorkflowTask) string {
+func (a *approvalsNotifier) createViewRequestUrl(workflowTask *models.ElevateWorkflowTask) string {
 	return fmt.Sprintf("%s/execution/%s", a.config.GetLoginServerUrl(), workflowTask.GetWorkflowID())
 }
 

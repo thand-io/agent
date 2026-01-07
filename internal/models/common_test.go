@@ -3,6 +3,8 @@ package models
 import (
 	"context"
 	"testing"
+
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
 type localEncrypt struct {
@@ -39,7 +41,7 @@ func TestEncodingWrapper_Encode(t *testing.T) {
 		{
 			name: "encode workflow task",
 			data: EncodingWrapper{
-				Type: ENCODED_WORKFLOW_TASK,
+				Type: sdkConstants.ENCODED_WORKFLOW_TASK,
 				Data: map[string]any{
 					"id":   "task-123",
 					"name": "test task",
@@ -49,7 +51,7 @@ func TestEncodingWrapper_Encode(t *testing.T) {
 		{
 			name: "encode auth data",
 			data: EncodingWrapper{
-				Type: ENCODED_AUTH,
+				Type: sdkConstants.ENCODED_AUTH,
 				Data: map[string]any{
 					"user":  "testuser",
 					"token": "abc123",
@@ -59,7 +61,7 @@ func TestEncodingWrapper_Encode(t *testing.T) {
 		{
 			name: "encode session data",
 			data: EncodingWrapper{
-				Type: ENCODED_SESSION,
+				Type: sdkConstants.ENCODED_SESSION,
 				Data: map[string]any{
 					"session_id": "sess-456",
 					"expires":    "2023-12-31",
@@ -69,7 +71,7 @@ func TestEncodingWrapper_Encode(t *testing.T) {
 		{
 			name: "encode session local data",
 			data: EncodingWrapper{
-				Type: ENCODED_SESSION_LOCAL,
+				Type: sdkConstants.ENCODED_SESSION_LOCAL,
 				Data: map[string]any{
 					"local_id": "local-789",
 					"path":     "/tmp/session",
@@ -125,7 +127,7 @@ func TestEncodingWrapper_Decode(t *testing.T) {
 		{
 			name: "decode workflow task",
 			data: EncodingWrapper{
-				Type: ENCODED_WORKFLOW_TASK,
+				Type: sdkConstants.ENCODED_WORKFLOW_TASK,
 				Data: map[string]any{
 					"id":   "task-123",
 					"name": "test task",
@@ -136,7 +138,7 @@ func TestEncodingWrapper_Decode(t *testing.T) {
 		{
 			name: "decode auth data",
 			data: EncodingWrapper{
-				Type: ENCODED_AUTH,
+				Type: sdkConstants.ENCODED_AUTH,
 				Data: map[string]any{
 					"user":  "testuser",
 					"token": "abc123",
@@ -147,7 +149,7 @@ func TestEncodingWrapper_Decode(t *testing.T) {
 		{
 			name: "decode session data",
 			data: EncodingWrapper{
-				Type: ENCODED_SESSION,
+				Type: sdkConstants.ENCODED_SESSION,
 				Data: map[string]any{
 					"session_id": "sess-456",
 					"expires":    "2023-12-31",
@@ -236,7 +238,7 @@ func TestEncodingWrapper_EncodeDecodeRoundTrip(t *testing.T) {
 		{
 			name: "round trip workflow task",
 			data: EncodingWrapper{
-				Type: ENCODED_WORKFLOW_TASK,
+				Type: sdkConstants.ENCODED_WORKFLOW_TASK,
 				Data: map[string]any{
 					"id":          "task-123",
 					"name":        "test task",
@@ -297,22 +299,22 @@ func TestConstants(t *testing.T) {
 	}{
 		{
 			name:     "ENCODED_WORKFLOW_TASK constant",
-			constant: ENCODED_WORKFLOW_TASK,
+			constant: sdkConstants.ENCODED_WORKFLOW_TASK,
 			expected: "workflow_task",
 		},
 		{
 			name:     "ENCODED_AUTH constant",
-			constant: ENCODED_AUTH,
+			constant: sdkConstants.ENCODED_AUTH,
 			expected: "auth",
 		},
 		{
 			name:     "ENCODED_SESSION constant",
-			constant: ENCODED_SESSION,
+			constant: sdkConstants.ENCODED_SESSION,
 			expected: "session",
 		},
 		{
 			name:     "ENCODED_SESSION_LOCAL constant",
-			constant: ENCODED_SESSION_LOCAL,
+			constant: sdkConstants.ENCODED_SESSION_LOCAL,
 			expected: "session_local",
 		},
 	}
@@ -328,7 +330,7 @@ func TestConstants(t *testing.T) {
 
 func BenchmarkEncodingWrapper_Encode(b *testing.B) {
 	data := EncodingWrapper{
-		Type: ENCODED_WORKFLOW_TASK,
+		Type: sdkConstants.ENCODED_WORKFLOW_TASK,
 		Data: map[string]any{
 			"id":          "task-123",
 			"name":        "benchmark task",
@@ -350,7 +352,7 @@ func BenchmarkEncodingWrapper_Encode(b *testing.B) {
 
 func BenchmarkEncodingWrapper_Decode(b *testing.B) {
 	data := EncodingWrapper{
-		Type: ENCODED_WORKFLOW_TASK,
+		Type: sdkConstants.ENCODED_WORKFLOW_TASK,
 		Data: map[string]any{
 			"id":          "task-123",
 			"name":        "benchmark task",
@@ -381,7 +383,7 @@ func TestEncodingWrapper_EncodeBytes(t *testing.T) {
 		{
 			name: "encode workflow task",
 			data: EncodingWrapper{
-				Type: ENCODED_WORKFLOW_TASK,
+				Type: sdkConstants.ENCODED_WORKFLOW_TASK,
 				Data: map[string]any{
 					"id":   "task-123",
 					"name": "test task",
@@ -391,7 +393,7 @@ func TestEncodingWrapper_EncodeBytes(t *testing.T) {
 		{
 			name: "encode session data",
 			data: EncodingWrapper{
-				Type: ENCODED_SESSION,
+				Type: sdkConstants.ENCODED_SESSION,
 				Data: map[string]any{
 					"session_id": "sess-456",
 				},
@@ -420,7 +422,7 @@ func TestEncodingWrapper_DecodeBytes(t *testing.T) {
 		{
 			name: "decode workflow task",
 			data: EncodingWrapper{
-				Type: ENCODED_WORKFLOW_TASK,
+				Type: sdkConstants.ENCODED_WORKFLOW_TASK,
 				Data: map[string]any{
 					"id":   "task-123",
 					"name": "test task",
@@ -468,7 +470,7 @@ func TestEncodingWrapper_DecodeBytes(t *testing.T) {
 
 func TestEncodingWrapper_EncodeAndEncrypt(t *testing.T) {
 	data := EncodingWrapper{
-		Type: ENCODED_WORKFLOW_TASK,
+		Type: sdkConstants.ENCODED_WORKFLOW_TASK,
 		Data: map[string]any{
 			"id":   "task-encrypt",
 			"name": "encrypted task",
@@ -484,7 +486,7 @@ func TestEncodingWrapper_EncodeAndEncrypt(t *testing.T) {
 
 func TestEncodingWrapper_DecodeAndDecrypt(t *testing.T) {
 	data := EncodingWrapper{
-		Type: ENCODED_WORKFLOW_TASK,
+		Type: sdkConstants.ENCODED_WORKFLOW_TASK,
 		Data: map[string]any{
 			"id":   "task-encrypt-decode",
 			"name": "encrypted task for decode",

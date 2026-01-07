@@ -12,6 +12,7 @@ import (
 
 type Role struct {
 	Version        *version.Version `json:"version,omitempty"`
+	Identifier     string           `json:"-"`
 	Name           string           `json:"name" validate:"required,min=1,max=100"`
 	Description    string           `json:"description" validate:"max=500"`
 	Authenticators []string         `json:"authenticators" validate:"dive,min=2,max=100"`            // All the auth providers that the role can use. If empty then any provider can be used
@@ -91,6 +92,14 @@ func (r *Role) AsMap() map[string]any {
 
 func (r *Role) IsValid() bool {
 	return len(r.Name) > 0 && len(r.Description) > 0
+}
+
+func (r *Role) GetVersion() *version.Version {
+	return r.Version
+}
+
+func (r *Role) GetIdentifier() string {
+	return r.Identifier
 }
 
 func (r *Role) GetName() string {

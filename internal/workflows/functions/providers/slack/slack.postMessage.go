@@ -39,7 +39,7 @@ func (t *slackFunction) GetOptionalParameters() map[string]any {
 
 // ValidateRequest validates the input parameters
 func (t *slackFunction) ValidateRequest(
-	workflowTask *sdkWorkflowsModel.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	call *model.CallFunction,
 	input any,
 ) error {
@@ -55,7 +55,7 @@ func (t *slackFunction) ValidateRequest(
 
 // Execute performs the Slack notification logic
 func (t *slackFunction) Execute(
-	workflowTask *sdkWorkflowsModel.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	call *model.CallFunction,
 	req any,
 ) (any, error) {

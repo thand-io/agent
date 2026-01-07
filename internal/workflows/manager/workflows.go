@@ -48,7 +48,7 @@ func (m *ThandWorkflowManager) registerThandWorkflows() error {
 }
 
 // createPrimaryWorkflowHandler creates the main workflow handler function
-func (m *ThandWorkflowManager) createElevationWorkflowHandler() func(workflow.Context, *models.ThandWorkflowTask) (*models.ThandWorkflowTask, error) {
+func (m *ThandWorkflowManager) createElevationWorkflowHandler() func(workflow.Context, *models.ElevateWorkflowTask) (*models.ElevateWorkflowTask, error) {
 	return func(
 		rootCtx workflow.Context,
 		workflowTask *models.ElevateWorkflowTask,
@@ -103,7 +103,7 @@ func (m *ThandWorkflowManager) createElevationWorkflowHandler() func(workflow.Co
 		}
 
 		// Setup get workflow task query handler
-		if err := sdkWorkflows.SetupGetWorkflowTaskQueryHandler(cancelCtx, workflowTask); err != nil {
+		if err := sdkWorkflows.SetupGetWorkflowTaskQueryHandler(cancelCtx, workflowTask.GetWorkflowTask()); err != nil {
 			log.Error("Failed to set get workflow task query handler", "Error", err)
 			return nil, err
 		}
@@ -114,19 +114,19 @@ func (m *ThandWorkflowManager) createElevationWorkflowHandler() func(workflow.Co
 
 		// Setup workflow selector
 		workflowSelector := sdkWorkflows.SetupWorkflowSelector(
-			cancelCtx, resumeSignal, workflowTask)
+			cancelCtx, resumeSignal, workflowTask.GetWorkflowTask())
 		workflowSelector.Select(cancelCtx)
 
 		log.Info("Starting main workflow execution loop")
 
 		// Execute main workflow loop
-		result, err := serverlessWorkflow.Run(cancelCtx, workflowSelector, workflowTask)
+		result, err := serverlessWorkflow.Run(cancelCtx, workflowSelector, workflowTask.GetWorkflowTask())
 
 		if err != nil {
 			return nil, err
 		}
 
-		return models.NewThandWorkflowTask(result), nil
+		return models.NewElevateWorkflowTask(result), nil
 
 	}
 }
@@ -177,7 +177,7 @@ func (m *ThandWorkflowManager) runCleanup(
 
 	// Use a disconnected context for cleanup to ensure it runs even if workflow is cancelled
 	newCtx, _ := workflow.NewDisconnectedContext(rootCtx)
-	workflowTask = workflowTask.WithTemporalContext(newCtx)
+	workflowTask = workflowTask.WithTemporalContext(newCtx).(*models.ElevateWorkflowTask)
 
 	// If a termination request with entrypoint is provided then we need to use it
 	if terminationRequest != nil && len(terminationRequest.EntryPoint) > 0 {

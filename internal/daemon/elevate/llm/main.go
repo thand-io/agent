@@ -89,16 +89,16 @@ func validateEvaluationResponse(evaluationResponse *ElevationRequestResponse, re
 func getProviderAndWorkflow(evaluationResponse *ElevationRequestResponse, providers map[string]models.Provider, workflows map[string]models.Workflow) (models.Provider, models.Workflow, error) {
 	provider, ok := providers[evaluationResponse.Provider]
 	if !ok {
-		return models.Provider{}, models.Workflow{}, fmt.Errorf("provider not found: %s", evaluationResponse.Provider)
+		return nil, models.Workflow{}, fmt.Errorf("provider not found: %s", evaluationResponse.Provider)
 	}
 
 	if len(evaluationResponse.Workflow) == 0 {
-		return models.Provider{}, models.Workflow{}, fmt.Errorf("workflow is required from LLM")
+		return nil, models.Workflow{}, fmt.Errorf("workflow is required from LLM")
 	}
 
 	workflow, ok := workflows[evaluationResponse.Workflow]
 	if !ok {
-		return models.Provider{}, models.Workflow{}, fmt.Errorf("workflow not found: %s", evaluationResponse.Workflow)
+		return nil, models.Workflow{}, fmt.Errorf("workflow not found: %s", evaluationResponse.Workflow)
 	}
 
 	return provider, workflow, nil

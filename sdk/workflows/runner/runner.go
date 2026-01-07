@@ -20,7 +20,7 @@ import (
 // ResumableWorkflowRunner implements a workflow runner that can pause and resume
 type ResumableWorkflowRunner struct {
 	config       config.Config
-	workflowTask *sdkWorkflowsModel.WorkflowTask
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport
 }
 
 func (r *ResumableWorkflowRunner) GetConfig() config.Config {
@@ -74,7 +74,7 @@ func (r *ResumableWorkflowRunner) CloneWithContext(ctx context.Context) *Resumab
 	}
 }
 
-func (r *ResumableWorkflowRunner) GetWorkflowTask() *sdkWorkflowsModel.WorkflowTask {
+func (r *ResumableWorkflowRunner) GetWorkflowTask() sdkWorkflowsModel.WorkflowTaskSupport {
 	return r.workflowTask
 }
 
@@ -91,7 +91,10 @@ func (m *ResumableWorkflowRunner) GetWorkflow() *model.Workflow {
 }
 
 // NewResumableRunner creates a new resumable workflow runner
-func NewResumableRunner(config config.Config, workflow *sdkWorkflowsModel.WorkflowTask) *ResumableWorkflowRunner {
+func NewResumableRunner(
+	config config.Config,
+	workflow sdkWorkflowsModel.WorkflowTaskSupport,
+) *ResumableWorkflowRunner {
 	return &ResumableWorkflowRunner{
 		config:       config,
 		workflowTask: workflow,

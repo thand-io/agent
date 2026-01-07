@@ -9,6 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	models "github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	sdkModels "github.com/thand-io/agent/sdk/models"
 	"github.com/thand-io/agent/sdk/workflows/config"
 	"github.com/thand-io/agent/sdk/workflows/functions"
@@ -63,8 +64,8 @@ func (m *WorkflowManager) GetFunction(name string) (functions.Function, bool) {
 
 // ResumeWorkflow resumes workflow execution from client-provided state
 func (m *WorkflowManager) ResumeWorkflow(
-	result *sdkWorkflowsModel.WorkflowTask,
-) (*sdkWorkflowsModel.WorkflowTaskSupport, error) {
+	result sdkWorkflowsModel.WorkflowTaskSupport,
+) (sdkWorkflowsModel.WorkflowTaskSupport, error) {
 
 	ctx := result.GetContext()
 
@@ -82,8 +83,8 @@ func (m *WorkflowManager) ResumeWorkflow(
 }
 
 func (m *WorkflowManager) ResumeWorkflowTask(
-	workflowTask *sdkWorkflowsModel.WorkflowTaskSupport,
-) (*sdkWorkflowsModel.WorkflowTaskSupport, error) {
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
+) (sdkWorkflowsModel.WorkflowTaskSupport, error) {
 
 	return ResumeWorkflowTask(
 		m.config,
@@ -93,8 +94,8 @@ func (m *WorkflowManager) ResumeWorkflowTask(
 
 func (m *WorkflowManager) resumeTemporalWorkflowTask(
 	ctx context.Context,
-	workflowTask *sdkWorkflowsModel.WorkflowTask,
-) (*sdkWorkflowsModel.WorkflowTask, error) {
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
+) (sdkWorkflowsModel.WorkflowTaskSupport, error) {
 
 	// Check the workflow task
 	if err := m.config.HydrateWorkflowTask(workflowTask); err != nil {
@@ -148,7 +149,7 @@ func (m *WorkflowManager) GetRegisteredFunctions() []string {
 	return m.config.GetFunctionRegistry().GetRegisteredFunctions()
 }
 
-func (m *WorkflowManager) createTemporalWorkflow(workflowTask *sdkWorkflowsModel.WorkflowTask) error {
+func (m *WorkflowManager) createTemporalWorkflow(workflowTask sdkWorkflowsModel.WorkflowTaskSupport) error {
 	// Not found, so start a new workflow execution
 
 	logrus.WithFields(logrus.Fields{
@@ -174,7 +175,7 @@ func (m *WorkflowManager) createTemporalWorkflow(workflowTask *sdkWorkflowsModel
 	if !temporalService.IsVersioningDisabled() {
 		workflowOptions.VersioningOverride = &client.PinnedVersioningOverride{
 			Version: worker.WorkerDeploymentVersion{
-				DeploymentName: sdkModels.TemporalDeploymentName,
+				DeploymentName: sdkConstants.TemporalDeploymentName,
 				BuildID:        common.GetBuildIdentifier(),
 			},
 		}

@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/thand-io/agent/internal/common"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	"gopkg.in/yaml.v3"
 )
 
@@ -41,7 +42,7 @@ type ExportableSession struct {
 // Encode the remote session from the local session
 func (s *ExportableSession) GetEncodedSession(encryptor EncryptionImpl) string {
 	return EncodingWrapper{
-		Type: ENCODED_SESSION,
+		Type: sdkConstants.ENCODED_SESSION,
 		Data: s,
 	}.EncodeAndEncrypt(encryptor)
 }
@@ -63,7 +64,7 @@ func (s *LocalSession) GetDecodedSession(decryptor EncryptionImpl) (*ExportableS
 		return nil, err
 	}
 
-	if decoded.Type != ENCODED_SESSION {
+	if decoded.Type != sdkConstants.ENCODED_SESSION {
 		return nil, fmt.Errorf("invalid session type: %s", decoded.Type)
 	}
 
@@ -114,14 +115,14 @@ func (s *LocalSession) CopyWithoutEndpoint() *LocalSession {
 
 func (s *LocalSession) GetEncodedLocalSession() string {
 	return EncodingWrapper{
-		Type: ENCODED_SESSION_LOCAL,
+		Type: sdkConstants.ENCODED_SESSION_LOCAL,
 		Data: s,
 	}.EncodeBase64()
 }
 
 func (s *LocalSession) GetEncodedLocalSessionBytes() []byte {
 	return EncodingWrapper{
-		Type: ENCODED_SESSION_LOCAL,
+		Type: sdkConstants.ENCODED_SESSION_LOCAL,
 		Data: s,
 	}.EncodeBytes()
 }
@@ -132,7 +133,7 @@ func DecodedLocalSession(input string) (*LocalSession, error) {
 		return nil, err
 	}
 
-	if wrapper.Type != ENCODED_SESSION_LOCAL {
+	if wrapper.Type != sdkConstants.ENCODED_SESSION_LOCAL {
 		return nil, fmt.Errorf("invalid session type: %s", wrapper.Type)
 	}
 
@@ -147,7 +148,7 @@ func DecodedLocalSessionBytes(input []byte) (*LocalSession, error) {
 		return nil, err
 	}
 
-	if wrapper.Type != ENCODED_SESSION_LOCAL {
+	if wrapper.Type != sdkConstants.ENCODED_SESSION_LOCAL {
 		return nil, fmt.Errorf("invalid session type: %s", wrapper.Type)
 	}
 

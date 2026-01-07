@@ -121,7 +121,7 @@ func TestKubernetesRoles(t *testing.T) {
 	}
 
 	// Kubernetes providers
-	k8sProviders := map[string]models.Provider{
+	k8sProviders := map[string]models.ProviderConfig{
 		"kubernetes-dev": {
 			Name:        "kubernetes-dev",
 			Description: "Kubernetes Development Cluster",
@@ -490,7 +490,7 @@ func TestKubernetesRoleScenarios(t *testing.T) {
 			},
 		}
 
-		providers := map[string]models.Provider{
+		providers := map[string]models.ProviderConfig{
 			"kubernetes-prod": {
 				Name:        "kubernetes-prod",
 				Description: "Production Kubernetes Cluster",

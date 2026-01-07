@@ -233,7 +233,7 @@ func (t *thandTask) executeRevocationTask(
 
 // executeTemporalRevokeParallel executes revocation tasks in parallel using Temporal
 func executeTemporalRevokeParallel(
-	workflowTask *sdkWorkflowsModel.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	taskName string,
 	call *taskModel.ThandTask,
 	revokeTasks []revokeTask,
@@ -299,7 +299,7 @@ func executeTemporalRevokeParallel(
 // executeGoRevokeParallel executes revocation tasks in parallel using Go routines and WaitGroup
 func executeGoRevokeParallel(
 	config models.ConfigImpl,
-	workflowTask *sdkWorkflowsModel.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	revokeTasks []revokeTask,
 ) ([]revokeResult, error) {
 

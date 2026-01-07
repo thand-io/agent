@@ -127,7 +127,7 @@ func (i *Identity) GetProviders() map[string]string {
 	return i.Providers
 }
 
-func (i *Identity) AddProvider(provider *Provider) {
+func (i *Identity) AddProvider(provider Provider) {
 
 	if provider == nil {
 		return
@@ -137,8 +137,8 @@ func (i *Identity) AddProvider(provider *Provider) {
 	if i.Providers == nil {
 		i.Providers = make(map[string]string)
 	}
-	if _, exists := i.Providers[provider.Name]; !exists {
-		i.Providers[provider.Name] = provider.Provider
+	if _, exists := i.Providers[provider.GetIdentifier()]; !exists {
+		i.Providers[provider.GetIdentifier()] = provider.GetProvider()
 	}
 }
 

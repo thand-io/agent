@@ -232,13 +232,9 @@ func (p *BaseProvider) ValidateRole(ctx context.Context, user *Identity, role *R
 
 // executeUserValidation triggers user approval workflow
 func ValidateRole(
-	providerCall ProviderImpl,
+	provider Provider,
 	elevateRequest ElevateRequestInternal,
 ) (map[string]any, error) {
-
-	if providerCall == nil {
-		return nil, fmt.Errorf("provider implementation is nil. Ensure the provider is initialized")
-	}
 
 	// Check the user has access to the required scopes etc
 
@@ -248,7 +244,7 @@ func ValidateRole(
 		User:  elevateRequest.User,
 	}
 
-	res, err := providerCall.ValidateRole(
+	res, err := provider.ValidateRole(
 		context.Background(),
 		&identity,
 		elevateRequest.Role,
@@ -261,7 +257,7 @@ func ValidateRole(
 		}
 
 		logrus.Warn("Provider does not implement role validation, using default")
-		err = validateRole(providerCall, &identity, elevateRequest.Role)
+		err = validateRole(provider, &identity, elevateRequest.Role)
 
 		if err != nil {
 
@@ -274,7 +270,7 @@ func ValidateRole(
 	return res, nil
 }
 
-func validateRole(provider ProviderImpl, _ *Identity, role *Role) error {
+func validateRole(provider Provider, _ *Identity, role *Role) error {
 
 	if provider == nil {
 		return fmt.Errorf("provider implementation is nil. Ensure the provider is initialized")
@@ -306,7 +302,7 @@ func validateRoleNotEmpty(role *Role) error {
 }
 
 // validateRoleInheritance validates that all inherited roles exist in the provider
-func validateRoleInheritance(provider ProviderImpl, role *Role) error {
+func validateRoleInheritance(provider Provider, role *Role) error {
 
 	if provider == nil {
 		return fmt.Errorf("provider implementation is nil. Ensure the provider is initialized")
@@ -330,7 +326,7 @@ func validateRoleInheritance(provider ProviderImpl, role *Role) error {
 }
 
 // validateInheritedRolesExist checks that all inherited roles exist in the provider
-func validateInheritedRolesExist(provider ProviderImpl, role *Role, providerRoles []SearchResult[ProviderRole]) error {
+func validateInheritedRolesExist(provider Provider, role *Role, providerRoles []SearchResult[ProviderRole]) error {
 	if provider == nil {
 		return fmt.Errorf("provider implementation is nil. Ensure the provider is initialized")
 	}
@@ -353,7 +349,7 @@ func validateInheritedRolesExist(provider ProviderImpl, role *Role, providerRole
 }
 
 // validateRolePermissions validates that role permissions exist in the provider
-func validateRolePermissions(provider ProviderImpl, role *Role) error {
+func validateRolePermissions(provider Provider, role *Role) error {
 
 	if provider == nil {
 		return fmt.Errorf("provider implementation is nil. Ensure the provider is initialized")

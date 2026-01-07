@@ -40,6 +40,7 @@ import (
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/workflows/manager"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	"go.temporal.io/api/workflowservice/v1"
 )
 
@@ -385,7 +386,7 @@ func (s *Server) setupRoutes(router *gin.Engine) {
 			// Create a code to identify the session after authentication
 			// This code is encrypted and can only be used by the agent
 			sessionCode := models.EncodingWrapper{
-				Type: models.ENCODED_SESSION_CODE,
+				Type: sdkConstants.ENCODED_SESSION_CODE,
 				Data: models.NewCodeWrapper(loginServer),
 			}.EncodeAndEncrypt(
 				s.Config.GetServices().GetEncryption(),

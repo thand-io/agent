@@ -50,7 +50,7 @@ func (t *notifyFunction) GetOptionalParameters() map[string]any {
 
 // ValidateRequest validates the input parameters
 func (t *notifyFunction) ValidateRequest(
-	workflowTask *sdkWorkflowsModel.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	call *model.CallFunction,
 	input any,
 ) error {
@@ -166,7 +166,7 @@ func (r *NotifierRequest) AsMap() map[string]any {
 
 // Execute performs the validation logic
 func (t *notifyFunction) Execute(
-	workflowTask *sdkWorkflowsModel.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	call *model.CallFunction,
 	input any,
 ) (any, error) {

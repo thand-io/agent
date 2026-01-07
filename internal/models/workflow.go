@@ -12,15 +12,17 @@ import (
 
 type Workflow struct {
 	Version     *version.Version `json:"version,omitempty"`
+	Identifier  string           `json:"-"`
 	Name        string           `json:"name" validate:"required,min=1,max=100"`
 	Description string           `json:"description" validate:"max=500"`
 	Workflow    *model.Workflow  `json:"workflow,omitempty" validate:"required"`
 	Enabled     bool             `json:"enabled" default:"true"` // By default enable the workflow
 }
 
-func NewWorkflow(version *version.Version, name string, description string, workflow *model.Workflow) *Workflow {
+func NewWorkflow(version *version.Version, identifier string, name string, description string, workflow *model.Workflow) *Workflow {
 	return &Workflow{
 		Version:     version,
+		Identifier:  identifier,
 		Name:        name,
 		Description: description,
 		Workflow:    workflow,
@@ -34,6 +36,10 @@ func (w *Workflow) GetVersion() *version.Version {
 
 func (r *Workflow) HasPermission(user *User) bool {
 	return true
+}
+
+func (w *Workflow) GetIdentifier() string {
+	return w.Identifier
 }
 
 func (w *Workflow) GetName() string {

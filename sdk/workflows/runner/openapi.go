@@ -14,7 +14,7 @@ import (
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
-	sdkModels "github.com/thand-io/agent/sdk/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -60,7 +60,7 @@ func (r *ResumableWorkflowRunner) executeOpenAPIFunction(
 		// Execute within Temporal activity
 		fut := workflow.ExecuteActivity(
 			workflowTask.GetTemporalContext(),
-			sdkModels.TemporalOpenAPIActivityName,
+			sdkConstants.TemporalOpenAPIActivityName,
 			args,
 			input,
 		)

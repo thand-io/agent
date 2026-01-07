@@ -33,7 +33,7 @@ type gcpProvider struct {
 	crmClient *cloudresourcemanager.Service
 }
 
-func (p *gcpProvider) Initialize(identifier string, provider models.Provider) error {
+func (p *gcpProvider) Initialize(identifier string, provider models.ProviderConfig) error {
 	// Set the provider to the base provider
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,

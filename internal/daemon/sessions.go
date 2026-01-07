@@ -10,6 +10,7 @@ import (
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 	sessionManager "github.com/thand-io/agent/internal/sessions"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
 // postSession creates a new session
@@ -60,7 +61,7 @@ func (s *Server) postSession(c *gin.Context) {
 
 	// If the code decrypts then we're all good.
 	codeResponse, err := models.EncodingWrapper{
-		Type: models.ENCODED_SESSION_CODE,
+		Type: sdkConstants.ENCODED_SESSION_CODE,
 	}.DecodeAndDecrypt(
 		sessionCode,
 		s.Config.GetServices().GetEncryption(),
@@ -92,7 +93,7 @@ func (s *Server) postSession(c *gin.Context) {
 	// call does not require decryption as the data is
 	// already encrypted within the session token.
 	sessionData, err := models.EncodingWrapper{
-		Type: models.ENCODED_SESSION_LOCAL,
+		Type: sdkConstants.ENCODED_SESSION_LOCAL,
 	}.Decode(sessionToken)
 
 	if err != nil {

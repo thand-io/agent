@@ -298,7 +298,7 @@ func (t *thandTask) executeAuthorization(
 
 // executeTemporalParallel executes authorization tasks in parallel using Temporal
 func (t *thandTask) executeTemporalParallel(
-	workflowTask *sdkWorkflowsModel.WorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	taskName string,
 	call *taskModel.ThandTask,
 	authTasks []authTask,

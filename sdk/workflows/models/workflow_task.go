@@ -127,7 +127,7 @@ func (r *WorkflowTask) GetTemporalContext() workflow.Context {
 	return nil
 }
 
-func (r *WorkflowTask) WithTemporalContext(ctx workflow.Context) *WorkflowTask {
+func (r *WorkflowTask) WithTemporalContext(ctx workflow.Context) WorkflowTaskSupport {
 
 	intlCtx := r.internalContext
 

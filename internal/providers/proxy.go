@@ -20,7 +20,7 @@ type remoteProviderProxy struct {
 	endpoint    string
 }
 
-func NewRemoteProviderProxy(providerKey, endpoint string) models.ProviderImpl {
+func NewRemoteProviderProxy(providerKey, endpoint string) models.Provider {
 
 	logrus.Debugf("Creating new remote provider proxy: %s/provider/%s", endpoint, providerKey)
 
@@ -30,7 +30,7 @@ func NewRemoteProviderProxy(providerKey, endpoint string) models.ProviderImpl {
 	}
 }
 
-func (p *remoteProviderProxy) Initialize(identifier string, provider models.Provider) error {
+func (p *remoteProviderProxy) Initialize(identifier string, provider models.ProviderConfig) error {
 
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,

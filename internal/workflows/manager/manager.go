@@ -17,7 +17,7 @@ import (
 	providerSlack "github.com/thand-io/agent/internal/workflows/functions/providers/slack"
 	providerThand "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 	taskThand "github.com/thand-io/agent/internal/workflows/tasks/providers/thand"
-	sdkModels "github.com/thand-io/agent/sdk/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	sdkWorkflowsConfig "github.com/thand-io/agent/sdk/workflows/config"
 	"github.com/thand-io/agent/sdk/workflows/functions"
 	workflowSdk "github.com/thand-io/agent/sdk/workflows/manager"
@@ -228,7 +228,7 @@ func (m *ThandWorkflowManager) executeElevationWorkflow(
 
 		if existingSession.Expiry.UTC().After(time.Now().UTC()) {
 
-			err = authProvider.GetClient().ValidateSession(ctx, decodedSession.Session)
+			err = authProvider.ValidateSession(ctx, decodedSession.Session)
 
 			if err == nil {
 
@@ -266,7 +266,7 @@ func (m *ThandWorkflowManager) executeElevationWorkflow(
 		}
 	}
 
-	sessionResponse, err := authProvider.GetClient().AuthorizeSession(ctx, &models.AuthorizeUser{
+	sessionResponse, err := authProvider.AuthorizeSession(ctx, &models.AuthorizeUser{
 		State:       workflowTask.GetEncodedTask(m.config.GetServices().GetEncryption()),
 		RedirectUri: m.config.GetAuthCallbackUrl(request.Authenticator),
 	})
@@ -348,8 +348,14 @@ func (m *ThandWorkflowManager) ResumeWorkflow(
 func (m *ThandWorkflowManager) ResumeWorkflowTask(
 	workflowTask *models.ElevateWorkflowTask,
 ) (*models.ElevateWorkflowTask, error) {
+
 	result, err := m.workflowManager.ResumeWorkflowTask(workflowTask)
-	return result, err
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to resume workflow task: %w", err)
+	}
+
+	return models.NewElevateWorkflowTask(result), nil
 }
 
 func (m *ThandWorkflowManager) createTemporalWorkflow(workflowTask *models.ElevateWorkflowTask) error {
@@ -413,7 +419,7 @@ func (m *ThandWorkflowManager) createTemporalWorkflow(workflowTask *models.Eleva
 	if !temporalService.IsVersioningDisabled() {
 		workflowOptions.VersioningOverride = &client.PinnedVersioningOverride{
 			Version: worker.WorkerDeploymentVersion{
-				DeploymentName: sdkModels.TemporalDeploymentName,
+				DeploymentName: sdkConstants.TemporalDeploymentName,
 				BuildID:        common.GetBuildIdentifier(),
 			},
 		}

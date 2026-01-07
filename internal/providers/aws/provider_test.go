@@ -14,7 +14,7 @@ import (
 func TestAWSProviderPermissions(t *testing.T) {
 
 	// Create minimal config for initialization
-	testConfig := models.Provider{
+	testConfig := models.ProviderConfig{
 		Name:        "test-aws",
 		Description: "Test AWS provider",
 		Provider:    "aws",
@@ -117,7 +117,7 @@ func TestAWSProviderPermissions(t *testing.T) {
 func TestAWSProviderRoles(t *testing.T) {
 
 	// Create minimal config for initialization
-	testConfig := models.Provider{
+	testConfig := models.ProviderConfig{
 		Name:        "test-aws",
 		Description: "Test AWS provider",
 		Provider:    "aws",

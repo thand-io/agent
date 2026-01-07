@@ -17,7 +17,7 @@ type salesForceProvider struct {
 	client *simpleforce.Client
 }
 
-func (p *salesForceProvider) Initialize(identifier string, provider models.Provider) error {
+func (p *salesForceProvider) Initialize(identifier string, provider models.ProviderConfig) error {
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,

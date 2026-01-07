@@ -116,7 +116,7 @@ func GenerateRole(
 	providerNames := extractProviderNames(providers)
 	systemPrompt := fmt.Sprintf("%s\n\n%s", InitalSystemPrompt, QueryElevationInfoPrompt)
 
-	queryResponseMap, err := buildQueryResponseMap(ctx, provider.GetClient(), queryResponse)
+	queryResponseMap, err := buildQueryResponseMap(ctx, provider, queryResponse)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +150,7 @@ func extractProviderNames(providers map[string]models.Provider) []string {
 	return providerNames
 }
 
-func buildQueryResponseMap(ctx context.Context, providerClient models.ProviderImpl, queryResponse *ElevationQueryResponse) (map[string]any, error) {
+func buildQueryResponseMap(ctx context.Context, provider models.Provider, queryResponse *ElevationQueryResponse) (map[string]any, error) {
 	queryResponseMap := map[string]any{
 		"roles":       []string{},
 		"permissions": []string{},
@@ -158,7 +158,7 @@ func buildQueryResponseMap(ctx context.Context, providerClient models.ProviderIm
 	}
 
 	if len(queryResponse.Roles) > 0 {
-		foundRoles, err := providerClient.ListRoles(ctx, &models.SearchRequest{
+		foundRoles, err := provider.ListRoles(ctx, &models.SearchRequest{
 			Terms: queryResponse.Roles,
 		})
 		if err != nil {
@@ -168,7 +168,7 @@ func buildQueryResponseMap(ctx context.Context, providerClient models.ProviderIm
 	}
 
 	if len(queryResponse.Permissions) > 0 {
-		foundPermissions, err := providerClient.ListPermissions(ctx, &models.SearchRequest{
+		foundPermissions, err := provider.ListPermissions(ctx, &models.SearchRequest{
 			Terms: queryResponse.Permissions,
 		})
 		if err != nil {
@@ -178,7 +178,7 @@ func buildQueryResponseMap(ctx context.Context, providerClient models.ProviderIm
 	}
 
 	if len(queryResponse.Resources) > 0 {
-		foundResources, err := providerClient.ListResources(ctx, &models.SearchRequest{
+		foundResources, err := provider.ListResources(ctx, &models.SearchRequest{
 			Terms: queryResponse.Resources,
 		})
 		if err != nil {
@@ -293,7 +293,7 @@ func createRoleFromParams(provider models.Provider, params map[string]any) (*mod
 		return nil, err
 	}
 
-	validateOut, err := models.ValidateRole(provider.GetClient(), models.ElevateRequestInternal{
+	validateOut, err := models.ValidateRole(provider, models.ElevateRequestInternal{
 		ElevateRequest: models.ElevateRequest{
 			Role: &role,
 		},

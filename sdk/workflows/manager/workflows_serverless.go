@@ -247,8 +247,8 @@ func (m *serverlessWorkflow) shouldContinueAsNew(ctx workflow.Context) bool {
 // This maybe called as part of a temporal workflow or directly
 func ResumeWorkflowTask(
 	config config.Config,
-	workflowTask *sdkWorkflowsModel.WorkflowTask,
-) (*sdkWorkflowsModel.WorkflowTask, error) {
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
+) (sdkWorkflowsModel.WorkflowTaskSupport, error) {
 
 	// Hydrate the workflow task
 	err := config.HydrateWorkflowTask(workflowTask)

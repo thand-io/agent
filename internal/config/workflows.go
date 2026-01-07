@@ -76,7 +76,6 @@ func (c *Config) ApplyWorkflows(foundWorkflows []*models.WorkflowDefinitions) (m
 
 	logrus.Debugln("Processing loaded workflows: ", len(foundWorkflows))
 
-
 	for _, workflow := range foundWorkflows {
 
 		if err := workflow.Validate(); err != nil {
@@ -94,6 +93,8 @@ func (c *Config) ApplyWorkflows(foundWorkflows []*models.WorkflowDefinitions) (m
 			if p.Version == nil {
 				p.Version = workflow.Version
 			}
+
+			p.Identifier = workflowKey
 
 			if len(p.Name) == 0 {
 				p.Name = workflowKey

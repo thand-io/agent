@@ -45,14 +45,14 @@ func TestProviderDefinitions_UnmarshalJSON(t *testing.T) {
 			validateFunc: func(t *testing.T, def *ProviderDefinitions) {
 				aws, exists := def.Providers["aws"]
 				assert.True(t, exists)
-				assert.Equal(t, "aws", aws.Provider)
-				assert.Equal(t, "AWS Provider", aws.Name)
-				assert.Equal(t, "Amazon Web Services provider", aws.Description)
+				assert.Equal(t, "aws", aws.GetProvider())
+				assert.Equal(t, "AWS Provider", aws.GetName())
+				assert.Equal(t, "Amazon Web Services provider", aws.GetDescription())
 
 				gcp, exists := def.Providers["gcp"]
 				assert.True(t, exists)
-				assert.Equal(t, "gcp", gcp.Provider)
-				assert.Equal(t, "GCP Provider", gcp.Name)
+				assert.Equal(t, "gcp", gcp.GetProvider())
+				assert.Equal(t, "GCP Provider", gcp.GetName())
 			},
 		},
 		{
@@ -191,12 +191,13 @@ providers:
 			validateFunc: func(t *testing.T, def *ProviderDefinitions) {
 				aws, exists := def.Providers["aws"]
 				assert.True(t, exists)
-				assert.Equal(t, "aws", aws.Provider)
-				assert.Equal(t, "AWS Provider", aws.Name)
+				assert.Equal(t, "aws", aws.GetProvider())
+				assert.Equal(t, "AWS Provider", aws.GetName())
 
 				gcp, exists := def.Providers["gcp"]
 				assert.True(t, exists)
-				assert.Equal(t, "gcp", gcp.Provider)
+				assert.Equal(t, "gcp", gcp.GetProvider())
+				assert.Equal(t, "GCP Provider", gcp.GetName())
 			},
 		},
 		{
@@ -294,8 +295,8 @@ providers:
 
 		assert.Equal(t, "1.5.0", def.Version.String())
 		assert.Len(t, def.Providers, 2)
-		assert.Equal(t, "Provider 1", def.Providers["provider1"].Name)
-		assert.Equal(t, "Provider 2", def.Providers["provider2"].Name)
+		assert.Equal(t, "Provider 1", def.Providers["provider1"].GetName())
+		assert.Equal(t, "Provider 2", def.Providers["provider2"].GetName())
 	})
 
 	t.Run("YAML->JSON->Struct unmarshal (production path)", func(t *testing.T) {
@@ -347,7 +348,7 @@ func TestProviderDefinitions_RoundTrip(t *testing.T) {
 		// Verify
 		assert.Equal(t, original.Version.String(), unmarshaled.Version.String())
 		assert.Len(t, unmarshaled.Providers, 1)
-		assert.Equal(t, original.Providers["aws"].Name, unmarshaled.Providers["aws"].Name)
+		assert.Equal(t, original.Providers["aws"].GetName(), unmarshaled.Providers["aws"].GetName())
 	})
 
 	t.Run("YAML round trip", func(t *testing.T) {
@@ -375,6 +376,6 @@ func TestProviderDefinitions_RoundTrip(t *testing.T) {
 		// Verify
 		assert.Equal(t, original.Version.String(), unmarshaled.Version.String())
 		assert.Len(t, unmarshaled.Providers, 1)
-		assert.Equal(t, original.Providers["gcp"].Name, unmarshaled.Providers["gcp"].Name)
+		assert.Equal(t, original.Providers["gcp"].GetName(), unmarshaled.Providers["gcp"].GetName())
 	})
 }

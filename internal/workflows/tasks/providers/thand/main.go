@@ -79,7 +79,7 @@ func (f *thandTask) GetVersion() string {
 
 // Execute executes the Thand approvals task
 func (t *thandTask) Execute(
-	workflowTask *sdkWorkflowsModel.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	task *model.TaskItem,
 	input any,
 ) (any, error) {

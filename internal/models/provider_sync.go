@@ -13,6 +13,7 @@ import (
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 )
@@ -41,9 +42,13 @@ func (p *BaseProvider) Synchronize(
 func Synchronize(
 	ctx context.Context,
 	temporalService TemporalImpl,
-	provider ProviderImpl,
+	provider Provider,
 	syncRequest *SynchronizeRequest, // can be nil
 ) error {
+
+	if provider == nil {
+		return fmt.Errorf("provider client is nil. Ensure the provider is initialized")
+	}
 
 	// Check if we have the relevant capabilities for synchronization
 	if !provider.HasAnyCapability(
@@ -103,7 +108,7 @@ func Synchronize(
 		if !temporalService.IsVersioningDisabled() {
 			workflowOptions.VersioningOverride = &client.PinnedVersioningOverride{
 				Version: worker.WorkerDeploymentVersion{
-					DeploymentName: TemporalDeploymentName,
+					DeploymentName: sdkConstants.TemporalDeploymentName,
 					BuildID:        common.GetBuildIdentifier(),
 				},
 			}
@@ -353,7 +358,7 @@ func PatchProviderUpstream(
 	return nil
 }
 
-func getSynchronizationRequests(provider ProviderImpl) []SynchronizeCapability {
+func getSynchronizationRequests(provider Provider) []SynchronizeCapability {
 	requests := make([]SynchronizeCapability, 0)
 
 	// Determine which capabilities to synchronize

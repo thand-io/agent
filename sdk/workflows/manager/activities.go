@@ -7,7 +7,7 @@ import (
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
-	sdkModels "github.com/thand-io/agent/sdk/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 	runner "github.com/thand-io/agent/sdk/workflows/runner"
 	"go.temporal.io/sdk/activity"
@@ -97,7 +97,7 @@ func (m *WorkflowManager) registerActivities() error {
 	) (any, error) {
 
 		logrus.WithFields(logrus.Fields{
-			"activity": sdkModels.TemporalHttpActivityName,
+			"activity": sdkConstants.TemporalHttpActivityName,
 			"url":      finalURL,
 			"method":   httpCall.Method,
 		}).Info("Executing HTTP activity")
@@ -105,7 +105,7 @@ func (m *WorkflowManager) registerActivities() error {
 		return runner.MakeHttpRequest(httpCall, finalURL)
 
 	}, activity.RegisterOptions{
-		Name: sdkModels.TemporalHttpActivityName,
+		Name: sdkConstants.TemporalHttpActivityName,
 	})
 
 	/*
@@ -118,7 +118,7 @@ func (m *WorkflowManager) registerActivities() error {
 	) (any, error) {
 
 		logrus.WithFields(logrus.Fields{
-			"activity": sdkModels.TemporalGrpcActivityName,
+			"activity": sdkConstants.TemporalGrpcActivityName,
 			"service":  grpcCall.Service.Name,
 			"method":   grpcCall.Method,
 		}).Info("Executing gRPC activity")
@@ -126,7 +126,7 @@ func (m *WorkflowManager) registerActivities() error {
 		return runner.MakeGrpcRequest(grpcCall, finalInput)
 
 	}, activity.RegisterOptions{
-		Name: sdkModels.TemporalGrpcActivityName,
+		Name: sdkConstants.TemporalGrpcActivityName,
 	})
 
 	/*
@@ -139,13 +139,13 @@ func (m *WorkflowManager) registerActivities() error {
 	) (any, error) {
 
 		logrus.WithFields(logrus.Fields{
-			"activity": sdkModels.TemporalAsyncionActivityName,
+			"activity": sdkConstants.TemporalAsyncionActivityName,
 		}).Info("Executing AsyncIO activity")
 
 		return nil, fmt.Errorf("asyncIO activity not implemented yet")
 
 	}, activity.RegisterOptions{
-		Name: sdkModels.TemporalAsyncionActivityName,
+		Name: sdkConstants.TemporalAsyncionActivityName,
 	})
 
 	/*
@@ -158,13 +158,13 @@ func (m *WorkflowManager) registerActivities() error {
 	) (any, error) {
 
 		logrus.WithFields(logrus.Fields{
-			"activity": sdkModels.TemporalOpenAPIActivityName,
+			"activity": sdkConstants.TemporalOpenAPIActivityName,
 		}).Info("Executing OpenAPI activity")
 
 		return runner.MakeOpenAPIRequest(openAPICall, input)
 
 	}, activity.RegisterOptions{
-		Name: sdkModels.TemporalOpenAPIActivityName,
+		Name: sdkConstants.TemporalOpenAPIActivityName,
 	})
 
 	return nil

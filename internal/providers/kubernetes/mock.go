@@ -10,14 +10,14 @@ type kubernetesProviderMock struct {
 }
 
 // NewMockKubernetesProvider creates a new mock Kubernetes provider for testing
-func NewMockKubernetesProvider() models.ProviderImpl {
+func NewMockKubernetesProvider() models.Provider {
 	return &kubernetesProviderMock{
 		kubernetesProvider: &kubernetesProvider{},
 	}
 }
 
 // Initialize loads permissions and roles without connecting to Kubernetes
-func (p *kubernetesProviderMock) Initialize(identifier string, provider models.Provider) error {
+func (p *kubernetesProviderMock) Initialize(identifier string, provider models.ProviderConfig) error {
 	// Initialize the embedded kubernetesProvider struct
 	p.kubernetesProvider = &kubernetesProvider{}
 

@@ -23,7 +23,7 @@ type gsuiteProvider struct {
 	adminEmail   string
 }
 
-func (p *gsuiteProvider) Initialize(identifier string, provider models.Provider) error {
+func (p *gsuiteProvider) Initialize(identifier string, provider models.ProviderConfig) error {
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,

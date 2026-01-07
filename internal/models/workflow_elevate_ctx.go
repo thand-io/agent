@@ -11,7 +11,7 @@ func NewElevationWorkflowContext(workflow *Workflow) (*ElevateWorkflowTask, erro
 	}
 
 	// Set the workflow name
-	newWorkflow.WorkflowName = workflow.Name
+	newWorkflow.WorkflowName = workflow.GetName()
 
 	return NewElevateWorkflowTask(newWorkflow), nil
 }
