@@ -469,7 +469,7 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models
 			return fmt.Errorf(
 				"timed out waiting for account assignment deletion for principalId %s in account %s",
 				principalId,
-				p.GetAccountID(),
+				targetAccountID,
 			)
 		}
 		iter++
