@@ -126,7 +126,7 @@ func (m *ThandWorkflowManager) createElevationWorkflowHandler() func(workflow.Co
 			return nil, err
 		}
 
-		return result.(*models.ThandWorkflowTask), nil
+		return models.NewThandWorkflowTask(result), nil
 
 	}
 }

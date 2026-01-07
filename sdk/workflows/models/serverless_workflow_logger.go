@@ -2,8 +2,27 @@ package models
 
 import (
 	"github.com/sirupsen/logrus"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/log"
+	"go.temporal.io/sdk/workflow"
 )
+
+func (r *ServerlessWorkflowTask) GetLogger() *LogBuilder {
+	var logger log.Logger
+	if r.HasTemporalContext() {
+		logger = workflow.GetLogger(r.GetTemporalContext())
+	} else if activity.IsActivity(r.GetContext()) {
+		logger = activity.GetLogger(r.GetContext())
+	} else {
+		// Use the existing global logger
+		logger = NewLogrusAdapter(
+			logrus.StandardLogger(),
+		)
+	}
+	return NewLogBuilder(
+		logger,
+	)
+}
 
 // LogBuilder provides a fluent interface for logging
 type LogBuilder struct {

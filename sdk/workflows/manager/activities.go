@@ -40,6 +40,8 @@ func (m *WorkflowManager) registerActivities() error {
 		fn := functionName
 		worker.RegisterActivityWithOptions(func(
 			ctx context.Context,
+
+			/// This needs to be a serialisable object
 			workflowTask sdkWorkflowsModel.WorkflowTask,
 			taskName string,
 			callFunction *model.CallFunction,

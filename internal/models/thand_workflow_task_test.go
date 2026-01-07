@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 // TestWorkflowTask_MessageInterpolation tests various message interpolation scenarios
@@ -185,12 +186,12 @@ func TestWorkflowTask_MessageInterpolation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a new workflow task
-			workflowTask := &ThandWorkflowTask{
+			workflowTask := NewThandWorkflowTask(&sdkWorkflowsModel.ServerlessWorkflowTask{
 				WorkflowID: "test-workflow",
 				Context:    tt.setupContext,
 				Input:      make(map[string]any),
 				Output:     make(map[string]any),
-			}
+			})
 
 			// Set up user if provided
 			if tt.setupUser != nil {
@@ -349,12 +350,12 @@ func TestWorkflowTask_ThandNotifyCallFunctionInterpolation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a workflow task
-			workflowTask := &ThandWorkflowTask{
+			workflowTask := NewThandWorkflowTask(&sdkWorkflowsModel.ServerlessWorkflowTask{
 				WorkflowID: "test-workflow",
 				Context:    tt.setupContext,
 				Input:      make(map[string]any),
 				Output:     make(map[string]any),
-			}
+			})
 
 			// Set up user if provided
 			if tt.setupUser != nil {
@@ -461,12 +462,12 @@ func TestWorkflowTask_ExpressionEvaluationEdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			workflowTask := &ThandWorkflowTask{
+			workflowTask := NewThandWorkflowTask(&sdkWorkflowsModel.ServerlessWorkflowTask{
 				WorkflowID: "test-workflow",
 				Context:    tt.setupContext,
 				Input:      make(map[string]any),
 				Output:     make(map[string]any),
-			}
+			})
 
 			result, err := workflowTask.TraverseAndEvaluate(tt.expression, workflowTask.GetInstanceCtx())
 
@@ -489,7 +490,7 @@ func TestWorkflowTask_ExpressionEvaluationEdgeCases(t *testing.T) {
 // TestWorkflowTask_WorkflowExampleCompatibility tests the exact format from the workflow example
 func TestWorkflowTask_WorkflowExampleCompatibility(t *testing.T) {
 	// This test verifies the exact message format from the attached workflow example
-	workflowTask := &ThandWorkflowTask{
+	workflowTask := NewThandWorkflowTask(&sdkWorkflowsModel.ServerlessWorkflowTask{
 		WorkflowID: "slack_approval",
 		Context: map[string]any{
 			"user": map[string]any{
@@ -498,7 +499,7 @@ func TestWorkflowTask_WorkflowExampleCompatibility(t *testing.T) {
 		},
 		Input:  make(map[string]any),
 		Output: make(map[string]any),
-	}
+	})
 
 	// Test the exact expression from the workflow example
 	notifyCall := map[string]any{
