@@ -77,10 +77,12 @@ func TestEvaluateSwitchTask_StringMatching(t *testing.T) {
 				WorkflowID: "test-workflow",
 			}
 
-			runner := &ResumableWorkflowRunner{
-				config:       cfg,
-				workflowTask: workflowTask,
-			}
+			runner := NewesumableWorkflowRunner(
+				config.NewRunnerConfig(
+					cfg,
+					workflowTask,
+				),
+			)
 
 			// Build switch cases from test data
 			switchItems := make([]model.SwitchItem, len(tt.expressions))
@@ -196,10 +198,12 @@ func TestEvaluateSwitchTask_NumericComparison(t *testing.T) {
 				WorkflowID: "test-workflow",
 			}
 
-			runner := &ResumableWorkflowRunner{
-				config:       cfg,
-				workflowTask: workflowTask,
-			}
+			runner := NewesumableWorkflowRunner(
+				config.NewRunnerConfig(
+					cfg,
+					workflowTask,
+				),
+			)
 
 			// Build switch cases from test data
 			switchItems := make([]model.SwitchItem, len(tt.expressions))
@@ -303,10 +307,12 @@ func TestEvaluateSwitchTask_BooleanConditions(t *testing.T) {
 				WorkflowID: "test-workflow",
 			}
 
-			runner := &ResumableWorkflowRunner{
-				config:       cfg,
-				workflowTask: workflowTask,
-			}
+			runner := NewesumableWorkflowRunner(
+				config.NewRunnerConfig(
+					cfg,
+					workflowTask,
+				),
+			)
 
 			// Build switch cases from test data
 			switchItems := make([]model.SwitchItem, len(tt.expressions))
@@ -398,10 +404,12 @@ func TestEvaluateSwitchTask_NestedObjectAccess(t *testing.T) {
 				WorkflowID: "test-workflow",
 			}
 
-			runner := &ResumableWorkflowRunner{
-				config:       cfg,
-				workflowTask: workflowTask,
-			}
+			runner := NewesumableWorkflowRunner(
+				config.NewRunnerConfig(
+					cfg,
+					workflowTask,
+				),
+			)
 
 			// Build switch cases from test data
 			switchItems := make([]model.SwitchItem, len(tt.expressions))
@@ -440,10 +448,12 @@ func TestEvaluateSwitchTask_DefaultCase(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := &ResumableWorkflowRunner{
-		config:       cfg,
-		workflowTask: workflowTask,
-	}
+	runner := NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			workflowTask,
+		),
+	)
 
 	// Input that won't match any specific case
 	input := map[string]any{
@@ -500,10 +510,12 @@ func TestEvaluateSwitchTask_FirstMatchWins(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := &ResumableWorkflowRunner{
-		config:       cfg,
-		workflowTask: workflowTask,
-	}
+	runner := NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			workflowTask,
+		),
+	)
 
 	// Input that would match multiple conditions
 	input := map[string]any{
@@ -552,10 +564,12 @@ func TestEvaluateSwitchTask_ErrorCases(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := &ResumableWorkflowRunner{
-		config:       cfg,
-		workflowTask: workflowTask,
-	}
+	runner := NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			workflowTask,
+		),
+	)
 
 	t.Run("No matching case and no default", func(t *testing.T) {
 		input := map[string]any{

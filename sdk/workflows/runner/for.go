@@ -13,7 +13,7 @@ const (
 )
 
 // executeForTask handles for loops
-func (r *ResumableWorkflowRunner) executeForTask(
+func (r *esumableWorkflowRunner) executeForTask(
 	taskName string,
 	forTask *model.ForTask,
 	input any,
@@ -65,7 +65,7 @@ func (r *ResumableWorkflowRunner) executeForTask(
 	return forOutput, nil
 }
 
-func (r *ResumableWorkflowRunner) processForItem(forTask *model.ForTask, idx int, item any, forOutput any) (any, error) {
+func (r *esumableWorkflowRunner) processForItem(forTask *model.ForTask, idx int, item any, forOutput any) (any, error) {
 
 	taskSupport := r.GetWorkflowTask()
 

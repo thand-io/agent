@@ -16,13 +16,13 @@ import (
 )
 
 // executeListenTask handles tasks that wait for events
-func (r *ResumableWorkflowRunner) executeListenTask(
+func (r *esumableWorkflowRunner) executeListenTask(
 	taskName string,
 	listen *model.ListenTask,
 	input any,
 ) (any, error) {
 
-	return ListenTaskHandler(r.workflowTask, taskName, listen, input)
+	return ListenTaskHandler(r.GetWorkflowTask(), taskName, listen, input)
 
 }
 

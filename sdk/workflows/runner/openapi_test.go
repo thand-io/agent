@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
+	"github.com/thand-io/agent/sdk/workflows/config"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
@@ -444,11 +445,20 @@ func TestBuildRequestURL(t *testing.T) {
 }
 
 func TestExecuteOpenAPIFunction(t *testing.T) {
-	// Create a minimal workflow runner for testing
-	runner := &ResumableWorkflowRunner{}
 
-	// Initialize the workflow task to avoid nil pointer
-	runner.workflowTask = &sdkWorkflowsModel.WorkflowTask{}
+	cfg := config.NewConfigService()
+
+	workflowTask := &sdkWorkflowsModel.WorkflowTask{
+		WorkflowID: "test-workflow",
+	}
+
+	// Create a minimal workflow runner for testing
+	runner := NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			workflowTask,
+		),
+	)
 
 	// Test missing operationId
 	call := &model.CallOpenAPI{

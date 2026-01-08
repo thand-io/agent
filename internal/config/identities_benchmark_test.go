@@ -9,7 +9,7 @@ import (
 
 func setupBenchmarkConfig(b *testing.B, numProviders int, identitiesPerProvider int) *Config {
 	c := &Config{
-		Providers: ProviderConfig{
+		Providers: ProviderDefinitionsConfig{
 			Definitions: make(map[string]models.ProviderConfig),
 		},
 	}
@@ -29,8 +29,6 @@ func setupBenchmarkConfig(b *testing.B, numProviders int, identitiesPerProvider 
 			})
 		}
 
-		mockProvider := NewMockIdentityProvider(name, identities)
-
 		// Create a provider model manually
 		providerModel := models.ProviderConfig{
 			Name:        name,
@@ -38,10 +36,14 @@ func setupBenchmarkConfig(b *testing.B, numProviders int, identitiesPerProvider 
 			Provider:    "mock",
 			Enabled:     true,
 		}
-		providerModel.SetClient(mockProvider)
+
+		base := models.NewBaseProvider("mock", providerModel,
+			models.NewProviderCapabilities().
+				WithDefaultIdentitiesConfiguration(),
+		)
 
 		c.mu.Lock()
-		c.Providers.Definitions[name] = providerModel
+		c.providerInstances[name] = base
 		c.mu.Unlock()
 	}
 	return c

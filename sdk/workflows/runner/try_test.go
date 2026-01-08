@@ -36,7 +36,12 @@ func TestErrorMatchesFilter(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create the runner
-	runner := NewResumableRunner(cfg, workflowCtx)
+	runner := NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			workflowCtx,
+		),
+	)
 
 	tests := []struct {
 		name     string
@@ -112,7 +117,12 @@ func TestCalculateRetryDelay(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create the runner
-	runner := NewResumableRunner(cfg, workflowCtx)
+	runner := NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			workflowCtx,
+		),
+	)
 
 	tests := []struct {
 		name        string

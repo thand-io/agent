@@ -19,7 +19,7 @@ func newTestConfig(t *testing.T, roles map[string]models.Role, providers map[str
 		Roles: RoleConfig{
 			Definitions: roles,
 		},
-		Providers: ProviderConfig{
+		Providers: ProviderDefinitionsConfig{
 			Definitions: providers,
 		},
 	}

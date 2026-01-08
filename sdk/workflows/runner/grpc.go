@@ -21,7 +21,7 @@ import (
 	"google.golang.org/protobuf/types/dynamicpb"
 )
 
-func (r *ResumableWorkflowRunner) executeGRPCFunction(
+func (r *esumableWorkflowRunner) executeGRPCFunction(
 	taskName string,
 	call *model.CallGRPC,
 	input any,

@@ -17,7 +17,7 @@ type MockIdentityProvider struct {
 }
 
 func NewMockIdentityProvider(name string, identities []models.Identity) *MockIdentityProvider {
-	provider := models.Provider{
+	provider := models.ProviderConfig{
 		Name:        name,
 		Description: "Mock Identity Provider",
 		Provider:    "mock",
@@ -37,7 +37,7 @@ func NewMockIdentityProvider(name string, identities []models.Identity) *MockIde
 	return mk
 }
 
-func (m *MockIdentityProvider) Initialize(identifier string, provider models.Provider) error {
+func (m *MockIdentityProvider) Initialize(identifier string, provider models.ProviderConfig) error {
 	return nil
 }
 
@@ -142,21 +142,10 @@ func TestGetIdentity(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create config with mock providers
-			config := &Config{
-				Providers: ProviderConfig{
-					Definitions: make(map[string]models.Provider),
-				},
-			}
+			config := &Config{}
 
 			for name, mockProvider := range tt.providers {
-				provider := models.Provider{
-					Name:        name,
-					Description: "Test provider",
-					Provider:    "mock",
-					Enabled:     true,
-				}
-				provider.SetClient(mockProvider)
-				config.Providers.Definitions[name] = provider
+				config.providerInstances[name] = mockProvider
 			}
 
 			// Call GetIdentity
@@ -451,21 +440,10 @@ func TestGetIdentitiesWithFilter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create config with mock providers
-			config := &Config{
-				Providers: ProviderConfig{
-					Definitions: make(map[string]models.Provider),
-				},
-			}
+			config := &Config{}
 
 			for name, mockProvider := range tt.providers {
-				provider := models.Provider{
-					Name:        name,
-					Description: "Test provider",
-					Provider:    "mock",
-					Enabled:     true,
-				}
-				provider.SetClient(mockProvider)
-				config.Providers.Definitions[name] = provider
+				config.providerInstances[name] = mockProvider
 			}
 
 			// Call GetIdentitiesWithFilter
@@ -582,15 +560,15 @@ func TestGetIdentitiesWithFilter_ConcurrentProviders(t *testing.T) {
 
 	prov1 := models.Provider{Name: "provider1", Description: "Test provider", Provider: "mock", Enabled: true}
 	prov1.SetClient(provider1)
-	config.Providers.Definitions["provider1"] = prov1
+	config.providerInstances["provider1"] = prov1
 
 	prov2 := models.Provider{Name: "provider2", Description: "Test provider", Provider: "mock", Enabled: true}
 	prov2.SetClient(provider2)
-	config.Providers.Definitions["provider2"] = prov2
+	config.providerInstances["provider2"] = prov2
 
 	prov3 := models.Provider{Name: "provider3", Description: "Test provider", Provider: "mock", Enabled: true}
 	prov3.SetClient(provider3)
-	config.Providers.Definitions["provider3"] = prov3
+	config.providerInstances["provider3"] = prov3
 
 	user := &models.User{
 		Email: "admin@example.com",
@@ -622,19 +600,10 @@ func TestGetIdentitiesWithFilter_ProviderError(t *testing.T) {
 	provider1 := &ErrorIdentityProvider{MockIdentityProvider: p1}
 
 	config := &Config{
-		Providers: ProviderConfig{
-			Definitions: make(map[string]models.Provider),
-		},
+		providerInstances: make(map[string]models.Provider),
 	}
 
-	provider := models.Provider{
-		Name:        "provider1",
-		Description: "Test provider",
-		Provider:    "mock",
-		Enabled:     true,
-	}
-	provider.SetClient(provider1)
-	config.Providers.Definitions["provider1"] = provider
+	config.providerInstances["provider1"] = provider1
 
 	user := &models.User{
 		Email: "admin@example.com",

@@ -17,92 +17,62 @@ import (
 	"go.temporal.io/sdk/temporal"
 )
 
-// ResumableWorkflowRunner implements a workflow runner that can pause and resume
-type ResumableWorkflowRunner struct {
-	config       config.Config
-	workflowTask sdkWorkflowsModel.WorkflowTaskSupport
+// esumableWorkflowRunner implements a workflow runner that can pause and resume
+type esumableWorkflowRunner struct {
+	config config.RunnerConfig
 }
 
-func (r *ResumableWorkflowRunner) GetConfig() config.Config {
-	return r.config
+func NewesumableWorkflowRunner(
+	config config.RunnerConfig,
+) *esumableWorkflowRunner {
+	return &esumableWorkflowRunner{
+		config: config,
+	}
 }
 
-func (r *ResumableWorkflowRunner) GetFunctions() *functions.FunctionRegistry {
+func (r *esumableWorkflowRunner) GetConfig() config.Config {
+	return r.config.GetConfig()
+}
+
+func (r *esumableWorkflowRunner) GetFunctions() *functions.FunctionRegistry {
 	return r.GetConfig().GetFunctionRegistry()
 }
 
-func (r *ResumableWorkflowRunner) GetFunction(name string) (functions.Function, bool) {
+func (r *esumableWorkflowRunner) GetFunction(name string) (functions.Function, bool) {
 	return r.GetFunctions().GetFunction(name)
 }
 
-func (r *ResumableWorkflowRunner) GetTasks() *tasks.TaskRegistry {
+func (r *esumableWorkflowRunner) GetTasks() *tasks.TaskRegistry {
 	return r.GetConfig().GetTaskRegistry()
 }
 
-func (r *ResumableWorkflowRunner) GetTaskHandler(taskItem *model.TaskItem) (tasks.Task, bool) {
+func (r *esumableWorkflowRunner) GetTaskHandler(taskItem *model.TaskItem) (tasks.Task, bool) {
 	return r.GetTasks().GetTaskHandler(taskItem)
 }
 
-func (r *ResumableWorkflowRunner) GetContext() context.Context {
-	ctx := r.workflowTask.GetContext()
-	return sdkWorkflowsModel.WithWorkflowContext(ctx, r.workflowTask)
+func (r *esumableWorkflowRunner) GetContext() context.Context {
+	ctx := r.GetWorkflowTask().GetContext()
+	return sdkWorkflowsModel.WithWorkflowContext(ctx, r.GetWorkflowTask())
 }
 
-func (r *ResumableWorkflowRunner) CloneWithContext(ctx context.Context) *ResumableWorkflowRunner {
-	// Try get a workflow task from the provided context, otherwise clone the current one
-	var wf *sdkWorkflowsModel.WorkflowTask
-	if ctx != nil {
-		if wfc, err := sdkWorkflowsModel.GetWorkflowContext(ctx); err == nil {
-			if t, ok := wfc.(*sdkWorkflowsModel.WorkflowTask); ok {
-				wf = t
-			}
-		}
-	}
-	if wf == nil {
-		cloned := r.workflowTask.Clone()
-		if t, ok := cloned.(*sdkWorkflowsModel.WorkflowTask); ok {
-			wf = t
-		}
-	}
-	// attach the provided context into the workflow task so GetContext() is coherent
-	if ctx != nil {
-		wf.SetInternalContext(ctx)
-	}
-	return &ResumableWorkflowRunner{
-		config:       r.config,
-		workflowTask: wf,
-	}
+func (r *esumableWorkflowRunner) GetWorkflowTask() sdkWorkflowsModel.WorkflowTaskSupport {
+	return r.config.GetWorkflowTask()
 }
 
-func (r *ResumableWorkflowRunner) GetWorkflowTask() sdkWorkflowsModel.WorkflowTaskSupport {
-	return r.workflowTask
-}
-
-func (r *ResumableWorkflowRunner) GetLogger() *sdkWorkflowsModel.LogBuilder {
+func (r *esumableWorkflowRunner) GetLogger() *sdkWorkflowsModel.LogBuilder {
 	return r.GetWorkflowTask().GetLogger()
 }
 
-func (r *ResumableWorkflowRunner) GetTaskList() *model.TaskList {
+func (r *esumableWorkflowRunner) GetTaskList() *model.TaskList {
 	return r.GetWorkflowTask().GetTaskList()
 }
 
-func (m *ResumableWorkflowRunner) GetWorkflow() *model.Workflow {
-	return m.workflowTask.GetWorkflowDef()
-}
-
-// NewResumableRunner creates a new resumable workflow runner
-func NewResumableRunner(
-	config config.Config,
-	workflow sdkWorkflowsModel.WorkflowTaskSupport,
-) *ResumableWorkflowRunner {
-	return &ResumableWorkflowRunner{
-		config:       config,
-		workflowTask: workflow,
-	}
+func (m *esumableWorkflowRunner) GetWorkflow() *model.Workflow {
+	return m.GetWorkflowTask().GetWorkflowDef()
 }
 
 // Run executes the workflow synchronously.
-func (wr *ResumableWorkflowRunner) Run(input any) (output any, err error) {
+func (wr *esumableWorkflowRunner) Run(input any) (output any, err error) {
 
 	if wr.GetWorkflow() == nil {
 		return nil, fmt.Errorf("workflow definition is nil")
@@ -189,16 +159,16 @@ func (wr *ResumableWorkflowRunner) Run(input any) (output any, err error) {
 		"processedOutput": output,
 	}).Info("Output processing completed")
 
-	wr.workflowTask.SetOutput(output)
-	wr.workflowTask.SetStatus(swctx.CompletedStatus)
+	wr.GetWorkflowTask().SetOutput(output)
+	wr.GetWorkflowTask().SetStatus(swctx.CompletedStatus)
 
 	return output, nil
 }
 
 // wrapWorkflowError ensures workflow errors have a proper instance reference.
-func (wr *ResumableWorkflowRunner) wrapWorkflowError(err error) error {
+func (wr *esumableWorkflowRunner) wrapWorkflowError(err error) error {
 
-	taskReference := wr.workflowTask.GetTaskReference()
+	taskReference := wr.GetWorkflowTask().GetTaskReference()
 
 	if len(taskReference) == 0 {
 		taskReference = "/"
@@ -239,7 +209,7 @@ func (wr *ResumableWorkflowRunner) wrapWorkflowError(err error) error {
 }
 
 // processOutput applies output transformations.
-func (wr *ResumableWorkflowRunner) processOutput(output any) (any, error) {
+func (wr *esumableWorkflowRunner) processOutput(output any) (any, error) {
 
 	workflow := wr.GetWorkflow()
 	log := wr.GetLogger()
@@ -272,7 +242,7 @@ func (wr *ResumableWorkflowRunner) processOutput(output any) (any, error) {
 }
 
 // processInput validates and transforms input if needed.
-func (wr *ResumableWorkflowRunner) processInput(input any) (output any, err error) {
+func (wr *esumableWorkflowRunner) processInput(input any) (output any, err error) {
 
 	workflow := wr.GetWorkflow()
 	log := wr.GetLogger()

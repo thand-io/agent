@@ -25,6 +25,9 @@ type Config interface {
 	GetTask(taskItem *model.TaskItem) (tasks.Task, bool)
 
 	RegisterWorkflow(name string, workflow model.Workflow) error
+
+	// HydrateWorkflowTask used to populate the workflow definition in a workflow task
+	// This is useful so that we don't have to embed the full workflow definition in every task instance
 	HydrateWorkflowTask(workflowTask sdkWorkflowsModel.WorkflowTaskSupport) error
 }
 

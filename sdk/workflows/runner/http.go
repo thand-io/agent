@@ -14,7 +14,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-func (r *ResumableWorkflowRunner) executeHttpFunction(
+func (r *esumableWorkflowRunner) executeHttpFunction(
 	taskName string,
 	call *model.CallHTTP,
 	input any,

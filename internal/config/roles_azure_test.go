@@ -54,7 +54,7 @@ func TestAzureRoles(t *testing.T) {
 	}
 
 	// Azure providers
-	azureProviders := map[string]models.Provider{
+	azureProviders := map[string]models.ProviderConfig{
 		"azure-prod": {
 			Name:        "azure-prod",
 			Description: "Azure Production Environment",
@@ -144,7 +144,7 @@ func TestAzureRoleScenarios(t *testing.T) {
 			},
 		}
 
-		providers := map[string]models.Provider{
+		providers := map[string]models.ProviderConfig{
 			"azure-dev": {
 				Name:        "azure-dev",
 				Description: "Azure Development Environment",
@@ -239,7 +239,7 @@ func TestAzureRoleScenarios(t *testing.T) {
 			},
 		}
 
-		providers := map[string]models.Provider{
+		providers := map[string]models.ProviderConfig{
 			"azure-analytics": {
 				Name:        "azure-analytics",
 				Description: "Azure Analytics Environment",
@@ -314,7 +314,7 @@ func TestAzureRoleScenarios(t *testing.T) {
 			},
 		}
 
-		providers := map[string]models.Provider{
+		providers := map[string]models.ProviderConfig{
 			"azure-subscriptions": {
 				Name:        "azure-subscriptions",
 				Description: "Azure Subscription Management",

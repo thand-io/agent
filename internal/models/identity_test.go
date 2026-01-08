@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/thand-io/agent/internal/providers"
 )
 
 func TestIdentity_GetId(t *testing.T) {
@@ -230,10 +231,10 @@ func TestIdentity_Providers(t *testing.T) {
 	identity := Identity{}
 	assert.Nil(t, identity.GetProviders())
 
-	provider := &Provider{
+	provider := providers.NewMockProvider(ProviderConfig{
 		Name:     "aws-prod",
 		Provider: "aws",
-	}
+	})
 
 	identity.AddProvider(provider)
 	providers := identity.GetProviders()

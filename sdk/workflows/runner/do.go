@@ -10,23 +10,23 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func (r *ResumableWorkflowRunner) executeDoRunner(
+func (r *esumableWorkflowRunner) executeDoRunner(
 	_ string, doTask *model.DoTask, input any) (any, error) {
 	return r.resumeTasks(doTask.Do, 0, input)
 }
 
-func (r *ResumableWorkflowRunner) executeTaskList(
+func (r *esumableWorkflowRunner) executeTaskList(
 	taskList *model.TaskList, input any) (any, error) {
 	return r.resumeTasks(taskList, 0, input)
 }
 
-func (d *ResumableWorkflowRunner) resumeTaskList(
+func (d *esumableWorkflowRunner) resumeTaskList(
 	taskList *model.TaskList, idx int, input any) (output any, err error) {
 	return d.resumeTasks(taskList, idx, input)
 }
 
 // runTasks runs all defined tasks sequentially.
-func (d *ResumableWorkflowRunner) resumeTasks(
+func (d *esumableWorkflowRunner) resumeTasks(
 	taskList *model.TaskList, idx int, input any) (output any, err error) {
 
 	if taskList == nil {
@@ -65,18 +65,18 @@ func (d *ResumableWorkflowRunner) resumeTasks(
 			continue
 		}
 
-		/*
-			err := d.updateTemporalSearchAttributes(currentTask, swctx.RunningStatus)
-
-			if err != nil {
-				log.WithFields(logrus.Fields{
-					"task":  currentTask,
-					"error": err,
-				}).Warn("Failed to update temporal search attributes")
-			}
-		*/
-
 		taskSupport.SetTaskStatus(currentTask.Key, swctx.RunningStatus)
+
+		err = d.config.PreStateTransitionHook(
+			taskSupport,
+		)
+
+		if err != nil {
+			log.WithFields(logrus.Fields{
+				"task":  currentTask,
+				"error": err,
+			}).Warn("Failed to execute pre state transition hook")
+		}
 
 		log.WithFields(logrus.Fields{
 			"task":  currentTask.Key,
@@ -91,6 +91,17 @@ func (d *ResumableWorkflowRunner) resumeTasks(
 		}
 
 		taskSupport.SetTaskStatus(currentTask.Key, swctx.CompletedStatus)
+
+		err = d.config.PostStateTransitionHook(
+			taskSupport,
+		)
+
+		if err != nil {
+			log.WithFields(logrus.Fields{
+				"task":  currentTask,
+				"error": err,
+			}).Warn("Failed to execute post state transition hook")
+		}
 
 		// Check if this task is a SwitchTask and handle it
 		if flowDirective, ok := output.(*model.FlowDirective); ok {
@@ -126,7 +137,7 @@ func (d *ResumableWorkflowRunner) resumeTasks(
 }
 
 // runTask executes an individual task.
-func (d *ResumableWorkflowRunner) runTaskItem(
+func (d *esumableWorkflowRunner) runTaskItem(
 	task *model.TaskItem,
 	input any,
 ) (output any, err error) {
@@ -192,7 +203,7 @@ func (d *ResumableWorkflowRunner) runTaskItem(
 	return output, nil
 }
 
-func (r *ResumableWorkflowRunner) executeTask(
+func (r *esumableWorkflowRunner) executeTask(
 	task *model.TaskItem,
 	input any,
 ) (any, error) {
@@ -205,7 +216,7 @@ func (r *ResumableWorkflowRunner) executeTask(
 }
 
 // dispatchTaskExecution handles the actual task execution logic using a type-based dispatcher
-func (r *ResumableWorkflowRunner) dispatchTaskExecution(
+func (r *esumableWorkflowRunner) dispatchTaskExecution(
 	task *model.TaskItem,
 	input any,
 ) (any, error) {

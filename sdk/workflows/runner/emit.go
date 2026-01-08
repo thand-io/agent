@@ -14,7 +14,7 @@ import (
 var ErrorEmitUnsupported = fmt.Errorf("emit task is only supported in temporal workflows")
 
 // executeEmitTask handles event emission according to the serverless workflow spec
-func (r *ResumableWorkflowRunner) executeEmitTask(
+func (r *esumableWorkflowRunner) executeEmitTask(
 	taskName string,
 	emit *model.EmitTask,
 	input any,
@@ -75,7 +75,7 @@ func (r *ResumableWorkflowRunner) executeEmitTask(
 }
 
 // createCloudEventFromEmit creates a CloudEvent from the emit task specification
-func (r *ResumableWorkflowRunner) createCloudEventFromEmit(
+func (r *esumableWorkflowRunner) createCloudEventFromEmit(
 	emit *model.EmitTask,
 	input any,
 ) (*cloudevents.Event, error) {
@@ -109,7 +109,7 @@ func (r *ResumableWorkflowRunner) createCloudEventFromEmit(
 }
 
 // setRequiredEventFields sets the required CloudEvent fields
-func (r *ResumableWorkflowRunner) setRequiredEventFields(
+func (r *esumableWorkflowRunner) setRequiredEventFields(
 	event *cloudevents.Event,
 	eventProps *model.EventProperties,
 	input any,
@@ -129,7 +129,7 @@ func (r *ResumableWorkflowRunner) setRequiredEventFields(
 }
 
 // setEventSource sets the event source field
-func (r *ResumableWorkflowRunner) setEventSource(
+func (r *esumableWorkflowRunner) setEventSource(
 	event *cloudevents.Event,
 	eventProps *model.EventProperties,
 	input any,
@@ -153,7 +153,7 @@ func (r *ResumableWorkflowRunner) setEventSource(
 }
 
 // setOptionalEventFields sets the optional CloudEvent fields
-func (r *ResumableWorkflowRunner) setOptionalEventFields(
+func (r *esumableWorkflowRunner) setOptionalEventFields(
 	event *cloudevents.Event,
 	eventProps *model.EventProperties,
 	input any,
@@ -183,7 +183,7 @@ func (r *ResumableWorkflowRunner) setOptionalEventFields(
 }
 
 // setEventTime sets the event time field
-func (r *ResumableWorkflowRunner) setEventTime(
+func (r *esumableWorkflowRunner) setEventTime(
 	event *cloudevents.Event,
 	eventProps *model.EventProperties,
 	input any,
@@ -203,7 +203,7 @@ func (r *ResumableWorkflowRunner) setEventTime(
 }
 
 // setEventDataSchema sets the event data schema field
-func (r *ResumableWorkflowRunner) setEventDataSchema(
+func (r *esumableWorkflowRunner) setEventDataSchema(
 	event *cloudevents.Event,
 	eventProps *model.EventProperties,
 	input any,
@@ -227,7 +227,7 @@ func (r *ResumableWorkflowRunner) setEventDataSchema(
 }
 
 // setEventData sets the event data
-func (r *ResumableWorkflowRunner) setEventData(
+func (r *esumableWorkflowRunner) setEventData(
 	event *cloudevents.Event,
 	eventProps *model.EventProperties,
 	input any,
@@ -248,7 +248,7 @@ func (r *ResumableWorkflowRunner) setEventData(
 }
 
 // getEventData determines the event data from properties or input
-func (r *ResumableWorkflowRunner) getEventData(
+func (r *esumableWorkflowRunner) getEventData(
 	eventProps *model.EventProperties,
 	input any,
 ) any {
@@ -264,7 +264,7 @@ func (r *ResumableWorkflowRunner) getEventData(
 }
 
 // setEventExtensions sets additional event extensions
-func (r *ResumableWorkflowRunner) setEventExtensions(
+func (r *esumableWorkflowRunner) setEventExtensions(
 	event *cloudevents.Event,
 	eventProps *model.EventProperties,
 ) {
@@ -280,7 +280,7 @@ func (r *ResumableWorkflowRunner) setEventExtensions(
 }
 
 // evaluateRuntimeExpression evaluates runtime expressions
-func (r *ResumableWorkflowRunner) evaluateRuntimeExpression(expression any, input any) (any, error) {
+func (r *esumableWorkflowRunner) evaluateRuntimeExpression(expression any, input any) (any, error) {
 	// If it's already a string, return as-is
 	if str, ok := expression.(string); ok {
 		// Check if it looks like a runtime expression (starts with $)
@@ -289,7 +289,7 @@ func (r *ResumableWorkflowRunner) evaluateRuntimeExpression(expression any, inpu
 		// Check if the string is a runtime expression (e.g., ${ .some.path })
 		if model.IsStrictExpr(str) {
 			// Use the existing workflow task evaluation method
-			return r.workflowTask.TraverseAndEvaluate(str, input)
+			return r.GetWorkflowTask().TraverseAndEvaluate(str, input)
 		}
 		return str, nil
 	}

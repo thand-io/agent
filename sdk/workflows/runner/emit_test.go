@@ -17,10 +17,12 @@ func TestExecuteEmitTask_NonTemporal(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := &ResumableWorkflowRunner{
-		config:       cfg,
-		workflowTask: workflowTask,
-	}
+	runner := NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			workflowTask,
+		),
+	)
 
 	// Create an emit task
 	emit := &model.EmitTask{
@@ -52,10 +54,12 @@ func TestCreateCloudEventFromEmit(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := &ResumableWorkflowRunner{
-		config:       cfg,
-		workflowTask: workflowTask,
-	}
+	runner := NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			workflowTask,
+		),
+	)
 
 	// Create an emit task with required fields
 	emit := &model.EmitTask{
@@ -111,14 +115,17 @@ func TestCreateCloudEventFromEmit(t *testing.T) {
 func TestCreateCloudEventFromEmit_MissingRequiredFields(t *testing.T) {
 	// Create a test runner
 	cfg := config.NewConfigService()
+
 	workflowTask := &sdkWorkflowsModel.WorkflowTask{
 		WorkflowID: "test-workflow",
 	}
 
-	runner := &ResumableWorkflowRunner{
-		config:       cfg,
-		workflowTask: workflowTask,
-	}
+	runner := NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			workflowTask,
+		),
+	)
 
 	// Test missing source
 	emit := &model.EmitTask{

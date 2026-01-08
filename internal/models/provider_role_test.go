@@ -13,7 +13,7 @@ import (
 
 // Helper function to create a BaseProvider with role support
 func newTestProviderWithRoles() *BaseProvider {
-	provider := Provider{
+	provider := ProviderConfig{
 		Name:        "test-provider",
 		Description: "Test Provider",
 		Provider:    "test",
@@ -197,7 +197,7 @@ func TestBaseProvider_GetRole(t *testing.T) {
 
 func TestBaseProvider_GetRole_WithoutCapability(t *testing.T) {
 	// Create provider without role capability
-	p := NewBaseProvider("test", Provider{Name: "test"}, NewProviderCapabilities())
+	p := NewBaseProvider("test", ProviderConfig{Name: "test"}, NewProviderCapabilities())
 
 	ctx := context.Background()
 	role, err := p.GetRole(ctx, "role1")
@@ -253,7 +253,7 @@ func TestBaseProvider_ListRoles(t *testing.T) {
 }
 
 func TestBaseProvider_ListRoles_WithoutCapability(t *testing.T) {
-	p := NewBaseProvider("test", Provider{Name: "test"}, NewProviderCapabilities())
+	p := NewBaseProvider("test", ProviderConfig{Name: "test"}, NewProviderCapabilities())
 
 	ctx := context.Background()
 	results, err := p.ListRoles(ctx, nil)
@@ -263,7 +263,7 @@ func TestBaseProvider_ListRoles_WithoutCapability(t *testing.T) {
 }
 
 func TestBaseProvider_ListRoles_Search(t *testing.T) {
-	p := NewBaseProvider("test", Provider{
+	p := NewBaseProvider("test", ProviderConfig{
 		Name: "Test Provider",
 	}, NewProviderCapabilities().WithDefaultRolesConfiguration())
 

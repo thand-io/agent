@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
+	"github.com/thand-io/agent/sdk/workflows/config"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 	"go.temporal.io/sdk/workflow"
 )
@@ -16,7 +17,7 @@ the overall efficiency of the workflow. By defining a set of subtasks to perform
 task facilitates the execution of complex operations in parallel, ensuring that multiple tasks can be
 executed simultaneously.
 */
-func (r *ResumableWorkflowRunner) executeForkTask(
+func (r *esumableWorkflowRunner) executeForkTask(
 	taskName string,
 	task *model.ForkTask,
 	input any,
@@ -38,7 +39,7 @@ func (r *ResumableWorkflowRunner) executeForkTask(
 }
 
 // executeForkTaskTemporal handles fork execution within a Temporal workflow context
-func (r *ResumableWorkflowRunner) executeForkTaskTemporal(
+func (r *esumableWorkflowRunner) executeForkTaskTemporal(
 	taskName string,
 	task *model.ForkTask,
 	input any,
@@ -82,10 +83,12 @@ func (r *ResumableWorkflowRunner) executeForkTaskTemporal(
 			childWF = childWF.WithTemporalContext(ctx)
 
 			// Create a new runner instance for this branch
-			branchRunner := &ResumableWorkflowRunner{
-				config:       r.config,
-				workflowTask: childWF,
-			}
+			branchRunner := NewesumableWorkflowRunner(
+				config.NewRunnerConfig(
+					r.GetConfig(),
+					childWF,
+				),
+			)
 
 			// NewTaskRunner.Run() = executeTask
 			out, err := branchRunner.executeTask(taskItem, input)
@@ -136,7 +139,7 @@ func (r *ResumableWorkflowRunner) executeForkTaskTemporal(
 }
 
 // executeForkTaskStandard handles fork execution in standard Go context (non-Temporal)
-func (r *ResumableWorkflowRunner) executeForkTaskStandard(
+func (r *esumableWorkflowRunner) executeForkTaskStandard(
 	taskName string,
 	task *model.ForkTask,
 	input any,
@@ -223,4 +226,32 @@ func (r *ResumableWorkflowRunner) executeForkTaskStandard(
 	default:
 	}
 	return results, nil
+}
+
+func (r *esumableWorkflowRunner) CloneWithContext(ctx context.Context) *esumableWorkflowRunner {
+	// Try get a workflow task from the provided context, otherwise clone the current one
+	var wf *sdkWorkflowsModel.WorkflowTask
+	if ctx != nil {
+		if wfc, err := sdkWorkflowsModel.GetWorkflowContext(ctx); err == nil {
+			if t, ok := wfc.(*sdkWorkflowsModel.WorkflowTask); ok {
+				wf = t
+			}
+		}
+	}
+	if wf == nil {
+		cloned := r.GetWorkflowTask().Clone()
+		if t, ok := cloned.(*sdkWorkflowsModel.WorkflowTask); ok {
+			wf = t
+		}
+	}
+	// attach the provided context into the workflow task so GetContext() is coherent
+	if ctx != nil {
+		wf.SetInternalContext(ctx)
+	}
+	return NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			r.GetConfig(),
+			wf,
+		),
+	)
 }

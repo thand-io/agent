@@ -27,7 +27,7 @@ do:
     method: get
     endpoint: https://petstore.swagger.io/v2/pet/{petId}
 */
-func (r *ResumableWorkflowRunner) executeCallFunction(
+func (r *esumableWorkflowRunner) executeCallFunction(
 	taskName string,
 	call *model.CallFunction,
 	input any,

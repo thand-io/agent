@@ -35,7 +35,12 @@ func TestProcessTaskOutput_TransformToApprovalsList(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create the runner
-	runner := NewResumableRunner(cfg, workflowCtx)
+	runner := NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			workflowCtx,
+		),
+	)
 
 	// Create task output configuration that transforms the raw output
 	// Raw output: {"data": {"approved": true}}
@@ -86,7 +91,12 @@ func TestProcessTaskOutput_TransformToApprovalsListWithExport(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create the runner
-	runner := NewResumableRunner(cfg, workflowCtx)
+	runner := NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			workflowCtx,
+		),
+	)
 
 	// Create task output configuration that transforms the raw output
 	// Raw output: {"data": {"approved": true}}
@@ -108,7 +118,7 @@ func TestProcessTaskOutput_TransformToApprovalsListWithExport(t *testing.T) {
 	}
 
 	// Set up initial context with some existing data
-	runner.workflowTask.SetInstanceCtx(map[string]any{
+	runner.GetWorkflowTask().SetInstanceCtx(map[string]any{
 		"user": "test.user",
 		"role": "admin",
 	})
@@ -137,7 +147,7 @@ func TestProcessTaskOutput_TransformToApprovalsListWithExport(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify the context now contains the approvals along with existing data
-	context := runner.workflowTask.GetInstanceCtx()
+	context := runner.GetWorkflowTask().GetInstanceCtx()
 	expectedContext := map[string]any{
 		"user": "test.user",
 		"role": "admin",
@@ -165,7 +175,12 @@ func TestProcessTaskOutput_WithoutOutput(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create the runner
-	runner := NewResumableRunner(cfg, workflowCtx)
+	runner := NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			workflowCtx,
+		),
+	)
 
 	// Create task base without output
 	taskBase := &model.TaskBase{
@@ -202,7 +217,12 @@ func TestProcessTaskOutput_TransformStructure(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create the runner
-	runner := NewResumableRunner(cfg, workflowCtx)
+	runner := NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			workflowCtx,
+		),
+	)
 
 	// Create task output configuration that transforms the raw output structure
 	taskOutput := &model.Output{
@@ -253,7 +273,12 @@ func TestProcessTaskOutput_IdentityTransform(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create the runner
-	runner := NewResumableRunner(cfg, workflowCtx)
+	runner := NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			workflowCtx,
+		),
+	)
 
 	// Create task output configuration using identity transform (the default)
 	taskOutput := &model.Output{

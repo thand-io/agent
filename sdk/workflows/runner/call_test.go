@@ -86,10 +86,12 @@ func TestExecuteCallFunction_MessageInterpolation(t *testing.T) {
 	}
 
 	// Create a runner
-	runner := &ResumableWorkflowRunner{
-		workflowTask: workflowTask,
-		config:       cfg,
-	}
+	runner := NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			workflowTask,
+		),
+	)
 
 	// Create a call function with the message expression that needs interpolation
 	callFunc := &model.CallFunction{
@@ -181,10 +183,12 @@ func TestExecuteCallFunction_MultipleExpressions(t *testing.T) {
 	}
 
 	// Create a runner
-	runner := &ResumableWorkflowRunner{
-		workflowTask: workflowTask,
-		config:       cfg,
-	}
+	runner := NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			workflowTask,
+		),
+	)
 
 	// Create a call function with multiple expressions
 	callFunc := &model.CallFunction{

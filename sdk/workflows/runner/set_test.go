@@ -13,14 +13,17 @@ import (
 func TestExecuteSetTask_BasicMapSet(t *testing.T) {
 	// Create a test runner
 	cfg := config.NewConfigService()
+
 	workflowTask := &sdkWorkflowsModel.WorkflowTask{
 		WorkflowID: "test-workflow",
 	}
 
-	runner := &ResumableWorkflowRunner{
-		config:       cfg,
-		workflowTask: workflowTask,
-	}
+	runner := NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			workflowTask,
+		),
+	)
 
 	// Create a set task with static values
 	setTask := &model.SetTask{
@@ -53,10 +56,12 @@ func TestExecuteSetTask_WithRuntimeExpressions(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := &ResumableWorkflowRunner{
-		config:       cfg,
-		workflowTask: workflowTask,
-	}
+	runner := NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			workflowTask,
+		),
+	)
 
 	// Create input data
 	input := map[string]any{
@@ -98,10 +103,12 @@ func TestExecuteSetTask_DirectRuntimeExpression(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := &ResumableWorkflowRunner{
-		config:       cfg,
-		workflowTask: workflowTask,
-	}
+	runner := NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			workflowTask,
+		),
+	)
 
 	// Create input data
 	input := map[string]any{
@@ -140,10 +147,12 @@ func TestExecuteSetTask_NestedData(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := &ResumableWorkflowRunner{
-		config:       cfg,
-		workflowTask: workflowTask,
-	}
+	runner := NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			workflowTask,
+		),
+	)
 
 	// Create a set task with nested data
 	setTask := &model.SetTask{
@@ -190,10 +199,12 @@ func TestExecuteSetTask_EmptySet(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := &ResumableWorkflowRunner{
-		config:       cfg,
-		workflowTask: workflowTask,
-	}
+	runner := NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			workflowTask,
+		),
+	)
 
 	// Create a set task with empty map
 	setTask := &model.SetTask{
@@ -220,10 +231,12 @@ func TestExecuteSetTask_NilSet(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := &ResumableWorkflowRunner{
-		config:       cfg,
-		workflowTask: workflowTask,
-	}
+	runner := NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			workflowTask,
+		),
+	)
 
 	// Create a set task with nil set - this should fail at the SDK validation level
 	// since the SetTask struct requires Set to be a non-nil map
@@ -251,10 +264,12 @@ func TestExecuteSetTask_WithInputData(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := &ResumableWorkflowRunner{
-		config:       cfg,
-		workflowTask: workflowTask,
-	}
+	runner := NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			workflowTask,
+		),
+	)
 
 	// Create input data
 	input := map[string]any{
@@ -307,11 +322,12 @@ func TestExecuteSetTask_ArrayValues(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := &ResumableWorkflowRunner{
-		config:       cfg,
-		workflowTask: workflowTask,
-	}
-
+	runner := NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			workflowTask,
+		),
+	)
 	// Create a set task with array values
 	setTask := &model.SetTask{
 		Set: map[string]any{
@@ -350,10 +366,12 @@ func TestExecuteSetTask_ComplexExpressions(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := &ResumableWorkflowRunner{
-		config:       cfg,
-		workflowTask: workflowTask,
-	}
+	runner := NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			workflowTask,
+		),
+	)
 
 	// Create input data
 	input := map[string]any{

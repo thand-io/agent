@@ -31,7 +31,7 @@ func NewOpenAPIExecutor() *OpenAPIExecutor {
 	}
 }
 
-func (r *ResumableWorkflowRunner) executeOpenAPIFunction(
+func (r *esumableWorkflowRunner) executeOpenAPIFunction(
 	taskName string,
 	call *model.CallOpenAPI,
 	input any,

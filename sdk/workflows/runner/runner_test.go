@@ -12,9 +12,9 @@ import (
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
-func NewDefaultRunner(workflow *model.Workflow) (*ResumableWorkflowRunner, error) {
+func NewDefaultRunner(workflow *model.Workflow) (*esumableWorkflowRunner, error) {
 
-	config := config.NewConfigService()
+	cfg := config.NewConfigService()
 
 	wkflw, err := sdkWorkflowsModel.NewWorkflowContext(workflow)
 
@@ -22,7 +22,14 @@ func NewDefaultRunner(workflow *model.Workflow) (*ResumableWorkflowRunner, error
 		return nil, err
 	}
 
-	return NewResumableRunner(config, wkflw), nil
+	runner := NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			wkflw,
+		),
+	)
+
+	return runner, nil
 }
 
 // runWorkflowTest is a reusable test function for workflows

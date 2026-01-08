@@ -7,13 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// MockProvider implements ProviderImpl for testing
-type MockProvider struct {
-	*BaseProvider
-}
-
-func NewMockProvider(name string, identities []Identity) *MockProvider {
-	provider := Provider{
+func NewMockProvider(name string, identities []Identity) Provider {
+	provider := ProviderConfig{
 		Name:        name,
 		Description: "Mock Provider",
 		Provider:    "mock",
@@ -25,13 +20,8 @@ func NewMockProvider(name string, identities []Identity) *MockProvider {
 			WithDefaultIdentitiesConfiguration())
 	base.SetIdentities(identities)
 
-	return &MockProvider{
-		BaseProvider: base,
-	}
+	return base
 }
-
-func (m *MockProvider) RegisterWorkflows(temporalClient TemporalImpl) error  { return nil }
-func (m *MockProvider) RegisterActivities(temporalClient TemporalImpl) error { return nil }
 
 func TestResolveIdentities(t *testing.T) {
 	// Define identities
@@ -71,15 +61,9 @@ func TestResolveIdentities(t *testing.T) {
 	mp1 := NewMockProvider("p1", []Identity{id1, id2})
 	mp2 := NewMockProvider("p2", []Identity{id3, id4})
 
-	p1 := Provider{Name: "p1"}
-	p1.SetClient(mp1)
-
-	p2 := Provider{Name: "p2"}
-	p2.SetClient(mp2)
-
 	providers := map[string]Provider{
-		"p1": p1,
-		"p2": p2,
+		"p1": mp1,
+		"p2": mp2,
 	}
 
 	tests := []struct {

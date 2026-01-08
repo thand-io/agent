@@ -246,12 +246,12 @@ func (m *serverlessWorkflow) shouldContinueAsNew(ctx workflow.Context) bool {
 // ResumeWorkflowTask resumes a workflow task using the internal runner
 // This maybe called as part of a temporal workflow or directly
 func ResumeWorkflowTask(
-	config config.Config,
+	cfg config.Config,
 	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 ) (sdkWorkflowsModel.WorkflowTaskSupport, error) {
 
 	// Hydrate the workflow task
-	err := config.HydrateWorkflowTask(workflowTask)
+	err := cfg.HydrateWorkflowTask(workflowTask)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to hydrate resumed workflow task: %w", err)
@@ -274,7 +274,12 @@ func ResumeWorkflowTask(
 	}).Info("Resuming workflow")
 
 	// Create runner
-	runner := runner.NewResumableRunner(config, workflowTask)
+	runner := runner.NewesumableWorkflowRunner(
+		config.NewRunnerConfig(
+			cfg,
+			workflowTask,
+		),
+	)
 
 	// Resume from saved state
 	_, err = runner.Run(workflowTask.GetInput())
