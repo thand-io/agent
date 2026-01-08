@@ -458,13 +458,19 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models
 	if err != nil {
 		return fmt.Errorf("failed to delete account assignment: %w", err)
 	}
+	var deleteOutputRequestId *string
+	if deleteOutput != nil && deleteOutput.AccountAssignmentDeletionStatus == nil && deleteOutput.AccountAssignmentDeletionStatus.RequestId == nil {
+		deleteOutputRequestId = deleteOutput.AccountAssignmentDeletionStatus.RequestId
+	}
 
 	// poll to verify deletion
-	// In a production system, you might want to implement polling
-	backoffDuration := 1 * time.Second
-	backoffLimit := 15
+	backoffDuration := awsProviderDeleteRoleAssignmentBackoffDuration
+	backoffLimit := awsProviderDeleteRoleAssignmentBackoffLimit
 	iter := 0
 	for {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("context cancelled while waiting for account assignment deletion: %w", err)
+		}
 		if iter >= backoffLimit {
 			return fmt.Errorf(
 				"timed out waiting for account assignment deletion for principalId %s in account %s",
@@ -477,18 +483,29 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models
 		statusOutput, err := p.ssoAdminService.DescribeAccountAssignmentDeletionStatus(
 			ctx, &ssoadmin.DescribeAccountAssignmentDeletionStatusInput{
 				InstanceArn:                        aws.String(instanceArn),
-				AccountAssignmentDeletionRequestId: deleteOutput.AccountAssignmentDeletionStatus.RequestId,
+				AccountAssignmentDeletionRequestId: deleteOutputRequestId,
 			})
 		if err != nil {
 			return fmt.Errorf("failed to describe account assignment deletion status: %w", err)
 		}
 
+		var statusOutputPrincipalId, statusOutputFailureReason *string
+		if deleteOutput != nil && statusOutput.AccountAssignmentDeletionStatus != nil {
+			if statusOutput.AccountAssignmentDeletionStatus.PrincipalId != nil {
+				statusOutputPrincipalId = statusOutput.AccountAssignmentDeletionStatus.PrincipalId
+			}
+			if statusOutput.AccountAssignmentDeletionStatus.PrincipalId != nil {
+				statusOutputFailureReason = statusOutput.AccountAssignmentDeletionStatus.FailureReason
+			}
+
+		}
+
 		switch statusOutput.AccountAssignmentDeletionStatus.Status {
 		case types.StatusValuesFailed:
 			logrus.WithFields(logrus.Fields{
-				"principalId":     *statusOutput.AccountAssignmentDeletionStatus.PrincipalId,
+				"principalId":     statusOutputPrincipalId,
 				"targetAccountID": targetAccountID,
-				"failureReason":   *statusOutput.AccountAssignmentDeletionStatus.FailureReason,
+				"failureReason":   statusOutputFailureReason,
 			}).Errorf(
 				"account assignment deletion failed for principalId %s in account %s",
 				*statusOutput.AccountAssignmentDeletionStatus.PrincipalId,
@@ -505,7 +522,7 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models
 
 		case types.StatusValuesSucceeded:
 			logrus.WithFields(logrus.Fields{
-				"principalId":     *statusOutput.AccountAssignmentDeletionStatus.PrincipalId,
+				"principalId":     statusOutputPrincipalId,
 				"targetAccountID": targetAccountID,
 			}).Info("Account assignment deletion succeeded")
 			return nil
