@@ -147,37 +147,58 @@ func (t *thandTask) executeRevocationTask(
 				continue
 			}
 
-			revokeReq := models.RevokeRoleRequest{
-				RoleRequest: &models.RoleRequest{
-					User:     user,
-					Role:     elevateRequest.Role,
-					Duration: &duration,
-				},
-				AuthorizeRoleResponse: authorizeResponse,
+			// Check if we have tenants specified in our request. If so, we need
+			// to create a revocation task for each identity and tenant combination
+			// If there are no tenants, we just create one task per identity
+			tenantsToProcess := elevateRequest.Tenants
+			if len(tenantsToProcess) == 0 {
+				tenantsToProcess = []string{""} // Use empty string to indicate no tenant
 			}
 
-			revokeTasks = append(revokeTasks, revokeTask{
-				ProviderName:      providerName,
-				Identity:          identity,
-				RevokeReq:         revokeReq,
-				AuthorizeResponse: authorizeResponse,
-			})
+			for _, tenantID := range tenantsToProcess {
+				revokeReq := models.RevokeRoleRequest{
+					RoleRequest: &models.RoleRequest{
+						User:     user,
+						Role:     elevateRequest.Role,
+						Duration: &duration,
+						Tenant:   tenantID,
+					},
+					AuthorizeRoleResponse: authorizeResponse,
+				}
 
+<<<<<<< HEAD
 			log.WithFields(logrus.Fields{
 				"user":     identity,
 				"role":     elevateRequest.Role.GetName(),
 				"provider": providerName,
 				"duration": duration,
 			}).Info("Preparing revocation logic")
+=======
+				revokeTasks = append(revokeTasks, revokeTask{
+					ProviderName:      providerName,
+					Identity:          identity,
+					RevokeReq:         revokeReq,
+					AuthorizeResponse: authorizeResponse,
+				})
+
+				log.WithFields(models.Fields{
+					"user":     identity,
+					"role":     elevateRequest.Role.GetName(),
+					"provider": providerName,
+					"duration": duration,
+					"tenant":   tenantID,
+				}).Info("Preparing revocation logic")
+			}
+>>>>>>> main
 		}
 	}
 
 	var revokeResults []revokeResult
 
 	if workflowTask.HasTemporalContext() {
-		revokeResults, err = executeTemporalRevokeParallel(workflowTask, taskName, call, revokeTasks)
+		revokeResults, err = t.executeTemporalRevokeParallel(workflowTask, taskName, call, revokeTasks)
 	} else {
-		revokeResults, err = executeGoRevokeParallel(t.config, workflowTask, revokeTasks)
+		revokeResults, err = t.executeGoRevokeParallel(t.config, workflowTask, revokeTasks)
 	}
 
 	if err != nil {
@@ -232,17 +253,30 @@ func (t *thandTask) executeRevocationTask(
 }
 
 // executeTemporalRevokeParallel executes revocation tasks in parallel using Temporal
+<<<<<<< HEAD
 func executeTemporalRevokeParallel(
 	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
+=======
+func (t *thandTask) executeTemporalRevokeParallel(
+	workflowTask *models.WorkflowTask,
+>>>>>>> main
 	taskName string,
 	call *taskModel.ThandTask,
 	revokeTasks []revokeTask,
 ) ([]revokeResult, error) {
 
 	temporalContext := workflowTask.GetTemporalContext()
+	serviceClient := t.config.GetServices()
 
 	ao := workflow.ActivityOptions{
+		TaskQueue:           serviceClient.GetTemporal().GetTaskQueue(),
 		StartToCloseTimeout: time.Minute * 5,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    1 * time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    100 * time.Second,
+			MaximumAttempts:    10,
+		},
 	}
 	aoctx := workflow.WithActivityOptions(temporalContext, ao)
 
@@ -272,6 +306,11 @@ func executeTemporalRevokeParallel(
 				thandRevokeReq,
 			).Get(ctx, &revokeOut)
 
+			if err != nil {
+				logrus.WithError(err).
+					Errorln("Revocation activity failed")
+			}
+
 			// Send result through channel
 			resultCh.Send(ctx, temporalRevokeResult{
 				Index:    taskIndex,
@@ -297,7 +336,7 @@ func executeTemporalRevokeParallel(
 }
 
 // executeGoRevokeParallel executes revocation tasks in parallel using Go routines and WaitGroup
-func executeGoRevokeParallel(
+func (t *thandTask) executeGoRevokeParallel(
 	config models.ConfigImpl,
 	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	revokeTasks []revokeTask,
