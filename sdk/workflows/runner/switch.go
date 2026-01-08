@@ -8,7 +8,7 @@ import (
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
-func (d *esumableWorkflowRunner) executeSwitchTask(
+func (d *ResumableWorkflowRunner) ExecuteSwitchTask(
 	taskKey string,
 	switchTask *model.SwitchTask,
 	input any,

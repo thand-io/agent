@@ -1,4 +1,4 @@
-package runner
+package runner_test
 
 import (
 	"testing"
@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/thand-io/agent/sdk/workflows/config"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
+	"github.com/thand-io/agent/sdk/workflows/runner"
 )
 
 func TestEvaluateSwitchTask_StringMatching(t *testing.T) {
@@ -77,7 +78,7 @@ func TestEvaluateSwitchTask_StringMatching(t *testing.T) {
 				WorkflowID: "test-workflow",
 			}
 
-			runner := NewesumableWorkflowRunner(
+			resumeableRunner := runner.NewResumableWorkflowRunner(
 				config.NewRunnerConfig(
 					cfg,
 					workflowTask,
@@ -104,7 +105,7 @@ func TestEvaluateSwitchTask_StringMatching(t *testing.T) {
 			}
 
 			// Execute the switch task
-			result, err := runner.executeSwitchTask("testSwitch", switchTask, tt.input)
+			result, err := resumeableRunner.ExecuteSwitchTask("testSwitch", switchTask, tt.input)
 
 			// Verify the result
 			require.NoError(t, err)
@@ -198,7 +199,7 @@ func TestEvaluateSwitchTask_NumericComparison(t *testing.T) {
 				WorkflowID: "test-workflow",
 			}
 
-			runner := NewesumableWorkflowRunner(
+			resumeableRunner := runner.NewResumableWorkflowRunner(
 				config.NewRunnerConfig(
 					cfg,
 					workflowTask,
@@ -225,7 +226,7 @@ func TestEvaluateSwitchTask_NumericComparison(t *testing.T) {
 			}
 
 			// Execute the switch task
-			result, err := runner.executeSwitchTask("testSwitch", switchTask, tt.input)
+			result, err := resumeableRunner.ExecuteSwitchTask("testSwitch", switchTask, tt.input)
 
 			// Verify the result
 			require.NoError(t, err)
@@ -307,7 +308,7 @@ func TestEvaluateSwitchTask_BooleanConditions(t *testing.T) {
 				WorkflowID: "test-workflow",
 			}
 
-			runner := NewesumableWorkflowRunner(
+			resumeableRunner := runner.NewResumableWorkflowRunner(
 				config.NewRunnerConfig(
 					cfg,
 					workflowTask,
@@ -334,7 +335,7 @@ func TestEvaluateSwitchTask_BooleanConditions(t *testing.T) {
 			}
 
 			// Execute the switch task
-			result, err := runner.executeSwitchTask("testSwitch", switchTask, tt.input)
+			result, err := resumeableRunner.ExecuteSwitchTask("testSwitch", switchTask, tt.input)
 
 			// Verify the result
 			require.NoError(t, err)
@@ -404,7 +405,7 @@ func TestEvaluateSwitchTask_NestedObjectAccess(t *testing.T) {
 				WorkflowID: "test-workflow",
 			}
 
-			runner := NewesumableWorkflowRunner(
+			resumeableRunner := runner.NewResumableWorkflowRunner(
 				config.NewRunnerConfig(
 					cfg,
 					workflowTask,
@@ -431,7 +432,7 @@ func TestEvaluateSwitchTask_NestedObjectAccess(t *testing.T) {
 			}
 
 			// Execute the switch task
-			result, err := runner.executeSwitchTask("testSwitch", switchTask, tt.input)
+			result, err := resumeableRunner.ExecuteSwitchTask("testSwitch", switchTask, tt.input)
 
 			// Verify the result
 			require.NoError(t, err)
@@ -448,7 +449,7 @@ func TestEvaluateSwitchTask_DefaultCase(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := runner.NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowTask,
@@ -495,7 +496,7 @@ func TestEvaluateSwitchTask_DefaultCase(t *testing.T) {
 	}
 
 	// Execute the switch task
-	result, err := runner.executeSwitchTask("testSwitch", switchTask, input)
+	result, err := resumeableRunner.ExecuteSwitchTask("testSwitch", switchTask, input)
 
 	// Verify the result falls back to default
 	require.NoError(t, err)
@@ -510,7 +511,7 @@ func TestEvaluateSwitchTask_FirstMatchWins(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := runner.NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowTask,
@@ -549,7 +550,7 @@ func TestEvaluateSwitchTask_FirstMatchWins(t *testing.T) {
 	}
 
 	// Execute the switch task
-	result, err := runner.executeSwitchTask("testSwitch", switchTask, input)
+	result, err := resumeableRunner.ExecuteSwitchTask("testSwitch", switchTask, input)
 
 	// Verify first match wins
 	require.NoError(t, err)
@@ -564,7 +565,7 @@ func TestEvaluateSwitchTask_ErrorCases(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := runner.NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowTask,
@@ -591,7 +592,7 @@ func TestEvaluateSwitchTask_ErrorCases(t *testing.T) {
 			},
 		}
 
-		result, err := runner.executeSwitchTask("testSwitch", switchTask, input)
+		result, err := resumeableRunner.ExecuteSwitchTask("testSwitch", switchTask, input)
 		assert.Error(t, err)
 		assert.Nil(t, result)
 		assert.Contains(t, err.Error(), "no matching switch case")
@@ -606,7 +607,7 @@ func TestEvaluateSwitchTask_ErrorCases(t *testing.T) {
 			Switch: []model.SwitchItem{},
 		}
 
-		result, err := runner.executeSwitchTask("testSwitch", switchTask, input)
+		result, err := resumeableRunner.ExecuteSwitchTask("testSwitch", switchTask, input)
 		assert.Error(t, err)
 		assert.Nil(t, result)
 		assert.Contains(t, err.Error(), "no switch cases defined")
@@ -617,7 +618,7 @@ func TestEvaluateSwitchTask_ErrorCases(t *testing.T) {
 			"value": "test",
 		}
 
-		result, err := runner.executeSwitchTask("testSwitch", nil, input)
+		result, err := resumeableRunner.ExecuteSwitchTask("testSwitch", nil, input)
 		assert.Error(t, err)
 		assert.Nil(t, result)
 		assert.Contains(t, err.Error(), "no switch cases defined")

@@ -1,4 +1,4 @@
-package runner
+package runner_test
 
 import (
 	"testing"
@@ -7,6 +7,7 @@ import (
 	slackProvider "github.com/thand-io/agent/internal/providers/slack"
 	"github.com/thand-io/agent/sdk/workflows/config"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
+	"github.com/thand-io/agent/sdk/workflows/runner"
 )
 
 // MockFunction implements the Function interface for testing
@@ -86,7 +87,7 @@ func TestExecuteCallFunction_MessageInterpolation(t *testing.T) {
 	}
 
 	// Create a runner
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := runner.NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowTask,
@@ -106,15 +107,15 @@ func TestExecuteCallFunction_MessageInterpolation(t *testing.T) {
 
 	// Execute the function
 	input := map[string]any{"someInput": "value"}
-	result, err := runner.executeCallFunction("testTask", callFunc, input)
+	result, err := resumeableRunner.ExecuteCallFunction("testTask", callFunc, input)
 
 	if err != nil {
-		t.Fatalf("executeCallFunction failed: %v", err)
+		t.Fatalf("ExecuteCallFunction failed: %v", err)
 	}
 
 	// Verify the result
 	if result == nil {
-		t.Fatalf("executeCallFunction returned nil result")
+		t.Fatalf("ExecuteCallFunction returned nil result")
 	}
 
 	// Check that the mock function was called
@@ -140,7 +141,7 @@ func TestExecuteCallFunction_MessageInterpolation(t *testing.T) {
 
 	expectedMessage := "The user john.doe is requesting access."
 	if actualMessage != expectedMessage {
-		t.Errorf("Message interpolation failed in executeCallFunction. Got: %s, Expected: %s", actualMessage, expectedMessage)
+		t.Errorf("Message interpolation failed in ExecuteCallFunction. Got: %s, Expected: %s", actualMessage, expectedMessage)
 	}
 
 	// Verify other parameters were passed through correctly
@@ -156,7 +157,7 @@ func TestExecuteCallFunction_MessageInterpolation(t *testing.T) {
 		t.Errorf("Approvals parameter incorrect. Got: %v, Expected: true", approvals)
 	}
 
-	t.Logf("executeCallFunction interpolation test successful: %s", actualMessage)
+	t.Logf("ExecuteCallFunction interpolation test successful: %s", actualMessage)
 }
 
 func TestExecuteCallFunction_MultipleExpressions(t *testing.T) {
@@ -183,7 +184,7 @@ func TestExecuteCallFunction_MultipleExpressions(t *testing.T) {
 	}
 
 	// Create a runner
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := runner.NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowTask,
@@ -203,10 +204,10 @@ func TestExecuteCallFunction_MultipleExpressions(t *testing.T) {
 
 	// Execute the function
 	input := map[string]any{}
-	_, err := runner.executeCallFunction("testTask", callFunc, input)
+	_, err := resumeableRunner.ExecuteCallFunction("testTask", callFunc, input)
 
 	if err != nil {
-		t.Fatalf("executeCallFunction failed: %v", err)
+		t.Fatalf("ExecuteCallFunction failed: %v", err)
 	}
 
 	// Verify interpolations

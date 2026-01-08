@@ -31,7 +31,7 @@ Examples:
 	  - setColor:
 	      set: ${ .configuration.color }
 */
-func (r *esumableWorkflowRunner) executeSetTask(
+func (r *ResumableWorkflowRunner) ExecuteSetTask(
 	taskName string,
 	task *model.SetTask,
 	input any,

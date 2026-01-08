@@ -17,7 +17,7 @@ import (
 )
 
 // executeRunTask handles task execution
-func (r *esumableWorkflowRunner) executeRunTask(
+func (r *ResumableWorkflowRunner) executeRunTask(
 	taskName string,
 	run *model.RunTask,
 	input any,
@@ -62,7 +62,7 @@ func (r *esumableWorkflowRunner) executeRunTask(
 // executeShellProcess executes a shell run process definition.
 // Supported fields (from DSL): command (string, required), arguments (map[string]any, optional), environment (map[string]any, optional)
 // It returns output according to the run.return directive (currently defaults to stdout behavior until extended).
-func (r *esumableWorkflowRunner) executeShellProcess(taskName string, shellTask *model.Shell) (map[string]any, error) {
+func (r *ResumableWorkflowRunner) executeShellProcess(taskName string, shellTask *model.Shell) (map[string]any, error) {
 
 	if shellTask == nil {
 		return nil, fmt.Errorf("shell process is nil")
@@ -165,7 +165,7 @@ func (r *esumableWorkflowRunner) executeShellProcess(taskName string, shellTask 
 //	Network (string, optional) network mode (e.g., host, bridge)
 //
 // Returns map with key "container" containing execution metadata similar to shell process: code, stdout, stderr, timeMs, id, image.
-func (r *esumableWorkflowRunner) executeContainerProcess(taskName string, containerTask *model.Container) (map[string]any, error) {
+func (r *ResumableWorkflowRunner) executeContainerProcess(taskName string, containerTask *model.Container) (map[string]any, error) {
 	if containerTask == nil {
 		return nil, fmt.Errorf("container process is nil")
 	}

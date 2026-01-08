@@ -1,4 +1,4 @@
-package runner
+package runner_test
 
 import (
 	"os"
@@ -10,9 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/thand-io/agent/sdk/workflows/config"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
+	"github.com/thand-io/agent/sdk/workflows/runner"
 )
 
-func NewDefaultRunner(workflow *model.Workflow) (*esumableWorkflowRunner, error) {
+func NewDefaultRunner(workflow *model.Workflow) (*runner.ResumableWorkflowRunner, error) {
 
 	cfg := config.NewConfigService()
 
@@ -22,14 +23,14 @@ func NewDefaultRunner(workflow *model.Workflow) (*esumableWorkflowRunner, error)
 		return nil, err
 	}
 
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := runner.NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			wkflw,
 		),
 	)
 
-	return runner, nil
+	return resumeableRunner, nil
 }
 
 // runWorkflowTest is a reusable test function for workflows

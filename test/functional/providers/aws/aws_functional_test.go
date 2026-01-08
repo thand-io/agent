@@ -163,7 +163,7 @@ func TestAWSProviderFunctional(t *testing.T) {
 	}
 
 	// Create provider configuration with LocalStack endpoint
-	providerConfig := &models.Provider{
+	providerConfig := &models.ProviderConfig{
 		Name:        "test-aws-provider",
 		Description: "Test AWS provider using LocalStack",
 		Provider:    "aws",

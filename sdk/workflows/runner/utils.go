@@ -9,7 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func (d *esumableWorkflowRunner) shouldRunTask(input any, task *model.TaskItem) (bool, error) {
+func (d *ResumableWorkflowRunner) shouldRunTask(input any, task *model.TaskItem) (bool, error) {
 
 	if task.GetBase().If != nil {
 		output, err := d.GetWorkflowTask().TraverseAndEvaluateBool(task.GetBase().If.String(), input)
@@ -22,7 +22,7 @@ func (d *esumableWorkflowRunner) shouldRunTask(input any, task *model.TaskItem) 
 }
 
 // processTaskInput processes task input validation and transformation.
-func (d *esumableWorkflowRunner) processTaskInput(task *model.TaskBase, taskInput any, taskName string) (output any, err error) {
+func (d *ResumableWorkflowRunner) processTaskInput(task *model.TaskBase, taskInput any, taskName string) (output any, err error) {
 
 	if task.Input == nil {
 		return taskInput, nil
@@ -51,8 +51,8 @@ func (d *esumableWorkflowRunner) processTaskInput(task *model.TaskBase, taskInpu
 	return output, nil
 }
 
-// processTaskOutput processes task output validation and transformation.
-func (d *esumableWorkflowRunner) processTaskOutput(task *model.TaskBase, taskOutput any, taskName string) (output any, err error) {
+// ProcessTaskOutput processes task output validation and transformation.
+func (d *ResumableWorkflowRunner) ProcessTaskOutput(task *model.TaskBase, taskOutput any, taskName string) (output any, err error) {
 
 	if task.Output == nil {
 		return taskOutput, nil
@@ -81,7 +81,7 @@ func (d *esumableWorkflowRunner) processTaskOutput(task *model.TaskBase, taskOut
 	return output, nil
 }
 
-func (d *esumableWorkflowRunner) processTaskExport(task *model.TaskBase, taskOutput any, taskName string) (err error) {
+func (d *ResumableWorkflowRunner) ProcessTaskExport(task *model.TaskBase, taskOutput any, taskName string) (err error) {
 
 	taskSupport := d.GetWorkflowTask()
 	log := d.GetLogger()

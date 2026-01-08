@@ -1,4 +1,4 @@
-package runner
+package runner_test
 
 import (
 	"testing"
@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/thand-io/agent/sdk/workflows/config"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
+	"github.com/thand-io/agent/sdk/workflows/runner"
 )
 
 func TestExecuteSetTask_BasicMapSet(t *testing.T) {
@@ -18,7 +19,7 @@ func TestExecuteSetTask_BasicMapSet(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := runner.NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowTask,
@@ -35,7 +36,7 @@ func TestExecuteSetTask_BasicMapSet(t *testing.T) {
 	}
 
 	// Execute the set task
-	result, err := runner.executeSetTask("testSet", setTask, map[string]any{})
+	result, err := resumeableRunner.ExecuteSetTask("testSet", setTask, map[string]any{})
 
 	// Verify the result
 	require.NoError(t, err)
@@ -56,7 +57,7 @@ func TestExecuteSetTask_WithRuntimeExpressions(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := runner.NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowTask,
@@ -82,7 +83,7 @@ func TestExecuteSetTask_WithRuntimeExpressions(t *testing.T) {
 	}
 
 	// Execute the set task
-	result, err := runner.executeSetTask("testSetWithExpressions", setTask, input)
+	result, err := resumeableRunner.ExecuteSetTask("testSetWithExpressions", setTask, input)
 
 	// Verify the result
 	require.NoError(t, err)
@@ -103,7 +104,7 @@ func TestExecuteSetTask_DirectRuntimeExpression(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := runner.NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowTask,
@@ -125,7 +126,7 @@ func TestExecuteSetTask_DirectRuntimeExpression(t *testing.T) {
 	}
 
 	// Execute the set task
-	result, err := runner.executeSetTask("testDirectExpression", setTask, input)
+	result, err := resumeableRunner.ExecuteSetTask("testDirectExpression", setTask, input)
 
 	// Verify the result
 	require.NoError(t, err)
@@ -147,7 +148,7 @@ func TestExecuteSetTask_NestedData(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := runner.NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowTask,
@@ -169,7 +170,7 @@ func TestExecuteSetTask_NestedData(t *testing.T) {
 	}
 
 	// Execute the set task
-	result, err := runner.executeSetTask("testNestedData", setTask, map[string]any{})
+	result, err := resumeableRunner.ExecuteSetTask("testNestedData", setTask, map[string]any{})
 
 	// Verify the result
 	require.NoError(t, err)
@@ -199,7 +200,7 @@ func TestExecuteSetTask_EmptySet(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := runner.NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowTask,
@@ -212,7 +213,7 @@ func TestExecuteSetTask_EmptySet(t *testing.T) {
 	}
 
 	// Execute the set task
-	result, err := runner.executeSetTask("testEmptySet", setTask, map[string]any{})
+	result, err := resumeableRunner.ExecuteSetTask("testEmptySet", setTask, map[string]any{})
 
 	// Verify the result
 	require.NoError(t, err)
@@ -231,7 +232,7 @@ func TestExecuteSetTask_NilSet(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := runner.NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowTask,
@@ -245,7 +246,7 @@ func TestExecuteSetTask_NilSet(t *testing.T) {
 	}
 
 	// Execute the set task
-	result, err := runner.executeSetTask("testEmptyNilSet", setTask, map[string]any{})
+	result, err := resumeableRunner.ExecuteSetTask("testEmptyNilSet", setTask, map[string]any{})
 
 	// Verify the result - empty map should be allowed
 	require.NoError(t, err)
@@ -264,7 +265,7 @@ func TestExecuteSetTask_WithInputData(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := runner.NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowTask,
@@ -296,7 +297,7 @@ func TestExecuteSetTask_WithInputData(t *testing.T) {
 	}
 
 	// Execute the set task
-	result, err := runner.executeSetTask("testWithInputData", setTask, input)
+	result, err := resumeableRunner.ExecuteSetTask("testWithInputData", setTask, input)
 
 	// Verify the result
 	require.NoError(t, err)
@@ -322,7 +323,7 @@ func TestExecuteSetTask_ArrayValues(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := runner.NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowTask,
@@ -338,7 +339,7 @@ func TestExecuteSetTask_ArrayValues(t *testing.T) {
 	}
 
 	// Execute the set task
-	result, err := runner.executeSetTask("testArrayValues", setTask, map[string]any{})
+	result, err := resumeableRunner.ExecuteSetTask("testArrayValues", setTask, map[string]any{})
 
 	// Verify the result
 	require.NoError(t, err)
@@ -366,7 +367,7 @@ func TestExecuteSetTask_ComplexExpressions(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := runner.NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowTask,
@@ -393,7 +394,7 @@ func TestExecuteSetTask_ComplexExpressions(t *testing.T) {
 	}
 
 	// Execute the set task
-	result, err := runner.executeSetTask("testComplexExpressions", setTask, input)
+	result, err := resumeableRunner.ExecuteSetTask("testComplexExpressions", setTask, input)
 
 	// Verify the result
 	require.NoError(t, err)

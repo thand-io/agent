@@ -1,7 +1,9 @@
-package runner
+package runner_test
 
 import (
 	"testing"
+
+	"github.com/thand-io/agent/sdk/workflows/runner"
 )
 
 func TestExpandURITemplate(t *testing.T) {
@@ -65,7 +67,7 @@ func TestExpandURITemplate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := expandURITemplate(tt.template, tt.input)
+			result, err := runner.ExpandURITemplate(tt.template, tt.input)
 
 			if tt.hasError {
 				if err == nil {

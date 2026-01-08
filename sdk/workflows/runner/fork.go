@@ -17,7 +17,7 @@ the overall efficiency of the workflow. By defining a set of subtasks to perform
 task facilitates the execution of complex operations in parallel, ensuring that multiple tasks can be
 executed simultaneously.
 */
-func (r *esumableWorkflowRunner) executeForkTask(
+func (r *ResumableWorkflowRunner) executeForkTask(
 	taskName string,
 	task *model.ForkTask,
 	input any,
@@ -39,7 +39,7 @@ func (r *esumableWorkflowRunner) executeForkTask(
 }
 
 // executeForkTaskTemporal handles fork execution within a Temporal workflow context
-func (r *esumableWorkflowRunner) executeForkTaskTemporal(
+func (r *ResumableWorkflowRunner) executeForkTaskTemporal(
 	taskName string,
 	task *model.ForkTask,
 	input any,
@@ -83,7 +83,7 @@ func (r *esumableWorkflowRunner) executeForkTaskTemporal(
 			childWF = childWF.WithTemporalContext(ctx)
 
 			// Create a new runner instance for this branch
-			branchRunner := NewesumableWorkflowRunner(
+			branchRunner := NewResumableWorkflowRunner(
 				config.NewRunnerConfig(
 					r.GetConfig(),
 					childWF,
@@ -139,7 +139,7 @@ func (r *esumableWorkflowRunner) executeForkTaskTemporal(
 }
 
 // executeForkTaskStandard handles fork execution in standard Go context (non-Temporal)
-func (r *esumableWorkflowRunner) executeForkTaskStandard(
+func (r *ResumableWorkflowRunner) executeForkTaskStandard(
 	taskName string,
 	task *model.ForkTask,
 	input any,
@@ -228,7 +228,7 @@ func (r *esumableWorkflowRunner) executeForkTaskStandard(
 	return results, nil
 }
 
-func (r *esumableWorkflowRunner) CloneWithContext(ctx context.Context) *esumableWorkflowRunner {
+func (r *ResumableWorkflowRunner) CloneWithContext(ctx context.Context) *ResumableWorkflowRunner {
 	// Try get a workflow task from the provided context, otherwise clone the current one
 	var wf *sdkWorkflowsModel.WorkflowTask
 	if ctx != nil {
@@ -248,7 +248,7 @@ func (r *esumableWorkflowRunner) CloneWithContext(ctx context.Context) *esumable
 	if ctx != nil {
 		wf.SetInternalContext(ctx)
 	}
-	return NewesumableWorkflowRunner(
+	return NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			r.GetConfig(),
 			wf,

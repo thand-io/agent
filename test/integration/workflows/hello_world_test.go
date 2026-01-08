@@ -64,10 +64,9 @@ func TestHelloWorldWorkflow(t *testing.T) {
 		require.Equal(t, "aws", awsProvider.Provider, "AWS provider type should be 'aws'")
 
 		// Verify LocalStack endpoint was substituted
-		awsConfig := awsProvider.GetConfig()
-		require.NotNil(t, awsConfig, "AWS config should not be nil")
+		require.NotNil(t, awsProvider.Config, "AWS config should not be nil")
 
-		endpoint, ok := (*awsConfig)["endpoint"].(string)
+		endpoint, ok := awsProvider.Config.AsMap()["endpoint"].(string)
 		require.True(t, ok, "Endpoint should be a string")
 		require.Contains(t, endpoint, "http://", "Endpoint should be an HTTP URL")
 		t.Logf("AWS provider endpoint: %s", endpoint)
@@ -97,11 +96,12 @@ func TestHelloWorldWorkflow(t *testing.T) {
 		cfg := createConfigWithCleanup(t, loader, testCase, infra)
 
 		// Create workflow manager (without Temporal for now - just testing the runner)
-		wm := manager.NewWorkflowManager(cfg)
+		wm, err := manager.NewThandWorkflowManager(cfg)
+		require.NoError(t, err, "Failed to create workflow manager")
 		require.NotNil(t, wm, "Workflow manager should not be nil")
 
 		// Get registered functions
-		functions := wm.GetRegisteredFunctions()
+		functions := wm.GetWorkflowManager().GetRegisteredFunctions()
 		t.Logf("Registered functions: %v", functions)
 		require.NotEmpty(t, functions, "Should have registered functions")
 	})
@@ -112,7 +112,7 @@ func TestHelloWorldWorkflow(t *testing.T) {
 		workflow := testCase.Workflows["hello_world"]
 
 		// Create a workflow task from the workflow
-		workflowTask, err := models.NewWorkflowContext(&workflow)
+		workflowTask, err := models.NewElevationWorkflowContext(&workflow)
 		require.NoError(t, err, "Failed to create workflow context")
 
 		// Set input
@@ -122,10 +122,11 @@ func TestHelloWorldWorkflow(t *testing.T) {
 		workflowTask.SetInput(input)
 
 		// Create workflow manager
-		wm := manager.NewWorkflowManager(cfg)
+		wm, err := manager.NewThandWorkflowManager(cfg)
+		require.NoError(t, err, "Failed to create workflow manager")
 
 		// Execute workflow using ResumeWorkflowTask (bypasses Temporal for direct execution)
-		result, err := wm.ResumeWorkflowTask(workflowTask)
+		result, err := wm.ResumeWorkflowTask(models.NewElevateWorkflowTask(workflowTask))
 		require.NoError(t, err, "Workflow execution should succeed")
 		require.NotNil(t, result, "Result should not be nil")
 
@@ -146,14 +147,16 @@ func TestHelloWorldWorkflow(t *testing.T) {
 
 		workflow := testCase.Workflows["hello_world"]
 
-		workflowTask, err := models.NewWorkflowContext(&workflow)
+		workflowTask, err := models.NewElevationWorkflowContext(&workflow)
 		require.NoError(t, err, "Failed to create workflow context")
 
 		// Set empty input - should use default "World"
 		workflowTask.SetInput(map[string]any{})
 
-		wm := manager.NewWorkflowManager(cfg)
-		result, err := wm.ResumeWorkflowTask(workflowTask)
+		wm, err := manager.NewThandWorkflowManager(cfg)
+		require.NoError(t, err, "Failed to create workflow manager")
+
+		result, err := wm.ResumeWorkflowTask(models.NewElevateWorkflowTask(workflowTask))
 		require.NoError(t, err, "Workflow execution should succeed")
 
 		output := result.GetOutput()

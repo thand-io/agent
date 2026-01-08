@@ -14,7 +14,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-func (r *esumableWorkflowRunner) executeHttpFunction(
+func (r *ResumableWorkflowRunner) executeHttpFunction(
 	taskName string,
 	call *model.CallHTTP,
 	input any,
@@ -47,7 +47,7 @@ func (r *esumableWorkflowRunner) executeHttpFunction(
 		}).Debug("Expanding URI template")
 
 		// Expand URI template with variables from input
-		expandedURI, err := expandURITemplate(uri.String(), input)
+		expandedURI, err := ExpandURITemplate(uri.String(), input)
 		if err != nil {
 			log.WithFields(logrus.Fields{
 				"template": uri.String(),
@@ -263,7 +263,7 @@ This has the following limitations compared to runtime expressions:
 	The referenced variable must be of type string, number, boolean, or null. If the variable is of a different type an error with type https://https://serverlessworkflow.io/spec/1.0.0/errors/expression and status 400 will be raised.
 	Runtime expression arguments are not available for string substitution.
 */
-func expandURITemplate(template string, input any) (string, error) {
+func ExpandURITemplate(template string, input any) (string, error) {
 	if input == nil {
 		// If no input provided, replace all placeholders with empty strings
 		return regexp.MustCompile(`\{[^}]*\}`).ReplaceAllString(template, ""), nil

@@ -1,4 +1,4 @@
-package runner
+package runner_test
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/thand-io/agent/sdk/workflows/config"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
+	"github.com/thand-io/agent/sdk/workflows/runner"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -104,7 +105,7 @@ func TestExecuteGRPCFunction_ConnectionFailure(t *testing.T) {
 	}
 
 	// Create a workflow runner
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := runner.NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowTask,
@@ -133,7 +134,7 @@ func TestExecuteGRPCFunction_ConnectionFailure(t *testing.T) {
 	}
 
 	// Execute the function and expect connection failure
-	result, err := runner.executeGRPCFunction("test-task", grpcCall, nil)
+	result, err := resumeableRunner.ExecuteGRPCFunction("test-task", grpcCall, nil)
 
 	// Verify that we get a connection error
 	assert.Error(t, err)
@@ -162,7 +163,7 @@ func TestCreateGRPCConnection_Success(t *testing.T) {
 	}
 
 	// Test connection creation
-	conn, err := createGRPCConnection(service)
+	conn, err := runner.CreateGRPCConnection(service)
 	assert.NoError(t, err)
 	assert.NotNil(t, conn)
 
@@ -179,7 +180,7 @@ func TestCreateGRPCConnection_Timeout(t *testing.T) {
 	}
 
 	// Test connection creation (gRPC connections are lazy, so this will succeed)
-	conn, err := createGRPCConnection(service)
+	conn, err := runner.CreateGRPCConnection(service)
 	// Connection creation doesn't fail immediately with gRPC
 	assert.NoError(t, err)
 	assert.NotNil(t, conn)
@@ -192,7 +193,7 @@ func TestCreateGRPCConnection_Timeout(t *testing.T) {
 
 func TestCreateGRPCContext_NoAuth(t *testing.T) {
 
-	ctx, err := createGRPCContext(nil, nil)
+	ctx, err := runner.CreateGRPCContext(nil, nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, ctx)
 
@@ -212,7 +213,7 @@ func TestCreateGRPCContext_BearerAuth(t *testing.T) {
 		},
 	}
 
-	ctx, err := createGRPCContext(nil, auth)
+	ctx, err := runner.CreateGRPCContext(nil, auth)
 	assert.NoError(t, err)
 	assert.NotNil(t, ctx)
 
@@ -234,7 +235,7 @@ func TestCreateGRPCContext_BasicAuth(t *testing.T) {
 		},
 	}
 
-	ctx, err := createGRPCContext(auth, nil)
+	ctx, err := runner.CreateGRPCContext(auth, nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, ctx)
 
@@ -253,7 +254,7 @@ func TestBuildRequestMessage_EmptyArguments(t *testing.T) {
 	mockMethodDesc := createMockProtoMethodDescriptor(t)
 
 	// Test with empty arguments
-	msg, err := buildRequestMessage(mockMethodDesc, map[string]any{})
+	msg, err := runner.BuildRequestMessage(mockMethodDesc, map[string]any{})
 	assert.NoError(t, err)
 	assert.NotNil(t, msg)
 }
@@ -268,14 +269,14 @@ func TestBuildRequestMessage_WithArguments(t *testing.T) {
 		"name": "Test User",
 	}
 
-	msg, err := buildRequestMessage(mockMethodDesc, arguments)
+	msg, err := runner.BuildRequestMessage(mockMethodDesc, arguments)
 	assert.NoError(t, err)
 	assert.NotNil(t, msg)
 }
 
 func TestConvertResponseToMap_NilMessage(t *testing.T) {
 
-	result, err := convertResponseToMap(nil)
+	result, err := runner.ConvertResponseToMap(nil)
 	assert.NoError(t, err)
 	assert.Nil(t, result)
 }
@@ -293,7 +294,7 @@ func TestConvertResponseToMap_ValidMessage(t *testing.T) {
 		msgReflect.Set(msgField, protoreflect.ValueOfString("Hello, World!"))
 	}
 
-	result, err := convertResponseToMap(msg)
+	result, err := runner.ConvertResponseToMap(msg)
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, "Hello, World!", result["message"])
@@ -436,7 +437,7 @@ func BenchmarkCreateGRPCConnection(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		conn, _ := createGRPCConnection(service)
+		conn, _ := runner.CreateGRPCConnection(service)
 		if conn != nil {
 			conn.Close()
 		}
@@ -454,6 +455,6 @@ func BenchmarkCreateGRPCContext(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		createGRPCContext(nil, auth)
+		runner.CreateGRPCContext(nil, auth)
 	}
 }

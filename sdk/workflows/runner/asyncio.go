@@ -7,7 +7,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func (r *esumableWorkflowRunner) executeAsyncFunction(
+func (r *ResumableWorkflowRunner) executeAsyncFunction(
 	taskName string,
 	call *model.CallAsyncAPI,
 	input any,

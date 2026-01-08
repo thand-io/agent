@@ -18,7 +18,7 @@ import (
 type TestCase struct {
 	Name      string
 	Path      string
-	Providers map[string]models.Provider
+	Providers map[string]models.ProviderConfig
 	Roles     map[string]models.Role
 	Workflows map[string]models.Workflow
 }
@@ -75,7 +75,7 @@ func (l *TestCaseLoader) LoadTestCase(name string) (*TestCase, error) {
 }
 
 // loadProviders loads providers from the test case directory
-func (l *TestCaseLoader) loadProviders(testPath string) (map[string]models.Provider, error) {
+func (l *TestCaseLoader) loadProviders(testPath string) (map[string]models.ProviderConfig, error) {
 	content, err := os.ReadFile(filepath.Join(testPath, "providers.yaml"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read providers.yaml: %w", err)
@@ -85,8 +85,8 @@ func (l *TestCaseLoader) loadProviders(testPath string) (map[string]models.Provi
 	content = l.substituteVariables(content)
 
 	var data struct {
-		Version   string                     `yaml:"version"`
-		Providers map[string]models.Provider `yaml:"providers"`
+		Version   string                           `yaml:"version"`
+		Providers map[string]models.ProviderConfig `yaml:"providers"`
 	}
 
 	if err := yaml.Unmarshal(content, &data); err != nil {

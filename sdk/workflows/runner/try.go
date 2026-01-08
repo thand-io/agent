@@ -12,7 +12,7 @@ import (
 )
 
 // executeTryTask handles try/catch logic with error handling and retry functionality
-func (r *esumableWorkflowRunner) executeTryTask(
+func (r *ResumableWorkflowRunner) executeTryTask(
 	taskName string,
 	tryTask *model.TryTask,
 	input any,
@@ -107,7 +107,7 @@ func (r *esumableWorkflowRunner) executeTryTask(
 }
 
 // shouldCatchError determines if an error should be caught based on catch conditions
-func (r *esumableWorkflowRunner) shouldCatchError(err error, catch *model.TryTaskCatch, input any) (bool, error) {
+func (r *ResumableWorkflowRunner) shouldCatchError(err error, catch *model.TryTaskCatch, input any) (bool, error) {
 	workflowTask := r.GetWorkflowTask()
 
 	// Check error filter if specified
@@ -153,7 +153,7 @@ type errorInfo struct {
 }
 
 // extractErrorInfo extracts error information from an error for filtering purposes
-func (r *esumableWorkflowRunner) extractErrorInfo(err error) errorInfo {
+func (r *ResumableWorkflowRunner) extractErrorInfo(err error) errorInfo {
 	info := errorInfo{}
 
 	// Check if it's a model.Error
@@ -177,7 +177,7 @@ func (r *esumableWorkflowRunner) extractErrorInfo(err error) errorInfo {
 }
 
 // matchesFilterCriteria checks if error info matches all filter criteria
-func (r *esumableWorkflowRunner) matchesFilterCriteria(info errorInfo, filter *model.ErrorFilter) bool {
+func (r *ResumableWorkflowRunner) matchesFilterCriteria(info errorInfo, filter *model.ErrorFilter) bool {
 	return r.matchesType(info.errorType, filter.Type) &&
 		r.matchesStatus(info.errorStatus, filter.Status) &&
 		r.matchesTitle(info.errorTitle, filter.Title) &&
@@ -186,38 +186,38 @@ func (r *esumableWorkflowRunner) matchesFilterCriteria(info errorInfo, filter *m
 }
 
 // matchesType checks if error type matches filter type
-func (r *esumableWorkflowRunner) matchesType(errorType, filterType string) bool {
+func (r *ResumableWorkflowRunner) matchesType(errorType, filterType string) bool {
 	return len(filterType) == 0 || errorType == filterType
 }
 
 // matchesStatus checks if error status matches filter status
-func (r *esumableWorkflowRunner) matchesStatus(errorStatus, filterStatus int) bool {
+func (r *ResumableWorkflowRunner) matchesStatus(errorStatus, filterStatus int) bool {
 	return filterStatus == 0 || errorStatus == filterStatus
 }
 
 // matchesTitle checks if error title matches filter title
-func (r *esumableWorkflowRunner) matchesTitle(errorTitle, filterTitle string) bool {
+func (r *ResumableWorkflowRunner) matchesTitle(errorTitle, filterTitle string) bool {
 	return len(filterTitle) == 0 || errorTitle == filterTitle
 }
 
 // matchesDetails checks if error details matches filter details
-func (r *esumableWorkflowRunner) matchesDetails(errorDetails, filterDetails string) bool {
+func (r *ResumableWorkflowRunner) matchesDetails(errorDetails, filterDetails string) bool {
 	return len(filterDetails) == 0 || errorDetails == filterDetails
 }
 
 // matchesInstance checks if error instance matches filter instance
-func (r *esumableWorkflowRunner) matchesInstance(errorInstance, filterInstance string) bool {
+func (r *ResumableWorkflowRunner) matchesInstance(errorInstance, filterInstance string) bool {
 	return len(filterInstance) == 0 || errorInstance == filterInstance
 }
 
 // errorMatchesFilter checks if an error matches the specified filter criteria
-func (r *esumableWorkflowRunner) errorMatchesFilter(err error, filter *model.ErrorFilter) bool {
+func (r *ResumableWorkflowRunner) errorMatchesFilter(err error, filter *model.ErrorFilter) bool {
 	info := r.extractErrorInfo(err)
 	return r.matchesFilterCriteria(info, filter)
 }
 
 // createErrorContext creates a context object for the caught error
-func (r *esumableWorkflowRunner) createErrorContext(err error) map[string]any {
+func (r *ResumableWorkflowRunner) createErrorContext(err error) map[string]any {
 	errorContext := make(map[string]any)
 
 	// Check if it's a structured model.Error
@@ -252,7 +252,7 @@ type retryConfig struct {
 }
 
 // validateRetryPolicy validates and extracts retry configuration
-func (r *esumableWorkflowRunner) validateRetryPolicy(taskName string, retryPolicy *model.RetryPolicy) (*retryConfig, error) {
+func (r *ResumableWorkflowRunner) validateRetryPolicy(taskName string, retryPolicy *model.RetryPolicy) (*retryConfig, error) {
 	if retryPolicy == nil {
 		return nil, fmt.Errorf("no retry policy")
 	}
@@ -288,7 +288,7 @@ func (r *esumableWorkflowRunner) validateRetryPolicy(taskName string, retryPolic
 }
 
 // checkRetryLimits checks if retry limits have been exceeded
-func (r *esumableWorkflowRunner) checkRetryLimits(taskName string, config *retryConfig, attempt int) bool {
+func (r *ResumableWorkflowRunner) checkRetryLimits(taskName string, config *retryConfig, attempt int) bool {
 	// Check if we've exceeded the maximum duration
 	if config.maxDuration > 0 && time.Since(config.startTime) > config.maxDuration {
 		log := r.GetLogger()
@@ -303,7 +303,7 @@ func (r *esumableWorkflowRunner) checkRetryLimits(taskName string, config *retry
 }
 
 // executeRetryAttempt executes a single retry attempt with delay
-func (r *esumableWorkflowRunner) executeRetryAttempt(
+func (r *ResumableWorkflowRunner) executeRetryAttempt(
 	taskName string,
 	tryTask *model.TryTask,
 	input any,
@@ -344,7 +344,7 @@ func (r *esumableWorkflowRunner) executeRetryAttempt(
 }
 
 // handleRetryLogic implements the retry mechanism with backoff strategies
-func (r *esumableWorkflowRunner) handleRetryLogic(taskName string, tryTask *model.TryTask, input any, originalErr error) (any, error) {
+func (r *ResumableWorkflowRunner) handleRetryLogic(taskName string, tryTask *model.TryTask, input any, originalErr error) (any, error) {
 	retryPolicy := tryTask.Catch.Retry
 	log := r.GetLogger()
 
@@ -398,7 +398,7 @@ func (r *esumableWorkflowRunner) handleRetryLogic(taskName string, tryTask *mode
 }
 
 // shouldRetry evaluates retry conditions
-func (r *esumableWorkflowRunner) shouldRetry(retryPolicy *model.RetryPolicy, input any, err error) (bool, error) {
+func (r *ResumableWorkflowRunner) shouldRetry(retryPolicy *model.RetryPolicy, input any, err error) (bool, error) {
 	workflowTask := r.GetWorkflowTask()
 
 	// Evaluate 'when' condition if specified
@@ -427,7 +427,7 @@ func (r *esumableWorkflowRunner) shouldRetry(retryPolicy *model.RetryPolicy, inp
 }
 
 // calculateRetryDelay calculates the delay before the next retry attempt
-func (r *esumableWorkflowRunner) calculateRetryDelay(retryPolicy *model.RetryPolicy, attempt int) time.Duration {
+func (r *ResumableWorkflowRunner) calculateRetryDelay(retryPolicy *model.RetryPolicy, attempt int) time.Duration {
 	var baseDelay time.Duration
 	log := r.GetLogger()
 

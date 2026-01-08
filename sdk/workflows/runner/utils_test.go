@@ -1,4 +1,4 @@
-package runner
+package runner_test
 
 import (
 	"testing"
@@ -8,9 +8,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/thand-io/agent/sdk/workflows/config"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
+	"github.com/thand-io/agent/sdk/workflows/runner"
 )
 
-// TestProcessTaskOutput tests the processTaskOutput function which transforms
+// TestProcessTaskOutput tests the ProcessTaskOutput function which transforms
 // raw task output using the output.as expression.
 //
 // Example transformation:
@@ -35,7 +36,7 @@ func TestProcessTaskOutput_TransformToApprovalsList(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create the runner
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := runner.NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowCtx,
@@ -61,8 +62,8 @@ func TestProcessTaskOutput_TransformToApprovalsList(t *testing.T) {
 		},
 	}
 
-	// Execute processTaskOutput
-	result, err := runner.processTaskOutput(taskBase, rawTaskOutput, "test-task")
+	// Execute ProcessTaskOutput
+	result, err := resumeableRunner.ProcessTaskOutput(taskBase, rawTaskOutput, "test-task")
 	assert.NoError(t, err)
 
 	// Verify the transformation
@@ -91,7 +92,7 @@ func TestProcessTaskOutput_TransformToApprovalsListWithExport(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create the runner
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := runner.NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowCtx,
@@ -118,7 +119,7 @@ func TestProcessTaskOutput_TransformToApprovalsListWithExport(t *testing.T) {
 	}
 
 	// Set up initial context with some existing data
-	runner.GetWorkflowTask().SetInstanceCtx(map[string]any{
+	resumeableRunner.GetWorkflowTask().SetInstanceCtx(map[string]any{
 		"user": "test.user",
 		"role": "admin",
 	})
@@ -130,8 +131,8 @@ func TestProcessTaskOutput_TransformToApprovalsListWithExport(t *testing.T) {
 		},
 	}
 
-	// Execute processTaskOutput
-	result, err := runner.processTaskOutput(taskBase, rawTaskOutput, "test-task")
+	// Execute ProcessTaskOutput
+	result, err := resumeableRunner.ProcessTaskOutput(taskBase, rawTaskOutput, "test-task")
 	assert.NoError(t, err)
 
 	// Verify the transformation
@@ -142,12 +143,12 @@ func TestProcessTaskOutput_TransformToApprovalsListWithExport(t *testing.T) {
 	}
 	assert.Equal(t, expected, result, "Should transform raw output to approvals list")
 
-	// Execute processTaskExport to add transformed output to context
-	err = runner.processTaskExport(taskBase, result, "test-task")
+	// Execute ProcessTaskExport to add transformed output to context
+	err = resumeableRunner.ProcessTaskExport(taskBase, result, "test-task")
 	assert.NoError(t, err)
 
 	// Verify the context now contains the approvals along with existing data
-	context := runner.GetWorkflowTask().GetInstanceCtx()
+	context := resumeableRunner.GetWorkflowTask().GetInstanceCtx()
 	expectedContext := map[string]any{
 		"user": "test.user",
 		"role": "admin",
@@ -175,7 +176,7 @@ func TestProcessTaskOutput_WithoutOutput(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create the runner
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := runner.NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowCtx,
@@ -194,8 +195,8 @@ func TestProcessTaskOutput_WithoutOutput(t *testing.T) {
 		},
 	}
 
-	// Execute processTaskOutput - should return the raw output unchanged
-	result, err := runner.processTaskOutput(taskBase, rawTaskOutput, "test-task")
+	// Execute ProcessTaskOutput - should return the raw output unchanged
+	result, err := resumeableRunner.ProcessTaskOutput(taskBase, rawTaskOutput, "test-task")
 	assert.NoError(t, err)
 	assert.Equal(t, rawTaskOutput, result)
 }
@@ -217,7 +218,7 @@ func TestProcessTaskOutput_TransformStructure(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create the runner
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := runner.NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowCtx,
@@ -244,8 +245,8 @@ func TestProcessTaskOutput_TransformStructure(t *testing.T) {
 		},
 	}
 
-	// Execute processTaskOutput
-	result, err := runner.processTaskOutput(taskBase, rawTaskOutput, "test-task")
+	// Execute ProcessTaskOutput
+	result, err := resumeableRunner.ProcessTaskOutput(taskBase, rawTaskOutput, "test-task")
 	assert.NoError(t, err)
 
 	// Verify the result - should be the transformed structure
@@ -273,7 +274,7 @@ func TestProcessTaskOutput_IdentityTransform(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create the runner
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := runner.NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowCtx,
@@ -300,8 +301,8 @@ func TestProcessTaskOutput_IdentityTransform(t *testing.T) {
 		"source": "approval-service",
 	}
 
-	// Execute processTaskOutput
-	result, err := runner.processTaskOutput(taskBase, rawTaskOutput, "test-task")
+	// Execute ProcessTaskOutput
+	result, err := resumeableRunner.ProcessTaskOutput(taskBase, rawTaskOutput, "test-task")
 	assert.NoError(t, err)
 
 	// Verify the result - should be identical to the input (identity transform)

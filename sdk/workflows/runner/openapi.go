@@ -31,7 +31,7 @@ func NewOpenAPIExecutor() *OpenAPIExecutor {
 	}
 }
 
-func (r *esumableWorkflowRunner) executeOpenAPIFunction(
+func (r *ResumableWorkflowRunner) ExecuteOpenAPIFunction(
 	taskName string,
 	call *model.CallOpenAPI,
 	input any,
@@ -92,7 +92,7 @@ func MakeOpenAPIRequest(args model.OpenAPIArguments, input any) (map[string]any,
 	authentication := args.Authentication
 
 	// Load OpenAPI document
-	documentURL, err := resolveDocumentURL(document)
+	documentURL, err := ResolveDocumentURL(document)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve document URL: %w", err)
 	}
@@ -134,7 +134,7 @@ func MakeOpenAPIRequest(args model.OpenAPIArguments, input any) (map[string]any,
 	return result, nil
 }
 
-func resolveDocumentURL(document *model.ExternalResource) (string, error) {
+func ResolveDocumentURL(document *model.ExternalResource) (string, error) {
 	if document == nil {
 		return "", fmt.Errorf("document is required")
 	}
@@ -211,7 +211,7 @@ func buildHTTPArgumentsFromOpenAPI(
 	}
 
 	// Build request URL with path parameters
-	requestURL := buildRequestURL(baseURL, path, parameters)
+	requestURL := BuildRequestURL(baseURL, path, parameters)
 
 	// Parse URL for endpoint
 	parsedURL, err := url.Parse(requestURL)
@@ -268,7 +268,7 @@ func buildHTTPArgumentsFromOpenAPI(
 	return httpArgs, nil
 }
 
-func buildRequestURL(baseURL, path string, parameters map[string]any) string {
+func BuildRequestURL(baseURL, path string, parameters map[string]any) string {
 	// Replace path parameters
 	finalPath := path
 	for paramName, paramValue := range parameters {

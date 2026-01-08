@@ -10,7 +10,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-func (r *esumableWorkflowRunner) executeWaitTask(
+func (r *ResumableWorkflowRunner) executeWaitTask(
 	taskName string,
 	call *model.WaitTask,
 	input any,

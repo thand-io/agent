@@ -36,7 +36,7 @@ func TestErrorMatchesFilter(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create the runner
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowCtx,
@@ -94,7 +94,7 @@ func TestErrorMatchesFilter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := runner.errorMatchesFilter(tt.error, tt.filter)
+			result := resumeableRunner.errorMatchesFilter(tt.error, tt.filter)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -117,7 +117,7 @@ func TestCalculateRetryDelay(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create the runner
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowCtx,
@@ -163,7 +163,7 @@ func TestCalculateRetryDelay(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			delay := runner.calculateRetryDelay(tt.retryPolicy, tt.attempt)
+			delay := resumeableRunner.calculateRetryDelay(tt.retryPolicy, tt.attempt)
 			delayMs := delay.Milliseconds()
 
 			assert.GreaterOrEqual(t, delayMs, tt.minDelay, "Delay should be at least minimum expected")

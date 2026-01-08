@@ -2,6 +2,7 @@ version: "1.0"
 workflows:
   # Simple AWS elevation workflow with self-approval via email
   aws_self_approval:
+    name: AWS Self approval
     description: AWS access elevation with self-approval via email
     authentication: default
     enabled: true

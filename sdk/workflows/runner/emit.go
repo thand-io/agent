@@ -13,8 +13,8 @@ import (
 
 var ErrorEmitUnsupported = fmt.Errorf("emit task is only supported in temporal workflows")
 
-// executeEmitTask handles event emission according to the serverless workflow spec
-func (r *esumableWorkflowRunner) executeEmitTask(
+// ExecuteEmitTask handles event emission according to the serverless workflow spec
+func (r *ResumableWorkflowRunner) ExecuteEmitTask(
 	taskName string,
 	emit *model.EmitTask,
 	input any,
@@ -35,7 +35,7 @@ func (r *esumableWorkflowRunner) executeEmitTask(
 	if workflowTask.HasTemporalContext() {
 
 		// Create the cloud event based on the emit task specification
-		event, err := r.createCloudEventFromEmit(emit, input)
+		event, err := r.CreateCloudEventFromEmit(emit, input)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create cloud event: %w", err)
 		}
@@ -74,8 +74,8 @@ func (r *esumableWorkflowRunner) executeEmitTask(
 	}
 }
 
-// createCloudEventFromEmit creates a CloudEvent from the emit task specification
-func (r *esumableWorkflowRunner) createCloudEventFromEmit(
+// CreateCloudEventFromEmit creates a CloudEvent from the emit task specification
+func (r *ResumableWorkflowRunner) CreateCloudEventFromEmit(
 	emit *model.EmitTask,
 	input any,
 ) (*cloudevents.Event, error) {
@@ -109,7 +109,7 @@ func (r *esumableWorkflowRunner) createCloudEventFromEmit(
 }
 
 // setRequiredEventFields sets the required CloudEvent fields
-func (r *esumableWorkflowRunner) setRequiredEventFields(
+func (r *ResumableWorkflowRunner) setRequiredEventFields(
 	event *cloudevents.Event,
 	eventProps *model.EventProperties,
 	input any,
@@ -129,7 +129,7 @@ func (r *esumableWorkflowRunner) setRequiredEventFields(
 }
 
 // setEventSource sets the event source field
-func (r *esumableWorkflowRunner) setEventSource(
+func (r *ResumableWorkflowRunner) setEventSource(
 	event *cloudevents.Event,
 	eventProps *model.EventProperties,
 	input any,
@@ -153,7 +153,7 @@ func (r *esumableWorkflowRunner) setEventSource(
 }
 
 // setOptionalEventFields sets the optional CloudEvent fields
-func (r *esumableWorkflowRunner) setOptionalEventFields(
+func (r *ResumableWorkflowRunner) setOptionalEventFields(
 	event *cloudevents.Event,
 	eventProps *model.EventProperties,
 	input any,
@@ -183,7 +183,7 @@ func (r *esumableWorkflowRunner) setOptionalEventFields(
 }
 
 // setEventTime sets the event time field
-func (r *esumableWorkflowRunner) setEventTime(
+func (r *ResumableWorkflowRunner) setEventTime(
 	event *cloudevents.Event,
 	eventProps *model.EventProperties,
 	input any,
@@ -203,7 +203,7 @@ func (r *esumableWorkflowRunner) setEventTime(
 }
 
 // setEventDataSchema sets the event data schema field
-func (r *esumableWorkflowRunner) setEventDataSchema(
+func (r *ResumableWorkflowRunner) setEventDataSchema(
 	event *cloudevents.Event,
 	eventProps *model.EventProperties,
 	input any,
@@ -227,7 +227,7 @@ func (r *esumableWorkflowRunner) setEventDataSchema(
 }
 
 // setEventData sets the event data
-func (r *esumableWorkflowRunner) setEventData(
+func (r *ResumableWorkflowRunner) setEventData(
 	event *cloudevents.Event,
 	eventProps *model.EventProperties,
 	input any,
@@ -248,7 +248,7 @@ func (r *esumableWorkflowRunner) setEventData(
 }
 
 // getEventData determines the event data from properties or input
-func (r *esumableWorkflowRunner) getEventData(
+func (r *ResumableWorkflowRunner) getEventData(
 	eventProps *model.EventProperties,
 	input any,
 ) any {
@@ -264,7 +264,7 @@ func (r *esumableWorkflowRunner) getEventData(
 }
 
 // setEventExtensions sets additional event extensions
-func (r *esumableWorkflowRunner) setEventExtensions(
+func (r *ResumableWorkflowRunner) setEventExtensions(
 	event *cloudevents.Event,
 	eventProps *model.EventProperties,
 ) {
@@ -280,7 +280,7 @@ func (r *esumableWorkflowRunner) setEventExtensions(
 }
 
 // evaluateRuntimeExpression evaluates runtime expressions
-func (r *esumableWorkflowRunner) evaluateRuntimeExpression(expression any, input any) (any, error) {
+func (r *ResumableWorkflowRunner) evaluateRuntimeExpression(expression any, input any) (any, error) {
 	// If it's already a string, return as-is
 	if str, ok := expression.(string); ok {
 		// Check if it looks like a runtime expression (starts with $)

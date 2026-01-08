@@ -1,4 +1,4 @@
-package runner
+package runner_test
 
 import (
 	"encoding/json"
@@ -10,6 +10,7 @@ import (
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/thand-io/agent/sdk/workflows/config"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
+	"github.com/thand-io/agent/sdk/workflows/runner"
 )
 
 // getTestOpenAPIDoc returns the test OpenAPI document template
@@ -218,7 +219,7 @@ func runOpenAPITest(t *testing.T, name string, args model.OpenAPIArguments, inpu
 			Endpoint: model.NewEndpoint(serverURL + "/openapi.json"),
 		}
 
-		result, err := MakeOpenAPIRequest(args, input)
+		result, err := runner.MakeOpenAPIRequest(args, input)
 
 		if expectError {
 			if err == nil {
@@ -367,7 +368,7 @@ func TestResolveDocumentURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := resolveDocumentURL(tt.document)
+			result, err := runner.ResolveDocumentURL(tt.document)
 
 			if tt.expectError {
 				if err == nil {
@@ -435,7 +436,7 @@ func TestBuildRequestURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := buildRequestURL(tt.baseURL, tt.path, tt.parameters)
+			result := runner.BuildRequestURL(tt.baseURL, tt.path, tt.parameters)
 
 			if result != tt.expected {
 				t.Errorf("Expected %s, got %s", tt.expected, result)
@@ -453,7 +454,7 @@ func TestExecuteOpenAPIFunction(t *testing.T) {
 	}
 
 	// Create a minimal workflow runner for testing
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := runner.NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowTask,
@@ -471,7 +472,7 @@ func TestExecuteOpenAPIFunction(t *testing.T) {
 		},
 	}
 
-	_, err := runner.executeOpenAPIFunction("test-task", call, nil)
+	_, err := resumeableRunner.ExecuteOpenAPIFunction("test-task", call, nil)
 	if err == nil {
 		t.Errorf("Expected error for missing operationId")
 	}

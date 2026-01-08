@@ -1,4 +1,4 @@
-package runner
+package runner_test
 
 import (
 	"testing"
@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/thand-io/agent/sdk/workflows/config"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
+	"github.com/thand-io/agent/sdk/workflows/runner"
 )
 
 func TestExecuteEmitTask_NonTemporal(t *testing.T) {
@@ -17,7 +18,7 @@ func TestExecuteEmitTask_NonTemporal(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := runner.NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowTask,
@@ -39,12 +40,12 @@ func TestExecuteEmitTask_NonTemporal(t *testing.T) {
 	}
 
 	// Execute the emit task
-	result, err := runner.executeEmitTask("testEmit", emit, map[string]any{"test": "data"})
+	result, err := resumeableRunner.ExecuteEmitTask("testEmit", emit, map[string]any{"test": "data"})
 
 	// Should return error for non-temporal workflow
 	assert.Nil(t, result)
 	assert.Error(t, err)
-	assert.Equal(t, ErrorEmitUnsupported, err)
+	assert.Equal(t, runner.ErrorEmitUnsupported, err)
 }
 
 func TestCreateCloudEventFromEmit(t *testing.T) {
@@ -54,7 +55,7 @@ func TestCreateCloudEventFromEmit(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := runner.NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowTask,
@@ -87,7 +88,7 @@ func TestCreateCloudEventFromEmit(t *testing.T) {
 	input := map[string]any{"inputKey": "inputValue"}
 
 	// Create cloud event
-	event, err := runner.createCloudEventFromEmit(emit, input)
+	event, err := resumeableRunner.CreateCloudEventFromEmit(emit, input)
 
 	// Verify no error
 	assert.NoError(t, err)
@@ -120,7 +121,7 @@ func TestCreateCloudEventFromEmit_MissingRequiredFields(t *testing.T) {
 		WorkflowID: "test-workflow",
 	}
 
-	runner := NewesumableWorkflowRunner(
+	resumeableRunner := runner.NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowTask,
@@ -138,7 +139,7 @@ func TestCreateCloudEventFromEmit_MissingRequiredFields(t *testing.T) {
 		},
 	}
 
-	_, err := runner.createCloudEventFromEmit(emit, nil)
+	_, err := resumeableRunner.CreateCloudEventFromEmit(emit, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "source is required")
 
@@ -148,7 +149,7 @@ func TestCreateCloudEventFromEmit_MissingRequiredFields(t *testing.T) {
 	}
 	emit.Emit.Event.With.Type = ""
 
-	_, err = runner.createCloudEventFromEmit(emit, nil)
+	_, err = resumeableRunner.CreateCloudEventFromEmit(emit, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "type is required")
 }

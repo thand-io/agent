@@ -10,23 +10,23 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func (r *esumableWorkflowRunner) executeDoRunner(
+func (r *ResumableWorkflowRunner) executeDoRunner(
 	_ string, doTask *model.DoTask, input any) (any, error) {
 	return r.resumeTasks(doTask.Do, 0, input)
 }
 
-func (r *esumableWorkflowRunner) executeTaskList(
+func (r *ResumableWorkflowRunner) executeTaskList(
 	taskList *model.TaskList, input any) (any, error) {
 	return r.resumeTasks(taskList, 0, input)
 }
 
-func (d *esumableWorkflowRunner) resumeTaskList(
+func (d *ResumableWorkflowRunner) resumeTaskList(
 	taskList *model.TaskList, idx int, input any) (output any, err error) {
 	return d.resumeTasks(taskList, idx, input)
 }
 
 // runTasks runs all defined tasks sequentially.
-func (d *esumableWorkflowRunner) resumeTasks(
+func (d *ResumableWorkflowRunner) resumeTasks(
 	taskList *model.TaskList, idx int, input any) (output any, err error) {
 
 	if taskList == nil {
@@ -137,7 +137,7 @@ func (d *esumableWorkflowRunner) resumeTasks(
 }
 
 // runTask executes an individual task.
-func (d *esumableWorkflowRunner) runTaskItem(
+func (d *ResumableWorkflowRunner) runTaskItem(
 	task *model.TaskItem,
 	input any,
 ) (output any, err error) {
@@ -182,7 +182,7 @@ func (d *esumableWorkflowRunner) runTaskItem(
 
 	taskSupport.SetTaskRawOutput(output)
 
-	if output, err = d.processTaskOutput(task.GetBase(), output, taskName); err != nil {
+	if output, err = d.ProcessTaskOutput(task.GetBase(), output, taskName); err != nil {
 
 		log.WithFields(logrus.Fields{
 			"task": taskName,
@@ -191,7 +191,7 @@ func (d *esumableWorkflowRunner) runTaskItem(
 		return nil, err
 	}
 
-	if err = d.processTaskExport(task.GetBase(), output, taskName); err != nil {
+	if err = d.ProcessTaskExport(task.GetBase(), output, taskName); err != nil {
 
 		log.WithFields(logrus.Fields{
 			"task": taskName,
@@ -203,7 +203,7 @@ func (d *esumableWorkflowRunner) runTaskItem(
 	return output, nil
 }
 
-func (r *esumableWorkflowRunner) executeTask(
+func (r *ResumableWorkflowRunner) executeTask(
 	task *model.TaskItem,
 	input any,
 ) (any, error) {
@@ -216,7 +216,7 @@ func (r *esumableWorkflowRunner) executeTask(
 }
 
 // dispatchTaskExecution handles the actual task execution logic using a type-based dispatcher
-func (r *esumableWorkflowRunner) dispatchTaskExecution(
+func (r *ResumableWorkflowRunner) dispatchTaskExecution(
 	task *model.TaskItem,
 	input any,
 ) (any, error) {
@@ -229,17 +229,17 @@ func (r *esumableWorkflowRunner) dispatchTaskExecution(
 
 	switch t := task.Task.(type) {
 	case *model.CallFunction:
-		return r.executeCallFunction(taskName, task.AsCallFunctionTask(), input)
+		return r.ExecuteCallFunction(taskName, task.AsCallFunctionTask(), input)
 	case *model.CallHTTP:
 		return r.executeHttpFunction(taskName, task.AsCallHTTPTask(), input)
 	case *model.CallAsyncAPI:
 		return r.executeAsyncFunction(taskName, task.AsCallAsyncAPITask(), input)
 	case *model.CallOpenAPI:
-		return r.executeOpenAPIFunction(taskName, task.AsCallOpenAPITask(), input)
+		return r.ExecuteOpenAPIFunction(taskName, task.AsCallOpenAPITask(), input)
 	case *model.CallGRPC:
-		return r.executeGRPCFunction(taskName, task.AsCallGRPCTask(), input)
+		return r.ExecuteGRPCFunction(taskName, task.AsCallGRPCTask(), input)
 	case *model.SetTask:
-		return r.executeSetTask(taskName, task.AsSetTask(), input)
+		return r.ExecuteSetTask(taskName, task.AsSetTask(), input)
 	case *model.ForTask:
 		return r.executeForTask(taskName, task.AsForTask(), input)
 	case *model.TryTask:
@@ -251,7 +251,7 @@ func (r *esumableWorkflowRunner) dispatchTaskExecution(
 	case *model.RaiseTask:
 		return r.executeRaiseTask(taskName, task.AsRaiseTask(), input)
 	case *model.EmitTask:
-		return r.executeEmitTask(taskName, task.AsEmitTask(), input)
+		return r.ExecuteEmitTask(taskName, task.AsEmitTask(), input)
 	case *model.RunTask:
 		return r.executeRunTask(taskName, task.AsRunTask(), input)
 	case *model.ForkTask:
@@ -259,7 +259,7 @@ func (r *esumableWorkflowRunner) dispatchTaskExecution(
 	case *model.DoTask:
 		return r.executeDoRunner(taskName, task.AsDoTask(), input)
 	case *model.SwitchTask:
-		return r.executeSwitchTask(taskName, task.AsSwitchTask(), input)
+		return r.ExecuteSwitchTask(taskName, task.AsSwitchTask(), input)
 	default:
 		return nil, fmt.Errorf("unsupported task type %T", t)
 	}

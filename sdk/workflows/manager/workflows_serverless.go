@@ -274,7 +274,7 @@ func ResumeWorkflowTask(
 	}).Info("Resuming workflow")
 
 	// Create runner
-	runner := runner.NewesumableWorkflowRunner(
+	resumeableRunner := runner.NewResumableWorkflowRunner(
 		config.NewRunnerConfig(
 			cfg,
 			workflowTask,
@@ -282,7 +282,7 @@ func ResumeWorkflowTask(
 	)
 
 	// Resume from saved state
-	_, err = runner.Run(workflowTask.GetInput())
+	_, err = resumeableRunner.Run(workflowTask.GetInput())
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to resume workflow: %w", err)

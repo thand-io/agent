@@ -21,7 +21,7 @@ import (
 	"google.golang.org/protobuf/types/dynamicpb"
 )
 
-func (r *esumableWorkflowRunner) executeGRPCFunction(
+func (r *ResumableWorkflowRunner) ExecuteGRPCFunction(
 	taskName string,
 	call *model.CallGRPC,
 	input any,
@@ -95,14 +95,14 @@ func (r *esumableWorkflowRunner) executeGRPCFunction(
 func MakeGrpcRequest(grpcCall model.GRPCArguments, finalInput map[string]any) (any, error) {
 
 	// Step 1: Create gRPC connection
-	conn, err := createGRPCConnection(grpcCall.Service)
+	conn, err := CreateGRPCConnection(grpcCall.Service)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create gRPC connection: %w", err)
 	}
 	defer conn.Close()
 
 	// Step 2: Create context with authentication
-	ctx, err := createGRPCContext(grpcCall.Service.Authentication, grpcCall.Authentication)
+	ctx, err := CreateGRPCContext(grpcCall.Service.Authentication, grpcCall.Authentication)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create gRPC context: %w", err)
 	}
@@ -114,7 +114,7 @@ func MakeGrpcRequest(grpcCall model.GRPCArguments, finalInput map[string]any) (a
 	}
 
 	// Step 4: Build the request message dynamically
-	reqMsg, err := buildRequestMessage(methodDesc, finalInput)
+	reqMsg, err := BuildRequestMessage(methodDesc, finalInput)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build request message: %w", err)
 	}
@@ -126,7 +126,7 @@ func MakeGrpcRequest(grpcCall model.GRPCArguments, finalInput map[string]any) (a
 	}
 
 	// Step 6: Convert response to map
-	result, err := convertResponseToMap(respMsg)
+	result, err := ConvertResponseToMap(respMsg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert response: %w", err)
 	}
@@ -134,8 +134,8 @@ func MakeGrpcRequest(grpcCall model.GRPCArguments, finalInput map[string]any) (a
 	return result, nil
 }
 
-// createGRPCConnection establishes a connection to the gRPC service
-func createGRPCConnection(service model.GRPCService) (*grpc.ClientConn, error) {
+// CreateGRPCConnection establishes a connection to the gRPC service
+func CreateGRPCConnection(service model.GRPCService) (*grpc.ClientConn, error) {
 	address := fmt.Sprintf("%s:%d", service.Host, service.Port)
 
 	// Use insecure connection (can be enhanced to support TLS)
@@ -147,8 +147,8 @@ func createGRPCConnection(service model.GRPCService) (*grpc.ClientConn, error) {
 	return conn, nil
 }
 
-// createGRPCContext creates a context with authentication headers
-func createGRPCContext(serviceAuth, callAuth *model.ReferenceableAuthenticationPolicy) (context.Context, error) {
+// CreateGRPCContext creates a context with authentication headers
+func CreateGRPCContext(serviceAuth, callAuth *model.ReferenceableAuthenticationPolicy) (context.Context, error) {
 	ctx := context.Background()
 
 	// Prefer call-level authentication over service-level
@@ -306,8 +306,8 @@ func findMethodInService(svc protoreflect.ServiceDescriptor, methodName string) 
 	return nil
 }
 
-// buildRequestMessage builds a dynamic protobuf message from arguments
-func buildRequestMessage(
+// BuildRequestMessage builds a dynamic protobuf message from arguments
+func BuildRequestMessage(
 	methodDesc protoreflect.MethodDescriptor,
 	arguments map[string]any,
 ) (*dynamicpb.Message, error) {
@@ -356,8 +356,8 @@ func invokeGRPCMethod(ctx context.Context, conn *grpc.ClientConn, serviceDesc pr
 	return respMsg, nil
 }
 
-// convertResponseToMap converts a dynamic protobuf message to a map
-func convertResponseToMap(msg *dynamicpb.Message) (map[string]any, error) {
+// ConvertResponseToMap converts a dynamic protobuf message to a map
+func ConvertResponseToMap(msg *dynamicpb.Message) (map[string]any, error) {
 	if msg == nil {
 		return nil, nil
 	}

@@ -7,7 +7,7 @@ import (
 )
 
 // executeRaiseTask handles error raising
-func (r *esumableWorkflowRunner) executeRaiseTask(
+func (r *ResumableWorkflowRunner) executeRaiseTask(
 	taskName string,
 	raise *model.RaiseTask,
 	input any,
