@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -21,7 +22,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
-const AwsProviderName = "aws"
+const (
+	AwsProviderName                                = "aws"
+	awsProviderDeleteRoleAssignmentBackoffDuration = time.Duration(1)
+	awsProviderDeleteRoleAssignmentBackoffLimit    = 15
+)
 
 // awsProvider implements the ProviderImpl interface for AWS
 type awsProvider struct {
