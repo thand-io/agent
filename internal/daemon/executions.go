@@ -251,15 +251,6 @@ func (s *Server) getWorkflowExecutionState(c *gin.Context, workflowID string) (*
 
 	var workflowTask sdkWorkflowsModel.WorkflowTask
 
-	// Get the workflow DSL by name if available
-	foundWorkflow, err := s.GetConfig().GetWorkflowByName(workflowExecInfo.Workflow)
-
-	if err != nil {
-		logrus.WithError(err).Warn("Failed to get workflow definition")
-	} else {
-		workflowTask.Workflow = foundWorkflow.GetWorkflow()
-	}
-
 	// Create a timeout context for the query to avoid hanging requests
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -368,6 +359,16 @@ func (s *Server) getWorkflowExecutionState(c *gin.Context, workflowID string) (*
 
 	}
 
+	// Get the workflow DSL by name if available
+	foundWorkflow, err := s.GetConfig().GetWorkflowByName(workflowExecInfo.Workflow)
+
+	if err != nil {
+		logrus.WithError(err).Warn("Failed to get workflow definition")
+	} else {
+		workflowTask.Workflow = foundWorkflow.GetWorkflow()
+	}
+
+	// Prepare the page data
 	data := &ExecutionStatePageData{
 		TemplateData: s.GetTemplateData(c),
 		ExecutionStatePageResponse: ExecutionStatePageResponse{
