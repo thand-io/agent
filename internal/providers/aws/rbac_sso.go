@@ -508,12 +508,12 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models
 				"failureReason":   statusOutputFailureReason,
 			}).Errorf(
 				"account assignment deletion failed for principalId %s in account %s",
-				*statusOutput.AccountAssignmentDeletionStatus.PrincipalId,
+				*statusOutputPrincipalId,
 				targetAccountID,
 			)
 			return fmt.Errorf(
 				"account assignment deletion failed for principalId %s in account %s",
-				*statusOutput.AccountAssignmentDeletionStatus.PrincipalId,
+				*statusOutputPrincipalId,
 				targetAccountID,
 			)
 
