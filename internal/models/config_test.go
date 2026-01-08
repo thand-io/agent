@@ -1,21 +1,22 @@
-package models
+package models_test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/thand-io/agent/internal/models"
 )
 
 func TestCORSConfig_WithDefaults(t *testing.T) {
 	tests := []struct {
 		name     string
-		config   CORSConfig
-		expected CORSConfig
+		config   models.CORSConfig
+		expected models.CORSConfig
 	}{
 		{
 			name:   "empty config gets all defaults",
-			config: CORSConfig{},
-			expected: CORSConfig{
+			config: models.CORSConfig{},
+			expected: models.CORSConfig{
 				AllowedMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"},
 				AllowedHeaders: []string{
 					"Origin",
@@ -30,10 +31,10 @@ func TestCORSConfig_WithDefaults(t *testing.T) {
 		},
 		{
 			name: "existing AllowedMethods preserved",
-			config: CORSConfig{
+			config: models.CORSConfig{
 				AllowedMethods: []string{"GET", "POST"},
 			},
-			expected: CORSConfig{
+			expected: models.CORSConfig{
 				AllowedMethods: []string{"GET", "POST"},
 				AllowedHeaders: []string{
 					"Origin",
@@ -48,10 +49,10 @@ func TestCORSConfig_WithDefaults(t *testing.T) {
 		},
 		{
 			name: "existing AllowedHeaders preserved",
-			config: CORSConfig{
+			config: models.CORSConfig{
 				AllowedHeaders: []string{"Content-Type", "X-Custom-Header"},
 			},
-			expected: CORSConfig{
+			expected: models.CORSConfig{
 				AllowedMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"},
 				AllowedHeaders: []string{"Content-Type", "X-Custom-Header"},
 				MaxAge:         86400,
@@ -59,10 +60,10 @@ func TestCORSConfig_WithDefaults(t *testing.T) {
 		},
 		{
 			name: "existing MaxAge preserved",
-			config: CORSConfig{
+			config: models.CORSConfig{
 				MaxAge: 3600,
 			},
-			expected: CORSConfig{
+			expected: models.CORSConfig{
 				AllowedMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"},
 				AllowedHeaders: []string{
 					"Origin",
@@ -77,7 +78,7 @@ func TestCORSConfig_WithDefaults(t *testing.T) {
 		},
 		{
 			name: "all existing values preserved",
-			config: CORSConfig{
+			config: models.CORSConfig{
 				AllowedOrigins:   []string{"https://example.com"},
 				AllowedMethods:   []string{"GET"},
 				AllowedHeaders:   []string{"Authorization"},
@@ -85,7 +86,7 @@ func TestCORSConfig_WithDefaults(t *testing.T) {
 				AllowCredentials: true,
 				MaxAge:           7200,
 			},
-			expected: CORSConfig{
+			expected: models.CORSConfig{
 				AllowedOrigins:   []string{"https://example.com"},
 				AllowedMethods:   []string{"GET"},
 				AllowedHeaders:   []string{"Authorization"},
@@ -96,11 +97,11 @@ func TestCORSConfig_WithDefaults(t *testing.T) {
 		},
 		{
 			name: "AllowCredentials and ExposeHeaders not affected by defaults",
-			config: CORSConfig{
+			config: models.CORSConfig{
 				AllowCredentials: true,
 				ExposeHeaders:    []string{"X-Custom-Header"},
 			},
-			expected: CORSConfig{
+			expected: models.CORSConfig{
 				AllowedMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"},
 				AllowedHeaders: []string{
 					"Origin",
@@ -132,7 +133,7 @@ func TestCORSConfig_WithDefaults(t *testing.T) {
 }
 
 func TestCORSConfig_WithDefaults_DoesNotModifyOriginal(t *testing.T) {
-	original := CORSConfig{
+	original := models.CORSConfig{
 		AllowedOrigins: []string{"https://example.com"},
 	}
 
@@ -196,7 +197,7 @@ func TestCORSConfig_AddOrigins(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := CORSConfig{
+			config := models.CORSConfig{
 				AllowedOrigins: tt.initialOrigins,
 			}
 
@@ -208,7 +209,7 @@ func TestCORSConfig_AddOrigins(t *testing.T) {
 }
 
 func TestCORSConfig_AddOrigins_ModifiesInPlace(t *testing.T) {
-	config := CORSConfig{
+	config := models.CORSConfig{
 		AllowedOrigins: []string{"https://example.com"},
 	}
 

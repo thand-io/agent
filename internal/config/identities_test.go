@@ -1,4 +1,4 @@
-package config
+package config_test
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 )
 
@@ -142,10 +143,10 @@ func TestGetIdentity(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create config with mock providers
-			config := &Config{}
+			config := &config.Config{}
 
 			for name, mockProvider := range tt.providers {
-				config.providerInstances[name] = mockProvider
+				config.AddProvider(name, mockProvider)
 			}
 
 			// Call GetIdentity
@@ -174,7 +175,7 @@ func TestGetIdentitiesWithFilter(t *testing.T) {
 	tests := []struct {
 		name          string
 		user          *models.User
-		identityType  IdentityType
+		identityType  config.IdentityType
 		filter        []string
 		query         string
 		providers     map[string]*MockIdentityProvider
@@ -189,7 +190,7 @@ func TestGetIdentitiesWithFilter(t *testing.T) {
 				Email: "admin@example.com",
 				Name:  "Admin User",
 			},
-			identityType: IdentityTypeUser,
+			identityType: config.IdentityTypeUser,
 			filter:       nil,
 			providers: map[string]*MockIdentityProvider{
 				"gsuite": NewMockIdentityProvider("gsuite", []models.Identity{
@@ -223,7 +224,7 @@ func TestGetIdentitiesWithFilter(t *testing.T) {
 				Email: "admin@example.com",
 				Name:  "Admin User",
 			},
-			identityType: IdentityTypeUser,
+			identityType: config.IdentityTypeUser,
 			filter:       []string{"john"},
 			providers: map[string]*MockIdentityProvider{
 				"gsuite": NewMockIdentityProvider("gsuite", []models.Identity{
@@ -257,7 +258,7 @@ func TestGetIdentitiesWithFilter(t *testing.T) {
 				Email: "admin@example.com",
 				Name:  "Admin User",
 			},
-			identityType: IdentityTypeGroup,
+			identityType: config.IdentityTypeGroup,
 			filter:       nil,
 			providers: map[string]*MockIdentityProvider{
 				"gsuite": NewMockIdentityProvider("gsuite", []models.Identity{
@@ -297,7 +298,7 @@ func TestGetIdentitiesWithFilter(t *testing.T) {
 				Email: "admin@example.com",
 				Name:  "Admin User",
 			},
-			identityType: IdentityTypeAll,
+			identityType: config.IdentityTypeAll,
 			filter:       nil,
 			providers: map[string]*MockIdentityProvider{
 				"gsuite": NewMockIdentityProvider("gsuite", []models.Identity{
@@ -333,7 +334,7 @@ func TestGetIdentitiesWithFilter(t *testing.T) {
 				Email: "admin@example.com",
 				Name:  "Admin User",
 			},
-			identityType: IdentityTypeUser,
+			identityType: config.IdentityTypeUser,
 			filter:       nil,
 			providers: map[string]*MockIdentityProvider{
 				"gsuite": NewMockIdentityProvider("gsuite", []models.Identity{
@@ -369,7 +370,7 @@ func TestGetIdentitiesWithFilter(t *testing.T) {
 				Email: "admin@example.com",
 				Name:  "Admin User",
 			},
-			identityType:  IdentityTypeUser,
+			identityType:  config.IdentityTypeUser,
 			filter:        nil,
 			providers:     map[string]*MockIdentityProvider{},
 			expectedCount: 1,
@@ -382,7 +383,7 @@ func TestGetIdentitiesWithFilter(t *testing.T) {
 				Email: "admin@example.com",
 				Name:  "Admin User",
 			},
-			identityType:  IdentityTypeUser,
+			identityType:  config.IdentityTypeUser,
 			filter:        []string{"admin"},
 			providers:     map[string]*MockIdentityProvider{},
 			expectedCount: 1,
@@ -395,7 +396,7 @@ func TestGetIdentitiesWithFilter(t *testing.T) {
 				Email: "admin@example.com",
 				Name:  "Admin User",
 			},
-			identityType:  IdentityTypeUser,
+			identityType:  config.IdentityTypeUser,
 			filter:        []string{"john"},
 			providers:     map[string]*MockIdentityProvider{},
 			expectedCount: 0,
@@ -408,7 +409,7 @@ func TestGetIdentitiesWithFilter(t *testing.T) {
 				Email: "admin@example.com",
 				Name:  "Admin User",
 			},
-			identityType: IdentityTypeGroup,
+			identityType: config.IdentityTypeGroup,
 			filter:       []string{"developers"},
 			query:        "developers",
 			providers: map[string]*MockIdentityProvider{
@@ -440,10 +441,10 @@ func TestGetIdentitiesWithFilter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create config with mock providers
-			config := &Config{}
+			config := &config.Config{}
 
 			for name, mockProvider := range tt.providers {
-				config.providerInstances[name] = mockProvider
+				config.AddProvider(name, mockProvider)
 			}
 
 			// Call GetIdentitiesWithFilter
@@ -549,33 +550,20 @@ func TestGetIdentitiesWithFilter_ConcurrentProviders(t *testing.T) {
 		name:                 "provider3",
 	}
 
-	config := &Config{
-		Providers: ProviderConfig{
-			Definitions: make(map[string]models.Provider),
-		},
-	}
+	cfg := &config.Config{}
 
 	// Register providers
 	// Note: We can't easily iterate map here because we need specific spy instances
-
-	prov1 := models.Provider{Name: "provider1", Description: "Test provider", Provider: "mock", Enabled: true}
-	prov1.SetClient(provider1)
-	config.providerInstances["provider1"] = prov1
-
-	prov2 := models.Provider{Name: "provider2", Description: "Test provider", Provider: "mock", Enabled: true}
-	prov2.SetClient(provider2)
-	config.providerInstances["provider2"] = prov2
-
-	prov3 := models.Provider{Name: "provider3", Description: "Test provider", Provider: "mock", Enabled: true}
-	prov3.SetClient(provider3)
-	config.providerInstances["provider3"] = prov3
+	cfg.AddProvider("provider1", provider1)
+	cfg.AddProvider("provider2", provider2)
+	cfg.AddProvider("provider3", provider3)
 
 	user := &models.User{
 		Email: "admin@example.com",
 		Name:  "Admin",
 	}
 
-	results, err := config.GetIdentitiesWithFilter(user, IdentityTypeUser, nil)
+	results, err := cfg.GetIdentitiesWithFilter(user, config.IdentityTypeUser, nil)
 	require.NoError(t, err)
 
 	// All 3 providers should have been called
@@ -599,18 +587,15 @@ func TestGetIdentitiesWithFilter_ProviderError(t *testing.T) {
 	p1 := NewMockIdentityProvider("provider1", []models.Identity{})
 	provider1 := &ErrorIdentityProvider{MockIdentityProvider: p1}
 
-	config := &Config{
-		providerInstances: make(map[string]models.Provider),
-	}
+	cfg := &config.Config{}
 
-	config.providerInstances["provider1"] = provider1
-
+	cfg.AddProvider("provider1", provider1)
 	user := &models.User{
 		Email: "admin@example.com",
 		Name:  "Admin",
 	}
 
-	results, err := config.GetIdentitiesWithFilter(user, IdentityTypeUser, nil)
+	results, err := cfg.GetIdentitiesWithFilter(user, config.IdentityTypeUser, nil)
 	require.NoError(t, err)
 	assert.Len(t, results, 1)
 	assert.Equal(t, user.Email, results[0].Result.ID)
@@ -653,20 +638,8 @@ func TestGetIdentitiesWithFilter_MixedUserAndGroup(t *testing.T) {
 		},
 	})
 
-	config := &Config{
-		Providers: ProviderConfig{
-			Definitions: make(map[string]models.Provider),
-		},
-	}
-
-	p := models.Provider{
-		Name:        "mixed",
-		Description: "Test provider",
-		Provider:    "mock",
-		Enabled:     true,
-	}
-	p.SetClient(provider)
-	config.Providers.Definitions["mixed"] = p
+	cfg := &config.Config{}
+	cfg.AddProvider("mixed", provider)
 
 	user := &models.User{
 		Email: "admin@example.com",
@@ -674,7 +647,7 @@ func TestGetIdentitiesWithFilter_MixedUserAndGroup(t *testing.T) {
 	}
 
 	t.Run("filter by IdentityTypeUser", func(t *testing.T) {
-		results, err := config.GetIdentitiesWithFilter(user, IdentityTypeUser, nil)
+		results, err := cfg.GetIdentitiesWithFilter(user, config.IdentityTypeUser, nil)
 		require.NoError(t, err)
 		assert.Len(t, results, 2)
 		for _, r := range results {
@@ -684,7 +657,7 @@ func TestGetIdentitiesWithFilter_MixedUserAndGroup(t *testing.T) {
 	})
 
 	t.Run("filter by IdentityTypeGroup", func(t *testing.T) {
-		results, err := config.GetIdentitiesWithFilter(user, IdentityTypeGroup, nil)
+		results, err := cfg.GetIdentitiesWithFilter(user, config.IdentityTypeGroup, nil)
 		require.NoError(t, err)
 		assert.Len(t, results, 2)
 		for _, r := range results {
@@ -694,7 +667,7 @@ func TestGetIdentitiesWithFilter_MixedUserAndGroup(t *testing.T) {
 	})
 
 	t.Run("filter by IdentityTypeAll", func(t *testing.T) {
-		results, err := config.GetIdentitiesWithFilter(user, IdentityTypeAll, nil)
+		results, err := cfg.GetIdentitiesWithFilter(user, config.IdentityTypeAll, nil)
 		require.NoError(t, err)
 		assert.Len(t, results, 4)
 	})
@@ -702,11 +675,7 @@ func TestGetIdentitiesWithFilter_MixedUserAndGroup(t *testing.T) {
 
 // TestGetIdentity_EmailParsing tests that email parsing extracts username correctly
 func TestGetIdentity_EmailParsing(t *testing.T) {
-	config := &Config{
-		Providers: ProviderConfig{
-			Definitions: make(map[string]models.Provider),
-		},
-	}
+	config := &config.Config{}
 
 	// No providers configured - should return error
 	_, err := config.GetIdentity("john.doe@example.com")
@@ -716,11 +685,7 @@ func TestGetIdentity_EmailParsing(t *testing.T) {
 
 // TestGetIdentity_NonEmail tests identity lookup for non-email identities
 func TestGetIdentity_NonEmail(t *testing.T) {
-	config := &Config{
-		Providers: ProviderConfig{
-			Definitions: make(map[string]models.Provider),
-		},
-	}
+	config := &config.Config{}
 
 	// No providers configured - should return error
 	_, err := config.GetIdentity("johndoe")
@@ -872,21 +837,10 @@ func TestGetIdentitiesWithFilter_DeduplicationAcrossProviders(t *testing.T) {
 		}),
 	}
 
-	config := &Config{
-		Providers: ProviderConfig{
-			Definitions: make(map[string]models.Provider),
-		},
-	}
+	cfg := &config.Config{}
 
 	for name, mockProvider := range providers {
-		provider := models.Provider{
-			Name:        name,
-			Description: "Test provider",
-			Provider:    "mock",
-			Enabled:     true,
-		}
-		provider.SetClient(mockProvider)
-		config.Providers.Definitions[name] = provider
+		cfg.AddProvider(name, mockProvider)
 	}
 
 	user := &models.User{
@@ -894,7 +848,7 @@ func TestGetIdentitiesWithFilter_DeduplicationAcrossProviders(t *testing.T) {
 		Name:  "Admin",
 	}
 
-	results, err := config.GetIdentitiesWithFilter(user, IdentityTypeUser, nil)
+	results, err := cfg.GetIdentitiesWithFilter(user, config.IdentityTypeUser, nil)
 	require.NoError(t, err)
 
 	// Should have 4 unique identities: shared@example.com + 3 unique ones
@@ -932,21 +886,10 @@ func TestGetIdentitiesWithFilter_CurrentUserFallback(t *testing.T) {
 		// Provider returns no results
 		provider := NewMockIdentityProvider("test", []models.Identity{})
 
-		config := &Config{
-			Providers: ProviderConfig{
-				Definitions: make(map[string]models.Provider),
-			},
-		}
-		p := models.Provider{
-			Name:        "test",
-			Description: "Test provider",
-			Provider:    "mock",
-			Enabled:     true,
-		}
-		p.SetClient(provider)
-		config.Providers.Definitions["test"] = p
+		cfg := &config.Config{}
+		cfg.AddProvider("test", provider)
 
-		results, err := config.GetIdentitiesWithFilter(currentUser, IdentityTypeUser, nil)
+		results, err := cfg.GetIdentitiesWithFilter(currentUser, config.IdentityTypeUser, nil)
 		require.NoError(t, err)
 
 		// Should return current user as fallback
@@ -958,21 +901,10 @@ func TestGetIdentitiesWithFilter_CurrentUserFallback(t *testing.T) {
 		// Provider returns no results
 		provider := NewMockIdentityProvider("test", []models.Identity{})
 
-		config := &Config{
-			Providers: ProviderConfig{
-				Definitions: make(map[string]models.Provider),
-			},
-		}
-		p := models.Provider{
-			Name:        "test",
-			Description: "Test provider",
-			Provider:    "mock",
-			Enabled:     true,
-		}
-		p.SetClient(provider)
-		config.Providers.Definitions["test"] = p
+		cfg := &config.Config{}
+		cfg.AddProvider("test", provider)
 
-		results, err := config.GetIdentitiesWithFilter(currentUser, IdentityTypeAll, nil)
+		results, err := cfg.GetIdentitiesWithFilter(currentUser, config.IdentityTypeAll, nil)
 		require.NoError(t, err)
 
 		// Should return current user as fallback
@@ -992,21 +924,10 @@ func TestGetIdentitiesWithFilter_CurrentUserFallback(t *testing.T) {
 			},
 		})
 
-		config := &Config{
-			Providers: ProviderConfig{
-				Definitions: make(map[string]models.Provider),
-			},
-		}
-		p := models.Provider{
-			Name:        "test",
-			Description: "Test provider",
-			Provider:    "mock",
-			Enabled:     true,
-		}
-		p.SetClient(provider)
-		config.Providers.Definitions["test"] = p
+		cfg := &config.Config{}
+		cfg.AddProvider("test", provider)
 
-		results, err := config.GetIdentitiesWithFilter(currentUser, IdentityTypeUser, nil)
+		results, err := cfg.GetIdentitiesWithFilter(currentUser, config.IdentityTypeUser, nil)
 		require.NoError(t, err)
 
 		// Should only have the provider result, not current user
@@ -1017,21 +938,10 @@ func TestGetIdentitiesWithFilter_CurrentUserFallback(t *testing.T) {
 	t.Run("user NOT returned when IdentityTypeGroup even with empty results", func(t *testing.T) {
 		provider := NewMockIdentityProvider("test", []models.Identity{})
 
-		config := &Config{
-			Providers: ProviderConfig{
-				Definitions: make(map[string]models.Provider),
-			},
-		}
-		p := models.Provider{
-			Name:        "test",
-			Description: "Test provider",
-			Provider:    "mock",
-			Enabled:     true,
-		}
-		p.SetClient(provider)
-		config.Providers.Definitions["test"] = p
+		cfg := &config.Config{}
+		cfg.AddProvider("test", provider)
 
-		results, err := config.GetIdentitiesWithFilter(currentUser, IdentityTypeGroup, nil)
+		results, err := cfg.GetIdentitiesWithFilter(currentUser, config.IdentityTypeGroup, nil)
 		require.NoError(t, err)
 
 		// Should be empty, not the current user
@@ -1041,21 +951,10 @@ func TestGetIdentitiesWithFilter_CurrentUserFallback(t *testing.T) {
 	t.Run("user NOT returned when filter is provided even with empty results", func(t *testing.T) {
 		provider := NewMockIdentityProvider("test", []models.Identity{})
 
-		config := &Config{
-			Providers: ProviderConfig{
-				Definitions: make(map[string]models.Provider),
-			},
-		}
-		p := models.Provider{
-			Name:        "test",
-			Description: "Test provider",
-			Provider:    "mock",
-			Enabled:     true,
-		}
-		p.SetClient(provider)
-		config.Providers.Definitions["test"] = p
+		cfg := &config.Config{}
+		cfg.AddProvider("test", provider)
 
-		results, err := config.GetIdentitiesWithFilter(currentUser, IdentityTypeUser, &models.SearchRequest{Terms: []string{"nonexistent"}})
+		results, err := cfg.GetIdentitiesWithFilter(currentUser, config.IdentityTypeUser, &models.SearchRequest{Terms: []string{"nonexistent"}})
 		require.NoError(t, err)
 
 		// Should be empty because filter was provided
@@ -1065,22 +964,11 @@ func TestGetIdentitiesWithFilter_CurrentUserFallback(t *testing.T) {
 	t.Run("user returned when filter is empty string", func(t *testing.T) {
 		provider := NewMockIdentityProvider("test", []models.Identity{})
 
-		config := &Config{
-			Providers: ProviderConfig{
-				Definitions: make(map[string]models.Provider),
-			},
-		}
-		p := models.Provider{
-			Name:        "test",
-			Description: "Test provider",
-			Provider:    "mock",
-			Enabled:     true,
-		}
-		p.SetClient(provider)
-		config.Providers.Definitions["test"] = p
+		cfg := &config.Config{}
+		cfg.AddProvider("test", provider)
 
 		// Pass an empty string as filter - this simulates ?q= in the URL
-		results, err := config.GetIdentitiesWithFilter(currentUser, IdentityTypeUser, &models.SearchRequest{Terms: []string{""}})
+		results, err := cfg.GetIdentitiesWithFilter(currentUser, config.IdentityTypeUser, &models.SearchRequest{Terms: []string{""}})
 		require.NoError(t, err)
 
 		// Should return current user as fallback because "" filter should be ignored
@@ -1091,22 +979,11 @@ func TestGetIdentitiesWithFilter_CurrentUserFallback(t *testing.T) {
 	t.Run("nil user - no fallback, empty results", func(t *testing.T) {
 		provider := NewMockIdentityProvider("test", []models.Identity{})
 
-		config := &Config{
-			Providers: ProviderConfig{
-				Definitions: make(map[string]models.Provider),
-			},
-		}
-		p := models.Provider{
-			Name:        "test",
-			Description: "Test provider",
-			Provider:    "mock",
-			Enabled:     true,
-		}
-		p.SetClient(provider)
-		config.Providers.Definitions["test"] = p
+		cfg := &config.Config{}
+		cfg.AddProvider("test", provider)
 
 		// This should not panic and should return empty
-		results, err := config.GetIdentitiesWithFilter(nil, IdentityTypeUser, nil)
+		results, err := cfg.GetIdentitiesWithFilter(nil, config.IdentityTypeUser, nil)
 		require.NoError(t, err)
 		assert.Len(t, results, 0)
 	})
@@ -1132,21 +1009,10 @@ func BenchmarkGetIdentitiesWithFilter_MultipleProviders(b *testing.B) {
 		providers[fmt.Sprintf("provider%d", i)] = NewMockIdentityProvider(fmt.Sprintf("provider%d", i), identities)
 	}
 
-	config := &Config{
-		Providers: ProviderConfig{
-			Definitions: make(map[string]models.Provider),
-		},
-	}
+	cfg := &config.Config{}
 
 	for name, mockProvider := range providers {
-		provider := models.Provider{
-			Name:        name,
-			Description: "Test provider",
-			Provider:    "mock",
-			Enabled:     true,
-		}
-		provider.SetClient(mockProvider)
-		config.Providers.Definitions[name] = provider
+		cfg.AddProvider(name, mockProvider)
 	}
 
 	user := &models.User{
@@ -1156,7 +1022,7 @@ func BenchmarkGetIdentitiesWithFilter_MultipleProviders(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := config.GetIdentitiesWithFilter(user, IdentityTypeUser, nil)
+		_, err := cfg.GetIdentitiesWithFilter(user, config.IdentityTypeUser, nil)
 		if err != nil {
 			b.Fatal(err)
 		}

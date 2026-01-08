@@ -1,20 +1,21 @@
-package models
+package models_test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/thand-io/agent/internal/models"
 )
 
 func TestGroup_String(t *testing.T) {
 	tests := []struct {
 		name     string
-		group    Group
+		group    models.Group
 		expected string
 	}{
 		{
 			name: "Name and Email",
-			group: Group{
+			group: models.Group{
 				Name:  "Admins",
 				Email: "admins@example.com",
 			},
@@ -22,21 +23,21 @@ func TestGroup_String(t *testing.T) {
 		},
 		{
 			name: "Name only",
-			group: Group{
+			group: models.Group{
 				Name: "Admins",
 			},
 			expected: "Admins",
 		},
 		{
 			name: "Email only",
-			group: Group{
+			group: models.Group{
 				Email: "admins@example.com",
 			},
 			expected: "admins@example.com",
 		},
 		{
 			name:     "Empty",
-			group:    Group{},
+			group:    models.Group{},
 			expected: "",
 		},
 	}
@@ -51,108 +52,108 @@ func TestGroup_String(t *testing.T) {
 func TestGroup_Equals(t *testing.T) {
 	tests := []struct {
 		name     string
-		group1   Group
-		group2   *Group
+		group1   models.Group
+		group2   *models.Group
 		expected bool
 	}{
 		{
 			name: "Same ID",
-			group1: Group{
+			group1: models.Group{
 				ID: "123",
 			},
-			group2: &Group{
+			group2: &models.Group{
 				ID: "123",
 			},
 			expected: true,
 		},
 		{
 			name: "Different ID",
-			group1: Group{
+			group1: models.Group{
 				ID: "123",
 			},
-			group2: &Group{
+			group2: &models.Group{
 				ID: "456",
 			},
 			expected: false,
 		},
 		{
 			name: "Same Name",
-			group1: Group{
+			group1: models.Group{
 				Name: "Admins",
 			},
-			group2: &Group{
+			group2: &models.Group{
 				Name: "Admins",
 			},
 			expected: true,
 		},
 		{
 			name: "Same Name Case Insensitive",
-			group1: Group{
+			group1: models.Group{
 				Name: "Admins",
 			},
-			group2: &Group{
+			group2: &models.Group{
 				Name: "ADMINS",
 			},
 			expected: true,
 		},
 		{
 			name: "Different Name",
-			group1: Group{
+			group1: models.Group{
 				Name: "Admins",
 			},
-			group2: &Group{
+			group2: &models.Group{
 				Name: "Users",
 			},
 			expected: false,
 		},
 		{
 			name: "Same Email",
-			group1: Group{
+			group1: models.Group{
 				Email: "admins@example.com",
 			},
-			group2: &Group{
+			group2: &models.Group{
 				Email: "admins@example.com",
 			},
 			expected: true,
 		},
 		{
 			name: "Same Email Case Insensitive",
-			group1: Group{
+			group1: models.Group{
 				Email: "admins@example.com",
 			},
-			group2: &Group{
+			group2: &models.Group{
 				Email: "ADMINS@EXAMPLE.COM",
 			},
 			expected: true,
 		},
 		{
 			name: "Different Email",
-			group1: Group{
+			group1: models.Group{
 				Email: "admins@example.com",
 			},
-			group2: &Group{
+			group2: &models.Group{
 				Email: "users@example.com",
 			},
 			expected: false,
 		},
 		{
 			name: "ID and Email vs Email only",
-			group1: Group{
+			group1: models.Group{
 				ID:    "123",
 				Email: "admins@example.com",
 			},
-			group2: &Group{
+			group2: &models.Group{
 				Email: "admins@example.com",
 			},
 			expected: true,
 		},
 		{
 			name: "Different IDs but same Name",
-			group1: Group{
+			group1: models.Group{
 				ID:   "123",
 				Name: "Admins",
 			},
-			group2: &Group{
+			group2: &models.Group{
 				ID:   "456",
 				Name: "Admins",
 			},
@@ -160,11 +161,11 @@ func TestGroup_Equals(t *testing.T) {
 		},
 		{
 			name: "Different IDs but same Email",
-			group1: Group{
+			group1: models.Group{
 				ID:    "123",
 				Email: "admins@example.com",
 			},
-			group2: &Group{
+			group2: &models.Group{
 				ID:    "456",
 				Email: "admins@example.com",
 			},
@@ -172,12 +173,12 @@ func TestGroup_Equals(t *testing.T) {
 		},
 		{
 			name: "Different IDs and Names but same Email",
-			group1: Group{
+			group1: models.Group{
 				ID:    "123",
 				Name:  "Admins",
 				Email: "admins@example.com",
 			},
-			group2: &Group{
+			group2: &models.Group{
 				ID:    "456",
 				Name:  "Users",
 				Email: "admins@example.com",
@@ -186,12 +187,12 @@ func TestGroup_Equals(t *testing.T) {
 		},
 		{
 			name: "All different fields",
-			group1: Group{
+			group1: models.Group{
 				ID:    "123",
 				Name:  "Admins",
 				Email: "admins@example.com",
 			},
-			group2: &Group{
+			group2: &models.Group{
 				ID:    "456",
 				Name:  "Users",
 				Email: "users@example.com",
@@ -200,7 +201,7 @@ func TestGroup_Equals(t *testing.T) {
 		},
 		{
 			name:     "Nil Other",
-			group1:   Group{},
+			group1:   models.Group{},
 			group2:   nil,
 			expected: false,
 		},
@@ -214,16 +215,16 @@ func TestGroup_Equals(t *testing.T) {
 }
 
 func TestGroup_GetID(t *testing.T) {
-	group := Group{ID: "123"}
+	group := models.Group{ID: "123"}
 	assert.Equal(t, "123", group.GetID())
 }
 
 func TestGroup_GetName(t *testing.T) {
-	group := Group{Name: "Admins"}
+	group := models.Group{Name: "Admins"}
 	assert.Equal(t, "Admins", group.GetName())
 }
 
 func TestGroup_GetEmail(t *testing.T) {
-	group := Group{Email: "admins@example.com"}
+	group := models.Group{Email: "admins@example.com"}
 	assert.Equal(t, "admins@example.com", group.GetEmail())
 }

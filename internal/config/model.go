@@ -156,6 +156,25 @@ func (c *Config) GetProviderByName(name string) (models.Provider, error) {
 	return nil, fmt.Errorf("provider not found: %s", name)
 }
 
+func (c *Config) HasProvider(name string) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	_, exists := c.providerInstances[name]
+	return exists
+}
+
+func (c *Config) AddProvider(name string, provider models.Provider) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.providerInstances == nil {
+		c.providerInstances = make(map[string]models.Provider)
+	}
+
+	c.providerInstances[name] = provider
+}
+
 func (c *Config) GetProvidersByCapability(capability ...models.ProviderCapability) map[string]models.Provider {
 	return c.GetProvidersByCapabilityWithUser(nil, capability...)
 }

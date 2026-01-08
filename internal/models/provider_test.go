@@ -1,4 +1,4 @@
-package models
+package models_test
 
 import (
 	"testing"
@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/thand-io/agent/internal/interpolate"
+	"github.com/thand-io/agent/internal/models"
 )
 
 // TestProvider_ResolveConfig_WithEnvVars tests the config resolution using
@@ -13,14 +14,14 @@ import (
 func TestProvider_ResolveConfig_WithEnvVars(t *testing.T) {
 	tests := []struct {
 		name           string
-		config         BasicConfig
+		config         models.BasicConfig
 		envVars        map[string]string
 		expectedConfig map[string]any
 		expectError    bool
 	}{
 		{
 			name: "simple env var access",
-			config: BasicConfig{
+			config: models.BasicConfig{
 				"region":     "${ .AWS_REGION }",
 				"account_id": "123456789012",
 			},
@@ -35,7 +36,7 @@ func TestProvider_ResolveConfig_WithEnvVars(t *testing.T) {
 		},
 		{
 			name: "multiple env vars",
-			config: BasicConfig{
+			config: models.BasicConfig{
 				"region":     "${ .AWS_REGION }",
 				"account_id": "${ .AWS_ACCOUNT_ID }",
 				"role_arn":   "${ .AWS_ROLE_ARN }",
@@ -54,7 +55,7 @@ func TestProvider_ResolveConfig_WithEnvVars(t *testing.T) {
 		},
 		{
 			name: "env var with default value",
-			config: BasicConfig{
+			config: models.BasicConfig{
 				"region": "${ .UNDEFINED_VAR // \"default-region\" }",
 			},
 			envVars: map[string]string{},
@@ -65,7 +66,7 @@ func TestProvider_ResolveConfig_WithEnvVars(t *testing.T) {
 		},
 		{
 			name: "env var string concatenation",
-			config: BasicConfig{
+			config: models.BasicConfig{
 				"arn": "${ \"arn:aws:iam::\" + .AWS_ACCOUNT + \":role/\" + .AWS_ROLE }",
 			},
 			envVars: map[string]string{
@@ -79,7 +80,7 @@ func TestProvider_ResolveConfig_WithEnvVars(t *testing.T) {
 		},
 		{
 			name: "env var in nested config",
-			config: BasicConfig{
+			config: models.BasicConfig{
 				"cluster_name": "${ .K8S_CLUSTER }",
 				"auth": map[string]any{
 					"token":    "${ .K8S_TOKEN }",
@@ -102,7 +103,7 @@ func TestProvider_ResolveConfig_WithEnvVars(t *testing.T) {
 		},
 		{
 			name: "env var conditional expression",
-			config: BasicConfig{
+			config: models.BasicConfig{
 				"env_type": "${ if .IS_PROD == \"true\" then \"production\" else \"development\" end }",
 			},
 			envVars: map[string]string{
@@ -115,7 +116,7 @@ func TestProvider_ResolveConfig_WithEnvVars(t *testing.T) {
 		},
 		{
 			name: "env var conditional false case",
-			config: BasicConfig{
+			config: models.BasicConfig{
 				"env_type": "${ if .IS_PROD == \"true\" then \"production\" else \"development\" end }",
 			},
 			envVars: map[string]string{
@@ -128,7 +129,7 @@ func TestProvider_ResolveConfig_WithEnvVars(t *testing.T) {
 		},
 		{
 			name: "env var in array",
-			config: BasicConfig{
+			config: models.BasicConfig{
 				"hosts": []any{
 					"${ .HOST1 }",
 					"${ .HOST2 }",
@@ -148,7 +149,7 @@ func TestProvider_ResolveConfig_WithEnvVars(t *testing.T) {
 		},
 		{
 			name: "mixed static and env var values",
-			config: BasicConfig{
+			config: models.BasicConfig{
 				"subscription_id": "${ .AZURE_SUBSCRIPTION_ID }",
 				"resource_group":  "my-resource-group",
 				"location":        "eastus",
@@ -165,7 +166,7 @@ func TestProvider_ResolveConfig_WithEnvVars(t *testing.T) {
 		},
 		{
 			name: "deeply nested config with env var",
-			config: BasicConfig{
+			config: models.BasicConfig{
 				"level1": map[string]any{
 					"level2": map[string]any{
 						"level3": map[string]any{
@@ -222,14 +223,14 @@ func TestProvider_ResolveConfig_WithEnvVars(t *testing.T) {
 func TestProvider_ResolveConfig_WithInput(t *testing.T) {
 	tests := []struct {
 		name           string
-		config         BasicConfig
+		config         models.BasicConfig
 		input          map[string]any
 		expectedConfig map[string]any
 		expectError    bool
 	}{
 		{
 			name: "simple input access",
-			config: BasicConfig{
+			config: models.BasicConfig{
 				"region": "${ .aws_region }",
 			},
 			input: map[string]any{
@@ -242,7 +243,7 @@ func TestProvider_ResolveConfig_WithInput(t *testing.T) {
 		},
 		{
 			name: "nested input object access",
-			config: BasicConfig{
+			config: models.BasicConfig{
 				"db_host": "${ .database.host }",
 				"db_port": "${ .database.port }",
 			},
@@ -260,7 +261,7 @@ func TestProvider_ResolveConfig_WithInput(t *testing.T) {
 		},
 		{
 			name: "integer value from input",
-			config: BasicConfig{
+			config: models.BasicConfig{
 				"port": "${ .port }",
 			},
 			input: map[string]any{
@@ -273,7 +274,7 @@ func TestProvider_ResolveConfig_WithInput(t *testing.T) {
 		},
 		{
 			name: "boolean value from input",
-			config: BasicConfig{
+			config: models.BasicConfig{
 				"enabled": "${ .enabled }",
 			},
 			input: map[string]any{
@@ -333,7 +334,7 @@ func assertConfigEqual(t *testing.T, expected, actual map[string]any) {
 
 // TestProvider_ResolveConfig_NilConfig tests handling of nil config
 func TestProvider_ResolveConfig_NilConfig(t *testing.T) {
-	provider := Provider{
+	provider := models.ProviderConfig{
 		Name:     "nil-config-provider",
 		Provider: "test",
 		Config:   nil,
@@ -351,10 +352,10 @@ func TestProvider_ResolveConfig_NilConfig(t *testing.T) {
 
 // TestProvider_ResolveConfig_UpdatesConfig verifies that ResolveConfig updates the provider's config in place
 func TestProvider_ResolveConfig_UpdatesConfig(t *testing.T) {
-	config := BasicConfig{
+	config := models.BasicConfig{
 		"value": "${ .my_var }",
 	}
-	provider := Provider{
+	provider := models.ProviderConfig{
 		Name:     "update-test-provider",
 		Provider: "test",
 		Config:   &config,
@@ -383,13 +384,13 @@ func TestProvider_ResolveConfig_UpdatesConfig(t *testing.T) {
 func TestProvider_ResolveConfig_ErrorCases(t *testing.T) {
 	tests := []struct {
 		name        string
-		config      BasicConfig
+		config      models.BasicConfig
 		input       map[string]any
 		expectError bool
 	}{
 		{
 			name: "invalid jq expression",
-			config: BasicConfig{
+			config: models.BasicConfig{
 				"value": "${ invalid syntax here }",
 			},
 			input:       map[string]any{},
@@ -413,7 +414,7 @@ func TestProvider_ResolveConfig_ErrorCases(t *testing.T) {
 // TestProvider_BasicConfigMethods tests BasicConfig helper methods used by ResolveConfig
 func TestProvider_BasicConfigMethods(t *testing.T) {
 	t.Run("AsMap returns copy of config", func(t *testing.T) {
-		config := BasicConfig{
+		config := models.BasicConfig{
 			"key1": "value1",
 			"key2": 123,
 		}
@@ -424,14 +425,14 @@ func TestProvider_BasicConfigMethods(t *testing.T) {
 	})
 
 	t.Run("AsMap on nil returns empty map", func(t *testing.T) {
-		var config *BasicConfig = nil
+		var config *models.BasicConfig = nil
 		result := config.AsMap()
 		assert.NotNil(t, result)
 		assert.Empty(t, result)
 	})
 
 	t.Run("Update merges values", func(t *testing.T) {
-		config := BasicConfig{
+		config := models.BasicConfig{
 			"key1": "original",
 			"key2": "keep",
 		}
@@ -447,7 +448,7 @@ func TestProvider_BasicConfigMethods(t *testing.T) {
 	})
 
 	t.Run("GetString returns string value", func(t *testing.T) {
-		config := BasicConfig{
+		config := models.BasicConfig{
 			"string_key": "hello",
 			"int_key":    123,
 		}

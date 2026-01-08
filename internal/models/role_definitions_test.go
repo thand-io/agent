@@ -1,4 +1,4 @@
-package models
+package models_test
 
 import (
 	"encoding/json"
@@ -7,6 +7,7 @@ import (
 	"github.com/hashicorp/go-version"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/thand-io/agent/internal/models"
 	"gopkg.in/yaml.v3"
 )
 
@@ -18,7 +19,7 @@ func TestRoleDefinitions_UnmarshalJSON(t *testing.T) {
 		expectError  bool
 		expectedVer  string
 		roleCount    int
-		validateFunc func(t *testing.T, def *RoleDefinitions)
+		validateFunc func(t *testing.T, def *models.RoleDefinitions)
 	}{
 		{
 			name: "string version with roles",
@@ -45,7 +46,7 @@ func TestRoleDefinitions_UnmarshalJSON(t *testing.T) {
 			expectError: false,
 			expectedVer: "1.0.0",
 			roleCount:   2,
-			validateFunc: func(t *testing.T, def *RoleDefinitions) {
+			validateFunc: func(t *testing.T, def *models.RoleDefinitions) {
 				admin, exists := def.Roles["admin"]
 				assert.True(t, exists)
 				assert.Equal(t, "Administrator", admin.Name)
@@ -135,7 +136,7 @@ func TestRoleDefinitions_UnmarshalJSON(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var def RoleDefinitions
+			var def models.RoleDefinitions
 			err := json.Unmarshal([]byte(tt.jsonInput), &def)
 
 			if tt.expectError {
@@ -167,7 +168,7 @@ func TestRoleDefinitions_UnmarshalYAML(t *testing.T) {
 		expectError  bool
 		expectedVer  string
 		roleCount    int
-		validateFunc func(t *testing.T, def *RoleDefinitions)
+		validateFunc func(t *testing.T, def *models.RoleDefinitions)
 	}{
 		{
 			name: "string version with roles",
@@ -187,7 +188,7 @@ roles:
 			expectError: false,
 			expectedVer: "1.0.0",
 			roleCount:   2,
-			validateFunc: func(t *testing.T, def *RoleDefinitions) {
+			validateFunc: func(t *testing.T, def *models.RoleDefinitions) {
 				admin, exists := def.Roles["admin"]
 				assert.True(t, exists)
 				assert.Equal(t, "Administrator", admin.Name)
@@ -244,7 +245,7 @@ roles: {}`,
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var def RoleDefinitions
+			var def models.RoleDefinitions
 			err := yaml.Unmarshal([]byte(tt.yamlInput), &def)
 
 			if tt.expectError {
@@ -280,7 +281,7 @@ roles:
     description: "Second role"`
 
 	t.Run("Direct YAML unmarshal", func(t *testing.T) {
-		var def RoleDefinitions
+		var def models.RoleDefinitions
 		err := yaml.Unmarshal([]byte(yamlInput), &def)
 		require.NoError(t, err)
 
@@ -301,7 +302,7 @@ roles:
 		require.NoError(t, err)
 
 		// Step 3: JSON to struct
-		var def RoleDefinitions
+		var def models.RoleDefinitions
 		err = json.Unmarshal(jsonData, &def)
 		require.NoError(t, err)
 
@@ -315,13 +316,13 @@ roles:
 // TestRoleDefinitions_RoundTrip tests that unmarshaling and marshaling preserves data
 func TestRoleDefinitions_RoundTrip(t *testing.T) {
 	t.Run("JSON round trip", func(t *testing.T) {
-		original := RoleDefinitions{
+		original := models.RoleDefinitions{
 			Version: version.Must(version.NewVersion("1.2.3")),
-			Roles: map[string]Role{
+			Roles: map[string]models.Role{
 				"admin": {
 					Name:        "Admin",
 					Description: "Admin role",
-					Permissions: Permissions{
+					Permissions: models.Permissions{
 						Allow: []string{"*"},
 					},
 				},
@@ -333,7 +334,7 @@ func TestRoleDefinitions_RoundTrip(t *testing.T) {
 		require.NoError(t, err)
 
 		// Unmarshal back
-		var unmarshaled RoleDefinitions
+		var unmarshaled models.RoleDefinitions
 		err = json.Unmarshal(jsonData, &unmarshaled)
 		require.NoError(t, err)
 
@@ -344,9 +345,9 @@ func TestRoleDefinitions_RoundTrip(t *testing.T) {
 	})
 
 	t.Run("YAML round trip", func(t *testing.T) {
-		original := RoleDefinitions{
+		original := models.RoleDefinitions{
 			Version: version.Must(version.NewVersion("2.0.0")),
-			Roles: map[string]Role{
+			Roles: map[string]models.Role{
 				"viewer": {
 					Name:        "Viewer",
 					Description: "View role",
@@ -359,7 +360,7 @@ func TestRoleDefinitions_RoundTrip(t *testing.T) {
 		require.NoError(t, err)
 
 		// Unmarshal back
-		var unmarshaled RoleDefinitions
+		var unmarshaled models.RoleDefinitions
 		err = yaml.Unmarshal(yamlData, &unmarshaled)
 		require.NoError(t, err)
 

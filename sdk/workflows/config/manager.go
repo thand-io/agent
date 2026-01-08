@@ -82,7 +82,7 @@ func (c *configService) WithTemporal(temporal models.TemporalService) *configSer
 }
 
 func (c *configService) HasTemporal() bool {
-	return true
+	return c.temporal != nil
 }
 
 func (c *configService) GetTemporal() models.TemporalService {

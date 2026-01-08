@@ -29,15 +29,17 @@ func NewWorkflowManager(cfg config.Config) (*WorkflowManager, error) {
 	workflowManager := &WorkflowManager{
 		config: cfg,
 	}
-	err := workflowManager.registerActivities()
-	if err != nil {
-		logrus.WithError(err).Error("Failed to register activities")
-		return nil, err
-	}
-	err = workflowManager.registerWorkflows()
-	if err != nil {
-		logrus.WithError(err).Error("Failed to register workflows")
-		return nil, err
+	if cfg.HasTemporal() {
+		err := workflowManager.registerActivities()
+		if err != nil {
+			logrus.WithError(err).Error("Failed to register activities")
+			return nil, err
+		}
+		err = workflowManager.registerWorkflows()
+		if err != nil {
+			logrus.WithError(err).Error("Failed to register workflows")
+			return nil, err
+		}
 	}
 	return workflowManager, nil
 }

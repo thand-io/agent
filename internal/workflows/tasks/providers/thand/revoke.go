@@ -166,14 +166,6 @@ func (t *thandTask) executeRevocationTask(
 					AuthorizeRoleResponse: authorizeResponse,
 				}
 
-<<<<<<< HEAD
-			log.WithFields(logrus.Fields{
-				"user":     identity,
-				"role":     elevateRequest.Role.GetName(),
-				"provider": providerName,
-				"duration": duration,
-			}).Info("Preparing revocation logic")
-=======
 				revokeTasks = append(revokeTasks, revokeTask{
 					ProviderName:      providerName,
 					Identity:          identity,
@@ -181,7 +173,7 @@ func (t *thandTask) executeRevocationTask(
 					AuthorizeResponse: authorizeResponse,
 				})
 
-				log.WithFields(models.Fields{
+				log.WithFields(logrus.Fields{
 					"user":     identity,
 					"role":     elevateRequest.Role.GetName(),
 					"provider": providerName,
@@ -189,7 +181,6 @@ func (t *thandTask) executeRevocationTask(
 					"tenant":   tenantID,
 				}).Info("Preparing revocation logic")
 			}
->>>>>>> main
 		}
 	}
 
@@ -253,13 +244,8 @@ func (t *thandTask) executeRevocationTask(
 }
 
 // executeTemporalRevokeParallel executes revocation tasks in parallel using Temporal
-<<<<<<< HEAD
-func executeTemporalRevokeParallel(
-	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
-=======
 func (t *thandTask) executeTemporalRevokeParallel(
-	workflowTask *models.WorkflowTask,
->>>>>>> main
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	taskName string,
 	call *taskModel.ThandTask,
 	revokeTasks []revokeTask,

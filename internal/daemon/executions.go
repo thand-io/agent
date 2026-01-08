@@ -277,7 +277,7 @@ func (s *Server) getWorkflowExecutionState(c *gin.Context, workflowID string) (*
 
 				elevationReq := workflowTask.GetContextAsMap()
 
-				if err == nil || elevationReq != nil {
+				if elevationReq != nil {
 
 					// Copy over task status phases to the response
 					phases := []string{}

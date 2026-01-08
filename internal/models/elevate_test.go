@@ -1,22 +1,23 @@
-package models
+package models_test
 
 import (
 	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/thand-io/agent/internal/models"
 )
 
-func NewMockProvider(name string, identities []Identity) Provider {
-	provider := ProviderConfig{
+func NewMockIdentityProvider(name string, identities []models.Identity) models.Provider {
+	provider := models.ProviderConfig{
 		Name:        name,
 		Description: "Mock Provider",
 		Provider:    "mock",
 		Enabled:     true,
 	}
 
-	base := NewBaseProvider(name, provider,
-		NewProviderCapabilities().
+	base := models.NewBaseProvider(name, provider,
+		models.NewProviderCapabilities().
 			WithDefaultIdentitiesConfiguration())
 	base.SetIdentities(identities)
 
@@ -25,43 +26,43 @@ func NewMockProvider(name string, identities []Identity) Provider {
 
 func TestResolveIdentities(t *testing.T) {
 	// Define identities
-	id1 := Identity{
+	id1 := models.Identity{
 		ID:    "user1@example.com",
 		Label: "User One",
-		User: &User{
+		User: &models.User{
 			Email: "user1@example.com",
 			Name:  "User One",
 		},
 	}
-	id2 := Identity{
+	id2 := models.Identity{
 		ID:    "user2",
 		Label: "User Two",
-		User: &User{
+		User: &models.User{
 			Email: "user2@example.com",
 			Name:  "User Two",
 		},
 	}
-	id3 := Identity{
+	id3 := models.Identity{
 		ID:    "group1",
 		Label: "Group One",
-		Group: &Group{
+		Group: &models.Group{
 			Name: "Group One",
 		},
 	}
-	id4 := Identity{
+	id4 := models.Identity{
 		ID:    "user4-id",
 		Label: "User Four",
-		User: &User{
+		User: &models.User{
 			Email: "user4@example.com",
 			Name:  "User Four",
 		},
 	}
 
 	// Create providers
-	mp1 := NewMockProvider("p1", []Identity{id1, id2})
-	mp2 := NewMockProvider("p2", []Identity{id3, id4})
+	mp1 := NewMockIdentityProvider("p1", []models.Identity{id1, id2})
+	mp2 := NewMockIdentityProvider("p2", []models.Identity{id3, id4})
 
-	providers := map[string]Provider{
+	providers := map[string]models.Provider{
 		"p1": mp1,
 		"p2": mp2,
 	}
@@ -130,7 +131,7 @@ func TestResolveIdentities(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := ElevateRequest{
+			req := models.ElevateRequest{
 				Identities: tt.identities,
 			}
 			resolved := req.ResolveIdentities(context.Background(), providers)

@@ -538,7 +538,7 @@ func TestSAMLProvider_Initialize(t *testing.T) {
 		setupConfig   func(t *testing.T) models.ProviderConfig
 		expectError   bool
 		errorContains string
-		validate      func(t *testing.T, p *models.ProviderConfig)
+		validate      func(t *testing.T, p *samlProvider)
 	}{
 		{
 			name: "Successful initialization with valid config",

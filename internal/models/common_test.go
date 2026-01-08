@@ -1,9 +1,10 @@
-package models
+package models_test
 
 import (
 	"context"
 	"testing"
 
+	"github.com/thand-io/agent/internal/models"
 	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
@@ -36,11 +37,11 @@ func TestEncodingWrapper_Encode(t *testing.T) {
 
 	tests := []struct {
 		name string
-		data EncodingWrapper
+		data models.EncodingWrapper
 	}{
 		{
 			name: "encode workflow task",
-			data: EncodingWrapper{
+			data: models.EncodingWrapper{
 				Type: sdkConstants.ENCODED_WORKFLOW_TASK,
 				Data: map[string]any{
 					"id":   "task-123",
@@ -50,7 +51,7 @@ func TestEncodingWrapper_Encode(t *testing.T) {
 		},
 		{
 			name: "encode auth data",
-			data: EncodingWrapper{
+			data: models.EncodingWrapper{
 				Type: sdkConstants.ENCODED_AUTH,
 				Data: map[string]any{
 					"user":  "testuser",
@@ -60,7 +61,7 @@ func TestEncodingWrapper_Encode(t *testing.T) {
 		},
 		{
 			name: "encode session data",
-			data: EncodingWrapper{
+			data: models.EncodingWrapper{
 				Type: sdkConstants.ENCODED_SESSION,
 				Data: map[string]any{
 					"session_id": "sess-456",
@@ -70,7 +71,7 @@ func TestEncodingWrapper_Encode(t *testing.T) {
 		},
 		{
 			name: "encode session local data",
-			data: EncodingWrapper{
+			data: models.EncodingWrapper{
 				Type: sdkConstants.ENCODED_SESSION_LOCAL,
 				Data: map[string]any{
 					"local_id": "local-789",
@@ -80,21 +81,21 @@ func TestEncodingWrapper_Encode(t *testing.T) {
 		},
 		{
 			name: "encode empty data",
-			data: EncodingWrapper{
+			data: models.EncodingWrapper{
 				Type: "empty",
 				Data: nil,
 			},
 		},
 		{
 			name: "encode string data",
-			data: EncodingWrapper{
+			data: models.EncodingWrapper{
 				Type: "string",
 				Data: "test string",
 			},
 		},
 		{
 			name: "encode number data",
-			data: EncodingWrapper{
+			data: models.EncodingWrapper{
 				Type: "number",
 				Data: 42,
 			},
@@ -121,12 +122,12 @@ func TestEncodingWrapper_Encode(t *testing.T) {
 func TestEncodingWrapper_Decode(t *testing.T) {
 	tests := []struct {
 		name    string
-		data    EncodingWrapper
+		data    models.EncodingWrapper
 		wantErr bool
 	}{
 		{
 			name: "decode workflow task",
-			data: EncodingWrapper{
+			data: models.EncodingWrapper{
 				Type: sdkConstants.ENCODED_WORKFLOW_TASK,
 				Data: map[string]any{
 					"id":   "task-123",
@@ -137,7 +138,7 @@ func TestEncodingWrapper_Decode(t *testing.T) {
 		},
 		{
 			name: "decode auth data",
-			data: EncodingWrapper{
+			data: models.EncodingWrapper{
 				Type: sdkConstants.ENCODED_AUTH,
 				Data: map[string]any{
 					"user":  "testuser",
@@ -148,7 +149,7 @@ func TestEncodingWrapper_Decode(t *testing.T) {
 		},
 		{
 			name: "decode session data",
-			data: EncodingWrapper{
+			data: models.EncodingWrapper{
 				Type: sdkConstants.ENCODED_SESSION,
 				Data: map[string]any{
 					"session_id": "sess-456",
@@ -159,7 +160,7 @@ func TestEncodingWrapper_Decode(t *testing.T) {
 		},
 		{
 			name: "decode empty data",
-			data: EncodingWrapper{
+			data: models.EncodingWrapper{
 				Type: "empty",
 				Data: nil,
 			},
@@ -173,7 +174,7 @@ func TestEncodingWrapper_Decode(t *testing.T) {
 			encoded := tt.data.EncodeBase64()
 
 			// Then decode it
-			var wrapper EncodingWrapper
+			var wrapper models.EncodingWrapper
 			decoded, err := wrapper.Decode(encoded)
 
 			if (err != nil) != tt.wantErr {
@@ -220,7 +221,7 @@ func TestEncodingWrapper_DecodeInvalidData(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var wrapper EncodingWrapper
+			var wrapper models.EncodingWrapper
 			_, err := wrapper.Decode(tt.input)
 
 			if (err != nil) != tt.wantErr {
@@ -233,11 +234,11 @@ func TestEncodingWrapper_DecodeInvalidData(t *testing.T) {
 func TestEncodingWrapper_EncodeDecodeRoundTrip(t *testing.T) {
 	tests := []struct {
 		name string
-		data EncodingWrapper
+		data models.EncodingWrapper
 	}{
 		{
 			name: "round trip workflow task",
-			data: EncodingWrapper{
+			data: models.EncodingWrapper{
 				Type: sdkConstants.ENCODED_WORKFLOW_TASK,
 				Data: map[string]any{
 					"id":          "task-123",
@@ -250,7 +251,7 @@ func TestEncodingWrapper_EncodeDecodeRoundTrip(t *testing.T) {
 		},
 		{
 			name: "round trip complex nested data",
-			data: EncodingWrapper{
+			data: models.EncodingWrapper{
 				Type: "complex",
 				Data: map[string]any{
 					"nested": map[string]any{
@@ -271,7 +272,7 @@ func TestEncodingWrapper_EncodeDecodeRoundTrip(t *testing.T) {
 			encoded := tt.data.EncodeBase64()
 
 			// Decode
-			var wrapper EncodingWrapper
+			var wrapper models.EncodingWrapper
 			decoded, err := wrapper.Decode(encoded)
 
 			if err != nil {
@@ -329,7 +330,7 @@ func TestConstants(t *testing.T) {
 }
 
 func BenchmarkEncodingWrapper_Encode(b *testing.B) {
-	data := EncodingWrapper{
+	data := models.EncodingWrapper{
 		Type: sdkConstants.ENCODED_WORKFLOW_TASK,
 		Data: map[string]any{
 			"id":          "task-123",
@@ -351,7 +352,7 @@ func BenchmarkEncodingWrapper_Encode(b *testing.B) {
 }
 
 func BenchmarkEncodingWrapper_Decode(b *testing.B) {
-	data := EncodingWrapper{
+	data := models.EncodingWrapper{
 		Type: sdkConstants.ENCODED_WORKFLOW_TASK,
 		Data: map[string]any{
 			"id":          "task-123",
@@ -369,7 +370,7 @@ func BenchmarkEncodingWrapper_Decode(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		var wrapper EncodingWrapper
+		var wrapper models.EncodingWrapper
 		_, _ = wrapper.Decode(encoded)
 	}
 }
@@ -378,11 +379,11 @@ func TestEncodingWrapper_EncodeBytes(t *testing.T) {
 
 	tests := []struct {
 		name string
-		data EncodingWrapper
+		data models.EncodingWrapper
 	}{
 		{
 			name: "encode workflow task",
-			data: EncodingWrapper{
+			data: models.EncodingWrapper{
 				Type: sdkConstants.ENCODED_WORKFLOW_TASK,
 				Data: map[string]any{
 					"id":   "task-123",
@@ -392,7 +393,7 @@ func TestEncodingWrapper_EncodeBytes(t *testing.T) {
 		},
 		{
 			name: "encode session data",
-			data: EncodingWrapper{
+			data: models.EncodingWrapper{
 				Type: sdkConstants.ENCODED_SESSION,
 				Data: map[string]any{
 					"session_id": "sess-456",
@@ -416,12 +417,12 @@ func TestEncodingWrapper_EncodeBytes(t *testing.T) {
 func TestEncodingWrapper_DecodeBytes(t *testing.T) {
 	tests := []struct {
 		name    string
-		data    EncodingWrapper
+		data    models.EncodingWrapper
 		wantErr bool
 	}{
 		{
 			name: "decode workflow task",
-			data: EncodingWrapper{
+			data: models.EncodingWrapper{
 				Type: sdkConstants.ENCODED_WORKFLOW_TASK,
 				Data: map[string]any{
 					"id":   "task-123",
@@ -432,7 +433,7 @@ func TestEncodingWrapper_DecodeBytes(t *testing.T) {
 		},
 		{
 			name: "decode empty data",
-			data: EncodingWrapper{
+			data: models.EncodingWrapper{
 				Type: "empty",
 				Data: nil,
 			},
@@ -446,7 +447,7 @@ func TestEncodingWrapper_DecodeBytes(t *testing.T) {
 			encoded := tt.data.EncodeBytes()
 
 			// Then decode it
-			var wrapper EncodingWrapper
+			var wrapper models.EncodingWrapper
 			decoded, err := wrapper.DecodeBytes(encoded)
 
 			if (err != nil) != tt.wantErr {
@@ -469,7 +470,7 @@ func TestEncodingWrapper_DecodeBytes(t *testing.T) {
 }
 
 func TestEncodingWrapper_EncodeAndEncrypt(t *testing.T) {
-	data := EncodingWrapper{
+	data := models.EncodingWrapper{
 		Type: sdkConstants.ENCODED_WORKFLOW_TASK,
 		Data: map[string]any{
 			"id":   "task-encrypt",
@@ -485,7 +486,7 @@ func TestEncodingWrapper_EncodeAndEncrypt(t *testing.T) {
 }
 
 func TestEncodingWrapper_DecodeAndDecrypt(t *testing.T) {
-	data := EncodingWrapper{
+	data := models.EncodingWrapper{
 		Type: sdkConstants.ENCODED_WORKFLOW_TASK,
 		Data: map[string]any{
 			"id":   "task-encrypt-decode",
@@ -495,7 +496,7 @@ func TestEncodingWrapper_DecodeAndDecrypt(t *testing.T) {
 
 	encoded := data.EncodeAndEncrypt(encryptor)
 
-	var wrapper EncodingWrapper
+	var wrapper models.EncodingWrapper
 	decoded, err := wrapper.DecodeAndDecrypt(encoded, encryptor)
 
 	if err != nil {

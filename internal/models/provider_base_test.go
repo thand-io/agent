@@ -1,120 +1,173 @@
-package models
+package models_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/thand-io/agent/internal/models"
 )
 
 func TestBaseProvider_Permissions(t *testing.T) {
-	p := &BaseProvider{
-		rbac: &RBACSupport{
-			permissions:    make([]ProviderPermission, 0),
-			permissionsMap: make(map[string]*ProviderPermission),
-		},
-	}
+	p := models.NewBaseProvider(
+		"test-provider",
+		models.ProviderConfig{Name: "Test Provider"},
+		models.NewProviderCapabilities().
+			WithDefaultPermissionsConfiguration(),
+	)
 
-	perm1 := ProviderPermission{Name: "perm1"}
-	perm2 := ProviderPermission{Name: "perm2"}
+	perm1 := models.ProviderPermission{Name: "perm1"}
+	perm2 := models.ProviderPermission{Name: "perm2"}
 
 	// Test SetPermissions
-	p.SetPermissions([]ProviderPermission{perm1})
-	assert.Len(t, p.rbac.permissions, 1)
-	assert.Equal(t, "perm1", p.rbac.permissions[0].Name)
-	assert.Contains(t, p.rbac.permissionsMap, "perm1")
+	p.SetPermissions([]models.ProviderPermission{perm1})
+	results, err := p.ListPermissions(context.Background(), nil)
+	assert.NoError(t, err)
+	assert.Len(t, results, 1)
+	assert.Equal(t, "perm1", results[0].Result.Name)
+
+	// Verify permission is accessible
+	perm, err := p.GetPermission(context.Background(), "perm1")
+	assert.NoError(t, err)
+	assert.Equal(t, "perm1", perm.Name)
 
 	// Test AddPermissions
 	p.AddPermissions(perm2)
-	assert.Len(t, p.rbac.permissions, 2)
-	assert.Equal(t, "perm2", p.rbac.permissions[1].Name)
-	assert.Contains(t, p.rbac.permissionsMap, "perm2")
+	results, err = p.ListPermissions(context.Background(), nil)
+	assert.NoError(t, err)
+	assert.Len(t, results, 2)
+
+	// Verify both permissions are accessible
+	perm2Ret, err := p.GetPermission(context.Background(), "perm2")
+	assert.NoError(t, err)
+	assert.Equal(t, "perm2", perm2Ret.Name)
 
 	// Test AddPermissions duplicate
 	p.AddPermissions(perm1)
-	// This is expected to fail if duplicates are not filtered
-	assert.Len(t, p.rbac.permissions, 2, "Should not add duplicate permission")
+	results, err = p.ListPermissions(context.Background(), nil)
+	assert.NoError(t, err)
+	assert.Len(t, results, 2, "Should not add duplicate permission")
 }
 
 func TestBaseProvider_Roles(t *testing.T) {
-	p := &BaseProvider{
-		rbac: &RBACSupport{
-			roles:    make([]ProviderRole, 0),
-			rolesMap: make(map[string]*ProviderRole),
-		},
-	}
+	p := models.NewBaseProvider(
+		"test-provider",
+		models.ProviderConfig{Name: "Test Provider"},
+		models.NewProviderCapabilities().
+			WithDefaultRolesConfiguration(),
+	)
 
-	role1 := ProviderRole{Name: "role1"}
-	role2 := ProviderRole{Name: "role2"}
+	role1 := models.ProviderRole{Name: "role1"}
+	role2 := models.ProviderRole{Name: "role2"}
 
 	// Test SetRoles
-	p.SetRoles([]ProviderRole{role1})
-	assert.Len(t, p.rbac.roles, 1)
-	assert.Equal(t, "role1", p.rbac.roles[0].Name)
-	assert.Contains(t, p.rbac.rolesMap, "role1")
+	p.SetRoles([]models.ProviderRole{role1})
+	results, err := p.ListRoles(context.Background(), nil)
+	assert.NoError(t, err)
+	assert.Len(t, results, 1)
+	assert.Equal(t, "role1", results[0].Result.Name)
+
+	// Verify role is accessible
+	role, err := p.GetRole(context.Background(), "role1")
+	assert.NoError(t, err)
+	assert.Equal(t, "role1", role.Name)
 
 	// Test AddRoles
 	p.AddRoles(role2)
-	assert.Len(t, p.rbac.roles, 2)
-	assert.Equal(t, "role2", p.rbac.roles[1].Name)
-	assert.Contains(t, p.rbac.rolesMap, "role2")
+	results, err = p.ListRoles(context.Background(), nil)
+	assert.NoError(t, err)
+	assert.Len(t, results, 2)
+
+	// Verify both roles are accessible
+	role2Ret, err := p.GetRole(context.Background(), "role2")
+	assert.NoError(t, err)
+	assert.Equal(t, "role2", role2Ret.Name)
 
 	// Test AddRoles duplicate
 	p.AddRoles(role1)
-	assert.Len(t, p.rbac.roles, 2, "Should not add duplicate role")
+	results, err = p.ListRoles(context.Background(), nil)
+	assert.NoError(t, err)
+	assert.Len(t, results, 2, "Should not add duplicate role")
 }
 
 func TestBaseProvider_Resources(t *testing.T) {
-	p := &BaseProvider{
-		rbac: &RBACSupport{
-			resources:    make([]ProviderResource, 0),
-			resourcesMap: make(map[string]*ProviderResource),
-		},
-	}
+	p := models.NewBaseProvider(
+		"test-provider",
+		models.ProviderConfig{Name: "Test Provider"},
+		models.NewProviderCapabilities().
+			WithDefaultResourcesConfiguration(),
+	)
 
-	res1 := ProviderResource{ID: "res1", Name: "res1"}
-	res2 := ProviderResource{ID: "res2", Name: "res2"}
+	res1 := models.ProviderResource{ID: "res1", Name: "res1"}
+	res2 := models.ProviderResource{ID: "res2", Name: "res2"}
 
 	// Test SetResources
-	p.SetResources([]ProviderResource{res1})
-	assert.Len(t, p.rbac.resources, 1)
-	assert.Equal(t, "res1", p.rbac.resources[0].ID)
-	assert.Contains(t, p.rbac.resourcesMap, "res1")
+	p.SetResources([]models.ProviderResource{res1})
+	results, err := p.ListResources(context.Background(), nil)
+	assert.NoError(t, err)
+	assert.Len(t, results, 1)
+	assert.Equal(t, "res1", results[0].Result.ID)
+
+	// Verify resource is accessible
+	res, err := p.GetResource(context.Background(), "res1")
+	assert.NoError(t, err)
+	assert.Equal(t, "res1", res.ID)
 
 	// Test AddResources
 	p.AddResources(res2)
-	assert.Len(t, p.rbac.resources, 2)
-	assert.Equal(t, "res2", p.rbac.resources[1].ID)
-	assert.Contains(t, p.rbac.resourcesMap, "res2")
+	results, err = p.ListResources(context.Background(), nil)
+	assert.NoError(t, err)
+	assert.Len(t, results, 2)
+
+	// Verify both resources are accessible
+	res2Ret, err := p.GetResource(context.Background(), "res2")
+	assert.NoError(t, err)
+	assert.Equal(t, "res2", res2Ret.ID)
 
 	// Test AddResources duplicate
 	p.AddResources(res1)
-	assert.Len(t, p.rbac.resources, 2, "Should not add duplicate resource")
+	results, err = p.ListResources(context.Background(), nil)
+	assert.NoError(t, err)
+	assert.Len(t, results, 2, "Should not add duplicate resource")
 }
 
 func TestBaseProvider_Identities(t *testing.T) {
-	p := &BaseProvider{
-		identity: &IdentitySupport{
-			identities:    make([]Identity, 0),
-			identitiesMap: make(map[string]*Identity),
-		},
-	}
+	p := models.NewBaseProvider(
+		"test-provider",
+		models.ProviderConfig{Name: "Test Provider"},
+		models.NewProviderCapabilities().
+			WithDefaultIdentitiesConfiguration(),
+	)
 
-	id1 := Identity{ID: "id1", Label: "id1"}
-	id2 := Identity{ID: "id2", Label: "id2"}
+	id1 := models.Identity{ID: "id1", Label: "id1"}
+	id2 := models.Identity{ID: "id2", Label: "id2"}
 
 	// Test SetIdentities
-	p.SetIdentities([]Identity{id1})
-	assert.Len(t, p.identity.identities, 1)
-	assert.Equal(t, "id1", p.identity.identities[0].ID)
-	assert.Contains(t, p.identity.identitiesMap, "id1")
+	p.SetIdentities([]models.Identity{id1})
+	results, err := p.ListIdentities(context.Background(), nil)
+	assert.NoError(t, err)
+	assert.Len(t, results, 1)
+	assert.Equal(t, "id1", results[0].Result.ID)
+
+	// Verify identity is accessible
+	identity, err := p.GetIdentity(context.Background(), "id1")
+	assert.NoError(t, err)
+	assert.Equal(t, "id1", identity.ID)
 
 	// Test AddIdentities
 	p.AddIdentities(id2)
-	assert.Len(t, p.identity.identities, 2)
-	assert.Equal(t, "id2", p.identity.identities[1].ID)
-	assert.Contains(t, p.identity.identitiesMap, "id2")
+	results, err = p.ListIdentities(context.Background(), nil)
+	assert.NoError(t, err)
+	assert.Len(t, results, 2)
+
+	// Verify both identities are accessible
+	id2Ret, err := p.GetIdentity(context.Background(), "id2")
+	assert.NoError(t, err)
+	assert.Equal(t, "id2", id2Ret.ID)
 
 	// Test AddIdentities duplicate
 	p.AddIdentities(id1)
-	assert.Len(t, p.identity.identities, 2, "Should not add duplicate identity")
+	results, err = p.ListIdentities(context.Background(), nil)
+	assert.NoError(t, err)
+	assert.Len(t, results, 2, "Should not add duplicate identity")
 }
