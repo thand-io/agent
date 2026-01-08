@@ -24,7 +24,7 @@ import (
 
 const (
 	AwsProviderName                                = "aws"
-	awsProviderDeleteRoleAssignmentBackoffDuration = time.Duration(1)
+	awsProviderDeleteRoleAssignmentBackoffDuration = 1 * time.Second
 	awsProviderDeleteRoleAssignmentBackoffLimit    = 15
 )
 

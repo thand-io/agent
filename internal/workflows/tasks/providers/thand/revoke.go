@@ -293,7 +293,7 @@ func (t *thandTask) executeTemporalRevokeParallel(
 
 			if err != nil {
 				logrus.WithError(err).
-					Errorln("Revokation activity failed")
+					Errorln("Revocation activity failed")
 			}
 
 			// Send result through channel

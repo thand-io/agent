@@ -458,9 +458,14 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models
 	if err != nil {
 		return fmt.Errorf("failed to delete account assignment: %w", err)
 	}
+
 	var deleteOutputRequestId *string
 	if deleteOutput != nil && deleteOutput.AccountAssignmentDeletionStatus != nil && deleteOutput.AccountAssignmentDeletionStatus.RequestId != nil {
 		deleteOutputRequestId = deleteOutput.AccountAssignmentDeletionStatus.RequestId
+	}
+
+	if deleteOutputRequestId == nil {
+		return fmt.Errorf("account assignment deletion request ID is nil")
 	}
 
 	// poll to verify deletion
@@ -528,7 +533,7 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models
 			}).Info("Account assignment deletion succeeded")
 			return nil
 		default:
-			return fmt.Errorf("unknown status value %s", statusOutput.AccountAssignmentDeletionStatus.Status)
+			return fmt.Errorf("unknown status value %s", statusOutputStatus)
 		}
 	}
 }
