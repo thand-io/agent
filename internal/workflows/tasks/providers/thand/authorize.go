@@ -309,6 +309,12 @@ func (t *thandTask) executeTemporalParallel(
 	ao := workflow.ActivityOptions{
 		TaskQueue:           serviceClient.GetTemporal().GetTaskQueue(),
 		StartToCloseTimeout: time.Minute * 5,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    1 * time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    100 * time.Second,
+			MaximumAttempts:    10,
+		},
 	}
 	aoctx := workflow.WithActivityOptions(temporalContext, ao)
 
@@ -335,6 +341,11 @@ func (t *thandTask) executeTemporalParallel(
 				},
 				authTask.ThandAuthReq,
 			).Get(ctx, &authOut)
+
+			if err != nil {
+				logrus.WithError(err).
+					Errorln("Failed to authorize activity")
+			}
 
 			// Send result through channel
 			resultCh.Send(ctx, temporalAuthResult{

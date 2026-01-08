@@ -58,11 +58,19 @@ func (p *awsProvider) RevokeRole(
 	user := req.GetUser()
 	role := req.GetRole()
 
+	// Determine target account: selected account or configured default
+	targetAccountID := p.GetAccountID()
+
+	if len(req.Tenant) > 0 {
+		// If a tenant is specified, use it as the target account ID
+		targetAccountID = req.Tenant
+	}
+
 	// Determine if we should use IAM Identity Center or traditional IAM
 	useIdentityCenter := p.shouldUseIdentityCenter(user)
 
 	if useIdentityCenter {
-		err := p.revokeRoleIdentityCenter(ctx, user, role)
+		err := p.revokeRoleIdentityCenter(ctx, user, role, targetAccountID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to revoke Identity Center role: %w", err)
 		}

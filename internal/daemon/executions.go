@@ -219,7 +219,6 @@ func (s *Server) getExecutionsPage(c *gin.Context) {
 // getWorkflowExecutionState retrieves the current state of a workflow execution
 // and returns it as ExecutionStatePageData ready for rendering or JSON response
 func (s *Server) getWorkflowExecutionState(c *gin.Context, workflowID string) (*ExecutionStatePageData, error) {
-	ctx := context.Background()
 
 	temporal := s.Config.GetServices().GetTemporal()
 
@@ -230,7 +229,7 @@ func (s *Server) getWorkflowExecutionState(c *gin.Context, workflowID string) (*
 	temporalClient := temporal.GetClient()
 
 	// Get the workflow execution information
-	wkflw, err := temporalClient.DescribeWorkflowExecution(ctx, workflowID, models.TemporalEmptyRunId)
+	wkflw, err := temporalClient.DescribeWorkflowExecution(context.Background(), workflowID, models.TemporalEmptyRunId)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get workflow state: %w", err)
@@ -246,18 +245,30 @@ func (s *Server) getWorkflowExecutionState(c *gin.Context, workflowID string) (*
 
 	var workflowTask models.WorkflowTask
 
+	// Get the workflow DSL by name if available
+	foundWorkflow, err := s.GetConfig().GetWorkflowByName(workflowExecInfo.Workflow)
+
+	if err != nil {
+		logrus.WithError(err).Warn("Failed to get workflow definition")
+	} else {
+		workflowTask.Workflow = foundWorkflow.GetWorkflow()
+	}
+
+	// Create a timeout context for the query to avoid hanging requests
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
 	// If workflow hasn't completed, query for the current state
 	if workflowExecInfo.CloseTime == nil {
 
-		// Create a timeout context for the query to avoid hanging requests
-		timeoutCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-		defer cancel()
-
+		// Note to future self - if you are debugging this locally make sure
+		// you're workflow and worker are running the same build Id otherwise,
+		// this will fail
 		queryResponse, err := temporalClient.QueryWorkflowWithOptions(timeoutCtx, &client.QueryWorkflowWithOptionsRequest{
 			WorkflowID:           workflowID,
 			RunID:                models.TemporalEmptyRunId,
 			QueryType:            models.TemporalGetWorkflowTaskQueryName,
-			QueryRejectCondition: enums.QUERY_REJECT_CONDITION_NONE,
+			QueryRejectCondition: enums.QUERY_REJECT_CONDITION_NOT_OPEN,
 			Args:                 nil,
 		})
 
@@ -265,55 +276,45 @@ func (s *Server) getWorkflowExecutionState(c *gin.Context, workflowID string) (*
 
 			err = queryResponse.QueryResult.Get(&workflowTask)
 
-			if err != nil {
-				return nil, fmt.Errorf("failed to get workflow state: %w", err)
-			}
-
-			workflowName := workflowTask.WorkflowName
-
-			if len(workflowName) == 0 {
+			if err == nil {
 
 				elevationReq, err := workflowTask.GetContextAsElevationRequest()
 
-				if err == nil && elevationReq != nil {
-					workflowName = elevationReq.Workflow
+				if err == nil || elevationReq != nil {
+
+					// Copy over task status phases to the response
+					phases := []string{}
+					for phase := range workflowTask.TasksStatusPhase {
+						phases = append(phases, phase)
+					}
+					workflowExecInfo.History = phases
+
+					workflowExecInfo.Input = workflowTask.Input
+					workflowExecInfo.Output = workflowTask.Output
+					workflowExecInfo.Context = workflowTask.Context
+
+				} else {
+					logrus.WithError(err).Debug("Failed to parse workflow task as elevation request")
 				}
 
-			}
-
-			// Get the workflow template name if available
-			foundWorkflow, err := s.GetConfig().GetWorkflowByName(workflowName)
-
-			if err != nil {
-				logrus.WithError(err).Warn("Failed to get workflow definition")
 			} else {
-				workflowTask.Workflow = foundWorkflow.GetWorkflow()
+				logrus.WithError(err).Debug("Failed to parse workflow task from query response")
 			}
-
-			// Copy over task status phases to the response
-			phases := []string{}
-			for phase := range workflowTask.TasksStatusPhase {
-				phases = append(phases, phase)
-			}
-			workflowExecInfo.History = phases
-
-			workflowExecInfo.Input = workflowTask.Input
-			workflowExecInfo.Output = workflowTask.Output
-			workflowExecInfo.Context = workflowTask.Context
 
 		} else {
 
-			logrus.WithError(err).Warnln("Failed to query workflow for current state")
-			workflowExecInfo.Output = err.Error()
+			// Query failed - this can be normal for workflows that don't implement the query handler
+			// or are in certain states. Log at debug level instead of warning.
+			logrus.WithError(err).WithField("workflowID", workflowID).
+				Debug("Failed to query workflow for current state - workflow may not implement query handler")
 
 		}
 
 	} else if wklwInfo.GetStatus() == enums.WORKFLOW_EXECUTION_STATUS_FAILED {
 
 		// Get history for failed workflows to extract detailed failure information
-
 		iter := temporalClient.GetWorkflowHistory(
-			ctx, workflowID, models.TemporalEmptyRunId,
+			timeoutCtx, workflowID, models.TemporalEmptyRunId,
 			false, enums.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT)
 
 		// Iterate through history events to find the failure
@@ -349,11 +350,10 @@ func (s *Server) getWorkflowExecutionState(c *gin.Context, workflowID string) (*
 	} else if wklwInfo.GetStatus() == enums.WORKFLOW_EXECUTION_STATUS_COMPLETED {
 
 		// Otherwise if the workflow has completed then get the last output
-
 		fut := temporalClient.GetWorkflow(
-			ctx, workflowID, models.TemporalEmptyRunId)
+			timeoutCtx, workflowID, models.TemporalEmptyRunId)
 
-		err := fut.Get(ctx, &workflowTask)
+		err := fut.Get(timeoutCtx, &workflowTask)
 
 		if err != nil {
 			logrus.WithError(err).Warnln("Failed to get workflow output")

@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
@@ -185,9 +186,9 @@ func (t *thandTask) executeRevocationTask(
 	var revokeResults []revokeResult
 
 	if workflowTask.HasTemporalContext() {
-		revokeResults, err = executeTemporalRevokeParallel(workflowTask, taskName, call, revokeTasks)
+		revokeResults, err = t.executeTemporalRevokeParallel(workflowTask, taskName, call, revokeTasks)
 	} else {
-		revokeResults, err = executeGoRevokeParallel(t.config, workflowTask, revokeTasks)
+		revokeResults, err = t.executeGoRevokeParallel(t.config, workflowTask, revokeTasks)
 	}
 
 	if err != nil {
@@ -242,7 +243,7 @@ func (t *thandTask) executeRevocationTask(
 }
 
 // executeTemporalRevokeParallel executes revocation tasks in parallel using Temporal
-func executeTemporalRevokeParallel(
+func (t *thandTask) executeTemporalRevokeParallel(
 	workflowTask *models.WorkflowTask,
 	taskName string,
 	call *taskModel.ThandTask,
@@ -250,9 +251,17 @@ func executeTemporalRevokeParallel(
 ) ([]revokeResult, error) {
 
 	temporalContext := workflowTask.GetTemporalContext()
+	serviceClient := t.config.GetServices()
 
 	ao := workflow.ActivityOptions{
+		TaskQueue:           serviceClient.GetTemporal().GetTaskQueue(),
 		StartToCloseTimeout: time.Minute * 5,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    1 * time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    100 * time.Second,
+			MaximumAttempts:    10,
+		},
 	}
 	aoctx := workflow.WithActivityOptions(temporalContext, ao)
 
@@ -282,6 +291,11 @@ func executeTemporalRevokeParallel(
 				thandRevokeReq,
 			).Get(ctx, &revokeOut)
 
+			if err != nil {
+				logrus.WithError(err).
+					Errorln("Revocation activity failed")
+			}
+
 			// Send result through channel
 			resultCh.Send(ctx, temporalRevokeResult{
 				Index:    taskIndex,
@@ -307,7 +321,7 @@ func executeTemporalRevokeParallel(
 }
 
 // executeGoRevokeParallel executes revocation tasks in parallel using Go routines and WaitGroup
-func executeGoRevokeParallel(
+func (t *thandTask) executeGoRevokeParallel(
 	config models.ConfigImpl,
 	workflowTask *models.WorkflowTask,
 	revokeTasks []revokeTask,

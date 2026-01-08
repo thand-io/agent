@@ -101,6 +101,7 @@ func (m *WorkflowManager) createPrimaryWorkflowHandler() func(workflow.Context, 
 			log.Error("Failed to set get workflow task query handler", "Error", err)
 			return nil, err
 		}
+
 		// Setup signal channels and handlers
 		resumeSignal, terminateSignal := m.setupSignalChannels(cancelCtx)
 		m.setupTerminationHandler(rootCtx, terminateSignal, cancelHandler, &terminationRequest)
