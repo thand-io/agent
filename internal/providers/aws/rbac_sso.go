@@ -459,7 +459,7 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models
 		return fmt.Errorf("failed to delete account assignment: %w", err)
 	}
 	var deleteOutputRequestId *string
-	if deleteOutput != nil && deleteOutput.AccountAssignmentDeletionStatus == nil && deleteOutput.AccountAssignmentDeletionStatus.RequestId == nil {
+	if deleteOutput != nil && deleteOutput.AccountAssignmentDeletionStatus != nil && deleteOutput.AccountAssignmentDeletionStatus.RequestId != nil {
 		deleteOutputRequestId = deleteOutput.AccountAssignmentDeletionStatus.RequestId
 	}
 
@@ -489,38 +489,39 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models
 			return fmt.Errorf("failed to describe account assignment deletion status: %w", err)
 		}
 
-		var statusOutputPrincipalId, statusOutputFailureReason *string
-		if deleteOutput != nil && statusOutput.AccountAssignmentDeletionStatus != nil {
+		var statusOutputPrincipalId, statusOutputFailureReason, statusOutputStatus string
+		if statusOutput != nil && statusOutput.AccountAssignmentDeletionStatus != nil {
 			if statusOutput.AccountAssignmentDeletionStatus.PrincipalId != nil {
-				statusOutputPrincipalId = statusOutput.AccountAssignmentDeletionStatus.PrincipalId
+				statusOutputPrincipalId = *statusOutput.AccountAssignmentDeletionStatus.PrincipalId
 			}
-			if statusOutput.AccountAssignmentDeletionStatus.PrincipalId != nil {
-				statusOutputFailureReason = statusOutput.AccountAssignmentDeletionStatus.FailureReason
+			if statusOutput.AccountAssignmentDeletionStatus.FailureReason != nil {
+				statusOutputFailureReason = *statusOutput.AccountAssignmentDeletionStatus.FailureReason
 			}
+			statusOutputStatus = string(statusOutput.AccountAssignmentDeletionStatus.Status)
 
 		}
 
-		switch statusOutput.AccountAssignmentDeletionStatus.Status {
-		case types.StatusValuesFailed:
+		switch statusOutputStatus {
+		case string(types.StatusValuesFailed):
 			logrus.WithFields(logrus.Fields{
 				"principalId":     statusOutputPrincipalId,
 				"targetAccountID": targetAccountID,
 				"failureReason":   statusOutputFailureReason,
 			}).Errorf(
 				"account assignment deletion failed for principalId %s in account %s",
-				*statusOutputPrincipalId,
+				statusOutputPrincipalId,
 				targetAccountID,
 			)
 			return fmt.Errorf(
 				"account assignment deletion failed for principalId %s in account %s",
-				*statusOutputPrincipalId,
+				statusOutputPrincipalId,
 				targetAccountID,
 			)
 
-		case types.StatusValuesInProgress:
+		case string(types.StatusValuesInProgress):
 			continue
 
-		case types.StatusValuesSucceeded:
+		case string(types.StatusValuesSucceeded):
 			logrus.WithFields(logrus.Fields{
 				"principalId":     statusOutputPrincipalId,
 				"targetAccountID": targetAccountID,
