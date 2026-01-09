@@ -9,11 +9,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	cloudevents "github.com/cloudevents/sdk-go/v2"
-	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/workflows/manager"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 	"go.temporal.io/api/enums/v1"
 )
 
@@ -102,15 +102,17 @@ func TestAWSElevationApprovalsWorkflow(t *testing.T) {
 		},
 	)
 
-	// Get the workflow and role
-	workflow := testCase.Workflows["aws_multi_approval"]
+	// Get the workflow from config to ensure Identifier field is set
+	workflowPtr, err := cfg.GetWorkflowByName("aws_multi_approval")
+	require.NoError(t, err, "Failed to get workflow from config")
+	workflow := *workflowPtr
 	role := testCase.Roles["aws_test_admin"]
 
 	t.Run("Full elevation lifecycle with multiple approvers", func(t *testing.T) {
 		// Create workflow task (elevation request)
 		sdkWorkflowTask, err := models.NewElevationWorkflowContext(&workflow)
 		require.NoError(t, err, "Failed to create workflow context")
-		
+
 		// Wrap in ElevateWorkflowTask to get SetRole/SetUser methods
 		workflowTask := models.NewElevateWorkflowTask(sdkWorkflowTask)
 

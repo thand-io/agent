@@ -307,8 +307,10 @@ func TestAWSElevationWithTemporal(t *testing.T) {
 		},
 	)
 
-	// Get the workflow and role
-	workflow := testCase.Workflows["aws_self_approval"]
+	// Get the workflow from config to ensure Identifier field is set
+	workflowPtr, err := cfg.GetWorkflowByName("aws_self_approval")
+	require.NoError(t, err, "Failed to get workflow from config")
+	workflow := *workflowPtr
 	role := testCase.Roles["aws_test_admin"]
 
 	t.Run("Full elevation lifecycle with Temporal", func(t *testing.T) {

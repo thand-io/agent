@@ -50,6 +50,8 @@ func TestHelloWorldWorkflow(t *testing.T) {
 		require.NotNil(t, testCase.Workflows, "Workflows should be loaded")
 		require.Contains(t, testCase.Workflows, "hello_world", "hello_world workflow should exist")
 
+		// Note: testCase.Workflows is used here only for validation
+		// For actual execution, use cfg.GetWorkflowByName() to get the processed workflow
 		workflow := testCase.Workflows["hello_world"]
 		require.True(t, workflow.Enabled, "Workflow should be enabled")
 		require.NotNil(t, workflow.GetWorkflow(), "Workflow DSL should be present")
@@ -109,7 +111,10 @@ func TestHelloWorldWorkflow(t *testing.T) {
 	t.Run("Workflow executes with simple input", func(t *testing.T) {
 		cfg := createConfigWithCleanup(t, loader, testCase, infra)
 
-		workflow := testCase.Workflows["hello_world"]
+		// Get workflow from config to ensure Identifier field is set
+		workflowPtr, err := cfg.GetWorkflowByName("hello_world")
+		require.NoError(t, err, "Failed to get workflow from config")
+		workflow := *workflowPtr
 
 		// Create a workflow task from the workflow
 		workflowTask, err := models.NewElevationWorkflowContext(&workflow)
@@ -145,7 +150,10 @@ func TestHelloWorldWorkflow(t *testing.T) {
 	t.Run("Workflow uses default name when not provided", func(t *testing.T) {
 		cfg := createConfigWithCleanup(t, loader, testCase, infra)
 
-		workflow := testCase.Workflows["hello_world"]
+		// Get workflow from config to ensure Identifier field is set
+		workflowPtr, err := cfg.GetWorkflowByName("hello_world")
+		require.NoError(t, err, "Failed to get workflow from config")
+		workflow := *workflowPtr
 
 		workflowTask, err := models.NewElevationWorkflowContext(&workflow)
 		require.NoError(t, err, "Failed to create workflow context")
