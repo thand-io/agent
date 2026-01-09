@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
@@ -25,10 +24,9 @@ type Config interface {
 	GetTask(taskItem *model.TaskItem) (tasks.Task, bool)
 
 	RegisterWorkflow(name string, workflow model.Workflow) error
+	GetWorkflow(name string) (model.Workflow, bool)
 
-	// HydrateWorkflowTask used to populate the workflow definition in a workflow task
-	// This is useful so that we don't have to embed the full workflow definition in every task instance
-	HydrateWorkflowTask(workflowTask sdkWorkflowsModel.WorkflowTaskSupport) error
+	CreateRunner(sdkM sdkWorkflowsModel.WorkflowTaskSupport) RunnerConfig
 }
 
 type configService struct {
@@ -45,6 +43,10 @@ func NewConfigService() *configService {
 		functions: functions.NewFunctionRegistry(),
 		tasks:     tasks.NewTaskRegistry(),
 	}
+}
+
+func (c *configService) CreateRunner(sdkM sdkWorkflowsModel.WorkflowTaskSupport) RunnerConfig {
+	return NewRunnerConfig(c, sdkM)
 }
 
 func (c *configService) RegisterFunction(f functions.Function) error {
@@ -103,22 +105,4 @@ func (c *configService) GetTaskRegistry() *tasks.TaskRegistry {
 
 func (c *configService) GetFunctionRegistry() *functions.FunctionRegistry {
 	return c.functions
-}
-
-func (c *configService) HydrateWorkflowTask(workflowTask sdkWorkflowsModel.WorkflowTaskSupport) error {
-
-	if workflowTask.GetWorkflowDef() == nil {
-
-		workflowDsl, ok := c.GetWorkflow(strings.ToLower(workflowTask.GetName()))
-
-		if !ok {
-			return fmt.Errorf("workflow %s not found", workflowTask.GetName())
-		}
-
-		// TODO: Clone the workflow definition to avoid mutations
-		workflowTask.SetWorkflowDef(&workflowDsl)
-
-	}
-
-	return nil
 }

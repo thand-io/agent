@@ -12,6 +12,7 @@ import (
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/config"
 	models "github.com/thand-io/agent/internal/models"
+	workflowConfig "github.com/thand-io/agent/internal/workflows/config"
 	providerAws "github.com/thand-io/agent/internal/workflows/functions/providers/aws"
 	providerGcp "github.com/thand-io/agent/internal/workflows/functions/providers/gcp"
 	providerSlack "github.com/thand-io/agent/internal/workflows/functions/providers/slack"
@@ -37,7 +38,7 @@ type ThandWorkflowManager struct {
 // NewWorkflowManager creates a new workflow manager
 func NewThandWorkflowManager(cfg *config.Config) (*ThandWorkflowManager, error) {
 
-	workflowConfig := NewThandWorkflowConfig(cfg)
+	workflowConfig := workflowConfig.NewThandWorkflowConfig(cfg)
 
 	// Register all custom tasks
 	for _, task := range []tasks.TaskCollection{
@@ -297,17 +298,10 @@ func (m *ThandWorkflowManager) ResumeWorkflow(
 	// from the workflow ID or create one if the workflow ID does not exist
 	if serviceClient.HasTemporal() && serviceClient.GetTemporal().HasClient() {
 
-		// Check the workflow task
-		err := m.GetConfig().HydrateWorkflowTask(workflowTask)
-
-		if err != nil {
-			return nil, fmt.Errorf("failed to hydrate workflow task: %w for resumption", err)
-		}
-
 		temporalService := serviceClient.GetTemporal()
 		temporalClient := temporalService.GetClient()
 
-		_, err = temporalClient.DescribeWorkflow(
+		_, err := temporalClient.DescribeWorkflow(
 			ctx,
 			workflowTask.GetWorkflowID(),
 			sdkWorkflowsModel.TemporalEmptyRunId,
@@ -444,84 +438,3 @@ func (m *ThandWorkflowManager) createTemporalWorkflow(workflowTask *models.Eleva
 
 	return nil
 }
-
-// updateTemporalSearchAttributes updates the workflow search attributes
-/*
-func (wr *ThandWorkflowManager) updateTemporalSearchAttributes(
-	currentTask *model.TaskItem,
-	status swctx.StatusPhase,
-) error {
-
-	if !wr.workflowTask.HasTemporalContext() {
-		return nil
-	}
-
-	workflowTask := wr.GetWorkflowTask()
-	log := workflowTask.GetLogger()
-
-	ctx := workflowTask.GetTemporalContext()
-
-	updates := []temporal.SearchAttributeUpdate{
-		models.TypedSearchAttributeStatus.ValueSet(string(status)),
-	}
-
-	isApproved := workflowTask.IsApproved()
-
-	if isApproved != nil {
-		updates = append(updates,
-			models.TypedSearchAttributeApproved.ValueSet(*isApproved),
-		)
-	}
-
-	if currentTask != nil && len(currentTask.Key) > 0 {
-		updates = append(updates,
-			models.TypedSearchAttributeTask.ValueSet(currentTask.Key),
-		)
-	}
-
-	elevationRequest, err := workflowTask.GetContextAsElevationRequest()
-
-	if err != nil {
-
-		log.WithError(err).Warn("No valid elevation context found, skipping search attribute update.")
-
-	} else {
-		if elevationRequest.User != nil && len(elevationRequest.User.Email) > 0 {
-			updates = append(updates,
-				models.TypedSearchAttributeUser.ValueSet(elevationRequest.User.Email),
-			)
-		}
-
-		if len(elevationRequest.Role.Name) > 0 {
-			updates = append(updates,
-				models.TypedSearchAttributeRole.ValueSet(elevationRequest.Role.Name),
-			)
-		}
-
-		if len(elevationRequest.Workflow) > 0 {
-			updates = append(updates,
-				models.TypedSearchAttributeWorkflow.ValueSet(elevationRequest.Workflow),
-			)
-		}
-
-		if len(elevationRequest.Providers) > 0 {
-			updates = append(updates,
-				models.TypedSearchAttributeProviders.ValueSet(elevationRequest.Providers),
-			)
-		}
-
-		if len(elevationRequest.Identities) > 0 {
-			updates = append(updates,
-				models.TypedSearchAttributeIdentities.ValueSet(elevationRequest.Identities),
-			)
-		}
-
-	}
-
-	log.WithFields(logrus.Fields{
-		"workflowID": workflowTask.WorkflowID,
-	}).Info("Updating temporal search attributes")
-
-	return workflow.UpsertTypedSearchAttributes(ctx, updates...)
-}
-*/

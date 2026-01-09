@@ -48,7 +48,9 @@ func (m *WorkflowManager) registerActivities() error {
 			input any,
 		) (any, error) {
 
-			if err := m.config.HydrateWorkflowTask(workflowTask); err != nil {
+			newRunner := m.config.CreateRunner(workflowTask)
+
+			if err := newRunner.HydrateWorkflowTask(); err != nil {
 				logrus.WithError(err).Error("Failed to hydrate workflow task in activity")
 				return nil, err
 			}

@@ -46,6 +46,10 @@ func (r *ResumableWorkflowRunner) GetTasks() *tasks.TaskRegistry {
 	return r.GetConfig().GetTaskRegistry()
 }
 
+func (r *ResumableWorkflowRunner) CreateRunner(sdkM sdkWorkflowsModel.WorkflowTaskSupport) config.RunnerConfig {
+	return r.config.GetConfig().CreateRunner(sdkM)
+}
+
 func (r *ResumableWorkflowRunner) GetTaskHandler(taskItem *model.TaskItem) (tasks.Task, bool) {
 	return r.GetTasks().GetTaskHandler(taskItem)
 }

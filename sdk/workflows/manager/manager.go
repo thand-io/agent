@@ -99,11 +99,6 @@ func (m *WorkflowManager) resumeTemporalWorkflowTask(
 	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 ) (sdkWorkflowsModel.WorkflowTaskSupport, error) {
 
-	// Check the workflow task
-	if err := m.config.HydrateWorkflowTask(workflowTask); err != nil {
-		return nil, err
-	}
-
 	// Create a new task state if it does not exist
 	// This is important as we might be in the middle of a workflow and
 	// the state might not have been initialised yet

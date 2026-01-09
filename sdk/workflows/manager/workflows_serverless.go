@@ -250,8 +250,10 @@ func ResumeWorkflowTask(
 	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 ) (sdkWorkflowsModel.WorkflowTaskSupport, error) {
 
+	newRunner := cfg.CreateRunner(workflowTask)
+
 	// Hydrate the workflow task
-	err := cfg.HydrateWorkflowTask(workflowTask)
+	err := newRunner.HydrateWorkflowTask()
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to hydrate resumed workflow task: %w", err)
@@ -275,10 +277,7 @@ func ResumeWorkflowTask(
 
 	// Create runner
 	resumeableRunner := runner.NewResumableWorkflowRunner(
-		config.NewRunnerConfig(
-			cfg,
-			workflowTask,
-		),
+		newRunner,
 	)
 
 	// Resume from saved state

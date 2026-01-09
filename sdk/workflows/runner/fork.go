@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
-	"github.com/thand-io/agent/sdk/workflows/config"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 	"go.temporal.io/sdk/workflow"
 )
@@ -84,10 +83,7 @@ func (r *ResumableWorkflowRunner) executeForkTaskTemporal(
 
 			// Create a new runner instance for this branch
 			branchRunner := NewResumableWorkflowRunner(
-				config.NewRunnerConfig(
-					r.GetConfig(),
-					childWF,
-				),
+				r.CreateRunner(childWF),
 			)
 
 			// NewTaskRunner.Run() = executeTask
@@ -249,9 +245,6 @@ func (r *ResumableWorkflowRunner) CloneWithContext(ctx context.Context) *Resumab
 		wf.SetInternalContext(ctx)
 	}
 	return NewResumableWorkflowRunner(
-		config.NewRunnerConfig(
-			r.GetConfig(),
-			wf,
-		),
+		r.CreateRunner(wf),
 	)
 }

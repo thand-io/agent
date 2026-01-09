@@ -1,11 +1,13 @@
-package manager
+package config
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/thand-io/agent/internal/config"
 	models "github.com/thand-io/agent/internal/models"
+	sdkWorkflowsConfig "github.com/thand-io/agent/sdk/workflows/config"
 	"github.com/thand-io/agent/sdk/workflows/functions"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 	"github.com/thand-io/agent/sdk/workflows/tasks"
@@ -25,6 +27,10 @@ func NewThandWorkflowConfig(
 		functions: functions.NewFunctionRegistry(),
 		tasks:     tasks.NewTaskRegistry(),
 	}
+}
+
+func (r *thandWorkflowConfig) CreateRunner(sdkM sdkWorkflowsModel.WorkflowTaskSupport) sdkWorkflowsConfig.RunnerConfig {
+	return NewthandRunner(r, sdkM)
 }
 
 func (c *thandWorkflowConfig) GetConfig() *config.Config {
@@ -65,40 +71,26 @@ func (c *thandWorkflowConfig) GetTask(taskItem *model.TaskItem) (tasks.Task, boo
 	return c.tasks.GetTaskHandler(taskItem)
 }
 
-func (c *thandWorkflowConfig) RegisterWorkflow(name string, workflow model.Workflow) error {
-	return fmt.Errorf("registering workflows is not supported in ThandWorkflowConfig")
+// GetWorkflow retrieves a workflow by name
+// Its important that we return a copy of the workflow definition to avoid
+// unintended mutations
+func (c *thandWorkflowConfig) GetWorkflow(name string) (model.Workflow, bool) {
+
+	workflowDsl, err := c.config.GetWorkflowByName(strings.ToLower(name))
+
+	if err != nil {
+		return model.Workflow{}, false
+	}
+
+	workflowCopy := workflowDsl.GetWorkflowClone()
+
+	if workflowCopy == nil {
+		return model.Workflow{}, false
+	}
+
+	return *workflowCopy, true
 }
 
-// HydrateWorkflowTask ensures that the workflow task has its workflow definition loaded
-// and its state initialised.
-func (c *thandWorkflowConfig) HydrateWorkflowTask(
-	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
-) error {
-
-	if workflowTask.GetWorkflowDef() == nil {
-
-		workflowDsl, err := c.GetConfig().GetWorkflowByName(workflowTask.GetName())
-
-		if err != nil {
-			return fmt.Errorf("failed to load workflow: %w", err)
-		}
-
-		workflowCopy := workflowDsl.GetWorkflowClone()
-
-		if workflowCopy == nil {
-			return fmt.Errorf("failed to clone workflow definition")
-		}
-
-		workflowTask.SetWorkflowDef(workflowCopy)
-
-	}
-
-	// Create a new task state if it does not exist
-	// This is important as we might be in the middle of a workflow and
-	// the state might not have been initialised yet
-	if !workflowTask.HasState() {
-		workflowTask.ClearTaskContext()
-	}
-
-	return nil
+func (c *thandWorkflowConfig) RegisterWorkflow(name string, workflow model.Workflow) error {
+	return fmt.Errorf("registering workflows is not supported in ThandWorkflowConfig")
 }
