@@ -69,12 +69,15 @@ func NewThandWorkflowManager(cfg *config.Config) (*ThandWorkflowManager, error) 
 		workflowManager: workflowManager,
 	}
 
-	// Register our custom temporal workflow
-	err = thandWorkflowManager.registerThandWorkflows()
+	if cfg.GetServices().HasTemporal() {
 
-	if err != nil {
-		logrus.WithError(err).Error("Failed to register thand workflows")
-		return nil, fmt.Errorf("failed to register thand workflows: %w", err)
+		// Register our custom temporal workflow
+		err = thandWorkflowManager.registerThandWorkflows()
+
+		if err != nil {
+			logrus.WithError(err).Error("Failed to register thand workflows")
+			return nil, fmt.Errorf("failed to register thand workflows: %w", err)
+		}
 	}
 
 	return thandWorkflowManager, nil
