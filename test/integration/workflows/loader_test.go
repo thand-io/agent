@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hashicorp/go-version"
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 	"gopkg.in/yaml.v3"
@@ -180,8 +181,20 @@ func (l *TestCaseLoader) CreateConfigFromTestCase(tc *TestCase) (*config.Config,
 	// Set up roles first (before providers in case providers need them)
 	cfg.Roles.Definitions = tc.Roles
 
-	// Set up workflows
-	cfg.Workflows.Definitions = tc.Workflows
+	// Apply workflows to set the Identifier field on each workflow
+	// The Identifier is critical for workflow hydration - it's used as the workflow name
+	// when loading workflow definitions during execution. Without this, workflows will
+	// fail with "workflow not found" errors.
+	workflows, err := cfg.ApplyWorkflows([]*models.WorkflowDefinitions{
+		{
+			Version:   version.Must(version.NewVersion("1.0")),
+			Workflows: tc.Workflows,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to apply workflows: %w", err)
+	}
+	cfg.Workflows.Definitions = workflows
 
 	// Set up providers
 	cfg.Providers.Definitions = tc.Providers
