@@ -334,6 +334,10 @@ func (ctx *WorkflowTask) SetTaskRawInput(input any) {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 
+	if ctx.state == nil {
+		ctx.state = NewWorkflowTaskState()
+	}
+
 	ctx.state.Input = input
 }
 
@@ -341,12 +345,21 @@ func (ctx *WorkflowTask) SetTaskRawOutput(output any) {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 
+	if ctx.state == nil {
+		ctx.state = NewWorkflowTaskState()
+	}
+
 	ctx.state.Output = output
 }
 
 func (ctx *WorkflowTask) SetTaskDef(def model.Task) error {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
+
+	if ctx.state == nil {
+		ctx.state = NewWorkflowTaskState()
+	}
+
 	ctx.state.Definition = def
 	return nil
 }
@@ -354,12 +367,22 @@ func (ctx *WorkflowTask) SetTaskDef(def model.Task) error {
 func (ctx *WorkflowTask) SetTaskStartedAt(startedAt time.Time) {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
+
+	if ctx.state == nil {
+		ctx.state = NewWorkflowTaskState()
+	}
+
 	ctx.state.StartedAt = startedAt
 }
 
 func (ctx *WorkflowTask) SetTaskName(name string) {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
+
+	if ctx.state == nil {
+		ctx.state = NewWorkflowTaskState()
+	}
+
 	ctx.state.Name = name
 	ctx.Entrypoint = name
 }
@@ -367,12 +390,22 @@ func (ctx *WorkflowTask) SetTaskName(name string) {
 func (ctx *WorkflowTask) SetTaskReference(ref string) {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
+
+	if ctx.state == nil {
+		ctx.state = NewWorkflowTaskState()
+	}
+
 	ctx.state.Reference = ref
 }
 
 func (ctx *WorkflowTask) GetTaskReference() string {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
+
+	if ctx.state == nil {
+		return ""
+	}
+
 	return ctx.state.Reference
 }
 
