@@ -12,6 +12,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 
 	"go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -229,7 +231,11 @@ func (s *Server) getWorkflowExecutionState(c *gin.Context, workflowID string) (*
 	temporalClient := temporal.GetClient()
 
 	// Get the workflow execution information
-	wkflw, err := temporalClient.DescribeWorkflowExecution(context.Background(), workflowID, models.TemporalEmptyRunId)
+	wkflw, err := temporalClient.DescribeWorkflowExecution(
+		context.Background(),
+		workflowID,
+		sdkWorkflowsModel.TemporalEmptyRunId,
+	)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get workflow state: %w", err)
@@ -243,7 +249,7 @@ func (s *Server) getWorkflowExecutionState(c *gin.Context, workflowID string) (*
 
 	workflowExecInfo := s.workflowExecutionInfo(wklwInfo)
 
-	var workflowTask models.WorkflowTask
+	var workflowTask sdkWorkflowsModel.WorkflowTask
 
 	// Create a timeout context for the query to avoid hanging requests
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -257,7 +263,7 @@ func (s *Server) getWorkflowExecutionState(c *gin.Context, workflowID string) (*
 		// this will fail
 		queryResponse, err := temporalClient.QueryWorkflowWithOptions(timeoutCtx, &client.QueryWorkflowWithOptionsRequest{
 			WorkflowID:           workflowID,
-			RunID:                models.TemporalEmptyRunId,
+			RunID:                sdkWorkflowsModel.TemporalEmptyRunId,
 			QueryType:            models.TemporalGetWorkflowTaskQueryName,
 			QueryRejectCondition: enums.QUERY_REJECT_CONDITION_NOT_OPEN,
 			Args:                 nil,
@@ -269,9 +275,9 @@ func (s *Server) getWorkflowExecutionState(c *gin.Context, workflowID string) (*
 
 			if err == nil {
 
-				elevationReq, err := workflowTask.GetContextAsElevationRequest()
+				elevationReq := workflowTask.GetContextAsMap()
 
-				if err == nil || elevationReq != nil {
+				if elevationReq != nil {
 
 					// Copy over task status phases to the response
 					phases := []string{}
@@ -305,7 +311,7 @@ func (s *Server) getWorkflowExecutionState(c *gin.Context, workflowID string) (*
 
 		// Get history for failed workflows to extract detailed failure information
 		iter := temporalClient.GetWorkflowHistory(
-			timeoutCtx, workflowID, models.TemporalEmptyRunId,
+			timeoutCtx, workflowID, sdkWorkflowsModel.TemporalEmptyRunId,
 			false, enums.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT)
 
 		// Iterate through history events to find the failure
@@ -342,7 +348,7 @@ func (s *Server) getWorkflowExecutionState(c *gin.Context, workflowID string) (*
 
 		// Otherwise if the workflow has completed then get the last output
 		fut := temporalClient.GetWorkflow(
-			timeoutCtx, workflowID, models.TemporalEmptyRunId)
+			timeoutCtx, workflowID, sdkWorkflowsModel.TemporalEmptyRunId)
 
 		err := fut.Get(timeoutCtx, &workflowTask)
 
@@ -541,7 +547,7 @@ func (s *Server) signalRunningWorkflow(c *gin.Context) {
 		return
 	}
 
-	if decodedTask.Type != models.ENCODED_WORKFLOW_SIGNAL {
+	if decodedTask.Type != sdkConstants.ENCODED_WORKFLOW_SIGNAL {
 		s.getErrorPage(c, http.StatusBadRequest, fmt.Sprintf("invalid workflow state type: %s", decodedTask.Type), nil)
 		return
 	}
@@ -578,8 +584,8 @@ func (s *Server) signalRunningWorkflow(c *gin.Context) {
 
 	// Lets signal the workflow to continue
 	err = temporalClient.SignalWorkflow(
-		ctx, workflowId, models.TemporalEmptyRunId,
-		models.TemporalEventSignalName, signal)
+		ctx, workflowId, sdkWorkflowsModel.TemporalEmptyRunId,
+		sdkWorkflowsModel.TemporalEventSignalName, signal)
 
 	if err != nil {
 		s.getErrorPage(c, http.StatusInternalServerError, "Failed to signal workflow", err)

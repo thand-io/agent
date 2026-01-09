@@ -35,7 +35,7 @@ func TestProviderSpecificInheritance(t *testing.T) {
 			},
 		}
 
-		providers := map[string]models.Provider{
+		providers := map[string]models.ProviderConfig{
 			"aws-prod": {
 				Name:        "AWS Production",
 				Description: "Production AWS Account",
@@ -88,7 +88,7 @@ func TestProviderSpecificInheritance(t *testing.T) {
 			},
 		}
 
-		providers := map[string]models.Provider{
+		providers := map[string]models.ProviderConfig{
 			"gcp-dev": {
 				Name:     "GCP Development",
 				Provider: "gcp",
@@ -142,7 +142,7 @@ func TestProviderSpecificInheritance(t *testing.T) {
 			},
 		}
 
-		providers := map[string]models.Provider{
+		providers := map[string]models.ProviderConfig{
 			"azure-prod": {
 				Name:     "Azure Production",
 				Provider: "azure",
@@ -320,7 +320,7 @@ func TestProviderParsingLogicConsolidated(t *testing.T) {
 			},
 		}
 
-		providers := map[string]models.Provider{
+		providers := map[string]models.ProviderConfig{
 			"aws-prod": {
 				Name:     "AWS Production",
 				Provider: "aws",
@@ -366,7 +366,7 @@ func TestProviderRoleLookup(t *testing.T) {
 			},
 		}
 
-		providers := map[string]models.Provider{
+		providers := map[string]models.ProviderConfig{
 			"aws-prod": {
 				Name:        "AWS Production",
 				Description: "Production AWS Account",
@@ -403,7 +403,7 @@ func TestProviderRoleLookup(t *testing.T) {
 			},
 		}
 
-		providers := map[string]models.Provider{
+		providers := map[string]models.ProviderConfig{
 			"aws": {
 				Name:     "AWS Default",
 				Provider: "aws",
@@ -438,7 +438,7 @@ func TestProviderRoleLookup(t *testing.T) {
 			},
 		}
 
-		providers := map[string]models.Provider{
+		providers := map[string]models.ProviderConfig{
 			"aws-prod": {
 				Name:     "AWS Production",
 				Provider: "aws",
@@ -473,7 +473,7 @@ func TestProviderRoleLookup(t *testing.T) {
 			},
 		}
 
-		providers := map[string]models.Provider{
+		providers := map[string]models.ProviderConfig{
 			"aws-prod": {
 				Name:     "AWS Production",
 				Provider: "aws",
@@ -523,7 +523,7 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 			},
 		}
 
-		providers := map[string]models.Provider{
+		providers := map[string]models.ProviderConfig{
 			"aws-prod": {
 				Name:     "AWS Production",
 				Provider: "aws",
@@ -571,7 +571,7 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 			},
 		}
 
-		providers := map[string]models.Provider{
+		providers := map[string]models.ProviderConfig{
 			"aws-prod": {
 				Name:     "AWS Production",
 				Provider: "aws",
@@ -617,7 +617,7 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 			},
 		}
 
-		providers := map[string]models.Provider{
+		providers := map[string]models.ProviderConfig{
 			"aws-prod": {
 				Name:     "AWS Production",
 				Provider: "aws",
@@ -686,7 +686,7 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 			},
 		}
 
-		providers := map[string]models.Provider{
+		providers := map[string]models.ProviderConfig{
 			"aws-corp": {
 				Name:     "AWS Corporate",
 				Provider: "aws",
@@ -750,7 +750,7 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 			},
 		}
 
-		providers := map[string]models.Provider{
+		providers := map[string]models.ProviderConfig{
 			"aws-secure": {
 				Name:     "AWS Secure",
 				Provider: "aws",
@@ -833,7 +833,7 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 			},
 		}
 
-		providers := map[string]models.Provider{
+		providers := map[string]models.ProviderConfig{
 			"aws-dev": {
 				Name:     "AWS Development",
 				Provider: "aws",
@@ -906,7 +906,7 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 			},
 		}
 
-		providers := map[string]models.Provider{
+		providers := map[string]models.ProviderConfig{
 			"aws-public": {
 				Name:     "AWS Public",
 				Provider: "aws",
@@ -944,7 +944,7 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 			},
 		}
 
-		providers := map[string]models.Provider{
+		providers := map[string]models.ProviderConfig{
 			"aws-scoped": {
 				Name:     "AWS Scoped",
 				Provider: "aws",

@@ -22,7 +22,7 @@ type oktaProvider struct {
 	apiToken string
 }
 
-func (p *oktaProvider) Initialize(identifier string, provider models.Provider) error {
+func (p *oktaProvider) Initialize(identifier string, provider models.ProviderConfig) error {
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,

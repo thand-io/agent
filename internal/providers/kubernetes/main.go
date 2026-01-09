@@ -23,7 +23,7 @@ type kubernetesProvider struct {
 	client kubernetes.Interface
 }
 
-func (p *kubernetesProvider) Initialize(identifier string, provider models.Provider) error {
+func (p *kubernetesProvider) Initialize(identifier string, provider models.ProviderConfig) error {
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,

@@ -10,41 +10,41 @@ import (
 	swctx "github.com/serverlessworkflow/sdk-go/v3/impl/ctx"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
+	"github.com/thand-io/agent/internal/config"
 	models "github.com/thand-io/agent/internal/models"
-	"github.com/thand-io/agent/internal/workflows/functions"
+	workflowConfig "github.com/thand-io/agent/internal/workflows/config"
 	providerAws "github.com/thand-io/agent/internal/workflows/functions/providers/aws"
 	providerGcp "github.com/thand-io/agent/internal/workflows/functions/providers/gcp"
 	providerSlack "github.com/thand-io/agent/internal/workflows/functions/providers/slack"
 	providerThand "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
-	"github.com/thand-io/agent/internal/workflows/runner"
-	"github.com/thand-io/agent/internal/workflows/tasks"
 	taskThand "github.com/thand-io/agent/internal/workflows/tasks/providers/thand"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
+	sdkWorkflowsConfig "github.com/thand-io/agent/sdk/workflows/config"
+	"github.com/thand-io/agent/sdk/workflows/functions"
+	workflowSdk "github.com/thand-io/agent/sdk/workflows/manager"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
+	"github.com/thand-io/agent/sdk/workflows/tasks"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 )
 
 // WorkflowManager manages workflow lifecycle and execution using the official SDK
-type WorkflowManager struct {
-	config    models.ConfigImpl
-	functions *functions.FunctionRegistry
-	tasks     *tasks.TaskRegistry
+type ThandWorkflowManager struct {
+	config          *config.Config
+	workflowManager *workflowSdk.WorkflowManager
 }
 
 // NewWorkflowManager creates a new workflow manager
-func NewWorkflowManager(cfg models.ConfigImpl) *WorkflowManager {
+func NewThandWorkflowManager(cfg *config.Config) (*ThandWorkflowManager, error) {
 
-	wm := WorkflowManager{
-		config:    cfg,
-		functions: functions.NewFunctionRegistry(cfg),
-		tasks:     tasks.NewTaskRegistry(cfg),
-	}
+	workflowConfig := workflowConfig.NewThandWorkflowConfig(cfg)
 
 	// Register all custom tasks
 	for _, task := range []tasks.TaskCollection{
 		taskThand.NewThandCollection(cfg),
 	} {
-		task.RegisterTasks(wm.tasks)
+		task.RegisterTasks(workflowConfig.GetTaskRegistry())
 	}
 
 	// Register all built-in function providers
@@ -54,39 +54,69 @@ func NewWorkflowManager(cfg models.ConfigImpl) *WorkflowManager {
 		providerGcp.NewGCPCollection(cfg),
 		providerAws.NewAWSCollection(cfg),
 	} {
-		provider.RegisterFunctions(wm.functions)
+		provider.RegisterFunctions(workflowConfig.GetFunctionRegistry())
 	}
 
-	// If we have temporal configured, then we can register
-	// all the activities and workflows
+	// Create an instance of the SDK workflow manager
+	workflowManager, err := workflowSdk.NewWorkflowManager(workflowConfig)
 
-	if cfg.GetServices().HasTemporal() {
-
-		// Register our activities
-		err := wm.registerActivities()
-		if err != nil {
-			logrus.WithError(err).Error("Failed to register activities")
-		}
-
-		// Register our workflows
-		err = wm.registerWorkflows()
-		if err != nil {
-			logrus.WithError(err).Error("Failed to register workflows")
-		}
+	if err != nil {
+		return nil, fmt.Errorf("failed to create workflow manager: %w", err)
 	}
 
-	return &wm
+	thandWorkflowManager := &ThandWorkflowManager{
+		config:          cfg,
+		workflowManager: workflowManager,
+	}
+
+	// Register our custom temporal workflow
+	err = thandWorkflowManager.registerThandWorkflows()
+
+	if err != nil {
+		logrus.WithError(err).Error("Failed to register thand workflows")
+		return nil, fmt.Errorf("failed to register thand workflows: %w", err)
+	}
+
+	return thandWorkflowManager, nil
 }
 
-// CreateWorkflow creates a workflow from a model.Workflow instance
-func (m *WorkflowManager) CreateWorkflow(
+func (m *ThandWorkflowManager) GetWorkflowManager() *workflowSdk.WorkflowManager {
+	return m.workflowManager
+}
+
+func (m *ThandWorkflowManager) GetThandConfig() *config.Config {
+	return m.config
+}
+
+func (m *ThandWorkflowManager) GetConfig() sdkWorkflowsConfig.Config {
+	return m.workflowManager.GetConfig()
+}
+
+func (m *ThandWorkflowManager) HasTemporal() bool {
+	return m.workflowManager.HasTemporal()
+}
+
+func (m *ThandWorkflowManager) GetTemporal() models.TemporalImpl {
+	return m.workflowManager.GetTemporal()
+}
+
+func (m *ThandWorkflowManager) GetTaskRegistry() *tasks.TaskRegistry {
+	return m.workflowManager.GetConfig().GetTaskRegistry()
+}
+
+func (m *ThandWorkflowManager) GetFunctionRegistry() *functions.FunctionRegistry {
+	return m.workflowManager.GetConfig().GetFunctionRegistry()
+}
+
+// CreateElevationWorkflow creates a workflow from a model.Workflow instance
+func (m *ThandWorkflowManager) CreateElevationWorkflow(
 	ctx context.Context,
 	request models.ElevateRequest,
 ) (*models.WorkflowRequest, error) {
 	// Create the workflow request which includes the redirect URL
 	// and user session, the actual execution happens in the
 	// ResumeWorkflow method which is called after user authentication
-	req, err := m.executeWorkflow(ctx, request)
+	req, err := m.executeElevationWorkflow(ctx, request)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute workflow: %w", err)
@@ -95,7 +125,7 @@ func (m *WorkflowManager) CreateWorkflow(
 	return req, nil
 }
 
-func (m *WorkflowManager) executeWorkflow(
+func (m *ThandWorkflowManager) executeElevationWorkflow(
 	ctx context.Context,
 	request models.ElevateRequest,
 ) (*models.WorkflowRequest, error) {
@@ -172,7 +202,7 @@ func (m *WorkflowManager) executeWorkflow(
 	// Convert input to map
 	internalContext := request.AsMap()
 
-	workflowTask, err := models.NewWorkflowContext(workflow)
+	workflowTask, err := models.NewElevationWorkflowContext(workflow)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create workflow context: %w", err)
@@ -199,7 +229,7 @@ func (m *WorkflowManager) executeWorkflow(
 
 		if existingSession.Expiry.UTC().After(time.Now().UTC()) {
 
-			err = authProvider.GetClient().ValidateSession(ctx, decodedSession.Session)
+			err = authProvider.ValidateSession(ctx, decodedSession.Session)
 
 			if err == nil {
 
@@ -237,7 +267,7 @@ func (m *WorkflowManager) executeWorkflow(
 		}
 	}
 
-	sessionResponse, err := authProvider.GetClient().AuthorizeSession(ctx, &models.AuthorizeUser{
+	sessionResponse, err := authProvider.AuthorizeSession(ctx, &models.AuthorizeUser{
 		State:       workflowTask.GetEncodedTask(m.config.GetServices().GetEncryption()),
 		RedirectUri: m.config.GetAuthCallbackUrl(request.Authenticator),
 	})
@@ -255,12 +285,11 @@ func (m *WorkflowManager) executeWorkflow(
 
 }
 
-// ResumeWorkflow resumes workflow execution from client-provided state
-func (m *WorkflowManager) ResumeWorkflow(
-	result *models.WorkflowTask,
-) (*models.WorkflowTask, error) {
+func (m *ThandWorkflowManager) ResumeWorkflow(
+	workflowTask *models.ElevateWorkflowTask,
+) (*models.ElevateWorkflowTask, error) {
 
-	ctx := result.GetContext()
+	ctx := workflowTask.GetContext()
 
 	// Check if workfow has already been registered on temporal
 	serviceClient := m.config.GetServices()
@@ -269,22 +298,19 @@ func (m *WorkflowManager) ResumeWorkflow(
 	// from the workflow ID or create one if the workflow ID does not exist
 	if serviceClient.HasTemporal() && serviceClient.GetTemporal().HasClient() {
 
-		// Check the workflow task
-		err := m.Hydrate(result)
-
-		if err != nil {
-			return nil, fmt.Errorf("failed to hydrate workflow task: %w for resumption", err)
-		}
-
 		temporalService := serviceClient.GetTemporal()
 		temporalClient := temporalService.GetClient()
 
-		_, err = temporalClient.DescribeWorkflow(ctx, result.WorkflowID, models.TemporalEmptyRunId)
+		_, err := temporalClient.DescribeWorkflow(
+			ctx,
+			workflowTask.GetWorkflowID(),
+			sdkWorkflowsModel.TemporalEmptyRunId,
+		)
 
 		if err != nil {
 
 			// Not found, so start a new workflow execution
-			err := m.createTemporalWorkflow(result)
+			err := m.createTemporalWorkflow(workflowTask)
 
 			if err != nil {
 				return nil, fmt.Errorf("failed to create temporal workflow: %w", err)
@@ -294,81 +320,39 @@ func (m *WorkflowManager) ResumeWorkflow(
 
 		// Lets signal the workflow to continue
 		err = temporalClient.SignalWorkflow(
-			ctx, result.WorkflowID, models.TemporalEmptyRunId,
-			models.TemporalResumeSignalName, result)
+			ctx,
+			workflowTask.GetWorkflowID(),
+			sdkWorkflowsModel.TemporalEmptyRunId,
+			sdkWorkflowsModel.TemporalResumeSignalName,
+			workflowTask,
+		)
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to signal workflow: %w", err)
 		}
 
-		return result, nil
+		return workflowTask, nil
 
 	} else {
 
-		return m.ResumeWorkflowTask(result)
+		return m.ResumeWorkflowTask(workflowTask)
 	}
-
 }
 
-// ResumeWorkflowTask resumes a workflow task using the internal runner
-// This maybe called as part of a temporal workflow or directly
-func (m *WorkflowManager) ResumeWorkflowTask(
-	result *models.WorkflowTask,
-) (*models.WorkflowTask, error) {
+func (m *ThandWorkflowManager) ResumeWorkflowTask(
+	workflowTask *models.ElevateWorkflowTask,
+) (*models.ElevateWorkflowTask, error) {
 
-	// Check the workflow task
-	err := m.Hydrate(result)
+	result, err := m.workflowManager.ResumeWorkflowTask(workflowTask)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to hydrate resumed workflow task: %w", err)
+		return nil, fmt.Errorf("failed to resume workflow task: %w", err)
 	}
 
-	// Set status to pending if not already set
-	if !result.HasStatus() {
-		result.SetStatus(swctx.PendingStatus)
-	}
-
-	logrus.WithFields(logrus.Fields{
-		"workflow_id": result.WorkflowID,
-	}).Info("Resuming workflow")
-
-	// Create runner
-	runner, err := m.createCustomRunner(result)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to create runner: %w", err)
-	}
-
-	// Resume from saved state
-	_, err = runner.Run(result.GetInput())
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to resume workflow: %w", err)
-	}
-
-	// Merge the output with the input based on any handlers
-
-	return result, err
+	return models.NewElevateWorkflowTask(result), nil
 }
 
-// createCustomRunner creates a workflow runner that can handle custom functions
-func (m *WorkflowManager) createCustomRunner(workflow *models.WorkflowTask) (*runner.ResumableWorkflowRunner, error) {
-	// Create our custom resumable runner instead of the default runner
-	return runner.NewResumableRunner(m.config, m.functions, m.tasks, workflow), nil
-}
-
-// RegisterCustomFunction allows external code to register additional functions
-func (m *WorkflowManager) RegisterCustomFunction(handler functions.Function) {
-	m.functions.RegisterFunction(handler)
-	logrus.WithField("function", handler.GetName()).Info("Registered external custom function")
-}
-
-// GetRegisteredFunctions returns all currently registered functions
-func (m *WorkflowManager) GetRegisteredFunctions() []string {
-	return m.functions.GetRegisteredFunctions()
-}
-
-func (m *WorkflowManager) createTemporalWorkflow(workflowTask *models.WorkflowTask) error {
+func (m *ThandWorkflowManager) createTemporalWorkflow(workflowTask *models.ElevateWorkflowTask) error {
 	// Not found, so start a new workflow execution
 
 	logrus.WithFields(logrus.Fields{
@@ -429,7 +413,7 @@ func (m *WorkflowManager) createTemporalWorkflow(workflowTask *models.WorkflowTa
 	if !temporalService.IsVersioningDisabled() {
 		workflowOptions.VersioningOverride = &client.PinnedVersioningOverride{
 			Version: worker.WorkerDeploymentVersion{
-				DeploymentName: models.TemporalDeploymentName,
+				DeploymentName: sdkConstants.TemporalDeploymentName,
 				BuildID:        common.GetBuildIdentifier(),
 			},
 		}

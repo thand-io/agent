@@ -76,7 +76,7 @@ func TestAWSRoles(t *testing.T) {
 	}
 
 	// AWS providers
-	awsProviders := map[string]models.Provider{
+	awsProviders := map[string]models.ProviderConfig{
 		"aws-prod": {
 			Name:        "aws-prod",
 			Description: "AWS Production Environment",
@@ -235,7 +235,7 @@ func TestAWSRoleScenarios(t *testing.T) {
 			},
 		}
 
-		providers := map[string]models.Provider{
+		providers := map[string]models.ProviderConfig{
 			"aws-staging": {
 				Name:        "aws-staging",
 				Description: "AWS Staging Environment",
@@ -329,7 +329,7 @@ func TestAWSRoleScenarios(t *testing.T) {
 			},
 		}
 
-		providers := map[string]models.Provider{
+		providers := map[string]models.ProviderConfig{
 			"aws-prod": {
 				Name:        "aws-prod",
 				Description: "AWS Production Environment",
@@ -374,7 +374,7 @@ func TestAWSRoleScenarios(t *testing.T) {
 
 	t.Run("aws_admin inherits from aws_user", func(t *testing.T) {
 		// AWS providers for this test
-		testProviders := map[string]models.Provider{
+		testProviders := map[string]models.ProviderConfig{
 			"aws-prod": {
 				Name:        "aws-prod",
 				Description: "AWS Production Environment",

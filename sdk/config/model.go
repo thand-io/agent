@@ -37,17 +37,17 @@ type PostflightRequest = internal.PostflightRequest
 // and any final configuration or status information.
 type PostflightResponse = internal.PostflightResponse
 
-// RoleConfig defines a role configuration that specifies access permissions
+// RoleDefinitionsConfig defines a role configuration that specifies access permissions
 // and constraints for users requesting access through the agent.
-type RoleConfig = internal.RoleConfig
+type RoleDefinitionsConfig = internal.RoleConfig
 
-// ProviderConfig defines the configuration for a provider integration,
+// ProviderDefinitionsConfig defines the configuration for a provider integration,
 // specifying how the agent connects to and manages external services.
-type ProviderConfig = internal.ProviderConfig
+type ProviderDefinitionsConfig = internal.ProviderDefinitionsConfig
 
-// WorkflowConfig defines a workflow configuration that specifies the
+// WorkflowDefinitionsConfig defines a workflow configuration that specifies the
 // approval process and steps for handling access requests.
-type WorkflowConfig = internal.WorkflowConfig
+type WorkflowDefinitionsConfig = internal.WorkflowConfig
 
 const (
 

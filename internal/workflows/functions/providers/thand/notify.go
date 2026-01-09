@@ -10,7 +10,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
-	"github.com/thand-io/agent/internal/workflows/functions"
+	"github.com/thand-io/agent/sdk/workflows/functions"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 const ThandNotifyFunction = "thand.notify"
@@ -49,7 +50,7 @@ func (t *notifyFunction) GetOptionalParameters() map[string]any {
 
 // ValidateRequest validates the input parameters
 func (t *notifyFunction) ValidateRequest(
-	workflowTask *models.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	call *model.CallFunction,
 	input any,
 ) error {
@@ -64,7 +65,7 @@ func (t *notifyFunction) ValidateRequest(
 	common.ConvertMapToInterface(call.With, &notificationReq)
 
 	// Get requesting user info
-	requestingUser := workflowTask.GetUser()
+	requestingUser := models.NewElevateWorkflowTask(workflowTask).GetUser()
 
 	if requestingUser == nil {
 		return errors.New("requesting user cannot be nil")
@@ -80,9 +81,9 @@ func (t *notifyFunction) ValidateRequest(
 
 	// filter out providers to see if the name matches
 	for _, provider := range notifierProviders {
-		if strings.Compare(provider.Name, notificationReq.Provider) == 0 {
+		if strings.Compare(provider.GetName(), notificationReq.Provider) == 0 {
 			return nil
-		} else if strings.Compare(provider.Provider, notificationReq.Provider) == 0 {
+		} else if strings.Compare(provider.GetProvider(), notificationReq.Provider) == 0 {
 			return nil
 		}
 	}
@@ -165,7 +166,7 @@ func (r *NotifierRequest) AsMap() map[string]any {
 
 // Execute performs the validation logic
 func (t *notifyFunction) Execute(
-	workflowTask *models.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	call *model.CallFunction,
 	input any,
 ) (any, error) {
@@ -187,7 +188,7 @@ func (t *notifyFunction) Execute(
 		return nil, errors.New("elevation request is not valid")
 	}
 
-	elevationReq, err := workflowTask.GetContextAsElevationRequest()
+	elevationReq, err := models.NewElevateWorkflowTask(workflowTask).GetContextAsElevationRequest()
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get elevation request from input: %w", err)
@@ -204,13 +205,13 @@ func (t *notifyFunction) Execute(
 	}
 
 	// Get server config to fetch provider
-	providerConfig, err := t.config.GetProviderByName(foundProvider)
+	provider, err := t.config.GetProviderByName(foundProvider)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get provider config: %w", err)
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"provider": providerConfig.Name,
+		"provider": provider.GetName(),
 	}).Info("Executing notification")
 
 	// Overwrite the notification request with the converted input
@@ -228,7 +229,7 @@ func (t *notifyFunction) Execute(
 		return nil, fmt.Errorf("failed to convert notification payload: %w", err)
 	}
 
-	err = providerConfig.GetClient().SendNotification(
+	err = provider.SendNotification(
 		workflowTask.GetContext(), notificationPayload)
 
 	if err != nil {

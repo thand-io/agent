@@ -197,6 +197,7 @@ providers:
 				gcp, exists := def.Providers["gcp"]
 				assert.True(t, exists)
 				assert.Equal(t, "gcp", gcp.Provider)
+				assert.Equal(t, "GCP Provider", gcp.Name)
 			},
 		},
 		{
@@ -325,7 +326,7 @@ func TestProviderDefinitions_RoundTrip(t *testing.T) {
 	t.Run("JSON round trip", func(t *testing.T) {
 		original := ProviderDefinitions{
 			Version: version.Must(version.NewVersion("1.2.3")),
-			Providers: map[string]Provider{
+			Providers: map[string]ProviderConfig{
 				"aws": {
 					Provider:    "aws",
 					Name:        "AWS",
@@ -353,7 +354,7 @@ func TestProviderDefinitions_RoundTrip(t *testing.T) {
 	t.Run("YAML round trip", func(t *testing.T) {
 		original := ProviderDefinitions{
 			Version: version.Must(version.NewVersion("2.0.0")),
-			Providers: map[string]Provider{
+			Providers: map[string]ProviderConfig{
 				"gcp": {
 					Provider:    "gcp",
 					Name:        "GCP",

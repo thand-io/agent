@@ -714,14 +714,9 @@ func getTenantOptions(providerKey string) ([]huh.Option[string], error) {
 	ctx := context.Background()
 
 	// Get the specific provider
-	providerDef, err := cfg.GetProviderByName(providerKey)
+	provider, err := cfg.GetProviderByName(providerKey)
 	if err != nil {
 		return nil, fmt.Errorf("provider %s not found: %w", providerKey, err)
-	}
-
-	provider := providerDef.GetClient()
-	if provider == nil {
-		return nil, fmt.Errorf("provider %s client not initialized", providerKey)
 	}
 
 	// Check if provider supports tenants

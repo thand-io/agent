@@ -253,14 +253,6 @@ func (s *Server) AuthMiddleware() gin.HandlerFunc {
 				continue
 			}
 
-			providerClient := foundProvider.GetClient()
-
-			if providerClient == nil {
-				logrus.WithField("provider", providerId).
-					Warnln("Provider client is nil for identity addition")
-				continue
-			}
-
 			sessionUser := session.User
 
 			if sessionUser == nil {
@@ -269,12 +261,12 @@ func (s *Server) AuthMiddleware() gin.HandlerFunc {
 				continue
 			}
 
-			providerClient.AddIdentities(models.Identity{
+			foundProvider.AddIdentities(models.Identity{
 				ID:    sessionUser.ID,
 				Label: sessionUser.Name,
 				User:  sessionUser,
 				Providers: map[string]string{
-					foundProvider.Name: providerId,
+					foundProvider.GetIdentifier(): providerId,
 				},
 			})
 		}
@@ -400,14 +392,14 @@ func (s *Server) processIAPJWT(
 	// Check if we have any GCP IAP providers configured
 	iapProviders := s.Config.GetProvidersByCapability(models.ProviderCapabilityAuthorizer)
 
-	var iapProvider models.ProviderImpl
+	var iapProvider models.Provider
 	var iapProviderName string
 
 	for providerName, provider := range iapProviders {
 		// Use the first GCP IAP provider we find
 		// TODO: Support multiple IAP providers? - Use the aud claim to match?
-		if provider.Provider == gcpiap.GcpIAPProviderName {
-			iapProvider = provider.GetClient()
+		if provider.GetProvider() == gcpiap.GcpIAPProviderName {
+			iapProvider = provider
 			iapProviderName = providerName
 			break
 		}

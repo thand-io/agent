@@ -12,8 +12,8 @@ import (
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
-	runner "github.com/thand-io/agent/internal/workflows/runner"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
+	runner "github.com/thand-io/agent/sdk/workflows/runner"
 )
 
 const ThandFormTask = "form"
@@ -109,7 +109,7 @@ For Slack: The blocks are sent directly as an interactive form
 For Email: A link to the HTML form page is sent
 */
 func (t *thandTask) executeFormTask(
-	workflowTask *models.WorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	taskName string,
 	call *taskModel.ThandTask,
 ) (any, error) {
@@ -226,7 +226,7 @@ func (t *thandTask) executeFormTask(
 
 // makeFormNotifications sends form notifications to all configured notifiers
 func (t *thandTask) makeFormNotifications(
-	workflowTask *models.WorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	taskName string,
 	formTask *FormTask,
 	elevationRequest *models.ElevateRequestInternal,

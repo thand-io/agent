@@ -116,11 +116,7 @@ func (e *ElevateRequest) ResolveIdentities(ctx context.Context, providers map[st
 			providerName := parts[0]
 			unprefixedIdentity := parts[1]
 			if provider, ok := providers[providerName]; ok {
-				providerClient := provider.GetClient()
-				if providerClient == nil {
-					continue
-				}
-				identity, err := providerClient.GetIdentity(ctx, unprefixedIdentity)
+				identity, err := provider.GetIdentity(ctx, unprefixedIdentity)
 				if err == nil && identity != nil {
 					resolved[unprefixedIdentity] = identity
 				}
@@ -130,11 +126,7 @@ func (e *ElevateRequest) ResolveIdentities(ctx context.Context, providers map[st
 		// Try to resolve across all providers
 		fallbackIdentityName := parts[0]
 		for _, provider := range providers {
-			providerClient := provider.GetClient()
-			if providerClient == nil {
-				continue
-			}
-			identity, err := providerClient.GetIdentity(ctx, fallbackIdentityName)
+			identity, err := provider.GetIdentity(ctx, fallbackIdentityName)
 			if err == nil && identity != nil {
 				resolved[fallbackIdentityName] = identity
 				break // Stop after first match

@@ -1,153 +1,156 @@
-package models
+package models_test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/thand-io/agent/internal/models"
 )
 
 func TestBaseProvider_HasCapability(t *testing.T) {
 	tests := []struct {
 		name      string
-		setupCaps func(*ProviderCapabilities)
-		checkCap  ProviderCapability
+		setupCaps func(*models.ProviderCapabilities)
+		checkCap  models.ProviderCapability
 		expected  bool
 	}{
 		// Roles
 		{
 			name: "Roles enabled",
-			setupCaps: func(pc *ProviderCapabilities) {
-				pc.Roles = &RolesConfiguration{}
+			setupCaps: func(pc *models.ProviderCapabilities) {
+				pc.Roles = &models.RolesConfiguration{}
 				pc.Roles.Enabled = true
 				pc.Roles.Synchronizable = true
 			},
-			checkCap: ProviderCapabilityRoles,
+			checkCap: models.ProviderCapabilityRoles,
 			expected: true,
 		},
 		{
 			name: "Roles disabled",
-			setupCaps: func(pc *ProviderCapabilities) {
-				pc.Roles = &RolesConfiguration{}
+			setupCaps: func(pc *models.ProviderCapabilities) {
+				pc.Roles = &models.RolesConfiguration{}
 				pc.Roles.Enabled = false
 			},
-			checkCap: ProviderCapabilityRoles,
+			checkCap: models.ProviderCapabilityRoles,
 			expected: false,
 		},
 
 		// Permissions
 		{
 			name: "Permissions enabled",
-			setupCaps: func(pc *ProviderCapabilities) {
-				pc.Permissions = &PermissionsConfiguration{}
+			setupCaps: func(pc *models.ProviderCapabilities) {
+				pc.Permissions = &models.PermissionsConfiguration{}
 				pc.Permissions.Enabled = true
 				pc.Permissions.Synchronizable = true
 			},
-			checkCap: ProviderCapabilityPermissions,
+			checkCap: models.ProviderCapabilityPermissions,
 			expected: true,
 		},
 
 		// Resources
 		{
 			name: "Resources enabled",
-			setupCaps: func(pc *ProviderCapabilities) {
-				pc.Resources = &ResourcesConfiguration{}
+			setupCaps: func(pc *models.ProviderCapabilities) {
+				pc.Resources = &models.ResourcesConfiguration{}
 				pc.Resources.Enabled = true
 				pc.Resources.Synchronizable = true
 			},
-			checkCap: ProviderCapabilityResources,
+			checkCap: models.ProviderCapabilityResources,
 			expected: true,
 		},
 
 		// Identities
 		{
 			name: "Identities enabled",
-			setupCaps: func(pc *ProviderCapabilities) {
-				pc.Identities = &IdentitiesConfiguration{}
+			setupCaps: func(pc *models.ProviderCapabilities) {
+				pc.Identities = &models.IdentitiesConfiguration{}
 				pc.Identities.Enabled = true
 				pc.Identities.Synchronizable = true
 			},
-			checkCap: ProviderCapabilityIdentities,
+			checkCap: models.ProviderCapabilityIdentities,
 			expected: true,
 		},
 
 		// Users
 		{
 			name: "Users enabled",
-			setupCaps: func(pc *ProviderCapabilities) {
-				pc.Users = &UsersConfiguration{}
+			setupCaps: func(pc *models.ProviderCapabilities) {
+				pc.Users = &models.UsersConfiguration{}
 				pc.Users.Enabled = true
 				pc.Users.Synchronizable = true
 			},
-			checkCap: ProviderCapabilityUsers,
+			checkCap: models.ProviderCapabilityUsers,
 			expected: true,
 		},
 
 		// Groups
 		{
 			name: "Groups enabled",
-			setupCaps: func(pc *ProviderCapabilities) {
-				pc.Groups = &GroupsConfiguration{}
+			setupCaps: func(pc *models.ProviderCapabilities) {
+				pc.Groups = &models.GroupsConfiguration{}
 				pc.Groups.Enabled = true
 				pc.Groups.Synchronizable = true
 			},
-			checkCap: ProviderCapabilityGroups,
+			checkCap: models.ProviderCapabilityGroups,
 			expected: true,
 		},
 
 		// Authorizer
 		{
 			name: "Authorizer enabled",
-			setupCaps: func(pc *ProviderCapabilities) {
-				pc.Authorizer = &AuthorizerConfiguration{}
+			setupCaps: func(pc *models.ProviderCapabilities) {
+				pc.Authorizer = &models.AuthorizerConfiguration{}
 				pc.Authorizer.Enabled = true
 			},
-			checkCap: ProviderCapabilityAuthorizer,
+			checkCap: models.ProviderCapabilityAuthorizer,
 			expected: true,
 		},
 
 		// Notifier
 		{
 			name: "Notifier enabled",
-			setupCaps: func(pc *ProviderCapabilities) {
-				pc.Notifier = &NotifierConfiguration{}
+			setupCaps: func(pc *models.ProviderCapabilities) {
+				pc.Notifier = &models.NotifierConfiguration{}
 				pc.Notifier.Enabled = true
 			},
-			checkCap: ProviderCapabilityNotifier,
+			checkCap: models.ProviderCapabilityNotifier,
 			expected: true,
 		},
 
 		// Provisioning
 		{
 			name: "AuthorizeRole enabled",
-			setupCaps: func(pc *ProviderCapabilities) {
-				pc.Provisioning = &ProviderConfiguration{}
+			setupCaps: func(pc *models.ProviderCapabilities) {
+				pc.Provisioning = &models.ProvisioningConfiguration{}
 				pc.Provisioning.Enabled = true
 			},
-			checkCap: ProviderCapabilityProvisioning,
+			checkCap: models.ProviderCapabilityProvisioning,
 			expected: true,
 		},
 
 		// Unknown capability
 		{
 			name: "Unknown capability",
-			setupCaps: func(pc *ProviderCapabilities) {
-				pc.Roles = &RolesConfiguration{}
+			setupCaps: func(pc *models.ProviderCapabilities) {
+				pc.Roles = &models.RolesConfiguration{}
 				pc.Roles.Enabled = true
 			},
-			checkCap: ProviderCapability("unknown"),
+			checkCap: models.ProviderCapability("unknown"),
 			expected: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			caps := &ProviderCapabilities{}
+			caps := &models.ProviderCapabilities{}
 			if tt.setupCaps != nil {
 				tt.setupCaps(caps)
 			}
-			p := &BaseProvider{
-				capabilities: caps,
-			}
+			p := models.NewBaseProvider(
+				"test-provider",
+				models.ProviderConfig{Name: "Test Provider"},
+				caps,
+			)
 			result := p.HasCapability(tt.checkCap)
 			assert.Equal(t, tt.expected, result, "HasCapability(%s) returned unexpected result", tt.checkCap)
 		})
@@ -155,41 +158,43 @@ func TestBaseProvider_HasCapability(t *testing.T) {
 }
 
 // Helper to create fully initialized capabilities for testing Enable/Disable
-func newInitializedCapabilities() *ProviderCapabilities {
-	return &ProviderCapabilities{
-		Roles:        &RolesConfiguration{},
-		Permissions:  &PermissionsConfiguration{},
-		Resources:    &ResourcesConfiguration{},
-		Identities:   &IdentitiesConfiguration{},
-		Users:        &UsersConfiguration{},
-		Groups:       &GroupsConfiguration{},
-		Authorizer:   &AuthorizerConfiguration{},
-		Notifier:     &NotifierConfiguration{},
-		Provisioning: &ProvisioningConfiguration{},
+func newInitializedCapabilities() *models.ProviderCapabilities {
+	return &models.ProviderCapabilities{
+		Roles:        &models.RolesConfiguration{},
+		Permissions:  &models.PermissionsConfiguration{},
+		Resources:    &models.ResourcesConfiguration{},
+		Identities:   &models.IdentitiesConfiguration{},
+		Users:        &models.UsersConfiguration{},
+		Groups:       &models.GroupsConfiguration{},
+		Authorizer:   &models.AuthorizerConfiguration{},
+		Notifier:     &models.NotifierConfiguration{},
+		Provisioning: &models.ProvisioningConfiguration{},
 	}
 }
 
 func TestBaseProvider_EnableCapability(t *testing.T) {
 	tests := []struct {
 		name            string
-		capabilityToAdd ProviderCapability
+		capabilityToAdd models.ProviderCapability
 	}{
-		{"Roles", ProviderCapabilityRoles},
-		{"Permissions", ProviderCapabilityPermissions},
-		{"Resources", ProviderCapabilityResources},
-		{"Identities", ProviderCapabilityIdentities},
-		{"Users", ProviderCapabilityUsers},
-		{"Groups", ProviderCapabilityGroups},
-		{"Authorizer", ProviderCapabilityAuthorizer},
-		{"Notifier", ProviderCapabilityNotifier},
-		{"Provisioning", ProviderCapabilityProvisioning},
+		{"Roles", models.ProviderCapabilityRoles},
+		{"Permissions", models.ProviderCapabilityPermissions},
+		{"Resources", models.ProviderCapabilityResources},
+		{"Identities", models.ProviderCapabilityIdentities},
+		{"Users", models.ProviderCapabilityUsers},
+		{"Groups", models.ProviderCapabilityGroups},
+		{"Authorizer", models.ProviderCapabilityAuthorizer},
+		{"Notifier", models.ProviderCapabilityNotifier},
+		{"Provisioning", models.ProviderCapabilityProvisioning},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := &BaseProvider{
-				capabilities: newInitializedCapabilities(),
-			}
+			p := models.NewBaseProvider(
+				"test-provider",
+				models.ProviderConfig{Name: "Test Provider"},
+				newInitializedCapabilities(),
+			)
 
 			// Ensure it's disabled initially
 			// (default bool is false, so Enabled=false)
@@ -205,24 +210,26 @@ func TestBaseProvider_EnableCapability(t *testing.T) {
 func TestBaseProvider_DisableCapability(t *testing.T) {
 	tests := []struct {
 		name               string
-		capabilityToRemove ProviderCapability
+		capabilityToRemove models.ProviderCapability
 	}{
-		{"Roles", ProviderCapabilityRoles},
-		{"Permissions", ProviderCapabilityPermissions},
-		{"Resources", ProviderCapabilityResources},
-		{"Identities", ProviderCapabilityIdentities},
-		{"Users", ProviderCapabilityUsers},
-		{"Groups", ProviderCapabilityGroups},
-		{"Authorizer", ProviderCapabilityAuthorizer},
-		{"Notifier", ProviderCapabilityNotifier},
-		{"Provisioning", ProviderCapabilityProvisioning},
+		{"Roles", models.ProviderCapabilityRoles},
+		{"Permissions", models.ProviderCapabilityPermissions},
+		{"Resources", models.ProviderCapabilityResources},
+		{"Identities", models.ProviderCapabilityIdentities},
+		{"Users", models.ProviderCapabilityUsers},
+		{"Groups", models.ProviderCapabilityGroups},
+		{"Authorizer", models.ProviderCapabilityAuthorizer},
+		{"Notifier", models.ProviderCapabilityNotifier},
+		{"Provisioning", models.ProviderCapabilityProvisioning},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := &BaseProvider{
-				capabilities: newInitializedCapabilities(),
-			}
+			p := models.NewBaseProvider(
+				"test-provider",
+				models.ProviderConfig{Name: "Test Provider"},
+				newInitializedCapabilities(),
+			)
 
 			// Enable it first
 			p.EnableCapability(tt.capabilityToRemove)
@@ -238,12 +245,13 @@ func TestBaseProvider_DisableCapability(t *testing.T) {
 }
 
 func TestBaseProvider_EnableDisable_Idempotency(t *testing.T) {
-	p := &BaseProvider{
-		capabilities: newInitializedCapabilities(),
-	}
+	p := models.NewBaseProvider(
+		"test-provider",
+		models.ProviderConfig{Name: "Test Provider"},
+		newInitializedCapabilities(),
+	)
 
-	cap := ProviderCapabilityRoles
-
+	cap := models.ProviderCapabilityRoles
 	// Enable twice
 	p.EnableCapability(cap)
 	p.EnableCapability(cap)
@@ -258,55 +266,57 @@ func TestBaseProvider_EnableDisable_Idempotency(t *testing.T) {
 func TestBaseProvider_HasAnyCapability(t *testing.T) {
 	tests := []struct {
 		name      string
-		setupCaps func(*ProviderCapabilities)
-		checkCaps []ProviderCapability
+		setupCaps func(*models.ProviderCapabilities)
+		checkCaps []models.ProviderCapability
 		expected  bool
 	}{
 		{
 			name: "Has one of the capabilities",
-			setupCaps: func(pc *ProviderCapabilities) {
-				pc.Roles = &RolesConfiguration{}
+			setupCaps: func(pc *models.ProviderCapabilities) {
+				pc.Roles = &models.RolesConfiguration{}
 				pc.Roles.Enabled = true
 				pc.Roles.Synchronizable = true
 
-				pc.Resources = &ResourcesConfiguration{}
+				pc.Resources = &models.ResourcesConfiguration{}
 				// Resources disabled by default
 			},
-			checkCaps: []ProviderCapability{ProviderCapabilityRoles, ProviderCapabilityResources},
+			checkCaps: []models.ProviderCapability{models.ProviderCapabilityRoles, models.ProviderCapabilityResources},
 			expected:  true,
 		},
 		{
 			name: "Has none of the capabilities",
-			setupCaps: func(pc *ProviderCapabilities) {
-				pc.Roles = &RolesConfiguration{}
+			setupCaps: func(pc *models.ProviderCapabilities) {
+				pc.Roles = &models.RolesConfiguration{}
 				pc.Roles.Enabled = false
 
-				pc.Resources = &ResourcesConfiguration{}
+				pc.Resources = &models.ResourcesConfiguration{}
 				pc.Resources.Enabled = false
 			},
-			checkCaps: []ProviderCapability{ProviderCapabilityRoles, ProviderCapabilityResources},
+			checkCaps: []models.ProviderCapability{models.ProviderCapabilityRoles, models.ProviderCapabilityResources},
 			expected:  false,
 		},
 		{
 			name: "Empty capabilities list",
-			setupCaps: func(pc *ProviderCapabilities) {
-				pc.Roles = &RolesConfiguration{}
+			setupCaps: func(pc *models.ProviderCapabilities) {
+				pc.Roles = &models.RolesConfiguration{}
 				pc.Roles.Enabled = true
 			},
-			checkCaps: []ProviderCapability{},
+			checkCaps: []models.ProviderCapability{},
 			expected:  false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			caps := &ProviderCapabilities{}
+			caps := &models.ProviderCapabilities{}
 			if tt.setupCaps != nil {
 				tt.setupCaps(caps)
 			}
-			p := &BaseProvider{
-				capabilities: caps,
-			}
+			p := models.NewBaseProvider(
+				"test-provider",
+				models.ProviderConfig{Name: "Test Provider"},
+				caps,
+			)
 			result := p.HasAnyCapability(tt.checkCaps...)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -314,54 +324,62 @@ func TestBaseProvider_HasAnyCapability(t *testing.T) {
 }
 
 func TestBaseProvider_DisableCapabilities(t *testing.T) {
-	p := &BaseProvider{
-		capabilities: newInitializedCapabilities(),
-	}
+	p := models.NewBaseProvider(
+		"test-provider",
+		models.ProviderConfig{Name: "Test Provider"},
+		newInitializedCapabilities(),
+	)
 
 	// Enable multiple capabilities
-	p.EnableCapability(ProviderCapabilityRoles)
-	p.EnableCapability(ProviderCapabilityResources)
+	p.EnableCapability(models.ProviderCapabilityRoles)
+	p.EnableCapability(models.ProviderCapabilityResources)
 
-	assert.True(t, p.HasCapability(ProviderCapabilityRoles))
-	assert.True(t, p.HasCapability(ProviderCapabilityResources))
-
+	assert.True(t, p.HasCapability(models.ProviderCapabilityRoles))
+	assert.True(t, p.HasCapability(models.ProviderCapabilityResources))
 	// Disable them
-	p.DisableCapabilities(ProviderCapabilityRoles, ProviderCapabilityResources)
+	p.DisableCapabilities(models.ProviderCapabilityRoles, models.ProviderCapabilityResources)
 
-	assert.False(t, p.HasCapability(ProviderCapabilityRoles))
-	assert.False(t, p.HasCapability(ProviderCapabilityResources))
+	assert.False(t, p.HasCapability(models.ProviderCapabilityRoles))
+	assert.False(t, p.HasCapability(models.ProviderCapabilityResources))
 }
 
 func TestBaseProvider_CapabilityConfigurationOverrides(t *testing.T) {
 	t.Run("Cannot enable capability unsupported by provider", func(t *testing.T) {
 		// Simulate a provider that does not support Roles (struct is nil)
-		caps := &ProviderCapabilities{
+		caps := &models.ProviderCapabilities{
 			Roles: nil,
-			Permissions: &PermissionsConfiguration{
+			Permissions: &models.PermissionsConfiguration{
 				Enabled: true,
 			},
 		}
-		p := &BaseProvider{capabilities: caps}
-
+		p := models.NewBaseProvider(
+			"test-provider",
+			models.ProviderConfig{Name: "Test Provider"},
+			caps,
+		)
 		// Attempt to enable an unsupported capability
-		p.EnableCapability(ProviderCapabilityRoles)
+		p.EnableCapability(models.ProviderCapabilityRoles)
 
-		assert.False(t, p.HasCapability(ProviderCapabilityRoles),
+		assert.False(t, p.HasCapability(models.ProviderCapabilityRoles),
 			"Should not be able to enable a capability that the provider does not support (nil config)")
 	})
 
 	t.Run("Override synchronization settings", func(t *testing.T) {
-		caps := &ProviderCapabilities{
-			Roles: &RolesConfiguration{
+		caps := &models.ProviderCapabilities{
+			Roles: &models.RolesConfiguration{
 				Enabled:        true,
 				Synchronizable: true,
 				Interval:       1,
 			},
 		}
-		p := &BaseProvider{capabilities: caps}
+		p := models.NewBaseProvider(
+			"test-provider",
+			models.ProviderConfig{Name: "Test Provider"},
+			caps,
+		)
 
 		// Verify initial state
-		assert.True(t, p.HasCapability(ProviderCapabilityRoles))
+		assert.True(t, p.HasCapability(models.ProviderCapabilityRoles))
 		assert.True(t, caps.Roles.Synchronizable)
 
 		// Change interval for synchronizable task
@@ -373,20 +391,20 @@ func TestBaseProvider_CapabilityConfigurationOverrides(t *testing.T) {
 		assert.False(t, caps.Roles.Synchronizable)
 
 		// Disable the capability entirely (override enabled -> disabled)
-		p.DisableCapability(ProviderCapabilityRoles)
-		assert.False(t, p.HasCapability(ProviderCapabilityRoles))
+		p.DisableCapability(models.ProviderCapabilityRoles)
+		assert.False(t, p.HasCapability(models.ProviderCapabilityRoles))
 	})
 }
 
 func TestProviderCapabilities_Update(t *testing.T) {
 	t.Run("Update enabled capability", func(t *testing.T) {
-		pc := NewProviderCapabilities()
+		pc := models.NewProviderCapabilities()
 		pc.Roles.Enabled = true
 		pc.Roles.Synchronizable = true
 		pc.Roles.Interval = 60
 
-		updates := &ProviderCapabilities{
-			Roles: &RolesConfiguration{
+		updates := &models.ProviderCapabilities{
+			Roles: &models.RolesConfiguration{
 				Enabled:        false, // Disable it
 				Synchronizable: false, // Disable sync
 				Interval:       30,    // Change interval
@@ -401,11 +419,11 @@ func TestProviderCapabilities_Update(t *testing.T) {
 	})
 
 	t.Run("Cannot enable disabled capability", func(t *testing.T) {
-		pc := NewProviderCapabilities()
+		pc := models.NewProviderCapabilities()
 		pc.Roles.Enabled = false
 
-		updates := &ProviderCapabilities{
-			Roles: &RolesConfiguration{
+		updates := &models.ProviderCapabilities{
+			Roles: &models.RolesConfiguration{
 				Enabled: true,
 			},
 		}
@@ -416,11 +434,11 @@ func TestProviderCapabilities_Update(t *testing.T) {
 	})
 
 	t.Run("Update interval only (disables because enabled=false default)", func(t *testing.T) {
-		pc := NewProviderCapabilities()
+		pc := models.NewProviderCapabilities()
 		pc.Roles.Enabled = true
 
-		updates := &ProviderCapabilities{
-			Roles: &RolesConfiguration{
+		updates := &models.ProviderCapabilities{
+			Roles: &models.RolesConfiguration{
 				Interval: 30,
 			},
 		}
@@ -432,11 +450,11 @@ func TestProviderCapabilities_Update(t *testing.T) {
 	})
 
 	t.Run("Update non-synchronizable capability", func(t *testing.T) {
-		pc := NewProviderCapabilities()
+		pc := models.NewProviderCapabilities()
 		pc.Authorizer.Enabled = true
 
-		updates := &ProviderCapabilities{
-			Authorizer: &AuthorizerConfiguration{
+		updates := &models.ProviderCapabilities{
+			Authorizer: &models.AuthorizerConfiguration{
 				Enabled: false,
 			},
 		}
@@ -446,11 +464,11 @@ func TestProviderCapabilities_Update(t *testing.T) {
 	})
 
 	t.Run("Ignore update for nil capability in base", func(t *testing.T) {
-		pc := NewProviderCapabilities()
+		pc := models.NewProviderCapabilities()
 		pc.Roles = nil // Simulate unsupported capability
 
-		updates := &ProviderCapabilities{
-			Roles: &RolesConfiguration{
+		updates := &models.ProviderCapabilities{
+			Roles: &models.RolesConfiguration{
 				Enabled: true,
 			},
 		}
@@ -460,14 +478,14 @@ func TestProviderCapabilities_Update(t *testing.T) {
 	})
 
 	t.Run("Update multiple capabilities", func(t *testing.T) {
-		pc := NewProviderCapabilities()
+		pc := models.NewProviderCapabilities()
 		pc.Roles.Enabled = true
 		pc.Users.Enabled = true
 		pc.Users.Interval = 60
 
-		updates := &ProviderCapabilities{
-			Roles: &RolesConfiguration{Enabled: false},
-			Users: &UsersConfiguration{Interval: 120, Enabled: true},
+		updates := &models.ProviderCapabilities{
+			Roles: &models.RolesConfiguration{Enabled: false},
+			Users: &models.UsersConfiguration{Interval: 120, Enabled: true},
 		}
 
 		pc.Update(updates)
@@ -477,13 +495,13 @@ func TestProviderCapabilities_Update(t *testing.T) {
 	})
 
 	t.Run("Update synchronization state", func(t *testing.T) {
-		pc := NewProviderCapabilities()
+		pc := models.NewProviderCapabilities()
 		pc.Roles.Enabled = true
 		pc.Roles.Synchronizable = true
 
 		// Disable sync
-		updates := &ProviderCapabilities{
-			Roles: &RolesConfiguration{
+		updates := &models.ProviderCapabilities{
+			Roles: &models.RolesConfiguration{
 				Enabled:        true,
 				Synchronizable: false,
 			},
@@ -493,8 +511,8 @@ func TestProviderCapabilities_Update(t *testing.T) {
 		assert.True(t, pc.Roles.Enabled)
 
 		// Enable sync
-		updates2 := &ProviderCapabilities{
-			Roles: &RolesConfiguration{
+		updates2 := &models.ProviderCapabilities{
+			Roles: &models.RolesConfiguration{
 				Enabled:        true,
 				Synchronizable: true,
 			},

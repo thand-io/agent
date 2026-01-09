@@ -16,7 +16,9 @@ import (
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
+
 	thandProvider "github.com/thand-io/agent/internal/workflows/tasks/providers/thand"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 	"go.temporal.io/api/enums/v1"
 )
 
@@ -270,8 +272,8 @@ func (s *Server) submitForm(c *gin.Context) {
 	temporalClient := temporal.GetClient()
 
 	err = temporalClient.SignalWorkflow(
-		ctx, workflowID, models.TemporalEmptyRunId,
-		models.TemporalEventSignalName, event)
+		ctx, workflowID, sdkWorkflowsModel.TemporalEmptyRunId,
+		sdkWorkflowsModel.TemporalEventSignalName, event)
 
 	if err != nil {
 		logrus.WithError(err).Error("Failed to signal workflow with form submission")
@@ -296,7 +298,7 @@ func (s *Server) getFormDataFromWorkflow(c *gin.Context, workflowID string) (*Fo
 	temporalClient := temporal.GetClient()
 
 	// Get workflow info from typed search attributes
-	workflowRun, err := temporalClient.DescribeWorkflow(ctx, workflowID, models.TemporalEmptyRunId)
+	workflowRun, err := temporalClient.DescribeWorkflow(ctx, workflowID, sdkWorkflowsModel.TemporalEmptyRunId)
 	if err != nil {
 		return nil, fmt.Errorf("workflow not found: %w", err)
 	}

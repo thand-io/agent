@@ -17,6 +17,7 @@ import (
 	"github.com/thand-io/agent/internal/common"
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 const ThandAuthorizeTask = "authorize"
@@ -35,7 +36,7 @@ func (t *AuthorizeTask) HasNotifiers() bool {
 }
 
 func (t *thandTask) executeAuthorizeTask(
-	workflowTask *models.WorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	taskName string,
 	call *taskModel.ThandTask) (any, error) {
 
@@ -94,7 +95,7 @@ type temporalAuthResult struct {
 
 // executeAuthorization performs the main authorization workflow
 func (t *thandTask) executeAuthorization(
-	workflowTask *models.WorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	taskName string,
 	call *taskModel.ThandTask,
 	elevateRequest *models.ElevateRequestInternal,
@@ -138,12 +139,12 @@ func (t *thandTask) executeAuthorization(
 
 	for _, providerName := range elevateRequest.Providers {
 
-		providerCall, err := t.config.GetProviderByName(providerName)
+		provider, err := t.config.GetProviderByName(providerName)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get provider: %w", err)
 		}
 
-		validateOutput, err := t.validateRoleAndBuildOutput(providerCall, *elevateRequest)
+		validateOutput, err := t.validateRoleAndBuildOutput(provider, *elevateRequest)
 		if err != nil {
 			return nil, err
 		}
@@ -183,7 +184,7 @@ func (t *thandTask) executeAuthorization(
 					},
 				}
 
-				log.WithFields(models.Fields{
+				log.WithFields(logrus.Fields{
 					"identity_id": identityId,
 					"provider":    providerName,
 					"tenant":      tenantId,
@@ -202,7 +203,7 @@ func (t *thandTask) executeAuthorization(
 					ThandAuthReq: thandAuthReq,
 				})
 
-				log.WithFields(models.Fields{
+				log.WithFields(logrus.Fields{
 					"user":     authReq.User.GetIdentity(),
 					"source":   authReq.User.Source,
 					"username": authReq.User.Username,
@@ -297,7 +298,7 @@ func (t *thandTask) executeAuthorization(
 
 // executeTemporalParallel executes authorization tasks in parallel using Temporal
 func (t *thandTask) executeTemporalParallel(
-	workflowTask *models.WorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	taskName string,
 	call *taskModel.ThandTask,
 	authTasks []authTask,
@@ -375,7 +376,7 @@ func (t *thandTask) executeTemporalParallel(
 
 // executeGoParallel executes authorization tasks in parallel using Go routines and WaitGroup
 func (t *thandTask) executeGoParallel(
-	workflowTask *models.WorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	authTasks []authTask,
 ) ([]authResult, error) {
 
@@ -398,7 +399,7 @@ func (t *thandTask) executeGoParallel(
 				return
 			}
 
-			authOut, err := providerCall.GetClient().AuthorizeRole(
+			authOut, err := providerCall.AuthorizeRole(
 				workflowTask.GetContext(), &authTask.AuthRequest,
 			)
 
@@ -418,14 +419,14 @@ func (t *thandTask) executeGoParallel(
 
 // validateRoleAndBuildOutput validates the role and builds the initial model output
 func (t *thandTask) validateRoleAndBuildOutput(
-	providerCall *models.Provider,
+	provider models.Provider,
 	elevateRequest models.ElevateRequestInternal,
 ) (map[string]any, error) {
 	modelOutput := map[string]any{}
 
-	validateOut, err := models.ValidateRole(providerCall.GetClient(), elevateRequest)
+	validateOut, err := models.ValidateRole(provider, elevateRequest)
 	if err != nil {
-		logrus.WithFields(models.Fields{
+		logrus.WithFields(logrus.Fields{
 			"error": err,
 			"role":  elevateRequest.Role,
 		}).Error("Failed to validate role")
@@ -451,15 +452,17 @@ func (t *thandTask) GetExport() *model.Export {
 
 // Add to your function
 func (t *thandTask) scheduleRevocation(
-	workflowTask *models.WorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	revocationTask string,
 	revocationAt time.Time,
 ) error {
 
 	log := workflowTask.GetLogger()
 
-	newTask := workflowTask.Clone().(*models.WorkflowTask)
-	newTask.SetEntrypoint(revocationTask)
+	newWorkflowTask := workflowTask.Clone().(*sdkWorkflowsModel.WorkflowTask)
+	newWorkflowTask.SetEntrypoint(revocationTask)
+
+	newTask := models.NewElevateWorkflowTask(newWorkflowTask)
 
 	serviceClient := t.config.GetServices()
 
@@ -480,8 +483,8 @@ func (t *thandTask) scheduleRevocation(
 		err := temporalClient.SignalWorkflow(
 			workflowTask.GetContext(),
 			workflowTask.WorkflowID,
-			models.TemporalEmptyRunId,
-			models.TemporalTerminateSignalName,
+			sdkWorkflowsModel.TemporalEmptyRunId,
+			sdkWorkflowsModel.TemporalTerminateSignalName,
 			signalInput,
 		)
 
@@ -490,7 +493,7 @@ func (t *thandTask) scheduleRevocation(
 			return fmt.Errorf("failed to signal workflow: %w", err)
 		}
 
-		log.WithFields(models.Fields{
+		log.WithFields(logrus.Fields{
 			"task": newTask.GetTaskName(),
 			"url":  t.config.GetResumeCallbackUrl(newTask),
 		}).Info("Scheduled revocation via Temporal")
@@ -525,13 +528,13 @@ func (t *thandTask) scheduleRevocation(
 					}
 
 					if response.StatusCode() != http.StatusOK {
-						log.WithFields(models.Fields{
+						log.WithFields(logrus.Fields{
 							"status_code": response.StatusCode(),
 						}).Error("Revoke endpoint returned non-200 status")
 						return
 					}
 
-					log.WithFields(models.Fields{
+					log.WithFields(logrus.Fields{
 						"revocation_task": newTask.GetTaskName(),
 						"workflow":        workflowTask,
 					}).Info("Scheduled revocation")
@@ -556,7 +559,7 @@ func (t *thandTask) scheduleRevocation(
 }
 
 func (t *thandTask) makeAuthorizationNotifications(
-	workflowTask *models.WorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	taskName string,
 	authorizeTask *AuthorizeTask,
 	elevateRequest *models.ElevateRequestInternal,
@@ -606,7 +609,7 @@ func (t *thandTask) makeAuthorizationNotifications(
 				Provider:  authorizeNotifier.GetProviderName(),
 			})
 
-			log.WithFields(models.Fields{
+			log.WithFields(logrus.Fields{
 				"recipient":   recipientId,
 				"provider":    authorizeNotifier.GetProviderName(),
 				"providerKey": providerKey,
@@ -625,7 +628,7 @@ func (t *thandTask) makeAuthorizationNotifications(
 	}
 
 	if err != nil {
-		log.WithError(err).WithFields(models.Fields{
+		log.WithError(err).WithFields(logrus.Fields{
 			"taskName": taskName,
 		}).Error("Failed to execute authorization notifications")
 
@@ -635,7 +638,7 @@ func (t *thandTask) makeAuthorizationNotifications(
 	// Process results using shared helper
 	if err := processNotificationResults(notifyResults, "Authorization notification"); err != nil {
 
-		log.WithError(err).WithFields(models.Fields{
+		log.WithError(err).WithFields(logrus.Fields{
 			"taskName": taskName,
 		}).Error("Failed to process authorization notification results")
 

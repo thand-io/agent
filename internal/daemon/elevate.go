@@ -257,7 +257,7 @@ func (s *Server) elevate(c *gin.Context, request models.ElevateRequest) {
 		}
 	}
 
-	workflowTask, err := s.Workflows.CreateWorkflow(ctx, request)
+	workflowTask, err := s.Workflows.CreateElevationWorkflow(ctx, request)
 
 	if err != nil {
 		s.getErrorPage(c, http.StatusBadRequest, "Failed to execute workflow", err)
@@ -388,7 +388,7 @@ func (s *Server) getElevateAuthOAuth2(c *gin.Context) {
 		return
 	}
 
-	session, err := authProviderInstance.GetClient().CreateSession(ctx, &models.AuthorizeUser{
+	session, err := authProviderInstance.CreateSession(ctx, &models.AuthorizeUser{
 		Code:        code,
 		State:       state,
 		RedirectUri: s.Config.GetAuthCallbackUrl(authProvider),
@@ -444,7 +444,7 @@ func (s *Server) getElevateAuthOAuth2(c *gin.Context) {
 
 }
 
-func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.WorkflowTask) {
+func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.ElevateWorkflowTask) {
 
 	// Get user context
 	if !s.Config.IsServer() {
@@ -508,7 +508,6 @@ func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.WorkflowTask) {
 
 	logrus.WithFields(logrus.Fields{
 		"task_name": workflowTask.GetTaskReference(),
-		"state":     workflowTask.GetEncodedTask(s.GetConfig().GetServices().GetEncryption()),
 	}).Info("Workflow is still running, redirecting to resume")
 
 	if workflowTask.GetStatus() == ctx.RunningStatus {
@@ -526,7 +525,7 @@ func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.WorkflowTask) {
 			TemplateData: s.GetTemplateData(c),
 			ExecutionStatePageResponse: ExecutionStatePageResponse{
 				Execution: &models.WorkflowExecutionInfo{
-					WorkflowID: workflowTask.WorkflowID,
+					WorkflowID: workflowTask.GetWorkflowID(),
 				},
 				Workflow: workflowTask.GetWorkflowDef(),
 			},
@@ -537,13 +536,11 @@ func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.WorkflowTask) {
 	} else {
 
 		c.JSON(http.StatusOK, models.ElevateResponse{
-			WorkflowId: workflowTask.WorkflowID,
+			WorkflowId: workflowTask.GetWorkflowID(),
 			Status:     workflowTask.GetStatus(),
 			Output:     workflowTask.GetOutputAsMap(),
 		})
-
 	}
-
 }
 
 // getElevateLLM handles POST /elevate/llm?reason=I need access to aws

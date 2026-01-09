@@ -16,10 +16,10 @@ const EmailProviderName = "email"
 // emailProvider implements the ProviderImpl interface for Email
 type emailProvider struct {
 	*models.BaseProvider
-	proxy models.ProviderImpl
+	proxy models.Provider
 }
 
-func (p *emailProvider) Initialize(identifier string, provider models.Provider) error {
+func (p *emailProvider) Initialize(identifier string, provider models.ProviderConfig) error {
 
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,

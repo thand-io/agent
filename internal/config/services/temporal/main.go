@@ -8,6 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
@@ -89,13 +90,13 @@ func (a *TemporalClient) Initialize() error {
 	if !a.config.DisableVersioning {
 		logrus.WithFields(logrus.Fields{
 			"BuildID":        buildID,
-			"DeploymentName": models.TemporalDeploymentName,
+			"DeploymentName": sdkConstants.TemporalDeploymentName,
 		}).Info("Configuring Worker with versioning")
 
 		workerOptions.DeploymentOptions = worker.DeploymentOptions{
 			UseVersioning: true,
 			Version: worker.WorkerDeploymentVersion{
-				DeploymentName: models.TemporalDeploymentName,
+				DeploymentName: sdkConstants.TemporalDeploymentName,
 				BuildID:        buildID,
 			},
 			// Default workflows to Pinned behavior

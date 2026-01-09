@@ -17,6 +17,7 @@ import (
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/config/services"
 	"github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
 type Mode string
@@ -52,9 +53,9 @@ type Config struct {
 	Secret  string               `mapstructure:"secret"` // Secret used for signing cookies and tokens
 
 	// Workflow engine config
-	Roles     RoleConfig     `mapstructure:"roles"`
-	Workflows WorkflowConfig `mapstructure:"workflows"` // These are workflows to run for role associated workflows
-	Providers ProviderConfig `mapstructure:"providers"` // These are integration providers like AWS, GCP, etc.
+	Roles     RoleConfig                `mapstructure:"roles"`
+	Workflows WorkflowConfig            `mapstructure:"workflows"` // These are workflows to run for role associated workflows
+	Providers ProviderDefinitionsConfig `mapstructure:"providers"` // These are integration providers like AWS, GCP, etc.
 
 	// This is ONLY if the agent is running in server mode
 	// and you want to use https://www.thand.io hosted services
@@ -68,6 +69,9 @@ type Config struct {
 	// Cached services client
 	initializeServiceClientOnce sync.Once
 	servicesClient              models.ServicesClientImpl
+
+	// Provider instances
+	providerInstances map[string]models.Provider
 }
 
 func (c *Config) GetSecret() string {
@@ -103,7 +107,7 @@ func (c *Config) GetWorkflows() WorkflowConfig {
 	return c.Workflows
 }
 
-func (c *Config) GetProviders() ProviderConfig {
+func (c *Config) GetProviders() ProviderDefinitionsConfig {
 	return c.Providers
 }
 
@@ -127,29 +131,48 @@ func (c *Config) GetServices() models.ServicesClientImpl {
 
 }
 
-func (c *Config) GetProvider(providerName string) (string, *models.Provider, error) {
+func (c *Config) GetProvider(providerName string) (string, models.Provider, error) {
 
 	// Get the first provider by provider name
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	for foundName, provider := range c.Providers.Definitions {
-		if strings.Compare(provider.Provider, providerName) == 0 {
-			return foundName, &provider, nil
+	for foundName, provider := range c.providerInstances {
+		if strings.Compare(provider.GetProvider(), providerName) == 0 {
+			return foundName, provider, nil
 		}
 	}
 
 	return "", nil, fmt.Errorf("provider not found: %s", providerName)
 }
 
-func (c *Config) GetProviderByName(name string) (*models.Provider, error) {
+func (c *Config) GetProviderByName(name string) (models.Provider, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	if provider, exists := c.Providers.Definitions[name]; exists {
-		return &provider, nil
+	if provider, exists := c.providerInstances[name]; exists {
+		return provider, nil
 	}
 	return nil, fmt.Errorf("provider not found: %s", name)
+}
+
+func (c *Config) HasProvider(name string) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	_, exists := c.providerInstances[name]
+	return exists
+}
+
+func (c *Config) AddProvider(name string, provider models.Provider) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.providerInstances == nil {
+		c.providerInstances = make(map[string]models.Provider)
+	}
+
+	c.providerInstances[name] = provider
 }
 
 func (c *Config) GetProvidersByCapability(capability ...models.ProviderCapability) map[string]models.Provider {
@@ -163,25 +186,18 @@ func (c *Config) GetProvidersByCapabilityWithUser(user *models.User, capability 
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	for name, provider := range c.Providers.Definitions {
+	for name, provider := range c.providerInstances {
 		// Skip providers that don't have a client initialized
-		client := provider.GetClient()
-
-		if client == nil {
-			continue
-		}
-
-		if !provider.Enabled {
-			continue
-		}
 
 		if !provider.HasPermission(user) {
 			continue
 		}
 
-		if client.HasAnyCapability(capability...) {
-			providers[name] = provider
+		if len(capability) != 0 && !provider.HasAnyCapability(capability...) {
+			continue
 		}
+
+		providers[name] = provider
 	}
 	return providers
 }
@@ -285,7 +301,7 @@ type WorkflowPluginConfig struct {
 type WorkflowPlugin struct {
 }
 
-type ProviderConfig struct {
+type ProviderDefinitionsConfig struct {
 	Path  string          `mapstructure:"path" json:"path"`
 	URL   *model.Endpoint `mapstructure:"url" json:"url"`
 	Vault string          `mapstructure:"vault" json:"vault"` // vault secret / path to use
@@ -294,14 +310,14 @@ type ProviderConfig struct {
 	Plugins ProviderPluginConfig `mapstructure:"plugins" json:"plugins"`
 
 	// Load providers directly from config using mapstructure:",remain"
-	Definitions map[string]models.Provider `mapstructure:",remain" json:"definitions"`
+	Definitions map[string]models.ProviderConfig `mapstructure:",remain" json:"definitions"`
 }
 
-func (p *ProviderConfig) GetDefinitions() map[string]models.Provider {
+func (p *ProviderDefinitionsConfig) GetDefinitions() map[string]models.ProviderConfig {
 	return p.Definitions
 }
 
-func (p *ProviderConfig) GetProviderByName(name string) (*models.Provider, error) {
+func (p *ProviderDefinitionsConfig) GetProviderByName(name string) (*models.ProviderConfig, error) {
 	if provider, exists := p.Definitions[name]; exists {
 		return &provider, nil
 	}
@@ -477,7 +493,7 @@ func (c *Config) GetAuthCallbackUrl(providerName string) string {
 	)
 }
 
-func (c *Config) GetResumeCallbackUrl(workflowTask *models.WorkflowTask) string {
+func (c *Config) GetResumeCallbackUrl(workflowTask *models.ElevateWorkflowTask) string {
 
 	queryParams := url.Values{
 		"state": {workflowTask.GetEncodedTask(
@@ -493,11 +509,11 @@ func (c *Config) GetResumeCallbackUrl(workflowTask *models.WorkflowTask) string 
 	))
 }
 
-func (c *Config) GetSignalCallbackUrl(workflowTask *models.WorkflowTask) string {
+func (c *Config) GetSignalCallbackUrl(workflowTask *models.ElevateWorkflowTask) string {
 
 	encodedInput := models.EncodingWrapper{
-		Type: models.ENCODED_WORKFLOW_SIGNAL,
-		Data: workflowTask.Input,
+		Type: sdkConstants.ENCODED_WORKFLOW_SIGNAL,
+		Data: workflowTask.GetInput(),
 	}.EncodeAndEncrypt(c.servicesClient.GetEncryption())
 
 	queryParams := url.Values{
@@ -508,7 +524,7 @@ func (c *Config) GetSignalCallbackUrl(workflowTask *models.WorkflowTask) string 
 
 	return c.GetCallbackUrl(fmt.Sprintf(
 		"/execution/%s/signal?%s",
-		workflowTask.WorkflowID,
+		workflowTask.GetWorkflowID(),
 		queryParams.Encode(),
 	))
 }
@@ -598,13 +614,7 @@ func (r *Config) GetProviderRoleWithIdentity(identity *models.Identity, roleName
 			continue
 		}
 
-		providerClient := p.GetClient()
-
-		if providerClient == nil {
-			continue
-		}
-
-		providerRole, err := providerClient.GetRole(ctx, roleName)
+		providerRole, err := p.GetRole(ctx, roleName)
 
 		if err != nil {
 			continue
@@ -630,13 +640,7 @@ func (r *Config) GetProviderPermission(permissionName string, providers ...strin
 			continue
 		}
 
-		providerClient := p.GetClient()
-
-		if providerClient == nil {
-			continue
-		}
-
-		providerPermission, err := providerClient.GetPermission(ctx, permissionName)
+		providerPermission, err := p.GetPermission(ctx, permissionName)
 
 		if err != nil {
 			continue
@@ -674,12 +678,12 @@ type RegistrationRequest struct {
 }
 
 type RegistrationResponse struct {
-	Success   bool                   `json:"success" required:"true"`
-	Services  *models.ServicesConfig `json:"services,omitempty"`
-	Logging   *models.LoggingConfig  `json:"logging,omitempty"`
-	Roles     *RoleConfig            `json:"roles,omitempty"`
-	Providers *ProviderConfig        `json:"providers,omitempty"`
-	Workflows *WorkflowConfig        `json:"workflows,omitempty"`
+	Success   bool                       `json:"success" required:"true"`
+	Services  *models.ServicesConfig     `json:"services,omitempty"`
+	Logging   *models.LoggingConfig      `json:"logging,omitempty"`
+	Roles     *RoleConfig                `json:"roles,omitempty"`
+	Providers *ProviderDefinitionsConfig `json:"providers,omitempty"`
+	Workflows *WorkflowConfig            `json:"workflows,omitempty"`
 }
 
 type PostflightRequest struct {

@@ -19,7 +19,7 @@ func NewMockAwsProvider() *awsProviderMock {
 	}
 }
 
-func (p *awsProviderMock) Initialize(identifier string, provider models.Provider) error {
+func (p *awsProviderMock) Initialize(identifier string, provider models.ProviderConfig) error {
 	// Initialize the embedded awsProvider struct first
 	p.awsProvider = &awsProvider{}
 	p.awsProvider.BaseProvider = models.NewBaseProvider(

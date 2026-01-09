@@ -41,11 +41,11 @@ type IAPClaims struct {
 // gcpIAPProvider implements the ProviderImpl interface for GCP IAP
 type gcpIAPProvider struct {
 	*models.BaseProvider
-	audience      string              // Audience for validating incoming JWTs (e.g., /projects/NUM/apps/ID)
-	oauthProvider models.ProviderImpl // Underlying Google OAuth2 provider
+	audience      string          // Audience for validating incoming JWTs (e.g., /projects/NUM/apps/ID)
+	oauthProvider models.Provider // Underlying Google OAuth2 provider
 }
 
-func (p *gcpIAPProvider) Initialize(identifier string, provider models.Provider) error {
+func (p *gcpIAPProvider) Initialize(identifier string, provider models.ProviderConfig) error {
 	logrus.WithFields(logrus.Fields{
 		"identifier": identifier,
 		"type":       GcpIAPProviderName,

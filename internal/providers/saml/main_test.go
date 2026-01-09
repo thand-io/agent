@@ -535,20 +535,20 @@ func TestSAMLProvider_RenewSession(t *testing.T) {
 func TestSAMLProvider_Initialize(t *testing.T) {
 	tests := []struct {
 		name          string
-		setupConfig   func(t *testing.T) models.Provider
+		setupConfig   func(t *testing.T) models.ProviderConfig
 		expectError   bool
 		errorContains string
 		validate      func(t *testing.T, p *samlProvider)
 	}{
 		{
 			name: "Successful initialization with valid config",
-			setupConfig: func(t *testing.T) models.Provider {
+			setupConfig: func(t *testing.T) models.ProviderConfig {
 				cert, key := createTestCert(t)
 				certFile, keyFile := writeCertAndKeyToFiles(t, cert, key)
 				idpServer := createMockIDPMetadataServer(t)
 				t.Cleanup(idpServer.Close)
 
-				return models.Provider{
+				return models.ProviderConfig{
 					Name:     "test-saml",
 					Provider: SamlProviderName,
 					Config: &models.BasicConfig{
@@ -571,11 +571,11 @@ func TestSAMLProvider_Initialize(t *testing.T) {
 		},
 		{
 			name: "Invalid IDP metadata URL",
-			setupConfig: func(t *testing.T) models.Provider {
+			setupConfig: func(t *testing.T) models.ProviderConfig {
 				cert, key := createTestCert(t)
 				certFile, keyFile := writeCertAndKeyToFiles(t, cert, key)
 
-				return models.Provider{
+				return models.ProviderConfig{
 					Name:     "test-saml",
 					Provider: SamlProviderName,
 					Config: &models.BasicConfig{
@@ -592,11 +592,11 @@ func TestSAMLProvider_Initialize(t *testing.T) {
 		},
 		{
 			name: "Certificate file does not exist",
-			setupConfig: func(t *testing.T) models.Provider {
+			setupConfig: func(t *testing.T) models.ProviderConfig {
 				idpServer := createMockIDPMetadataServer(t)
 				t.Cleanup(idpServer.Close)
 
-				return models.Provider{
+				return models.ProviderConfig{
 					Name:     "test-saml",
 					Provider: SamlProviderName,
 					Config: &models.BasicConfig{
@@ -613,13 +613,13 @@ func TestSAMLProvider_Initialize(t *testing.T) {
 		},
 		{
 			name: "Invalid root URL",
-			setupConfig: func(t *testing.T) models.Provider {
+			setupConfig: func(t *testing.T) models.ProviderConfig {
 				cert, key := createTestCert(t)
 				certFile, keyFile := writeCertAndKeyToFiles(t, cert, key)
 				idpServer := createMockIDPMetadataServer(t)
 				t.Cleanup(idpServer.Close)
 
-				return models.Provider{
+				return models.ProviderConfig{
 					Name:     "test-saml",
 					Provider: SamlProviderName,
 					Config: &models.BasicConfig{
@@ -636,8 +636,8 @@ func TestSAMLProvider_Initialize(t *testing.T) {
 		},
 		{
 			name: "Invalid config format",
-			setupConfig: func(t *testing.T) models.Provider {
-				return models.Provider{
+			setupConfig: func(t *testing.T) models.ProviderConfig {
+				return models.ProviderConfig{
 					Name:     "test-saml",
 					Provider: SamlProviderName,
 					Config: &models.BasicConfig{

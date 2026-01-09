@@ -11,7 +11,7 @@ import (
 // The mock providers are registered via the internal/testing/mocks package import
 // This prevents actual cloud provider client initialization during tests
 // but still loads roles and permissions from embedded data
-func newTestConfig(t *testing.T, roles map[string]models.Role, providers map[string]models.Provider) *Config {
+func newTestConfig(t *testing.T, roles map[string]models.Role, providers map[string]models.ProviderConfig) *Config {
 	t.Helper()
 
 	config := &Config{
@@ -19,7 +19,7 @@ func newTestConfig(t *testing.T, roles map[string]models.Role, providers map[str
 		Roles: RoleConfig{
 			Definitions: roles,
 		},
-		Providers: ProviderConfig{
+		Providers: ProviderDefinitionsConfig{
 			Definitions: providers,
 		},
 	}

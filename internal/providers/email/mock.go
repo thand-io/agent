@@ -153,21 +153,21 @@ type emailProviderMock struct {
 }
 
 // NewMockEmailProvider creates a new mock email provider for testing
-func NewMockEmailProvider() models.ProviderImpl {
+func NewMockEmailProvider() models.Provider {
 	return &emailProviderMock{
 		interceptor: EmailInterceptor,
 	}
 }
 
 // NewMockEmailProviderWithInterceptor creates a mock with a custom interceptor
-func NewMockEmailProviderWithInterceptor(interceptor *MockEmailInterceptor) models.ProviderImpl {
+func NewMockEmailProviderWithInterceptor(interceptor *MockEmailInterceptor) models.Provider {
 	return &emailProviderMock{
 		interceptor: interceptor,
 	}
 }
 
 // Initialize sets up the mock email provider
-func (p *emailProviderMock) Initialize(identifier string, provider models.Provider) error {
+func (p *emailProviderMock) Initialize(identifier string, provider models.ProviderConfig) error {
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,

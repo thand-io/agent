@@ -30,7 +30,7 @@ type azureProvider struct {
 	resourceGroupName   string
 }
 
-func (p *azureProvider) Initialize(identifier string, provider models.Provider) error {
+func (p *azureProvider) Initialize(identifier string, provider models.ProviderConfig) error {
 	// Set the provider to the base provider
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,

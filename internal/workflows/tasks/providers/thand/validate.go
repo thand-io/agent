@@ -7,6 +7,7 @@ import (
 	"maps"
 	"strings"
 
+	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
@@ -19,7 +20,7 @@ var VALIDATOR_LLM = "llm"
 
 // ThandValidateTask represents a custom task for Thand validation
 func (t *thandTask) executeValidateTask(
-	workflowTask *models.WorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	call *taskModel.ThandTask,
 	input any) (any, error) {
 
@@ -61,7 +62,7 @@ func (t *thandTask) executeValidateTask(
 		duration = "t" + duration
 	}
 
-	log.WithFields(models.Fields{
+	log.WithFields(logrus.Fields{
 		"duration": duration,
 		"role":     role,
 		"reason":   reason,
@@ -83,7 +84,7 @@ func (t *thandTask) executeValidateTask(
 		validator = VALIDATOR_STATIC
 	}
 
-	log.WithFields(models.Fields{
+	log.WithFields(logrus.Fields{
 		"validator": validator,
 	}).Info("Executing validation")
 
@@ -93,7 +94,7 @@ func (t *thandTask) executeValidateTask(
 
 	primaryProvider := elevateRequest.Providers[0]
 
-	providerCall, err := t.config.GetProviderByName(primaryProvider)
+	provider, err := t.config.GetProviderByName(primaryProvider)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get provider: %w", err)
 	}
@@ -101,7 +102,7 @@ func (t *thandTask) executeValidateTask(
 	responseOut := map[string]any{}
 
 	// Validate role
-	validateOut, err := models.ValidateRole(providerCall.GetClient(), elevateRequest)
+	validateOut, err := models.ValidateRole(provider, elevateRequest)
 
 	if err != nil {
 		return nil, err
@@ -112,7 +113,7 @@ func (t *thandTask) executeValidateTask(
 		maps.Copy(responseOut, validateOut)
 	}
 
-	log.WithFields(models.Fields{
+	log.WithFields(logrus.Fields{
 		"role":      elevateRequest.Role,
 		"providers": elevateRequest.Providers,
 		"output":    validateOut,

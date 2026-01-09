@@ -8,21 +8,7 @@ import (
 	"go.temporal.io/sdk/worker"
 )
 
-const TemporalDeploymentName = "thand-agent"
-
-const TemporalEmptyRunId = ""
-
 const TemporalExecuteElevationWorkflowName = "ExecuteElevationWorkflow"
-
-const TemporalCleanupActivityName = "cleanup"
-const TemporalHttpActivityName = "http"
-const TemporalGrpcActivityName = "grpc"
-const TemporalAsyncionActivityName = "asyncio"
-const TemporalOpenAPIActivityName = "openapi"
-
-const TemporalResumeSignalName = "resume"
-const TemporalEventSignalName = "event"
-const TemporalTerminateSignalName = "terminate"
 
 const TemporalIsApprovedQueryName = "isApproved"
 const TemporalGetWorkflowTaskQueryName = "getWorkflowTask"

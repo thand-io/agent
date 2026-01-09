@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hashicorp/go-version"
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 	"gopkg.in/yaml.v3"
@@ -18,7 +19,7 @@ import (
 type TestCase struct {
 	Name      string
 	Path      string
-	Providers map[string]models.Provider
+	Providers map[string]models.ProviderConfig
 	Roles     map[string]models.Role
 	Workflows map[string]models.Workflow
 }
@@ -75,7 +76,7 @@ func (l *TestCaseLoader) LoadTestCase(name string) (*TestCase, error) {
 }
 
 // loadProviders loads providers from the test case directory
-func (l *TestCaseLoader) loadProviders(testPath string) (map[string]models.Provider, error) {
+func (l *TestCaseLoader) loadProviders(testPath string) (map[string]models.ProviderConfig, error) {
 	content, err := os.ReadFile(filepath.Join(testPath, "providers.yaml"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read providers.yaml: %w", err)
@@ -85,8 +86,8 @@ func (l *TestCaseLoader) loadProviders(testPath string) (map[string]models.Provi
 	content = l.substituteVariables(content)
 
 	var data struct {
-		Version   string                     `yaml:"version"`
-		Providers map[string]models.Provider `yaml:"providers"`
+		Version   string                           `yaml:"version"`
+		Providers map[string]models.ProviderConfig `yaml:"providers"`
 	}
 
 	if err := yaml.Unmarshal(content, &data); err != nil {
@@ -180,8 +181,20 @@ func (l *TestCaseLoader) CreateConfigFromTestCase(tc *TestCase) (*config.Config,
 	// Set up roles first (before providers in case providers need them)
 	cfg.Roles.Definitions = tc.Roles
 
-	// Set up workflows
-	cfg.Workflows.Definitions = tc.Workflows
+	// Apply workflows to set the Identifier field on each workflow
+	// The Identifier is critical for workflow hydration - it's used as the workflow name
+	// when loading workflow definitions during execution. Without this, workflows will
+	// fail with "workflow not found" errors.
+	workflows, err := cfg.ApplyWorkflows([]*models.WorkflowDefinitions{
+		{
+			Version:   version.Must(version.NewVersion("1.0")),
+			Workflows: tc.Workflows,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to apply workflows: %w", err)
+	}
+	cfg.Workflows.Definitions = workflows
 
 	// Set up providers
 	cfg.Providers.Definitions = tc.Providers

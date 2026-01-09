@@ -1,0 +1,266 @@
+package runner
+
+import (
+	"fmt"
+	"time"
+
+	swctx "github.com/serverlessworkflow/sdk-go/v3/impl/ctx"
+	utils "github.com/serverlessworkflow/sdk-go/v3/impl/utils"
+	"github.com/serverlessworkflow/sdk-go/v3/model"
+	"github.com/sirupsen/logrus"
+)
+
+func (r *ResumableWorkflowRunner) executeDoRunner(
+	_ string, doTask *model.DoTask, input any) (any, error) {
+	return r.resumeTasks(doTask.Do, 0, input)
+}
+
+func (r *ResumableWorkflowRunner) executeTaskList(
+	taskList *model.TaskList, input any) (any, error) {
+	return r.resumeTasks(taskList, 0, input)
+}
+
+func (d *ResumableWorkflowRunner) resumeTaskList(
+	taskList *model.TaskList, idx int, input any) (output any, err error) {
+	return d.resumeTasks(taskList, idx, input)
+}
+
+// runTasks runs all defined tasks sequentially.
+func (d *ResumableWorkflowRunner) resumeTasks(
+	taskList *model.TaskList, idx int, input any) (output any, err error) {
+
+	if taskList == nil {
+		return input, nil
+	}
+
+	taskSupport := d.GetWorkflowTask()
+	log := d.GetLogger()
+
+	output = input
+
+	taskListRef := *taskList
+
+	// check if index is valid
+	if idx < 0 || idx >= len(taskListRef) {
+		return output, fmt.Errorf("invalid task index %d", idx)
+	}
+
+	currentTask := taskListRef[idx]
+
+	for currentTask != nil {
+
+		taskSupport.SetTaskStatus(currentTask.Key, swctx.PendingStatus)
+
+		if err = taskSupport.SetTaskDef(currentTask); err != nil {
+			return nil, err
+		}
+		if err = taskSupport.SetTaskReferenceFromName(currentTask.Key); err != nil {
+			return nil, err
+		}
+
+		if shouldRun, err := d.shouldRunTask(input, currentTask); err != nil {
+			return output, err
+		} else if !shouldRun {
+			idx, currentTask = taskList.Next(idx)
+			continue
+		}
+
+		taskSupport.SetTaskStatus(currentTask.Key, swctx.RunningStatus)
+
+		err = d.config.PreStateTransitionHook(
+			taskSupport,
+		)
+
+		if err != nil {
+			log.WithFields(logrus.Fields{
+				"task":  currentTask,
+				"error": err,
+			}).Warn("Failed to execute pre state transition hook")
+		}
+
+		log.WithFields(logrus.Fields{
+			"task":  currentTask.Key,
+			"input": input,
+		}).Info("Starting task execution")
+
+		output, err = d.runTaskItem(currentTask, input)
+
+		if err != nil {
+			taskSupport.SetTaskStatus(currentTask.Key, swctx.FaultedStatus)
+			return output, err
+		}
+
+		taskSupport.SetTaskStatus(currentTask.Key, swctx.CompletedStatus)
+
+		err = d.config.PostStateTransitionHook(
+			taskSupport,
+		)
+
+		if err != nil {
+			log.WithFields(logrus.Fields{
+				"task":  currentTask,
+				"error": err,
+			}).Warn("Failed to execute post state transition hook")
+		}
+
+		// Check if this task is a SwitchTask and handle it
+		if flowDirective, ok := output.(*model.FlowDirective); ok {
+
+			// Process FlowDirective: update idx/currentTask accordingly
+			idx, currentTask = taskList.KeyAndIndex(flowDirective.Value)
+			if currentTask == nil {
+
+				log.WithFields(logrus.Fields{
+					"task":  currentTask,
+					"error": err,
+				}).Error("Flow directive target not found")
+
+				return nil, fmt.Errorf(
+					"flow directive target '%s' not found", flowDirective.Value)
+			}
+			continue
+		}
+
+		input = utils.DeepCloneValue(output)
+
+		log.WithFields(logrus.Fields{
+			"currentTask": currentTask.Key,
+			"taskOutput":  output,
+			"nextInput":   input,
+		}).Info("Task completed, setting input for next task")
+
+		idx, currentTask = taskList.Next(idx)
+
+	}
+
+	return output, nil
+}
+
+// runTask executes an individual task.
+func (d *ResumableWorkflowRunner) runTaskItem(
+	task *model.TaskItem,
+	input any,
+) (output any, err error) {
+
+	if task == nil || task.Task == nil {
+		return nil, fmt.Errorf("invalid task")
+	}
+
+	taskName := task.Key
+
+	taskSupport := d.GetWorkflowTask()
+	log := d.GetLogger()
+
+	taskSupport.SetTaskStartedAt(time.Now())
+	taskSupport.SetTaskRawInput(input)
+	taskSupport.SetTaskName(taskName)
+
+	if task.GetBase().Input != nil {
+		if input, err = d.processTaskInput(task.GetBase(), input, taskName); err == nil {
+			taskSupport.SetTaskRawInput(input)
+		} else {
+
+			log.WithFields(logrus.Fields{
+				"task": taskName,
+			}).WithError(err).Error("Failed to process task input")
+
+			return nil, err
+		}
+	}
+
+	output, err = d.executeTask(task, input)
+
+	if err != nil {
+
+		log.WithFields(logrus.Fields{
+			"task":  taskName,
+			"error": err,
+		}).Error("Task execution failed")
+
+		return nil, err
+	}
+
+	taskSupport.SetTaskRawOutput(output)
+
+	if output, err = d.ProcessTaskOutput(task.GetBase(), output, taskName); err != nil {
+
+		log.WithFields(logrus.Fields{
+			"task": taskName,
+		}).WithError(err).Error("Failed to process task output")
+
+		return nil, err
+	}
+
+	if err = d.ProcessTaskExport(task.GetBase(), output, taskName); err != nil {
+
+		log.WithFields(logrus.Fields{
+			"task": taskName,
+		}).WithError(err).Error("Failed to process task export")
+
+		return nil, err
+	}
+
+	return output, nil
+}
+
+func (r *ResumableWorkflowRunner) executeTask(
+	task *model.TaskItem,
+	input any,
+) (any, error) {
+
+	if task == nil || task.Task == nil {
+		return nil, fmt.Errorf("invalid task")
+	}
+
+	return r.dispatchTaskExecution(task, input)
+}
+
+// dispatchTaskExecution handles the actual task execution logic using a type-based dispatcher
+func (r *ResumableWorkflowRunner) dispatchTaskExecution(
+	task *model.TaskItem,
+	input any,
+) (any, error) {
+	taskName := task.Key
+
+	// First, check for custom handlers
+	if handler, exists := r.GetTasks().GetTaskHandler(task); exists {
+		return handler.Execute(r.GetWorkflowTask(), task, input)
+	}
+
+	switch t := task.Task.(type) {
+	case *model.CallFunction:
+		return r.ExecuteCallFunction(taskName, task.AsCallFunctionTask(), input)
+	case *model.CallHTTP:
+		return r.executeHttpFunction(taskName, task.AsCallHTTPTask(), input)
+	case *model.CallAsyncAPI:
+		return r.executeAsyncFunction(taskName, task.AsCallAsyncAPITask(), input)
+	case *model.CallOpenAPI:
+		return r.ExecuteOpenAPIFunction(taskName, task.AsCallOpenAPITask(), input)
+	case *model.CallGRPC:
+		return r.ExecuteGRPCFunction(taskName, task.AsCallGRPCTask(), input)
+	case *model.SetTask:
+		return r.ExecuteSetTask(taskName, task.AsSetTask(), input)
+	case *model.ForTask:
+		return r.executeForTask(taskName, task.AsForTask(), input)
+	case *model.TryTask:
+		return r.executeTryTask(taskName, task.AsTryTask(), input)
+	case *model.WaitTask:
+		return r.executeWaitTask(taskName, task.AsWaitTask(), input)
+	case *model.ListenTask:
+		return r.executeListenTask(taskName, task.AsListenTask(), input)
+	case *model.RaiseTask:
+		return r.executeRaiseTask(taskName, task.AsRaiseTask(), input)
+	case *model.EmitTask:
+		return r.ExecuteEmitTask(taskName, task.AsEmitTask(), input)
+	case *model.RunTask:
+		return r.executeRunTask(taskName, task.AsRunTask(), input)
+	case *model.ForkTask:
+		return r.executeForkTask(taskName, task.AsForkTask(), input)
+	case *model.DoTask:
+		return r.executeDoRunner(taskName, task.AsDoTask(), input)
+	case *model.SwitchTask:
+		return r.ExecuteSwitchTask(taskName, task.AsSwitchTask(), input)
+	default:
+		return nil, fmt.Errorf("unsupported task type %T", t)
+	}
+}

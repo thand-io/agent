@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/blevesearch/bleve/v2"
+	"github.com/sirupsen/logrus"
 )
 
 type BaseProvider struct {
@@ -59,7 +60,34 @@ type TenantsSupport struct {
 	tenantsIndex bleve.Index
 }
 
-func NewBaseProvider(identifier string, provider Provider, capabilities *ProviderCapabilities) *BaseProvider {
+func (p *BaseProvider) HasPermission(user *User) bool {
+
+	// If no user and no role then allow access
+	// This is to allow access to public providers
+	// e.g. for authentication
+	// If a role is defined then we need a user to check against the role
+	if user == nil && p.GetConfigRole() == nil {
+		logrus.Debugf("Provider %s has no role defined and no user, allowing access", p.GetName())
+		return true
+	} else if user == nil && p.GetConfigRole() != nil {
+		// If we have a role defined but no user then deny access
+		logrus.Debugf("Provider %s has a role defined but no user, denying access", p.GetName())
+		return false
+	} else if user != nil && p.GetConfigRole() == nil {
+		// If we have a user but no role then allow access
+		logrus.Debugf("Provider %s has no role defined but has a user, allowing access", p.GetName())
+		return true
+	}
+
+	// Otherwise, if we have a role defined then check the user has that role
+	return p.GetConfigRole().HasPermission(user)
+}
+
+func (p *BaseProvider) GetConfigRole() *Role {
+	return p.role
+}
+
+func NewBaseProvider(identifier string, provider ProviderConfig, capabilities *ProviderCapabilities) *BaseProvider {
 
 	// Lets setup the capabilities first
 	if capabilities == nil {
@@ -177,7 +205,11 @@ func (p *BaseProvider) GetProvider() string {
 	return p.provider
 }
 
-func (p *BaseProvider) Initialize(identifier string, provider Provider) error {
+func (p *BaseProvider) GetBaseRole() *Role {
+	return p.role
+}
+
+func (p *BaseProvider) Initialize(identifier string, provider ProviderConfig) error {
 	// Initialize the provider
 	return nil
 }

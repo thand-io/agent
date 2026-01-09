@@ -22,7 +22,7 @@ type emailSmtpProvider struct {
 	defaultFromAddress string
 }
 
-func (p *emailSmtpProvider) Initialize(identifier string, provider models.Provider) error {
+func (p *emailSmtpProvider) Initialize(identifier string, provider models.ProviderConfig) error {
 
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
@@ -125,7 +125,7 @@ func (p *emailSmtpProvider) SendNotification(
 	return nil
 }
 
-func NewEmailSmtpProvider() models.ProviderImpl {
+func NewEmailSmtpProvider() models.Provider {
 	return &emailSmtpProvider{}
 }
 

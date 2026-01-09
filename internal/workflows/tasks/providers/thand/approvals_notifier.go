@@ -23,14 +23,14 @@ type ApprovalNotifier struct {
 
 type approvalsNotifier struct {
 	config       models.ConfigImpl
-	workflowTask *models.WorkflowTask
+	workflowTask *models.ElevateWorkflowTask
 	elevationReq *models.ElevateRequestInternal
 	req          *ApprovalNotifier
 }
 
 func NewApprovalsNotifier(
 	config models.ConfigImpl,
-	workflowTask *models.WorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	elevationReq *models.ElevateRequestInternal,
 	req *ApprovalNotifier,
 ) NotifierImpl {

@@ -7,7 +7,7 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
-func (c *Config) synchronizeProvider(p *models.Provider) {
+func (c *Config) synchronizeProvider(p models.Provider) {
 
 	if !c.IsServer() {
 		logrus.Debugln("Not a server instance, skipping provider synchronization")
@@ -16,13 +16,6 @@ func (c *Config) synchronizeProvider(p *models.Provider) {
 
 	if p == nil {
 		logrus.Warningln("Provider is nil, cannot synchronize")
-		return
-	}
-
-	impl := p.GetClient()
-
-	if impl == nil {
-		logrus.Warningln("Provider client is nil, cannot synchronize:", p.Name)
 		return
 	}
 
@@ -38,22 +31,21 @@ func (c *Config) synchronizeProvider(p *models.Provider) {
 	go func() {
 
 		syncRequest := models.SynchronizeRequest{
-			ProviderIdentifier: impl.GetIdentifier(),
+			ProviderIdentifier: p.GetIdentifier(),
 		}
 
-		err := impl.Synchronize(
+		err := p.Synchronize(
 			context.Background(),
 			temporalClient,
 			&syncRequest,
 		)
 
 		if err != nil {
-			logrus.WithError(err).Errorln("Failed to synchronize provider:", p.Name)
+			logrus.WithError(err).Errorln("Failed to synchronize provider:", p.GetIdentifier())
 			return
 		}
 
-		logrus.Infoln("Synchronized provider successfully:", p.Name)
-
+		logrus.Infoln("Synchronized provider successfully:", p.GetIdentifier())
 	}()
 
 }

@@ -2,6 +2,7 @@ version: "1.0"
 workflows:
   # AWS elevation workflow with multiple approvals
   aws_multi_approval:
+    name: AWS Multi approval
     description: AWS access elevation with multiple approvals
     authentication: default
     enabled: true

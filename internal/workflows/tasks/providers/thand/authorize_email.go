@@ -126,13 +126,6 @@ func (a *authorizerNotifier) addProviderAccessButtons(ctx context.Context, data 
 			continue
 		}
 
-		providerClient := provider.GetClient()
-
-		if providerClient == nil {
-			logrus.Errorf("Provider '%s' has no client defined for access URL", providerName)
-			continue
-		}
-
 		for _, identity := range identities {
 			authRequest, foundReq := a.authRequests[identity]
 			authResponse, foundAuth := a.authResponses[identity]
@@ -142,7 +135,7 @@ func (a *authorizerNotifier) addProviderAccessButtons(ctx context.Context, data 
 				continue
 			}
 
-			accessURL := providerClient.GetAuthorizedAccessUrl(
+			accessURL := provider.GetAuthorizedAccessUrl(
 				ctx,
 				authRequest,
 				authResponse,

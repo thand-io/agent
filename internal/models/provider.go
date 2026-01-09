@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
-	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/interpolate"
 )
@@ -44,7 +43,7 @@ var ErrNotImplemented = errors.New("not implemented")
 	enabled: true
 */
 
-type Provider struct {
+type ProviderConfig struct {
 	Version      *version.Version      `json:"version,omitempty"`
 	Name         string                `json:"name" validate:"required,min=1,max=100"`
 	Description  string                `json:"description" validate:"max=500"`
@@ -53,50 +52,9 @@ type Provider struct {
 	Config       *BasicConfig          `json:"config,omitempty"`                                          // Provider-specific configuration
 	Role         *Role                 `json:"role,omitempty"`                                            // The base role for this provider
 	Enabled      bool                  `json:"enabled"`                                                   // Whether this provider is enabled
-
-	client ProviderImpl `json:"-" yaml:"-"`
 }
 
-func (p *Provider) GetClient() ProviderImpl {
-	return p.client
-}
-
-func (p *Provider) HasPermission(user *User) bool {
-
-	// If no user and no role then allow access
-	// This is to allow access to public providers
-	// e.g. for authentication
-	// If a role is defined then we need a user to check against the role
-	if user == nil && p.Role == nil {
-		logrus.Debugf("Provider %s has no role defined and no user, allowing access", p.Name)
-		return true
-	} else if user == nil && p.Role != nil {
-		// If we have a role defined but no user then deny access
-		logrus.Debugf("Provider %s has a role defined but no user, denying access", p.Name)
-		return false
-	} else if user != nil && p.Role == nil {
-		// If we have a user but no role then allow access
-		logrus.Debugf("Provider %s has no role defined but has a user, allowing access", p.Name)
-		return true
-	}
-
-	// Otherwise, if we have a role defined then check the user has that role
-	return p.Role.HasPermission(user)
-}
-
-func (p *Provider) SetClient(client ProviderImpl) {
-	p.client = client
-}
-
-func (p *Provider) GetConfig() *BasicConfig {
-	return p.Config
-}
-
-func (p *Provider) SetConfig(config *BasicConfig) {
-	p.Config = config
-}
-
-func (p *Provider) ResolveConfig(vars map[string]any) error {
+func (p *ProviderConfig) ResolveConfig(vars map[string]any) error {
 
 	envs := os.Environ()
 
@@ -143,8 +101,8 @@ These permissions, along with access to specific resources (e.g., "company finan
 */
 
 // Interface for provider implementations
-type ProviderImpl interface {
-	Initialize(identifier string, provider Provider) error
+type Provider interface {
+	Initialize(identifier string, provider ProviderConfig) error
 
 	// Form base provider
 	GetConfig() *BasicConfig
@@ -152,6 +110,8 @@ type ProviderImpl interface {
 	GetName() string
 	GetDescription() string
 	GetProvider() string
+	GetBaseRole() *Role
+	HasPermission(user *User) bool
 
 	Synchronize(ctx context.Context, temporalClient TemporalImpl, req *SynchronizeRequest) error
 
@@ -212,17 +172,17 @@ func (r *RoleRequest) GetDuration() *time.Duration {
 
 // ProviderDefinitions represents a collection of provider configurations loaded from a file or other source.
 type ProviderDefinitions struct {
-	Version   *version.Version    `yaml:"version" json:"version"`
-	Providers map[string]Provider `yaml:"providers" json:"providers"`
+	Version   *version.Version          `yaml:"version" json:"version"`
+	Providers map[string]ProviderConfig `yaml:"providers" json:"providers"`
 }
 
 // UnmarshalJSON converts Version to string from any type
 func (h *ProviderDefinitions) UnmarshalJSON(data []byte) error {
 	aux := &struct {
-		Version   any                 `json:"version"`
-		Providers map[string]Provider `json:"providers"`
+		Version   any                       `json:"version"`
+		Providers map[string]ProviderConfig `json:"providers"`
 	}{
-		Providers: make(map[string]Provider),
+		Providers: make(map[string]ProviderConfig),
 	}
 
 	if err := json.Unmarshal(data, &aux); err != nil {
@@ -243,10 +203,10 @@ func (h *ProviderDefinitions) UnmarshalJSON(data []byte) error {
 // UnmarshalYAML converts Version to string from any type
 func (h *ProviderDefinitions) UnmarshalYAML(unmarshal func(any) error) error {
 	aux := &struct {
-		Version   any                 `yaml:"version"`
-		Providers map[string]Provider `yaml:"providers"`
+		Version   any                       `yaml:"version"`
+		Providers map[string]ProviderConfig `yaml:"providers"`
 	}{
-		Providers: make(map[string]Provider),
+		Providers: make(map[string]ProviderConfig),
 	}
 
 	if err := unmarshal(&aux); err != nil {

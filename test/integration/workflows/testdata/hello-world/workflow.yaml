@@ -2,6 +2,7 @@ version: "1.0"
 workflows:
   # Simple hello world workflow that returns a message
   hello_world:
+    name: Hello World
     description: A simple hello world workflow for testing
     authentication: test_auth
     enabled: true

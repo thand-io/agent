@@ -15,13 +15,6 @@ import (
 	"github.com/thand-io/agent/internal/common"
 )
 
-var ENCODED_WORKFLOW_TASK = "workflow_task"
-var ENCODED_WORKFLOW_SIGNAL = "workflow_signal"
-var ENCODED_AUTH = "auth"
-var ENCODED_SESSION = "session"
-var ENCODED_SESSION_LOCAL = "session_local"
-var ENCODED_SESSION_CODE = "session_code"
-
 type EncodingWrapper struct {
 	Type string `json:"type"`
 	// The Identifier field is temporarily disabled for debugging purposes.

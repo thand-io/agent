@@ -11,12 +11,12 @@ import (
 )
 
 var (
-	registry      = make(map[string]models.ProviderImpl)
+	registry      = make(map[string]models.Provider)
 	registryMutex sync.RWMutex
 )
 
 // Register adds a provider to the registry.
-func Register(name string, provider models.ProviderImpl) {
+func Register(name string, provider models.Provider) {
 	name = strings.ToLower(name)
 	registryMutex.Lock()
 	defer registryMutex.Unlock()
@@ -28,7 +28,7 @@ func Register(name string, provider models.ProviderImpl) {
 }
 
 // Set replaces a provider in the registry (useful for testing)
-func Set(name string, provider models.ProviderImpl) {
+func Set(name string, provider models.Provider) {
 	name = strings.ToLower(name)
 	registryMutex.Lock()
 	defer registryMutex.Unlock()
@@ -36,7 +36,7 @@ func Set(name string, provider models.ProviderImpl) {
 }
 
 // Get returns a provider from the registry.
-func Get(name string) (models.ProviderImpl, error) {
+func Get(name string) (models.Provider, error) {
 	name = strings.ToLower(name)
 	registryMutex.RLock()
 	defer registryMutex.RUnlock()
@@ -48,7 +48,7 @@ func Get(name string) (models.ProviderImpl, error) {
 }
 
 // Get returns a new instance of the provider from the registry.
-func CreateInstance(name string) (models.ProviderImpl, error) {
+func CreateInstance(name string) (models.Provider, error) {
 	name = strings.ToLower(name)
 	registryMutex.RLock()
 	template, exists := registry[name]
@@ -63,5 +63,5 @@ func CreateInstance(name string) (models.ProviderImpl, error) {
 		providerType = providerType.Elem()
 	}
 	newInstance := reflect.New(providerType)
-	return newInstance.Interface().(models.ProviderImpl), nil
+	return newInstance.Interface().(models.Provider), nil
 }

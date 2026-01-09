@@ -47,7 +47,7 @@ func (c *Config) GetIdentity(identity string) (*models.Identity, error) {
 			return nil, fmt.Errorf("provider '%s' not found: %w", providerID, err)
 		}
 
-		result, err := provider.GetClient().GetIdentity(ctx, identityKey)
+		result, err := provider.GetIdentity(ctx, identityKey)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get identity '%s' from provider '%s': %w", identityKey, providerID, err)
 		}
@@ -73,10 +73,10 @@ func (c *Config) GetIdentity(identity string) (*models.Identity, error) {
 		go func(p models.Provider) {
 			defer wg.Done()
 
-			result, err := p.GetClient().GetIdentity(ctx, identityKey)
+			result, err := p.GetIdentity(ctx, identityKey)
 			if err != nil {
 				logrus.WithError(err).WithFields(logrus.Fields{
-					"provider": p.Name,
+					"provider": p.GetName(),
 					"identity": identityKey,
 				}).Debug("Failed to get identity from provider")
 				return
@@ -170,11 +170,11 @@ func (c *Config) GetIdentitiesWithFilter(
 				var identities []models.SearchResult[models.Identity]
 				var err error
 
-				identities, err = p.GetClient().ListIdentities(ctx, searchRequest)
+				identities, err = p.ListIdentities(ctx, searchRequest)
 
 				if err != nil {
 					logrus.WithError(err).
-						WithField("provider", p.Name).
+						WithField("provider", p.GetName()).
 						Error("Failed to get identities from provider")
 					errorChan <- err
 					return
@@ -193,7 +193,7 @@ func (c *Config) GetIdentitiesWithFilter(
 						continue
 					}
 
-					identity.AddProvider(&p)
+					identity.AddProvider(p)
 
 					mappableIdentifier := identity.GetMappableIdentifier()
 

@@ -355,9 +355,7 @@ func TestGetCompositeRole(t *testing.T) {
 			}
 
 			if tt.providers != nil {
-				config.Providers = ProviderConfig{
-					Definitions: tt.providers,
-				}
+				config.providerInstances = tt.providers
 			}
 
 			// Call GetCompositeRole
@@ -419,7 +417,7 @@ func TestGetCompositeRole_ProviderSpecificInheritance(t *testing.T) {
 		},
 	}
 
-	providers := map[string]models.Provider{
+	providers := map[string]models.ProviderConfig{
 		"aws-prod": {
 			Name:        "aws-prod",
 			Description: "AWS Production",
@@ -431,7 +429,7 @@ func TestGetCompositeRole_ProviderSpecificInheritance(t *testing.T) {
 		Roles: RoleConfig{
 			Definitions: roles,
 		},
-		Providers: ProviderConfig{
+		Providers: ProviderDefinitionsConfig{
 			Definitions: providers,
 		},
 	}

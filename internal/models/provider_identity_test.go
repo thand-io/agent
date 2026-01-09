@@ -1,4 +1,4 @@
-package models
+package models_test
 
 import (
 	"context"
@@ -9,28 +9,29 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/thand-io/agent/internal/models"
 )
 
 // Helper function to create a BaseProvider with identity support
-func newTestProviderWithIdentities() *BaseProvider {
-	provider := Provider{
+func newTestProviderWithIdentities() *models.BaseProvider {
+	provider := models.ProviderConfig{
 		Name:        "test-provider",
 		Description: "Test Provider",
 		Provider:    "test",
 	}
 
-	return NewBaseProvider("test-provider-id", provider,
-		NewProviderCapabilities().WithDefaultIdentitiesConfiguration())
+	return models.NewBaseProvider("test-provider-id", provider,
+		models.NewProviderCapabilities().WithDefaultIdentitiesConfiguration())
 }
 
 func TestBaseProvider_SetIdentities(t *testing.T) {
 	p := newTestProviderWithIdentities()
 
-	identities := []Identity{
+	identities := []models.Identity{
 		{
 			ID:    "user1",
 			Label: "User One",
-			User: &User{
+			User: &models.User{
 				ID:    "user1",
 				Name:  "User One",
 				Email: "user1@example.com",
@@ -39,7 +40,7 @@ func TestBaseProvider_SetIdentities(t *testing.T) {
 		{
 			ID:    "user2",
 			Label: "User Two",
-			User: &User{
+			User: &models.User{
 				ID:    "user2",
 				Name:  "User Two",
 				Email: "user2@example.com",
@@ -48,7 +49,7 @@ func TestBaseProvider_SetIdentities(t *testing.T) {
 		{
 			ID:    "group1",
 			Label: "Group One",
-			Group: &Group{
+			Group: &models.Group{
 				ID:    "group1",
 				Name:  "Group One",
 				Email: "group1@example.com",
@@ -63,61 +64,76 @@ func TestBaseProvider_SetIdentities(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	// Verify identities are set
-	p.identity.mu.RLock()
-	assert.Len(t, p.identity.identities, 3)
-	// Each identity has multiple keys (ID, Label, Email, Name)
-	assert.NotEmpty(t, p.identity.identitiesMap)
-	p.identity.mu.RUnlock()
+	results, err := p.ListIdentities(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Len(t, results, 3)
 
-	// Verify map contains expected keys (lowercase)
-	p.identity.mu.RLock()
-	assert.Contains(t, p.identity.identitiesMap, "user1")
-	assert.Contains(t, p.identity.identitiesMap, "user one")
-	assert.Contains(t, p.identity.identitiesMap, "user1@example.com")
-	assert.Contains(t, p.identity.identitiesMap, "group1")
-	assert.Contains(t, p.identity.identitiesMap, "group one")
-	assert.Contains(t, p.identity.identitiesMap, "group1@example.com")
-	p.identity.mu.RUnlock()
+	// Verify all identities can be retrieved by ID
+	user1, err := p.GetIdentity(context.Background(), "user1")
+	require.NoError(t, err)
+	assert.Equal(t, "user1", user1.ID)
+	assert.Equal(t, "User One", user1.Label)
 
-	// Verify map points to correct identities
-	p.identity.mu.RLock()
-	assert.Equal(t, "user1", p.identity.identitiesMap["user1"].ID)
-	assert.Equal(t, "User One", p.identity.identitiesMap["user one"].Label)
-	assert.Equal(t, "user1@example.com", p.identity.identitiesMap["user1@example.com"].User.Email)
-	p.identity.mu.RUnlock()
+	user2, err := p.GetIdentity(context.Background(), "user2")
+	require.NoError(t, err)
+	assert.Equal(t, "user2", user2.ID)
+
+	group1, err := p.GetIdentity(context.Background(), "group1")
+	require.NoError(t, err)
+	assert.Equal(t, "group1", group1.ID)
+
+	// Verify identities can be retrieved by label (case-insensitive)
+	user1ByLabel, err := p.GetIdentity(context.Background(), "user one")
+	require.NoError(t, err)
+	assert.Equal(t, "user1", user1ByLabel.ID)
+	assert.Equal(t, "User One", user1ByLabel.Label)
+
+	// Verify identities can be retrieved by email
+	user1ByEmail, err := p.GetIdentity(context.Background(), "user1@example.com")
+	require.NoError(t, err)
+	assert.Equal(t, "user1", user1ByEmail.ID)
+	assert.Equal(t, "user1@example.com", user1ByEmail.User.Email)
 }
 
 func TestBaseProvider_SetIdentities_ReplacesExisting(t *testing.T) {
 	p := newTestProviderWithIdentities()
 
 	// Set initial identities
-	initialIdentities := []Identity{
+	initialIdentities := []models.Identity{
 		{ID: "user1", Label: "User One"},
 		{ID: "user2", Label: "User Two"},
 	}
 	p.SetIdentities(initialIdentities)
 
 	// Replace with new identities
-	newIdentities := []Identity{
+	newIdentities := []models.Identity{
 		{ID: "user3", Label: "User Three"},
 	}
 	p.SetIdentities(newIdentities)
 
 	// Verify old identities are replaced
-	p.identity.mu.RLock()
-	assert.Len(t, p.identity.identities, 1)
-	assert.Equal(t, "user3", p.identity.identities[0].ID)
-	assert.NotContains(t, p.identity.identitiesMap, "user1")
-	assert.NotContains(t, p.identity.identitiesMap, "user2")
-	assert.Contains(t, p.identity.identitiesMap, "user3")
-	p.identity.mu.RUnlock()
+	results, err := p.ListIdentities(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Len(t, results, 1)
+	assert.Equal(t, "user3", results[0].Result.ID)
+
+	// Verify old identities are not accessible
+	_, err = p.GetIdentity(context.Background(), "user1")
+	assert.Error(t, err)
+	_, err = p.GetIdentity(context.Background(), "user2")
+	assert.Error(t, err)
+
+	// Verify new identity is accessible
+	user3, err := p.GetIdentity(context.Background(), "user3")
+	require.NoError(t, err)
+	assert.Equal(t, "user3", user3.ID)
 }
 
 func TestBaseProvider_AddIdentities(t *testing.T) {
 	p := newTestProviderWithIdentities()
 
 	// Set initial identities
-	initialIdentities := []Identity{
+	initialIdentities := []models.Identity{
 		{ID: "user1", Label: "User One"},
 	}
 	p.SetIdentities(initialIdentities)
@@ -125,25 +141,30 @@ func TestBaseProvider_AddIdentities(t *testing.T) {
 
 	// Add new identities
 	p.AddIdentities(
-		Identity{ID: "user2", Label: "User Two"},
-		Identity{ID: "group1", Label: "Group One"},
+		models.Identity{ID: "user2", Label: "User Two"},
+		models.Identity{ID: "group1", Label: "Group One"},
 	)
 	time.Sleep(10 * time.Millisecond)
 
 	// Verify all identities are present
-	p.identity.mu.RLock()
-	assert.Len(t, p.identity.identities, 3)
-	assert.Contains(t, p.identity.identitiesMap, "user1")
-	assert.Contains(t, p.identity.identitiesMap, "user2")
-	assert.Contains(t, p.identity.identitiesMap, "group1")
-	p.identity.mu.RUnlock()
+	results, err := p.ListIdentities(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Len(t, results, 3)
+
+	// Verify all identities are accessible
+	_, err = p.GetIdentity(context.Background(), "user1")
+	require.NoError(t, err)
+	_, err = p.GetIdentity(context.Background(), "user2")
+	require.NoError(t, err)
+	_, err = p.GetIdentity(context.Background(), "group1")
+	require.NoError(t, err)
 }
 
 func TestBaseProvider_AddIdentities_FiltersDuplicates(t *testing.T) {
 	p := newTestProviderWithIdentities()
 
 	// Set initial identities
-	initialIdentities := []Identity{
+	initialIdentities := []models.Identity{
 		{ID: "user1", Label: "User One"},
 		{ID: "user2", Label: "User Two"},
 	}
@@ -152,29 +173,34 @@ func TestBaseProvider_AddIdentities_FiltersDuplicates(t *testing.T) {
 
 	// Try to add duplicate and new identity
 	p.AddIdentities(
-		Identity{ID: "user1", Label: "User One"},  // duplicate by ID
-		Identity{ID: "user3", Label: "User Two"},  // duplicate by Label
-		Identity{ID: "user4", Label: "User Four"}, // new
+		models.Identity{ID: "user1", Label: "User One"},  // duplicate by ID
+		models.Identity{ID: "user3", Label: "User Two"},  // duplicate by Label
+		models.Identity{ID: "user4", Label: "User Four"}, // new
 	)
 	time.Sleep(10 * time.Millisecond)
 
 	// Verify duplicates are filtered
-	p.identity.mu.RLock()
-	assert.Len(t, p.identity.identities, 3, "Should have 3 identities (2 initial + 1 new)")
-	assert.Contains(t, p.identity.identitiesMap, "user1")
-	assert.Contains(t, p.identity.identitiesMap, "user2")
-	assert.Contains(t, p.identity.identitiesMap, "user4")
-	p.identity.mu.RUnlock()
+	results, err := p.ListIdentities(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Len(t, results, 3, "Should have 3 identities (2 initial + 1 new)")
+
+	// Verify expected identities are accessible
+	_, err = p.GetIdentity(context.Background(), "user1")
+	require.NoError(t, err)
+	_, err = p.GetIdentity(context.Background(), "user2")
+	require.NoError(t, err)
+	_, err = p.GetIdentity(context.Background(), "user4")
+	require.NoError(t, err)
 }
 
 func TestBaseProvider_GetIdentity(t *testing.T) {
 	p := newTestProviderWithIdentities()
 
-	identities := []Identity{
+	identities := []models.Identity{
 		{
 			ID:    "user-1",
 			Label: "John Doe",
-			User: &User{
+			User: &models.User{
 				ID:    "user-1",
 				Name:  "John Doe",
 				Email: "john@example.com",
@@ -183,7 +209,7 @@ func TestBaseProvider_GetIdentity(t *testing.T) {
 		{
 			ID:    "group-1",
 			Label: "Admin Group",
-			Group: &Group{
+			Group: &models.Group{
 				ID:    "group-1",
 				Name:  "Admin Group",
 				Email: "admins@example.com",
@@ -234,7 +260,7 @@ func TestBaseProvider_GetIdentity(t *testing.T) {
 
 func TestBaseProvider_GetIdentity_WithoutCapability(t *testing.T) {
 	// Create provider without identity capability
-	p := NewBaseProvider("test", Provider{Name: "test"}, NewProviderCapabilities())
+	p := models.NewBaseProvider("test", models.ProviderConfig{Name: "test"}, models.NewProviderCapabilities())
 
 	ctx := context.Background()
 	identity, err := p.GetIdentity(ctx, "user1")
@@ -246,11 +272,11 @@ func TestBaseProvider_GetIdentity_WithoutCapability(t *testing.T) {
 func TestBaseProvider_ListIdentities(t *testing.T) {
 	p := newTestProviderWithIdentities()
 
-	identities := []Identity{
+	identities := []models.Identity{
 		{
 			ID:    "user1",
 			Label: "Production Admin",
-			User: &User{
+			User: &models.User{
 				ID:    "user1",
 				Name:  "Production Admin",
 				Email: "admin@prod.com",
@@ -259,7 +285,7 @@ func TestBaseProvider_ListIdentities(t *testing.T) {
 		{
 			ID:    "user2",
 			Label: "Development User",
-			User: &User{
+			User: &models.User{
 				ID:    "user2",
 				Name:  "Development User",
 				Email: "dev@test.com",
@@ -268,7 +294,7 @@ func TestBaseProvider_ListIdentities(t *testing.T) {
 		{
 			ID:    "group1",
 			Label: "Staging Group",
-			Group: &Group{
+			Group: &models.Group{
 				ID:    "group1",
 				Name:  "Staging Group",
 				Email: "staging@example.com",
@@ -285,12 +311,12 @@ func TestBaseProvider_ListIdentities(t *testing.T) {
 	assert.Len(t, results, 3)
 
 	// Test listing with empty search request
-	results, err = p.ListIdentities(ctx, &SearchRequest{})
+	results, err = p.ListIdentities(ctx, &models.SearchRequest{})
 	require.NoError(t, err)
 	assert.Len(t, results, 3)
 
 	// Test listing with filter by label
-	results, err = p.ListIdentities(ctx, &SearchRequest{
+	results, err = p.ListIdentities(ctx, &models.SearchRequest{
 		Terms: []string{"production"},
 	})
 	require.NoError(t, err)
@@ -298,7 +324,7 @@ func TestBaseProvider_ListIdentities(t *testing.T) {
 	assert.Equal(t, "user1", results[0].Result.ID)
 
 	// Test listing with case-insensitive filter
-	results, err = p.ListIdentities(ctx, &SearchRequest{
+	results, err = p.ListIdentities(ctx, &models.SearchRequest{
 		Terms: []string{"DEVELOPMENT"},
 	})
 	require.NoError(t, err)
@@ -306,7 +332,7 @@ func TestBaseProvider_ListIdentities(t *testing.T) {
 	assert.Equal(t, "user2", results[0].Result.ID)
 
 	// Test listing with email filter
-	results, err = p.ListIdentities(ctx, &SearchRequest{
+	results, err = p.ListIdentities(ctx, &models.SearchRequest{
 		Terms: []string{"staging@example.com"},
 	})
 	require.NoError(t, err)
@@ -314,7 +340,7 @@ func TestBaseProvider_ListIdentities(t *testing.T) {
 	assert.Equal(t, "group1", results[0].Result.ID)
 
 	// Test partial match on name
-	results, err = p.ListIdentities(ctx, &SearchRequest{
+	results, err = p.ListIdentities(ctx, &models.SearchRequest{
 		Terms: []string{"admin"},
 	})
 	require.NoError(t, err)
@@ -322,7 +348,7 @@ func TestBaseProvider_ListIdentities(t *testing.T) {
 }
 
 func TestBaseProvider_ListIdentities_WithoutCapability(t *testing.T) {
-	p := NewBaseProvider("test", Provider{Name: "test"}, NewProviderCapabilities())
+	p := models.NewBaseProvider("test", models.ProviderConfig{Name: "test"}, models.NewProviderCapabilities())
 
 	ctx := context.Background()
 	results, err := p.ListIdentities(ctx, nil)
@@ -333,28 +359,28 @@ func TestBaseProvider_ListIdentities_WithoutCapability(t *testing.T) {
 
 func TestBaseProvider_ListIdentities_Search(t *testing.T) {
 
-	p := NewBaseProvider("test", Provider{
+	p := models.NewBaseProvider("test", models.ProviderConfig{
 		Name: "Test Provider",
-	}, NewProviderCapabilities().WithDefaultIdentitiesConfiguration())
+	}, models.NewProviderCapabilities().WithDefaultIdentitiesConfiguration())
 
 	userEmail := "hugh@thand.io"
-	identity := Identity{
+	identity := models.Identity{
 		ID:    "user1",
 		Label: "Hugh",
-		User: &User{
+		User: &models.User{
 			Email: userEmail,
 			Name:  "Hugh",
 		},
 	}
 
-	p.SetIdentities([]Identity{identity})
+	p.SetIdentities([]models.Identity{identity})
 
 	// Wait for index to be built
 	time.Sleep(500 * time.Millisecond)
 
 	ctx := context.Background()
 	// Simulate what identities.go does: append *
-	searchReq := &SearchRequest{
+	searchReq := &models.SearchRequest{
 		Query: userEmail + "*",
 		Terms: []string{userEmail},
 	}
@@ -383,9 +409,9 @@ func TestBaseProvider_SetIdentities_Concurrency(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 
-			identities := make([]Identity, identitiesPerGoroutine)
+			identities := make([]models.Identity, identitiesPerGoroutine)
 			for j := 0; j < identitiesPerGoroutine; j++ {
-				identities[j] = Identity{
+				identities[j] = models.Identity{
 					ID:    fmt.Sprintf("identity-%d-%d", id, j),
 					Label: fmt.Sprintf("Identity %d-%d", id, j),
 				}
@@ -398,24 +424,19 @@ func TestBaseProvider_SetIdentities_Concurrency(t *testing.T) {
 	time.Sleep(50 * time.Millisecond) // Let async operations settle
 
 	// Verify no race conditions occurred and data is consistent
-	p.identity.mu.RLock()
-	assert.NotNil(t, p.identity.identities)
-	assert.NotNil(t, p.identity.identitiesMap)
-	identityCount := len(p.identity.identities)
-	mapCount := len(p.identity.identitiesMap)
-	p.identity.mu.RUnlock()
+	results, err := p.ListIdentities(context.Background(), nil)
+	require.NoError(t, err)
+	assert.NotNil(t, results)
 
 	// The last SetIdentities wins, should have identitiesPerGoroutine items
-	assert.Equal(t, identitiesPerGoroutine, identityCount)
-	// Each identity has at least 2 keys (ID and Label)
-	assert.GreaterOrEqual(t, mapCount, identitiesPerGoroutine*2)
+	assert.Equal(t, identitiesPerGoroutine, len(results))
 }
 
 func TestBaseProvider_AddIdentities_Concurrency(t *testing.T) {
 	p := newTestProviderWithIdentities()
 
 	// Set initial state
-	p.SetIdentities([]Identity{
+	p.SetIdentities([]models.Identity{
 		{ID: "initial-1", Label: "Initial One"},
 	})
 	time.Sleep(10 * time.Millisecond)
@@ -430,9 +451,9 @@ func TestBaseProvider_AddIdentities_Concurrency(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 
-			identities := make([]Identity, identitiesPerGoroutine)
+			identities := make([]models.Identity, identitiesPerGoroutine)
 			for j := 0; j < identitiesPerGoroutine; j++ {
-				identities[j] = Identity{
+				identities[j] = models.Identity{
 					ID:    fmt.Sprintf("identity-%d-%d", id, j),
 					Label: fmt.Sprintf("Identity %d-%d", id, j),
 				}
@@ -445,21 +466,20 @@ func TestBaseProvider_AddIdentities_Concurrency(t *testing.T) {
 	time.Sleep(100 * time.Millisecond) // Let async operations settle
 
 	// Verify no race conditions occurred
-	p.identity.mu.RLock()
-	assert.NotNil(t, p.identity.identities)
-	assert.NotNil(t, p.identity.identitiesMap)
+	results, err := p.ListIdentities(context.Background(), nil)
+	require.NoError(t, err)
+	assert.NotNil(t, results)
 	// Should have at least the initial identity
-	assert.GreaterOrEqual(t, len(p.identity.identities), 1)
-	p.identity.mu.RUnlock()
+	assert.GreaterOrEqual(t, len(results), 1)
 }
 
 func TestBaseProvider_GetIdentity_Concurrency(t *testing.T) {
 	p := newTestProviderWithIdentities()
 
 	// Set up test data
-	identities := make([]Identity, 100)
+	identities := make([]models.Identity, 100)
 	for i := 0; i < 100; i++ {
-		identities[i] = Identity{
+		identities[i] = models.Identity{
 			ID:    fmt.Sprintf("identity-%d", i),
 			Label: fmt.Sprintf("Identity %d", i),
 		}
@@ -497,7 +517,7 @@ func TestBaseProvider_MixedIdentityOperations_Concurrency(t *testing.T) {
 	p := newTestProviderWithIdentities()
 
 	// Set initial state
-	initialIdentities := []Identity{
+	initialIdentities := []models.Identity{
 		{ID: "initial-1", Label: "Initial One"},
 		{ID: "initial-2", Label: "Initial Two"},
 	}
@@ -514,7 +534,7 @@ func TestBaseProvider_MixedIdentityOperations_Concurrency(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			for j := 0; j < iterations; j++ {
-				identities := []Identity{
+				identities := []models.Identity{
 					{ID: fmt.Sprintf("set-%d-%d", id, j), Label: fmt.Sprintf("Set %d %d", id, j)},
 				}
 				p.SetIdentities(identities)
@@ -529,7 +549,7 @@ func TestBaseProvider_MixedIdentityOperations_Concurrency(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			for j := 0; j < iterations; j++ {
-				identity := Identity{
+				identity := models.Identity{
 					ID:    fmt.Sprintf("add-%d-%d", id, j),
 					Label: fmt.Sprintf("Add %d %d", id, j),
 				}
@@ -569,16 +589,15 @@ func TestBaseProvider_MixedIdentityOperations_Concurrency(t *testing.T) {
 	time.Sleep(100 * time.Millisecond) // Let async operations settle
 
 	// Verify data structures are still valid
-	p.identity.mu.RLock()
-	assert.NotNil(t, p.identity.identities)
-	assert.NotNil(t, p.identity.identitiesMap)
-	p.identity.mu.RUnlock()
+	results, err := p.ListIdentities(context.Background(), nil)
+	require.NoError(t, err)
+	assert.NotNil(t, results)
 }
 
 func TestBaseProvider_IdentityRWLock_Behavior(t *testing.T) {
 	p := newTestProviderWithIdentities()
 
-	identities := []Identity{
+	identities := []models.Identity{
 		{ID: "identity-1", Label: "Identity One"},
 		{ID: "identity-2", Label: "Identity Two"},
 	}
@@ -606,7 +625,7 @@ func TestBaseProvider_IdentityRWLock_Behavior(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		newIdentities := []Identity{
+		newIdentities := []models.Identity{
 			{ID: "identity-3", Label: "Identity Three"},
 		}
 		p.SetIdentities(newIdentities)
@@ -616,16 +635,9 @@ func TestBaseProvider_IdentityRWLock_Behavior(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Verify the writer succeeded
-	p.identity.mu.RLock()
-	found := false
-	for _, i := range p.identity.identities {
-		if i.ID == "identity-3" {
-			found = true
-			break
-		}
-	}
-	p.identity.mu.RUnlock()
-	assert.True(t, found, "Writer should have succeeded even with concurrent readers")
+	identity3, err := p.GetIdentity(context.Background(), "identity-3")
+	assert.NoError(t, err, "Writer should have succeeded even with concurrent readers")
+	assert.NotNil(t, identity3)
 }
 
 func TestBaseProvider_IdentityDataRaceDetection(t *testing.T) {
@@ -637,7 +649,7 @@ func TestBaseProvider_IdentityDataRaceDetection(t *testing.T) {
 	// Writer goroutine
 	go func() {
 		for i := 0; i < 1000; i++ {
-			p.SetIdentities([]Identity{
+			p.SetIdentities([]models.Identity{
 				{ID: fmt.Sprintf("identity-%d", i), Label: fmt.Sprintf("Identity %d", i)},
 			})
 		}
@@ -657,7 +669,7 @@ func TestBaseProvider_IdentityDataRaceDetection(t *testing.T) {
 	// Add goroutine
 	go func() {
 		for i := 0; i < 1000; i++ {
-			p.AddIdentities(Identity{
+			p.AddIdentities(models.Identity{
 				ID:    fmt.Sprintf("add-identity-%d", i),
 				Label: fmt.Sprintf("Add Identity %d", i),
 			})
@@ -673,52 +685,51 @@ func TestBaseProvider_IdentityDataRaceDetection(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Final verification
-	p.identity.mu.RLock()
-	assert.NotNil(t, p.identity.identities)
-	assert.NotNil(t, p.identity.identitiesMap)
-	p.identity.mu.RUnlock()
+	results, err := p.ListIdentities(context.Background(), nil)
+	require.NoError(t, err)
+	assert.NotNil(t, results)
 }
 
 func TestCreateKeysFromIdentity(t *testing.T) {
 	// Test with user
-	userIdentity := Identity{
+	userIdentity := models.Identity{
 		ID:    "user-123",
 		Label: "John Doe",
-		User: &User{
+		User: &models.User{
 			ID:    "user-123",
 			Name:  "John Doe",
 			Email: "john@example.com",
 		},
 	}
 
-	keys := CreateKeysFromIdentity(userIdentity)
+	keys := models.CreateKeysFromIdentity(userIdentity)
 	assert.Contains(t, keys, "user-123")
 	assert.Contains(t, keys, "John Doe")
 	assert.Contains(t, keys, "john@example.com")
 
 	// Test with group
-	groupIdentity := Identity{
+	groupIdentity := models.Identity{
 		ID:    "group-456",
 		Label: "Admin Group",
-		Group: &Group{
+		Group: &models.Group{
 			ID:    "group-456",
 			Name:  "Admin Group",
 			Email: "admins@example.com",
 		},
 	}
 
-	keys = CreateKeysFromIdentity(groupIdentity)
+	keys = models.CreateKeysFromIdentity(groupIdentity)
 	assert.Contains(t, keys, "group-456")
 	assert.Contains(t, keys, "Admin Group")
 	assert.Contains(t, keys, "admins@example.com")
 
 	// Test with minimal identity
-	minimalIdentity := Identity{
+	minimalIdentity := models.Identity{
 		ID:    "minimal",
 		Label: "Minimal",
 	}
 
-	keys = CreateKeysFromIdentity(minimalIdentity)
+	keys = models.CreateKeysFromIdentity(minimalIdentity)
 	assert.Len(t, keys, 2)
 	assert.Contains(t, keys, "minimal")
 	assert.Contains(t, keys, "Minimal")

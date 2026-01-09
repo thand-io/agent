@@ -38,7 +38,7 @@ type GitHubTokenResponse struct {
 	Scope       string `json:"scope"`
 }
 
-func (p *githubProvider) Initialize(identifier string, provider models.Provider) error {
+func (p *githubProvider) Initialize(identifier string, provider models.ProviderConfig) error {
 
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,

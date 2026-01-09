@@ -30,7 +30,7 @@ import (
 )
 
 // LoadProviders loads providers from a file or URL and maps them to their implementations
-func (c *Config) LoadProviders() (map[string]models.Provider, error) {
+func (c *Config) LoadProviders() (map[string]models.ProviderConfig, error) {
 
 	vaultData, err := c.loadProviderVaultData()
 
@@ -70,7 +70,7 @@ func (c *Config) LoadProviders() (map[string]models.Provider, error) {
 	return c.ApplyProviders(foundProviders)
 }
 
-func (c *Config) ApplyProviders(foundProviders []*models.ProviderDefinitions) (map[string]models.Provider, error) {
+func (c *Config) ApplyProviders(foundProviders []*models.ProviderDefinitions) (map[string]models.ProviderConfig, error) {
 
 	providersLen := len(c.Providers.Definitions)
 	if providersLen > 0 {
@@ -82,7 +82,7 @@ func (c *Config) ApplyProviders(foundProviders []*models.ProviderDefinitions) (m
 		for providerKey, provider := range c.Providers.Definitions {
 			foundProviders = append(foundProviders, &models.ProviderDefinitions{
 				Version: defaultVersion,
-				Providers: map[string]models.Provider{
+				Providers: map[string]models.ProviderConfig{
 					providerKey: provider,
 				},
 			})
@@ -119,8 +119,8 @@ func (c *Config) loadProviderVaultData() (string, error) {
 }
 
 // processProviderDefinitions processes raw provider data and returns enabled providers
-func (c *Config) processProviderDefinitions(foundProviders []*models.ProviderDefinitions) map[string]models.Provider {
-	defs := make(map[string]models.Provider)
+func (c *Config) processProviderDefinitions(foundProviders []*models.ProviderDefinitions) map[string]models.ProviderConfig {
+	defs := make(map[string]models.ProviderConfig)
 	logrus.Debugln("Processing loaded providers: ", len(foundProviders))
 
 	for _, provider := range foundProviders {
@@ -131,17 +131,13 @@ func (c *Config) processProviderDefinitions(foundProviders []*models.ProviderDef
 		}
 
 		for providerKey, p := range provider.Providers {
+
 			if !c.shouldIncludeProvider(providerKey, p, defs) {
 				continue
 			}
-			if p.Version == nil {
-				p.Version = provider.Version
-			}
-			if len(p.Name) == 0 {
-				p.Name = providerKey
-			}
 
 			defs[providerKey] = p
+
 			logrus.Infoln("Found provider:", providerKey, "of type", p.Provider)
 		}
 	}
@@ -150,7 +146,12 @@ func (c *Config) processProviderDefinitions(foundProviders []*models.ProviderDef
 }
 
 // shouldIncludeProvider determines if a provider should be included in the final list
-func (c *Config) shouldIncludeProvider(providerKey string, p models.Provider, existingDefs map[string]models.Provider) bool {
+func (c *Config) shouldIncludeProvider(
+	providerKey string,
+	p models.ProviderConfig,
+	existingDefs map[string]models.ProviderConfig,
+) bool {
+
 	if !p.Enabled {
 		logrus.Infoln("Provider disabled (not marked as enabled):", providerKey)
 		return false
@@ -167,7 +168,7 @@ func (c *Config) shouldIncludeProvider(providerKey string, p models.Provider, ex
 // initResult represents the result of provider initialization
 type initResult struct {
 	key      string
-	provider *models.Provider
+	provider models.Provider
 	err      error
 }
 
@@ -182,11 +183,11 @@ func (c *Config) InitializeProviders() error {
 
 	// Start goroutines for each provider
 	for providerKey, p := range defs {
-		go func(providerKey string, provider models.Provider) {
-			err := c.initializeSingleProvider(providerKey, &provider)
+		go func(providerKey string, provider models.ProviderConfig) {
+			impl, err := c.initializeSingleProvider(providerKey, &provider)
 			resultChan <- initResult{
 				key:      providerKey,
-				provider: &provider,
+				provider: impl,
 				err:      err,
 			}
 		}(providerKey, p)
@@ -202,14 +203,14 @@ func (c *Config) InitializeProviders() error {
 			continue
 		}
 
-		if result.provider.GetClient() == nil {
+		if result.provider == nil {
 			logrus.Errorln("Provider client is nil after initialization:", result.key)
 			// Skip providers with nil client
 			continue
 		}
 
 		// Check for capabilities for RBAC and Identities
-		if result.provider.GetClient().HasAnyCapability(
+		if result.provider.HasAnyCapability(
 			models.ProviderCapabilityIdentities,
 			models.ProviderCapabilityUsers,
 			models.ProviderCapabilityGroups,
@@ -230,13 +231,13 @@ func (c *Config) InitializeProviders() error {
 				temporalService := c.GetServices().GetTemporal()
 
 				// Revister all provider workflows and activities
-				err := result.provider.GetClient().RegisterWorkflows(temporalService)
+				err := result.provider.RegisterWorkflows(temporalService)
 				if err != nil && !errors.Is(err, models.ErrNotImplemented) {
 					logrus.WithError(err).Errorln("Failed to register workflows for provider:", result.key)
 					continue
 				}
 
-				err = result.provider.GetClient().RegisterActivities(temporalService)
+				err = result.provider.RegisterActivities(temporalService)
 				if err != nil && !errors.Is(err, models.ErrNotImplemented) {
 					logrus.WithError(err).Errorln("Failed to register activities for provider:", result.key)
 					continue
@@ -250,12 +251,12 @@ func (c *Config) InitializeProviders() error {
 		}
 
 		// The provider returned from the goroutine already has the client set
-		results[result.key] = *result.provider
+		results[result.key] = result.provider
 
 	}
 
 	c.mu.Lock()
-	c.Providers.Definitions = results
+	c.providerInstances = results
 	c.mu.Unlock()
 
 	logrus.Debugln("All providers initialized successfully")
@@ -263,12 +264,12 @@ func (c *Config) InitializeProviders() error {
 }
 
 // initializeSingleProvider initializes a single provider
-func (c *Config) initializeSingleProvider(providerKey string, p *models.Provider) error {
+func (c *Config) initializeSingleProvider(providerKey string, p *models.ProviderConfig) (models.Provider, error) {
 
 	impl, err := c.getProviderImplementation(providerKey, p.Provider)
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Before we initialize, we need to check if any of the provider's
@@ -278,19 +279,18 @@ func (c *Config) initializeSingleProvider(providerKey string, p *models.Provider
 	)
 
 	if err != nil {
-		return fmt.Errorf("failed to resolve environment variables for provider %s: %w", providerKey, err)
+		return nil, fmt.Errorf("failed to resolve environment variables for provider %s: %w", providerKey, err)
 	}
 
 	if err := impl.Initialize(providerKey, *p); err != nil {
-		return err
+		return nil, err
 	}
 
-	p.SetClient(impl)
-	return nil
+	return impl, nil
 }
 
 // getProviderImplementation returns the appropriate provider implementation based on config mode
-func (c *Config) getProviderImplementation(providerKey string, providerName string) (models.ProviderImpl, error) {
+func (c *Config) getProviderImplementation(providerKey string, providerName string) (models.Provider, error) {
 
 	if c.IsServer() || c.IsAgent() {
 		return providers.CreateInstance(strings.ToLower(providerName))

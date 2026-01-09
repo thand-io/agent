@@ -38,7 +38,7 @@ func TestGCPRoles(t *testing.T) {
 	}
 
 	// GCP providers
-	gcpProviders := map[string]models.Provider{
+	gcpProviders := map[string]models.ProviderConfig{
 		"gcp-prod": {
 			Name:        "gcp-prod",
 			Description: "GCP Production Environment",
@@ -118,7 +118,7 @@ func TestGCPRoleScenarios(t *testing.T) {
 			},
 		}
 
-		providers := map[string]models.Provider{
+		providers := map[string]models.ProviderConfig{
 			"gcp-dev": {
 				Name:        "gcp-dev",
 				Description: "GCP Development Environment",
@@ -223,7 +223,7 @@ func TestGCPRoleScenarios(t *testing.T) {
 			},
 		}
 
-		providers := map[string]models.Provider{
+		providers := map[string]models.ProviderConfig{
 			"gcp-prod": {
 				Name:        "gcp-prod",
 				Description: "GCP Production Environment",

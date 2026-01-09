@@ -22,7 +22,7 @@ func (p *awsProvider) Synchronize(
 	return PreSynchronizeActivities(ctx, temporalService, p)
 }
 
-func PreSynchronizeActivities(ctx context.Context, temporalService models.TemporalImpl, provider models.ProviderImpl) error {
+func PreSynchronizeActivities(ctx context.Context, temporalService models.TemporalImpl, provider models.Provider) error {
 
 	awsData, err := getSharedData()
 

@@ -8,7 +8,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
-	"github.com/thand-io/agent/internal/workflows/functions"
+	"github.com/thand-io/agent/sdk/workflows/functions"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 const ThandAuthorizeFunction = "thand.authorize"
@@ -45,7 +46,7 @@ func (t *authorizeFunction) GetOptionalParameters() map[string]any {
 
 // ValidateRequest validates the input parameters
 func (t *authorizeFunction) ValidateRequest(
-	workflowTask *models.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	call *model.CallFunction,
 	input any,
 ) error {
@@ -63,7 +64,7 @@ func (r *ThandAuthorizeRequest) IsValid() bool {
 
 // Execute performs the authorization logic
 func (t *authorizeFunction) Execute(
-	workflowTask *models.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	call *model.CallFunction,
 	input any,
 ) (any, error) {
@@ -79,12 +80,12 @@ func (t *authorizeFunction) Execute(
 
 // validateAndParseRequests validates and parses the incoming requests
 func (t *authorizeFunction) validateAndParseRequests(
-	workflowTask *models.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	call *model.CallFunction,
 	input any,
 ) (*ThandAuthorizeRequest, error) {
 
-	elevationRequest, err := workflowTask.GetContextAsElevationRequest()
+	elevationRequest, err := models.NewElevateWorkflowTask(workflowTask).GetContextAsElevationRequest()
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get elevation request from context: %w", err)
@@ -119,14 +120,14 @@ func (t *authorizeFunction) validateAndParseRequests(
 
 // executeAuthorization performs the main authorization workflow
 func (t *authorizeFunction) executeAuthorization(
-	workflowTask *models.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	elevateRequest *ThandAuthorizeRequest,
 ) (any, error) {
 
 	// ElevateRequest contains the role to be authorized
 	// AuthRequest contains the revocation state and the user to be authorized
 
-	providerCall, err := t.config.GetProviderByName(elevateRequest.Provider)
+	provider, err := t.config.GetProviderByName(elevateRequest.Provider)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get provider: %w", err)
@@ -134,13 +135,13 @@ func (t *authorizeFunction) executeAuthorization(
 
 	logrus.WithFields(logrus.Fields{
 		"provider":      elevateRequest.Provider,
-		"provider_type": fmt.Sprintf("%T", providerCall.GetClient()),
+		"provider_type": provider.GetProvider(),
 		"user_email":    elevateRequest.RoleRequest.User.Email,
 		"user_source":   elevateRequest.RoleRequest.User.Source,
 		"user_username": elevateRequest.RoleRequest.User.Username,
 	}).Info("About to call AuthorizeRole on provider")
 
-	authOut, err := providerCall.GetClient().AuthorizeRole(
+	authOut, err := provider.AuthorizeRole(
 		workflowTask.GetContext(), &models.AuthorizeRoleRequest{
 			RoleRequest: elevateRequest.RoleRequest,
 		},

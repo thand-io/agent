@@ -14,6 +14,7 @@ import (
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 	gpcIap "github.com/thand-io/agent/internal/providers/gcp.iap"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
 // Authentication Callback Handlers
@@ -98,7 +99,7 @@ func (s *Server) getAuthRequest(c *gin.Context) {
 	client := common.GetClientIdentifier()
 
 	encodedState := models.EncodingWrapper{
-		Type: models.ENCODED_AUTH,
+		Type: sdkConstants.ENCODED_AUTH,
 		Data: models.NewAuthWrapper(
 			callback,        // where are we returning to
 			client.String(), // server identifier
@@ -114,7 +115,7 @@ func (s *Server) getAuthRequest(c *gin.Context) {
 		"stateLength":  len(encodedState),
 	}).Debugln("Encoded state for auth request")
 
-	authResponse, err := providerConfig.GetClient().AuthorizeSession(
+	authResponse, err := providerConfig.AuthorizeSession(
 		context.Background(),
 		// This creates the state payload for the auth request
 		&models.AuthorizeUser{
@@ -265,9 +266,9 @@ func (s *Server) decodeState(state string) (models.EncodingWrapper, error) {
 // processDecodedState routes based on decoded state type
 func (s *Server) processDecodedState(c *gin.Context, decoded models.EncodingWrapper) {
 	switch decoded.Type {
-	case models.ENCODED_WORKFLOW_TASK:
+	case sdkConstants.ENCODED_WORKFLOW_TASK:
 		s.getElevateAuthOAuth2(c)
-	case models.ENCODED_AUTH:
+	case sdkConstants.ENCODED_AUTH:
 		authWrapper := models.AuthWrapper{}
 		err := common.ConvertMapToInterface(
 			decoded.Data.(map[string]any), &authWrapper)
@@ -394,7 +395,7 @@ func (s *Server) getAuthCallbackPage(c *gin.Context, auth models.AuthWrapper) {
 		code = c.PostForm("SAMLResponse")
 	}
 
-	session, err := provider.GetClient().CreateSession(c, &models.AuthorizeUser{
+	session, err := provider.CreateSession(c, &models.AuthorizeUser{
 		State:       state,
 		Code:        code,
 		RedirectUri: s.GetConfig().GetAuthCallbackUrl(auth.Provider),
@@ -430,7 +431,7 @@ func (s *Server) getAuthCallbackPage(c *gin.Context, auth models.AuthWrapper) {
 		if upstreamConfig.Auth.IAP {
 
 			// Make sure that only specified provider types are listed here.
-			if provider.Provider != gpcIap.GcpIAPProviderName {
+			if provider.GetProvider() != gpcIap.GcpIAPProviderName {
 				s.getErrorPage(c, http.StatusInternalServerError,
 					"Upstream IAP authentication is only supported with GCP IAP provider")
 				return

@@ -1,4 +1,4 @@
-package models
+package models_test
 
 import (
 	"context"
@@ -9,24 +9,25 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/thand-io/agent/internal/models"
 )
 
 // Helper function to create a BaseProvider with resource support
-func newTestProviderWithResources() *BaseProvider {
-	provider := Provider{
+func newTestProviderWithResources() *models.BaseProvider {
+	provider := models.ProviderConfig{
 		Name:        "test-provider",
 		Description: "Test Provider",
 		Provider:    "test",
 	}
 
-	return NewBaseProvider("test-provider-id", provider,
-		NewProviderCapabilities().WithDefaultResourcesConfiguration())
+	return models.NewBaseProvider("test-provider-id", provider,
+		models.NewProviderCapabilities().WithDefaultResourcesConfiguration())
 }
 
 func TestBaseProvider_SetResources(t *testing.T) {
 	p := newTestProviderWithResources()
 
-	resources := []ProviderResource{
+	resources := []models.ProviderResource{
 		{ID: "res1", Name: "Database-Prod", Type: "database", Description: "Production database"},
 		{ID: "res2", Name: "Storage-Dev", Type: "storage", Description: "Development storage"},
 		{ID: "res3", Name: "Compute-Staging", Type: "compute", Description: "Staging compute"},
@@ -39,60 +40,74 @@ func TestBaseProvider_SetResources(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	// Verify resources are set
-	p.rbac.mu.RLock()
-	assert.Len(t, p.rbac.resources, 3)
-	assert.Len(t, p.rbac.resourcesMap, 6) // Each resource has 2 keys (ID and Name)
-	p.rbac.mu.RUnlock()
+	results, err := p.ListResources(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Len(t, results, 3)
 
-	// Verify map contains all expected keys (lowercase)
-	p.rbac.mu.RLock()
-	assert.Contains(t, p.rbac.resourcesMap, "res1")
-	assert.Contains(t, p.rbac.resourcesMap, "database-prod")
-	assert.Contains(t, p.rbac.resourcesMap, "res2")
-	assert.Contains(t, p.rbac.resourcesMap, "storage-dev")
-	assert.Contains(t, p.rbac.resourcesMap, "res3")
-	assert.Contains(t, p.rbac.resourcesMap, "compute-staging")
-	p.rbac.mu.RUnlock()
+	// Verify all resources can be retrieved by ID
+	res1, err := p.GetResource(context.Background(), "res1")
+	require.NoError(t, err)
+	assert.Equal(t, "res1", res1.ID)
+	assert.Equal(t, "Database-Prod", res1.Name)
 
-	// Verify map points to correct resources
-	p.rbac.mu.RLock()
-	assert.Equal(t, "res1", p.rbac.resourcesMap["res1"].ID)
-	assert.Equal(t, "Database-Prod", p.rbac.resourcesMap["database-prod"].Name)
-	assert.Equal(t, "Storage-Dev", p.rbac.resourcesMap["storage-dev"].Name)
-	p.rbac.mu.RUnlock()
+	res2, err := p.GetResource(context.Background(), "res2")
+	require.NoError(t, err)
+	assert.Equal(t, "res2", res2.ID)
+
+	res3, err := p.GetResource(context.Background(), "res3")
+	require.NoError(t, err)
+	assert.Equal(t, "res3", res3.ID)
+
+	// Verify resources can be retrieved by name (case-insensitive)
+	res1ByName, err := p.GetResource(context.Background(), "database-prod")
+	require.NoError(t, err)
+	assert.Equal(t, "res1", res1ByName.ID)
+	assert.Equal(t, "Database-Prod", res1ByName.Name)
+
+	res2ByName, err := p.GetResource(context.Background(), "storage-dev")
+	require.NoError(t, err)
+	assert.Equal(t, "Storage-Dev", res2ByName.Name)
 }
 
 func TestBaseProvider_SetResources_ReplacesExisting(t *testing.T) {
 	p := newTestProviderWithResources()
 
 	// Set initial resources
-	initialResources := []ProviderResource{
+	initialResources := []models.ProviderResource{
 		{ID: "res1", Name: "Resource One"},
 		{ID: "res2", Name: "Resource Two"},
 	}
 	p.SetResources(initialResources)
 
 	// Replace with new resources
-	newResources := []ProviderResource{
+	newResources := []models.ProviderResource{
 		{ID: "res3", Name: "Resource Three"},
 	}
 	p.SetResources(newResources)
 
 	// Verify old resources are replaced
-	p.rbac.mu.RLock()
-	assert.Len(t, p.rbac.resources, 1)
-	assert.Equal(t, "res3", p.rbac.resources[0].ID)
-	assert.NotContains(t, p.rbac.resourcesMap, "res1")
-	assert.NotContains(t, p.rbac.resourcesMap, "res2")
-	assert.Contains(t, p.rbac.resourcesMap, "res3")
-	p.rbac.mu.RUnlock()
+	results, err := p.ListResources(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Len(t, results, 1)
+	assert.Equal(t, "res3", results[0].Result.ID)
+
+	// Verify old resources are not accessible
+	_, err = p.GetResource(context.Background(), "res1")
+	assert.Error(t, err)
+	_, err = p.GetResource(context.Background(), "res2")
+	assert.Error(t, err)
+
+	// Verify new resource is accessible
+	res3, err := p.GetResource(context.Background(), "res3")
+	require.NoError(t, err)
+	assert.Equal(t, "res3", res3.ID)
 }
 
 func TestBaseProvider_AddResources(t *testing.T) {
 	p := newTestProviderWithResources()
 
 	// Set initial resources
-	initialResources := []ProviderResource{
+	initialResources := []models.ProviderResource{
 		{ID: "res1", Name: "Resource One"},
 	}
 	p.SetResources(initialResources)
@@ -100,25 +115,30 @@ func TestBaseProvider_AddResources(t *testing.T) {
 
 	// Add new resources
 	p.AddResources(
-		ProviderResource{ID: "res2", Name: "Resource Two"},
-		ProviderResource{ID: "res3", Name: "Resource Three"},
+		models.ProviderResource{ID: "res2", Name: "Resource Two"},
+		models.ProviderResource{ID: "res3", Name: "Resource Three"},
 	)
 	time.Sleep(10 * time.Millisecond)
 
 	// Verify all resources are present
-	p.rbac.mu.RLock()
-	assert.Len(t, p.rbac.resources, 3)
-	assert.Contains(t, p.rbac.resourcesMap, "res1")
-	assert.Contains(t, p.rbac.resourcesMap, "res2")
-	assert.Contains(t, p.rbac.resourcesMap, "res3")
-	p.rbac.mu.RUnlock()
+	results, err := p.ListResources(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Len(t, results, 3)
+
+	// Verify all resources are accessible
+	_, err = p.GetResource(context.Background(), "res1")
+	require.NoError(t, err)
+	_, err = p.GetResource(context.Background(), "res2")
+	require.NoError(t, err)
+	_, err = p.GetResource(context.Background(), "res3")
+	require.NoError(t, err)
 }
 
 func TestBaseProvider_AddResources_FiltersDuplicates(t *testing.T) {
 	p := newTestProviderWithResources()
 
 	// Set initial resources
-	initialResources := []ProviderResource{
+	initialResources := []models.ProviderResource{
 		{ID: "res1", Name: "Resource One"},
 		{ID: "res2", Name: "Resource Two"},
 	}
@@ -127,25 +147,30 @@ func TestBaseProvider_AddResources_FiltersDuplicates(t *testing.T) {
 
 	// Try to add duplicate and new resource
 	p.AddResources(
-		ProviderResource{ID: "res1", Name: "Resource One"},  // duplicate by ID
-		ProviderResource{ID: "res3", Name: "Resource Two"},  // duplicate by Name
-		ProviderResource{ID: "res4", Name: "Resource Four"}, // new
+		models.ProviderResource{ID: "res1", Name: "Resource One"},  // duplicate by ID
+		models.ProviderResource{ID: "res3", Name: "Resource Two"},  // duplicate by Name
+		models.ProviderResource{ID: "res4", Name: "Resource Four"}, // new
 	)
 	time.Sleep(10 * time.Millisecond)
 
 	// Verify duplicates are filtered
-	p.rbac.mu.RLock()
-	assert.Len(t, p.rbac.resources, 3, "Should have 3 resources (2 initial + 1 new)")
-	assert.Contains(t, p.rbac.resourcesMap, "res1")
-	assert.Contains(t, p.rbac.resourcesMap, "res2")
-	assert.Contains(t, p.rbac.resourcesMap, "res4")
-	p.rbac.mu.RUnlock()
+	results, err := p.ListResources(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Len(t, results, 3, "Should have 3 resources (2 initial + 1 new)")
+
+	// Verify expected resources are accessible
+	_, err = p.GetResource(context.Background(), "res1")
+	require.NoError(t, err)
+	_, err = p.GetResource(context.Background(), "res2")
+	require.NoError(t, err)
+	_, err = p.GetResource(context.Background(), "res4")
+	require.NoError(t, err)
 }
 
 func TestBaseProvider_GetResource(t *testing.T) {
 	p := newTestProviderWithResources()
 
-	resources := []ProviderResource{
+	resources := []models.ProviderResource{
 		{
 			ID:          "res-1",
 			Name:        "Production-Database",
@@ -191,7 +216,7 @@ func TestBaseProvider_GetResource(t *testing.T) {
 
 func TestBaseProvider_GetResource_WithoutCapability(t *testing.T) {
 	// Create provider without resource capability
-	p := NewBaseProvider("test", Provider{Name: "test"}, NewProviderCapabilities())
+	p := models.NewBaseProvider("test", models.ProviderConfig{Name: "test"}, models.NewProviderCapabilities())
 
 	ctx := context.Background()
 	resource, err := p.GetResource(ctx, "res1")
@@ -203,7 +228,7 @@ func TestBaseProvider_GetResource_WithoutCapability(t *testing.T) {
 func TestBaseProvider_ListResources(t *testing.T) {
 	p := newTestProviderWithResources()
 
-	resources := []ProviderResource{
+	resources := []models.ProviderResource{
 		{ID: "db-prod", Name: "Production Database"},
 		{ID: "storage-dev", Name: "Development Storage"},
 		{ID: "compute-staging", Name: "Staging Compute"},
@@ -218,12 +243,12 @@ func TestBaseProvider_ListResources(t *testing.T) {
 	assert.Len(t, results, 3)
 
 	// Test listing with empty search request
-	results, err = p.ListResources(ctx, &SearchRequest{})
+	results, err = p.ListResources(ctx, &models.SearchRequest{})
 	require.NoError(t, err)
 	assert.Len(t, results, 3)
 
 	// Test listing with filter
-	results, err = p.ListResources(ctx, &SearchRequest{
+	results, err = p.ListResources(ctx, &models.SearchRequest{
 		Terms: []string{"production"},
 	})
 	require.NoError(t, err)
@@ -231,7 +256,7 @@ func TestBaseProvider_ListResources(t *testing.T) {
 	assert.Equal(t, "db-prod", results[0].Result.ID)
 
 	// Test listing with case-insensitive filter
-	results, err = p.ListResources(ctx, &SearchRequest{
+	results, err = p.ListResources(ctx, &models.SearchRequest{
 		Terms: []string{"DEVELOPMENT"},
 	})
 	require.NoError(t, err)
@@ -239,7 +264,7 @@ func TestBaseProvider_ListResources(t *testing.T) {
 	assert.Equal(t, "storage-dev", results[0].Result.ID)
 
 	// Test partial match
-	results, err = p.ListResources(ctx, &SearchRequest{
+	results, err = p.ListResources(ctx, &models.SearchRequest{
 		Terms: []string{"storage"},
 	})
 	require.NoError(t, err)
@@ -247,7 +272,7 @@ func TestBaseProvider_ListResources(t *testing.T) {
 }
 
 func TestBaseProvider_ListResources_WithoutCapability(t *testing.T) {
-	p := NewBaseProvider("test", Provider{Name: "test"}, NewProviderCapabilities())
+	p := models.NewBaseProvider("test", models.ProviderConfig{Name: "test"}, models.NewProviderCapabilities())
 
 	ctx := context.Background()
 	results, err := p.ListResources(ctx, nil)
@@ -257,12 +282,12 @@ func TestBaseProvider_ListResources_WithoutCapability(t *testing.T) {
 }
 
 func TestBaseProvider_ListResources_Search(t *testing.T) {
-	p := NewBaseProvider("test", Provider{
+	p := models.NewBaseProvider("test", models.ProviderConfig{
 		Name: "Test Provider",
-	}, NewProviderCapabilities().WithDefaultResourcesConfiguration())
+	}, models.NewProviderCapabilities().WithDefaultResourcesConfiguration())
 
 	resourceName := "ProductionDatabase"
-	resources := []ProviderResource{
+	resources := []models.ProviderResource{
 		{
 			ID:   "db-prod",
 			Name: resourceName,
@@ -281,7 +306,7 @@ func TestBaseProvider_ListResources_Search(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 
 	ctx := context.Background()
-	searchReq := &SearchRequest{
+	searchReq := &models.SearchRequest{
 		Terms: []string{resourceName},
 	}
 
@@ -309,9 +334,9 @@ func TestBaseProvider_SetResources_Concurrency(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 
-			resources := make([]ProviderResource, resourcesPerGoroutine)
+			resources := make([]models.ProviderResource, resourcesPerGoroutine)
 			for j := 0; j < resourcesPerGoroutine; j++ {
-				resources[j] = ProviderResource{
+				resources[j] = models.ProviderResource{
 					ID:   fmt.Sprintf("res-%d-%d", id, j),
 					Name: fmt.Sprintf("Resource %d-%d", id, j),
 				}
@@ -324,24 +349,19 @@ func TestBaseProvider_SetResources_Concurrency(t *testing.T) {
 	time.Sleep(50 * time.Millisecond) // Let async operations settle
 
 	// Verify no race conditions occurred and data is consistent
-	p.rbac.mu.RLock()
-	assert.NotNil(t, p.rbac.resources)
-	assert.NotNil(t, p.rbac.resourcesMap)
-	resourceCount := len(p.rbac.resources)
-	mapCount := len(p.rbac.resourcesMap)
-	p.rbac.mu.RUnlock()
+	results, err := p.ListResources(context.Background(), nil)
+	require.NoError(t, err)
+	assert.NotNil(t, results)
 
 	// The last SetResources wins, should have resourcesPerGoroutine items
-	assert.Equal(t, resourcesPerGoroutine, resourceCount)
-	// Each resource has 2 keys (ID and Name)
-	assert.Equal(t, resourcesPerGoroutine*2, mapCount)
+	assert.Equal(t, resourcesPerGoroutine, len(results))
 }
 
 func TestBaseProvider_AddResources_Concurrency(t *testing.T) {
 	p := newTestProviderWithResources()
 
 	// Set initial state
-	p.SetResources([]ProviderResource{
+	p.SetResources([]models.ProviderResource{
 		{ID: "initial-1", Name: "Initial One"},
 	})
 	time.Sleep(10 * time.Millisecond)
@@ -356,9 +376,9 @@ func TestBaseProvider_AddResources_Concurrency(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 
-			resources := make([]ProviderResource, resourcesPerGoroutine)
+			resources := make([]models.ProviderResource, resourcesPerGoroutine)
 			for j := 0; j < resourcesPerGoroutine; j++ {
-				resources[j] = ProviderResource{
+				resources[j] = models.ProviderResource{
 					ID:   fmt.Sprintf("res-%d-%d", id, j),
 					Name: fmt.Sprintf("Resource %d-%d", id, j),
 				}
@@ -371,21 +391,20 @@ func TestBaseProvider_AddResources_Concurrency(t *testing.T) {
 	time.Sleep(100 * time.Millisecond) // Let async operations settle
 
 	// Verify no race conditions occurred
-	p.rbac.mu.RLock()
-	assert.NotNil(t, p.rbac.resources)
-	assert.NotNil(t, p.rbac.resourcesMap)
+	results, err := p.ListResources(context.Background(), nil)
+	require.NoError(t, err)
+	assert.NotNil(t, results)
 	// Should have at least the initial resource
-	assert.GreaterOrEqual(t, len(p.rbac.resources), 1)
-	p.rbac.mu.RUnlock()
+	assert.GreaterOrEqual(t, len(results), 1)
 }
 
 func TestBaseProvider_GetResource_Concurrency(t *testing.T) {
 	p := newTestProviderWithResources()
 
 	// Set up test data
-	resources := make([]ProviderResource, 100)
+	resources := make([]models.ProviderResource, 100)
 	for i := 0; i < 100; i++ {
-		resources[i] = ProviderResource{
+		resources[i] = models.ProviderResource{
 			ID:   fmt.Sprintf("res-%d", i),
 			Name: fmt.Sprintf("Resource %d", i),
 		}
@@ -423,7 +442,7 @@ func TestBaseProvider_MixedResourceOperations_Concurrency(t *testing.T) {
 	p := newTestProviderWithResources()
 
 	// Set initial state
-	initialResources := []ProviderResource{
+	initialResources := []models.ProviderResource{
 		{ID: "initial-1", Name: "Initial One"},
 		{ID: "initial-2", Name: "Initial Two"},
 	}
@@ -440,7 +459,7 @@ func TestBaseProvider_MixedResourceOperations_Concurrency(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			for j := 0; j < iterations; j++ {
-				resources := []ProviderResource{
+				resources := []models.ProviderResource{
 					{ID: fmt.Sprintf("set-%d-%d", id, j), Name: fmt.Sprintf("Set %d %d", id, j)},
 				}
 				p.SetResources(resources)
@@ -455,7 +474,7 @@ func TestBaseProvider_MixedResourceOperations_Concurrency(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			for j := 0; j < iterations; j++ {
-				resource := ProviderResource{
+				resource := models.ProviderResource{
 					ID:   fmt.Sprintf("add-%d-%d", id, j),
 					Name: fmt.Sprintf("Add %d %d", id, j),
 				}
@@ -495,16 +514,15 @@ func TestBaseProvider_MixedResourceOperations_Concurrency(t *testing.T) {
 	time.Sleep(100 * time.Millisecond) // Let async operations settle
 
 	// Verify data structures are still valid
-	p.rbac.mu.RLock()
-	assert.NotNil(t, p.rbac.resources)
-	assert.NotNil(t, p.rbac.resourcesMap)
-	p.rbac.mu.RUnlock()
+	results, err := p.ListResources(context.Background(), nil)
+	require.NoError(t, err)
+	assert.NotNil(t, results)
 }
 
 func TestBaseProvider_ResourceRWLock_Behavior(t *testing.T) {
 	p := newTestProviderWithResources()
 
-	resources := []ProviderResource{
+	resources := []models.ProviderResource{
 		{ID: "res-1", Name: "Resource One"},
 		{ID: "res-2", Name: "Resource Two"},
 	}
@@ -532,7 +550,7 @@ func TestBaseProvider_ResourceRWLock_Behavior(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		newResources := []ProviderResource{
+		newResources := []models.ProviderResource{
 			{ID: "res-3", Name: "Resource Three"},
 		}
 		p.SetResources(newResources)
@@ -542,16 +560,9 @@ func TestBaseProvider_ResourceRWLock_Behavior(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Verify the writer succeeded
-	p.rbac.mu.RLock()
-	found := false
-	for _, r := range p.rbac.resources {
-		if r.ID == "res-3" {
-			found = true
-			break
-		}
-	}
-	p.rbac.mu.RUnlock()
-	assert.True(t, found, "Writer should have succeeded even with concurrent readers")
+	res3, err := p.GetResource(context.Background(), "res-3")
+	assert.NoError(t, err, "Writer should have succeeded even with concurrent readers")
+	assert.NotNil(t, res3)
 }
 
 func TestBaseProvider_ResourceDataRaceDetection(t *testing.T) {
@@ -563,7 +574,7 @@ func TestBaseProvider_ResourceDataRaceDetection(t *testing.T) {
 	// Writer goroutine
 	go func() {
 		for i := 0; i < 1000; i++ {
-			p.SetResources([]ProviderResource{
+			p.SetResources([]models.ProviderResource{
 				{ID: fmt.Sprintf("res-%d", i), Name: fmt.Sprintf("Resource %d", i)},
 			})
 		}
@@ -583,7 +594,7 @@ func TestBaseProvider_ResourceDataRaceDetection(t *testing.T) {
 	// Add goroutine
 	go func() {
 		for i := 0; i < 1000; i++ {
-			p.AddResources(ProviderResource{
+			p.AddResources(models.ProviderResource{
 				ID:   fmt.Sprintf("add-res-%d", i),
 				Name: fmt.Sprintf("Add Resource %d", i),
 			})
@@ -599,19 +610,18 @@ func TestBaseProvider_ResourceDataRaceDetection(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Final verification
-	p.rbac.mu.RLock()
-	assert.NotNil(t, p.rbac.resources)
-	assert.NotNil(t, p.rbac.resourcesMap)
-	p.rbac.mu.RUnlock()
+	results, err := p.ListResources(context.Background(), nil)
+	require.NoError(t, err)
+	assert.NotNil(t, results)
 }
 
 func TestCreateKeysFromResources(t *testing.T) {
-	resource := ProviderResource{
+	resource := models.ProviderResource{
 		ID:   "res-123",
 		Name: "Production-Database",
 	}
 
-	keys := CreateKeysFromResources(resource)
+	keys := models.CreateKeysFromResources(resource)
 	assert.Len(t, keys, 2)
 	assert.Contains(t, keys, "res-123")
 	assert.Contains(t, keys, "Production-Database")

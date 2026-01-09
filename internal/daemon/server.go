@@ -40,6 +40,7 @@ import (
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/workflows/manager"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	"go.temporal.io/api/workflowservice/v1"
 )
 
@@ -48,7 +49,12 @@ var staticFiles embed.FS
 
 func NewServer(cfg *config.Config) *Server {
 
-	workflows := manager.NewWorkflowManager(cfg)
+	workflows, err := manager.NewThandWorkflowManager(cfg)
+
+	if err != nil {
+		logrus.WithError(err).Fatal("Failed to create workflow manager")
+		return nil
+	}
 
 	// Create template functions
 	funcMap := template.FuncMap{
@@ -83,7 +89,7 @@ type Server struct {
 	Config          *config.Config
 	TemplateEngine  *template.Template
 	StartTime       time.Time
-	Workflows       *manager.WorkflowManager
+	Workflows       *manager.ThandWorkflowManager
 	TotalRequests   int64
 	ElevateRequests int64
 	server          *http.Server
@@ -380,7 +386,7 @@ func (s *Server) setupRoutes(router *gin.Engine) {
 			// Create a code to identify the session after authentication
 			// This code is encrypted and can only be used by the agent
 			sessionCode := models.EncodingWrapper{
-				Type: models.ENCODED_SESSION_CODE,
+				Type: sdkConstants.ENCODED_SESSION_CODE,
 				Data: models.NewCodeWrapper(loginServer),
 			}.EncodeAndEncrypt(
 				s.Config.GetServices().GetEncryption(),

@@ -25,7 +25,7 @@ func (p *gcpProvider) Synchronize(
 func PreSynchronizeActivities(
 	ctx context.Context,
 	temporalService models.TemporalImpl,
-	provider models.ProviderImpl,
+	provider models.Provider,
 	req *models.SynchronizeRequest,
 ) error {
 

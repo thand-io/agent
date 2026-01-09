@@ -466,7 +466,7 @@ func (c *Config) SyncWithLoginServer() error {
 	logrus.Debugf("Syncing configuration with login server at: %s", apiUrl)
 
 	// Overwrite everything.
-	c.Providers = ProviderConfig{
+	c.Providers = ProviderDefinitionsConfig{
 		URL: &model.Endpoint{
 			EndpointConfig: &model.EndpointConfiguration{
 				URI:            &model.LiteralUri{Value: fmt.Sprintf("%s/providers", apiUrl)},

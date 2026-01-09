@@ -14,6 +14,7 @@ import (
 	"github.com/thand-io/agent/internal/providers/aws"
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 // TestEvaluateApprovalSwitch tests the approval switch logic with various scenarios
@@ -172,10 +173,10 @@ func TestEvaluateApprovalSwitch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a workflow task with the approvals context
-			workflowTask := &models.WorkflowTask{
+			workflowTask := models.NewElevateWorkflowTask(&sdkWorkflowsModel.WorkflowTask{
 				WorkflowID:   "test-workflow",
 				WorkflowName: "Test Workflow",
-			} // Set the context with approvals
+			}) // Set the context with approvals
 			workflowTask.SetContextKeyValue("approvals", tt.approvals)
 
 			// Create a thandTask instance
@@ -203,10 +204,10 @@ func TestEvaluateApprovalSwitch(t *testing.T) {
 
 // TestEvaluateApprovalSwitchProgression tests the progression of approvals over time
 func TestEvaluateApprovalSwitchProgression(t *testing.T) {
-	workflowTask := &models.WorkflowTask{
+	workflowTask := models.NewElevateWorkflowTask(&sdkWorkflowsModel.WorkflowTask{
 		WorkflowID:   "test-workflow",
 		WorkflowName: "Test Workflow",
-	}
+	})
 
 	task := &thandTask{}
 	taskName := "approval_task"
@@ -274,10 +275,10 @@ func TestEvaluateApprovalSwitchProgression(t *testing.T) {
 
 // TestEvaluateApprovalSwitchDenialProgression tests that a denial stops the process
 func TestEvaluateApprovalSwitchDenialProgression(t *testing.T) {
-	workflowTask := &models.WorkflowTask{
+	workflowTask := models.NewElevateWorkflowTask(&sdkWorkflowsModel.WorkflowTask{
 		WorkflowID:   "test-workflow",
 		WorkflowName: "Test Workflow",
-	}
+	})
 
 	task := &thandTask{}
 	taskName := "approval_task"
@@ -767,7 +768,7 @@ func TestExecuteApprovalsTask_ProcessEvent(t *testing.T) {
 	approverID := "approver@example.com"
 
 	mockProvider := aws.NewMockAwsProvider()
-	provider := models.Provider{
+	provider := models.ProviderConfig{
 		Name:     "mock",
 		Provider: "aws",
 		Enabled:  true,
@@ -791,18 +792,11 @@ func TestExecuteApprovalsTask_ProcessEvent(t *testing.T) {
 		},
 	})
 
-	provider.SetClient(mockProvider)
-
-	cfg := &config.Config{
-		Providers: config.ProviderConfig{
-			Definitions: map[string]models.Provider{
-				"mock": provider,
-			},
-		},
-	}
+	cfg := &config.Config{}
+	cfg.AddProvider("mock", mockProvider)
 
 	// Setup WorkflowTask with ElevationRequest context
-	workflowTask := &models.WorkflowTask{
+	workflowTask := models.NewElevateWorkflowTask(&sdkWorkflowsModel.WorkflowTask{
 		WorkflowID:   "test-workflow",
 		WorkflowName: "Test Workflow",
 		Context: map[string]any{
@@ -813,7 +807,7 @@ func TestExecuteApprovalsTask_ProcessEvent(t *testing.T) {
 			"identities": []string{"target-identity"},
 			"approvals":  map[string]any{}, // Empty approvals initially
 		},
-	}
+	})
 
 	// Setup the Task Definition
 	taskDef := &taskModel.ThandTask{
@@ -865,7 +859,7 @@ func TestExecuteApprovalsTask_SelfApprovalDenied(t *testing.T) {
 	requesterID := "requester@example.com"
 
 	mockProvider := aws.NewMockAwsProvider()
-	provider := models.Provider{
+	provider := models.ProviderConfig{
 		Name:     "mock",
 		Provider: "aws",
 		Enabled:  true,
@@ -882,23 +876,16 @@ func TestExecuteApprovalsTask_SelfApprovalDenied(t *testing.T) {
 		},
 	})
 
-	provider.SetClient(mockProvider)
+	cfg := &config.Config{}
+	cfg.AddProvider("mock", mockProvider)
 
-	cfg := &config.Config{
-		Providers: config.ProviderConfig{
-			Definitions: map[string]models.Provider{
-				"mock": provider,
-			},
-		},
-	}
-
-	workflowTask := &models.WorkflowTask{
+	workflowTask := models.NewElevateWorkflowTask(&sdkWorkflowsModel.WorkflowTask{
 		WorkflowID: "test-workflow",
 		Context: map[string]any{
 			"user":      map[string]any{"id": requesterID, "email": requesterID},
 			"approvals": map[string]any{},
 		},
-	}
+	})
 
 	taskDef := &taskModel.ThandTask{
 		With: &models.BasicConfig{
@@ -941,7 +928,7 @@ func TestExecuteApprovalsTask_NonExistentIdentity(t *testing.T) {
 	approverID := "nonexistent@example.com"
 
 	mockProvider := aws.NewMockAwsProvider()
-	provider := models.Provider{
+	provider := models.ProviderConfig{
 		Name:     "mock",
 		Provider: "aws",
 		Enabled:  true,
@@ -959,18 +946,11 @@ func TestExecuteApprovalsTask_NonExistentIdentity(t *testing.T) {
 		},
 	})
 
-	provider.SetClient(mockProvider)
-
-	cfg := &config.Config{
-		Providers: config.ProviderConfig{
-			Definitions: map[string]models.Provider{
-				"mock": provider,
-			},
-		},
-	}
+	cfg := &config.Config{}
+	cfg.AddProvider("mock", mockProvider)
 
 	// Setup WorkflowTask with ElevationRequest context
-	workflowTask := &models.WorkflowTask{
+	workflowTask := models.NewElevateWorkflowTask(&sdkWorkflowsModel.WorkflowTask{
 		WorkflowID:   "test-workflow",
 		WorkflowName: "Test Workflow",
 		Context: map[string]any{
@@ -981,7 +961,7 @@ func TestExecuteApprovalsTask_NonExistentIdentity(t *testing.T) {
 			"identities": []string{"target-identity"},
 			"approvals":  map[string]any{}, // Empty approvals initially
 		},
-	}
+	})
 
 	// Setup the Task Definition
 	taskDef := &taskModel.ThandTask{
@@ -1032,7 +1012,7 @@ func TestExecuteApprovalsTask_Denial(t *testing.T) {
 	approverID := "approver@example.com"
 
 	mockProvider := aws.NewMockAwsProvider()
-	provider := models.Provider{
+	provider := models.ProviderConfig{
 		Name:     "mock",
 		Provider: "aws",
 		Enabled:  true,
@@ -1056,18 +1036,11 @@ func TestExecuteApprovalsTask_Denial(t *testing.T) {
 		},
 	})
 
-	provider.SetClient(mockProvider)
-
-	cfg := &config.Config{
-		Providers: config.ProviderConfig{
-			Definitions: map[string]models.Provider{
-				"mock": provider,
-			},
-		},
-	}
+	cfg := &config.Config{}
+	cfg.AddProvider("mock", mockProvider)
 
 	// Setup WorkflowTask with ElevationRequest context
-	workflowTask := &models.WorkflowTask{
+	workflowTask := models.NewElevateWorkflowTask(&sdkWorkflowsModel.WorkflowTask{
 		WorkflowID:   "test-workflow",
 		WorkflowName: "Test Workflow",
 		Context: map[string]any{
@@ -1078,7 +1051,7 @@ func TestExecuteApprovalsTask_Denial(t *testing.T) {
 			"identities": []string{"target-identity"},
 			"approvals":  map[string]any{}, // Empty approvals initially
 		},
-	}
+	})
 
 	// Setup the Task Definition
 	taskDef := &taskModel.ThandTask{
@@ -1131,7 +1104,7 @@ func TestExecuteApprovalsTask_ApprovalThenDenial(t *testing.T) {
 	approver2ID := "approver2@example.com"
 
 	mockProvider := aws.NewMockAwsProvider()
-	provider := models.Provider{
+	provider := models.ProviderConfig{
 		Name:     "mock",
 		Provider: "aws",
 		Enabled:  true,
@@ -1162,19 +1135,12 @@ func TestExecuteApprovalsTask_ApprovalThenDenial(t *testing.T) {
 		},
 	})
 
-	provider.SetClient(mockProvider)
-
-	cfg := &config.Config{
-		Providers: config.ProviderConfig{
-			Definitions: map[string]models.Provider{
-				"mock": provider,
-			},
-		},
-	}
+	cfg := &config.Config{}
+	cfg.AddProvider("mock", mockProvider)
 
 	// Setup WorkflowTask with ElevationRequest context
 	// Pre-populate with one approval
-	workflowTask := &models.WorkflowTask{
+	workflowTask := models.NewElevateWorkflowTask(&sdkWorkflowsModel.WorkflowTask{
 		WorkflowID:   "test-workflow",
 		WorkflowName: "Test Workflow",
 		Context: map[string]any{
@@ -1190,7 +1156,7 @@ func TestExecuteApprovalsTask_ApprovalThenDenial(t *testing.T) {
 				},
 			},
 		},
-	}
+	})
 
 	// Setup the Task Definition
 	// Require 2 approvals
@@ -1232,7 +1198,7 @@ func TestExecuteApprovalsTask_ApprovalThenDenial(t *testing.T) {
 
 	// Verify Context Update
 	approvals := workflowTask.Context.(map[string]any)["approvals"].(map[string]any)
-	
+
 	// Check approver1 (existing approval)
 	assert.Contains(t, approvals, approver1ID)
 	approval1Data := approvals[approver1ID].(map[string]any)

@@ -14,10 +14,10 @@ func (b *BaseProvider) RegisterActivities(temporalClient TemporalImpl) error {
 }
 
 type ProviderActivities struct {
-	provider ProviderImpl
+	provider Provider
 }
 
-func NewProviderActivities(provider ProviderImpl) *ProviderActivities {
+func NewProviderActivities(provider Provider) *ProviderActivities {
 	return &ProviderActivities{
 		provider: provider,
 	}

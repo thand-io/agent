@@ -28,26 +28,26 @@ import (
 func (s *Server) getProviderIdentities(c *gin.Context) {
 
 	providerName := c.Param("provider")
-	provider, foundProvider := s.Config.Providers.Definitions[providerName]
+	provider, err := s.Config.GetProviderByName(providerName)
 
-	if !foundProvider {
+	if err != nil {
 		s.getErrorPage(c, http.StatusNotFound, "Provider not found")
 		return
 	}
 
-	if provider.GetClient() == nil {
+	if provider == nil {
 		s.getErrorPage(c, http.StatusNotFound, "Provider has no client defined")
 		return
 	}
 
-	if !provider.GetClient().HasCapability(models.ProviderCapabilityIdentities) {
+	if !provider.HasCapability(models.ProviderCapabilityIdentities) {
 		s.getErrorPage(c, http.StatusNotImplemented, "The provider does not implement identities")
 		return
 	}
 
 	filter := c.Query("q")
 
-	identities, err := provider.GetClient().ListIdentities(
+	identities, err := provider.ListIdentities(
 		context.Background(), &models.SearchRequest{
 			Terms: []string{filter},
 		})
@@ -81,19 +81,19 @@ func (s *Server) getProviderIdentities(c *gin.Context) {
 func (s *Server) getProviderRoles(c *gin.Context) {
 
 	providerName := c.Param("provider")
-	provider, foundProvider := s.Config.Providers.Definitions[providerName]
+	provider, err := s.Config.GetProviderByName(providerName)
 
-	if !foundProvider {
+	if err != nil {
 		s.getErrorPage(c, http.StatusNotFound, "Provider not found")
 		return
 	}
 
-	if provider.GetClient() == nil {
+	if provider == nil {
 		s.getErrorPage(c, http.StatusNotFound, "Provider has no client defined")
 		return
 	}
 
-	if !provider.GetClient().HasCapability(models.ProviderCapabilityRoles) {
+	if !provider.HasCapability(models.ProviderCapabilityRoles) {
 		s.getErrorPage(c, http.StatusNotImplemented, "The provider does not implement roles")
 		return
 	}
@@ -113,7 +113,7 @@ func (s *Server) getProviderRoles(c *gin.Context) {
 		}
 	}
 
-	roles, err := provider.GetClient().ListRoles(context.Background(), searchRequest)
+	roles, err := provider.ListRoles(context.Background(), searchRequest)
 
 	if err != nil {
 		s.getErrorPage(c, http.StatusInternalServerError, "Failed to list roles")
@@ -142,19 +142,19 @@ func (s *Server) getProviderRoles(c *gin.Context) {
 func (s *Server) getProviderByName(c *gin.Context) {
 
 	providerName := c.Param("provider")
-	provider := s.Config.Providers.Definitions[providerName]
+	provider, err := s.Config.GetProviderByName(providerName)
 
-	if provider.GetClient() == nil {
+	if err != nil {
 		s.getErrorPage(c, http.StatusNotFound, "Provider not found")
 		return
 	}
 
 	c.JSON(http.StatusOK, models.ProviderResponse{
 		ID:           providerName,
-		Name:         provider.Name,
-		Description:  provider.Description,
-		Provider:     provider.Provider,
-		Capabilities: provider.GetClient().GetCapabilities(),
+		Name:         provider.GetName(),
+		Description:  provider.GetDescription(),
+		Provider:     provider.GetProvider(),
+		Capabilities: provider.GetCapabilities(),
 		Enabled:      true,
 	})
 }
@@ -177,19 +177,19 @@ func (s *Server) getProviderPermissions(c *gin.Context) {
 
 	providerName := c.Param("provider")
 
-	provider, foundProvider := s.Config.Providers.Definitions[providerName]
+	provider, err := s.Config.GetProviderByName(providerName)
 
-	if !foundProvider {
+	if err != nil {
 		s.getErrorPage(c, http.StatusNotFound, "Provider not found")
 		return
 	}
 
-	if provider.GetClient() == nil {
+	if provider == nil {
 		s.getErrorPage(c, http.StatusNotFound, "Provider has no client defined")
 		return
 	}
 
-	if !provider.GetClient().HasCapability(models.ProviderCapabilityPermissions) {
+	if !provider.HasCapability(models.ProviderCapabilityPermissions) {
 		s.getErrorPage(c, http.StatusNotImplemented, "The provider does not implement permissions")
 		return
 	}
@@ -209,7 +209,7 @@ func (s *Server) getProviderPermissions(c *gin.Context) {
 		}
 	}
 
-	permissions, err := provider.GetClient().ListPermissions(context.Background(), searchRequest)
+	permissions, err := provider.ListPermissions(context.Background(), searchRequest)
 
 	if err != nil {
 		s.getErrorPage(c, http.StatusInternalServerError, "Failed to list permissions", err)
@@ -241,19 +241,19 @@ func (s *Server) getProviderResources(c *gin.Context) {
 
 	providerName := c.Param("provider")
 
-	provider, foundProvider := s.Config.Providers.Definitions[providerName]
+	provider, err := s.Config.GetProviderByName(providerName)
 
-	if !foundProvider {
+	if err != nil {
 		s.getErrorPage(c, http.StatusNotFound, "Provider not found")
 		return
 	}
 
-	if provider.GetClient() == nil {
+	if provider == nil {
 		s.getErrorPage(c, http.StatusNotFound, "Provider has no client defined")
 		return
 	}
 
-	if !provider.GetClient().HasCapability(models.ProviderCapabilityResources) {
+	if !provider.HasCapability(models.ProviderCapabilityResources) {
 		s.getErrorPage(c, http.StatusNotImplemented, "The provider does not implement resources")
 		return
 	}
@@ -273,7 +273,7 @@ func (s *Server) getProviderResources(c *gin.Context) {
 		}
 	}
 
-	resources, err := provider.GetClient().ListResources(context.Background(), searchRequest)
+	resources, err := provider.ListResources(context.Background(), searchRequest)
 
 	if err != nil {
 		s.getErrorPage(c, http.StatusInternalServerError, "Failed to list resources", err)
@@ -305,19 +305,14 @@ func (s *Server) getProviderTenants(c *gin.Context) {
 
 	providerName := c.Param("provider")
 
-	provider, foundProvider := s.Config.Providers.Definitions[providerName]
+	provider, err := s.Config.GetProviderByName(providerName)
 
-	if !foundProvider {
+	if err != nil {
 		s.getErrorPage(c, http.StatusNotFound, "Provider not found")
 		return
 	}
 
-	if provider.GetClient() == nil {
-		s.getErrorPage(c, http.StatusNotFound, "Provider has no client defined")
-		return
-	}
-
-	if !provider.GetClient().HasCapability(models.ProviderCapabilityTenants) {
+	if !provider.HasCapability(models.ProviderCapabilityTenants) {
 		s.getErrorPage(c, http.StatusNotImplemented, "The provider does not implement tenants")
 		return
 	}
@@ -337,7 +332,7 @@ func (s *Server) getProviderTenants(c *gin.Context) {
 		}
 	}
 
-	tenants, err := provider.GetClient().ListTenants(context.Background(), searchRequest)
+	tenants, err := provider.ListTenants(context.Background(), searchRequest)
 
 	if err != nil {
 		s.getErrorPage(c, http.StatusInternalServerError, "Failed to list tenants", err)
@@ -354,32 +349,30 @@ func (s *Server) getProviderTenants(c *gin.Context) {
 func (s *Server) getAuthProvidersAsProviderResponse(authenticatedUser *models.Session) map[string]models.ProviderResponse {
 	return s.getProvidersAsProviderResponse(
 		authenticatedUser,
-		false, // Authentication providers don't need elevation capability
 		models.ProviderCapabilityAuthorizer)
 }
 
 func (s *Server) getProvidersAsProviderResponse(
 	authenticatedUser *models.Session,
-	forElevation bool,
 	capabilities ...models.ProviderCapability,
 ) map[string]models.ProviderResponse {
 
 	providerResponse := map[string]models.ProviderResponse{}
 
-	for providerKey, provider := range s.Config.Providers.Definitions {
+	for providerKey, provider := range s.Config.GetProvidersByCapability() {
 
 		providerName := providerKey
 
-		if len(provider.Name) > 0 {
-			providerName = provider.Name
+		if len(provider.GetName()) > 0 {
+			providerName = provider.GetName()
 		}
 
 		// Skip providers that don't have a client initialized
-		if provider.GetClient() == nil {
+		if provider == nil {
 			continue
 		}
 
-		if len(capabilities) > 0 && !provider.GetClient().HasAnyCapability(capabilities...) {
+		if len(capabilities) > 0 && !provider.HasAnyCapability(capabilities...) {
 			continue
 		}
 
@@ -390,9 +383,9 @@ func (s *Server) getProvidersAsProviderResponse(
 		providerResponse[providerKey] = models.ProviderResponse{
 			ID:           providerKey,
 			Name:         providerName,
-			Description:  provider.Description,
-			Provider:     provider.Provider,
-			Capabilities: provider.GetClient().GetCapabilities(),
+			Description:  provider.GetDescription(),
+			Provider:     provider.GetProvider(),
+			Capabilities: provider.GetCapabilities(),
 			Enabled:      true,
 		}
 	}
@@ -442,26 +435,9 @@ func (s *Server) getProviders(c *gin.Context) {
 		}
 	}
 
-	// Detect if this request is for elevation purposes
-	// Check both the raw capability string and parsed capabilities
-	// The UI sends "rbac" which doesn't parse to a valid capability enum
-	forElevation := false
-	if strings.Contains(strings.ToLower(capability), "rbac") {
-		forElevation = true
-	}
-	// Also check parsed capabilities for provisioning/roles/permissions
-	for _, cap := range capabilities {
-		if cap == models.ProviderCapabilityProvisioning ||
-			cap == models.ProviderCapabilityRoles ||
-			cap == models.ProviderCapabilityPermissions {
-			forElevation = true
-			break
-		}
-	}
-
 	response := models.ProvidersResponse{
 		Version:   "1.0",
-		Providers: s.getProvidersAsProviderResponse(authenticatedUser, forElevation, capabilities...),
+		Providers: s.getProvidersAsProviderResponse(authenticatedUser, capabilities...),
 	}
 
 	if s.canAcceptHtml(c) {
@@ -533,9 +509,7 @@ func (s *Server) providerFunctionHandler(c *gin.Context) {
 		return
 	}
 
-	providerClient := provider.GetClient()
-
-	if providerClient == nil {
+	if provider == nil {
 		s.getErrorPage(c, http.StatusNotFound, "Provider has no client defined")
 		return
 	}
@@ -555,7 +529,7 @@ func (s *Server) providerFunctionHandler(c *gin.Context) {
 			}
 		}
 
-		providerResponse, err = provider.GetClient().AuthorizeSession(
+		providerResponse, err = provider.AuthorizeSession(
 			context.Background(),
 			&user)
 
@@ -572,7 +546,7 @@ func (s *Server) providerFunctionHandler(c *gin.Context) {
 			}
 		}
 
-		providerResponse, err = providerClient.ListIdentities(
+		providerResponse, err = provider.ListIdentities(
 			context.Background(),
 			&searchRequest,
 		)
@@ -590,19 +564,19 @@ func (s *Server) providerFunctionHandler(c *gin.Context) {
 			}
 		}
 
-		providerResponse, err = providerClient.ListTenants(
+		providerResponse, err = provider.ListTenants(
 			context.Background(),
 			&searchRequest,
 		)
 
 	default:
 
-		if providerClient.HasCapability(models.ProviderCapabilityWebhook) {
+		if provider.HasCapability(models.ProviderCapabilityWebhook) {
 
 			logrus.Debugln("Handling provider webhook function:", function)
 
 			// Let the provider handle the webhook
-			err = providerClient.HandleWebhook(
+			err = provider.HandleWebhook(
 				context.Background(), &models.WebhookRequest{
 					Context:  c,
 					Endpoint: s.Config.GetCallbackUrl("/"),
@@ -630,7 +604,7 @@ func (s *Server) providerFunctionHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, providerResponse)
 }
 
-func (s *Server) getProvider(providerName string) (*models.Provider, error) {
+func (s *Server) getProvider(providerName string) (models.Provider, error) {
 
 	provider, err := s.Config.GetProviderByName(providerName)
 
@@ -638,7 +612,7 @@ func (s *Server) getProvider(providerName string) (*models.Provider, error) {
 		return nil, fmt.Errorf("provider '%s' not found", providerName)
 	}
 
-	if provider.GetClient() == nil {
+	if provider == nil {
 		return nil, fmt.Errorf("provider has no client defined")
 	}
 

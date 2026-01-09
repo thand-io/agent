@@ -39,7 +39,7 @@ type UserInfoResponse struct {
 	Groups            []string `json:"groups,omitempty"` // User groups/roles
 }
 
-func (p *thandProvider) Initialize(identifier string, provider models.Provider) error {
+func (p *thandProvider) Initialize(identifier string, provider models.ProviderConfig) error {
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,

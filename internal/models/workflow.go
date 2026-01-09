@@ -12,15 +12,17 @@ import (
 
 type Workflow struct {
 	Version     *version.Version `json:"version,omitempty"`
+	Identifier  string           `json:"-"`
 	Name        string           `json:"name" validate:"required,min=1,max=100"`
 	Description string           `json:"description" validate:"max=500"`
 	Workflow    *model.Workflow  `json:"workflow,omitempty" validate:"required"`
 	Enabled     bool             `json:"enabled" default:"true"` // By default enable the workflow
 }
 
-func NewWorkflow(version *version.Version, name string, description string, workflow *model.Workflow) *Workflow {
+func NewWorkflow(version *version.Version, identifier string, name string, description string, workflow *model.Workflow) *Workflow {
 	return &Workflow{
 		Version:     version,
+		Identifier:  identifier,
 		Name:        name,
 		Description: description,
 		Workflow:    workflow,
@@ -34,6 +36,10 @@ func (w *Workflow) GetVersion() *version.Version {
 
 func (r *Workflow) HasPermission(user *User) bool {
 	return true
+}
+
+func (w *Workflow) GetIdentifier() string {
+	return w.Identifier
 }
 
 func (w *Workflow) GetName() string {
@@ -87,11 +93,11 @@ type WorkflowResponse struct {
 }
 
 type WorkflowRequest struct {
-	Task *WorkflowTask `json:"task"`
-	Url  string        `json:"url"`
+	Task *ElevateWorkflowTask `json:"task"`
+	Url  string               `json:"url"`
 }
 
-func (r *WorkflowRequest) GetTask() *WorkflowTask {
+func (r *WorkflowRequest) GetTask() *ElevateWorkflowTask {
 	return r.Task
 }
 
@@ -130,7 +136,7 @@ type WorkflowExecutionInfo struct {
 
 // TaskHandler defines the signature for task execution functions
 type TaskHandler func(
-	workflowTask *WorkflowTask,
+	workflowTask *ElevateWorkflowTask,
 	task *model.TaskItem,
 	input any,
 ) (any, error)

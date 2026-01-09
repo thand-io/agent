@@ -17,7 +17,7 @@ type terraformProvider struct {
 	permissions []models.ProviderPermission
 }
 
-func (p *terraformProvider) Initialize(identifier string, provider models.Provider) error {
+func (p *terraformProvider) Initialize(identifier string, provider models.ProviderConfig) error {
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,

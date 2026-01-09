@@ -11,6 +11,7 @@ import (
 	"github.com/thand-io/agent/internal/models"
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
@@ -27,7 +28,7 @@ func (t *RevokeTask) HasNotifiers() bool {
 
 // ThandRevokeTask represents a custom task for Thand revocation
 func (t *thandTask) executeRevokeTask(
-	workflowTask *models.WorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	taskName string,
 	call *taskModel.ThandTask) (any, error) {
 
@@ -74,7 +75,7 @@ type temporalRevokeResult struct {
 }
 
 func (t *thandTask) executeRevocationTask(
-	workflowTask *models.WorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	taskName string,
 	call *taskModel.ThandTask,
 	elevateRequest *models.ElevateRequestInternal,
@@ -172,7 +173,7 @@ func (t *thandTask) executeRevocationTask(
 					AuthorizeResponse: authorizeResponse,
 				})
 
-				log.WithFields(models.Fields{
+				log.WithFields(logrus.Fields{
 					"user":     identity,
 					"role":     elevateRequest.Role.GetName(),
 					"provider": providerName,
@@ -244,7 +245,7 @@ func (t *thandTask) executeRevocationTask(
 
 // executeTemporalRevokeParallel executes revocation tasks in parallel using Temporal
 func (t *thandTask) executeTemporalRevokeParallel(
-	workflowTask *models.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	taskName string,
 	call *taskModel.ThandTask,
 	revokeTasks []revokeTask,
@@ -323,7 +324,7 @@ func (t *thandTask) executeTemporalRevokeParallel(
 // executeGoRevokeParallel executes revocation tasks in parallel using Go routines and WaitGroup
 func (t *thandTask) executeGoRevokeParallel(
 	config models.ConfigImpl,
-	workflowTask *models.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	revokeTasks []revokeTask,
 ) ([]revokeResult, error) {
 
@@ -345,7 +346,7 @@ func (t *thandTask) executeGoRevokeParallel(
 				return
 			}
 
-			revokeOut, err := providerCall.GetClient().RevokeRole(
+			revokeOut, err := providerCall.RevokeRole(
 				workflowTask.GetContext(), &revokeTask.RevokeReq,
 			)
 
@@ -364,7 +365,7 @@ func (t *thandTask) executeGoRevokeParallel(
 
 // makeRevocationNotifications sends notifications about access revocation
 func (t *thandTask) makeRevocationNotifications(
-	workflowTask *models.WorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	taskName string,
 	revokeTask *RevokeTask,
 	elevateRequest *models.ElevateRequestInternal,
@@ -411,7 +412,7 @@ func (t *thandTask) makeRevocationNotifications(
 				Provider:  revokeNotifier.GetProviderName(),
 			})
 
-			log.WithFields(models.Fields{
+			log.WithFields(logrus.Fields{
 				"recipient":   recipientId,
 				"provider":    revokeNotifier.GetProviderName(),
 				"providerKey": providerKey,
@@ -430,7 +431,7 @@ func (t *thandTask) makeRevocationNotifications(
 	}
 
 	if err != nil {
-		log.WithError(err).WithFields(models.Fields{
+		log.WithError(err).WithFields(logrus.Fields{
 			"taskName": taskName,
 		}).Error("Failed to execute revocation notifications")
 
@@ -440,7 +441,7 @@ func (t *thandTask) makeRevocationNotifications(
 	// Process results using shared helper
 	if err := processNotificationResults(notifyResults, "Revocation notification"); err != nil {
 
-		log.WithError(err).WithFields(models.Fields{
+		log.WithError(err).WithFields(logrus.Fields{
 			"taskName": taskName,
 		}).Error("Failed to process revocation notification results")
 

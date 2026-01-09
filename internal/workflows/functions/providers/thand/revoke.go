@@ -8,7 +8,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
-	"github.com/thand-io/agent/internal/workflows/functions"
+	"github.com/thand-io/agent/sdk/workflows/functions"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 const ThandRevokeFunction = "thand.revoke"
@@ -54,7 +55,7 @@ func (t *revokeFunction) GetOptionalParameters() map[string]any {
 
 // ValidateRequest validates the input parameters
 func (t *revokeFunction) ValidateRequest(
-	workflowTask *models.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	call *model.CallFunction,
 	input any,
 ) error {
@@ -63,7 +64,7 @@ func (t *revokeFunction) ValidateRequest(
 
 // Execute performs the revocation logic
 func (t *revokeFunction) Execute(
-	workflowTask *models.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	call *model.CallFunction,
 	input any,
 ) (any, error) {
@@ -79,12 +80,15 @@ func (t *revokeFunction) Execute(
 
 // validateAndParseRequests validates and parses the incoming requests
 func (t *revokeFunction) validateAndParseRequests(
-	workflowTask *models.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	call *model.CallFunction,
 	input any,
 ) (*ThandRevokeRequest, error) {
 
-	elevationRequest, err := workflowTask.GetContextAsElevationRequest()
+	// Cast to ThandWorkflowTask to access context methods
+	thandWorkflowTask := models.NewElevateWorkflowTask(workflowTask)
+
+	elevationRequest, err := thandWorkflowTask.GetContextAsElevationRequest()
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get elevation request from context: %w", err)
@@ -112,7 +116,7 @@ func (t *revokeFunction) validateAndParseRequests(
 
 // executeRevocation performs the main revocation workflow
 func (t *revokeFunction) executeRevocation(
-	workflowTask *models.WorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	revokeRequest *ThandRevokeRequest,
 ) (any, error) {
 
@@ -122,7 +126,7 @@ func (t *revokeFunction) executeRevocation(
 		return nil, fmt.Errorf("failed to get provider: %w", err)
 	}
 
-	revokeOut, err := providerCall.GetClient().RevokeRole(
+	revokeOut, err := providerCall.RevokeRole(
 		workflowTask.GetContext(), &models.RevokeRoleRequest{
 			RoleRequest:           revokeRequest.RoleRequest,
 			AuthorizeRoleResponse: revokeRequest.AuthorizeRoleResponse,

@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/slack-go/slack"
 	"github.com/thand-io/agent/internal/models"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 // createSlackBlocks creates the Slack Block Kit blocks for the notification
@@ -91,7 +92,7 @@ func (a *approvalsNotifier) addRequestDetailsSection(blocks *[]slack.Block, elev
 		var providerNames []string
 		for _, providerID := range elevateRequest.Providers {
 			if provider, err := a.config.GetProviderByName(providerID); err == nil && provider != nil {
-				providerNames = append(providerNames, fmt.Sprintf("%s (%s)", provider.Name, providerID))
+				providerNames = append(providerNames, fmt.Sprintf("%s (%s)", provider.GetName(), providerID))
 			} else {
 				providerNames = append(providerNames, providerID)
 			}
@@ -325,7 +326,7 @@ func (a *approvalsNotifier) addIdentitiesSection(blocks *[]slack.Block, elevateR
 // addActionSection adds action buttons section based on approval requirements
 func (a *approvalsNotifier) addActionSection(
 	blocks *[]slack.Block,
-	workflowTask *models.WorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	approvalNotifier *ApprovalNotifier,
 ) {
 	if approvalNotifier.Approvals > 0 {
@@ -380,7 +381,7 @@ func (a *approvalsNotifier) addActionSection(
 				slack.NewButtonBlockElement(
 					fmt.Sprintf(
 						"%s-%s-%s",
-						a.workflowTask.WorkflowID,
+						a.workflowTask.GetWorkflowID(),
 						a.workflowTask.GetTaskName(),
 						"approve",
 					),
@@ -395,7 +396,7 @@ func (a *approvalsNotifier) addActionSection(
 				slack.NewButtonBlockElement(
 					fmt.Sprintf(
 						"%s-%s-%s",
-						a.workflowTask.WorkflowID,
+						a.workflowTask.GetWorkflowID(),
 						a.workflowTask.GetTaskName(),
 						"deny",
 					),
@@ -410,7 +411,7 @@ func (a *approvalsNotifier) addActionSection(
 				slack.NewButtonBlockElement(
 					fmt.Sprintf(
 						"%s-%s-%s",
-						a.workflowTask.WorkflowID,
+						a.workflowTask.GetWorkflowID(),
 						a.workflowTask.GetTaskName(),
 						"view_request",
 					),
@@ -439,12 +440,12 @@ func (a *approvalsNotifier) addActionSection(
 	}
 }
 
-func (a *approvalsNotifier) createViewRequestUrl(workflowTask *models.WorkflowTask) string {
-	return fmt.Sprintf("%s/execution/%s", a.config.GetLoginServerUrl(), workflowTask.WorkflowID)
+func (a *approvalsNotifier) createViewRequestUrl(workflowTask *models.ElevateWorkflowTask) string {
+	return fmt.Sprintf("%s/execution/%s", a.config.GetLoginServerUrl(), workflowTask.GetWorkflowID())
 }
 
 func (a *approvalsNotifier) createCallbackUrl(
-	workflowTask *models.WorkflowTask,
+	workflowTask *models.ElevateWorkflowTask,
 	approvalNotifier *ApprovalNotifier,
 	approve bool,
 ) string {
@@ -463,16 +464,18 @@ func (a *approvalsNotifier) createCallbackUrl(
 	// event.SetExtension("user", "")
 
 	// Setup workflow for the next state
-	signaledWorkflow := workflowTask.Clone().(*models.WorkflowTask)
+	signaledWorkflow := workflowTask.Clone().(*sdkWorkflowsModel.WorkflowTask)
 	signaledWorkflow.SetInput(&event)
 
 	if len(approvalNotifier.Entrypoint) > 0 {
 		signaledWorkflow.SetEntrypoint(approvalNotifier.Entrypoint)
 	}
 
+	elevateWorkflow := models.NewElevateWorkflowTask(signaledWorkflow)
+
 	if workflowTask.HasTemporalContext() {
-		return a.config.GetSignalCallbackUrl(signaledWorkflow)
+		return a.config.GetSignalCallbackUrl(elevateWorkflow)
 	} else {
-		return a.config.GetResumeCallbackUrl(signaledWorkflow)
+		return a.config.GetResumeCallbackUrl(elevateWorkflow)
 	}
 }

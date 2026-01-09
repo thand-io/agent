@@ -1,39 +1,40 @@
-package models
+package models_test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/thand-io/agent/internal/models"
 )
 
 func TestIdentity_GetId(t *testing.T) {
-	identity := Identity{ID: "test-id"}
+	identity := models.Identity{ID: "test-id"}
 	assert.Equal(t, "test-id", identity.GetId())
 }
 
 func TestIdentity_String(t *testing.T) {
 	tests := []struct {
 		name     string
-		identity Identity
+		identity models.Identity
 		expected string
 	}{
 		{
 			name: "User Identity",
-			identity: Identity{
-				User: &User{Name: "John", Email: "john@example.com"},
+			identity: models.Identity{
+				User: &models.User{Name: "John", Email: "john@example.com"},
 			},
 			expected: "John (john@example.com)",
 		},
 		{
 			name: "Group Identity",
-			identity: Identity{
-				Group: &Group{Name: "Admins", Email: "admins@example.com"},
+			identity: models.Identity{
+				Group: &models.Group{Name: "Admins", Email: "admins@example.com"},
 			},
 			expected: "Admins (admins@example.com)",
 		},
 		{
 			name:     "Empty Identity",
-			identity: Identity{},
+			identity: models.Identity{},
 			expected: "",
 		},
 	}
@@ -48,26 +49,26 @@ func TestIdentity_String(t *testing.T) {
 func TestIdentity_GetEmail(t *testing.T) {
 	tests := []struct {
 		name     string
-		identity Identity
+		identity models.Identity
 		expected string
 	}{
 		{
 			name: "User Email",
-			identity: Identity{
-				User: &User{Email: "john@example.com"},
+			identity: models.Identity{
+				User: &models.User{Email: "john@example.com"},
 			},
 			expected: "john@example.com",
 		},
 		{
 			name: "Group Email",
-			identity: Identity{
-				Group: &Group{Email: "admins@example.com"},
+			identity: models.Identity{
+				Group: &models.Group{Email: "admins@example.com"},
 			},
 			expected: "admins@example.com",
 		},
 		{
 			name:     "No Email",
-			identity: Identity{},
+			identity: models.Identity{},
 			expected: "",
 		},
 	}
@@ -80,50 +81,50 @@ func TestIdentity_GetEmail(t *testing.T) {
 }
 
 func TestIdentity_Equals(t *testing.T) {
-	user1 := &User{ID: "u1", Email: "u1@example.com"}
-	user2 := &User{ID: "u2", Email: "u2@example.com"}
-	group1 := &Group{ID: "g1", Name: "g1"}
-	group2 := &Group{ID: "g2", Name: "g2"}
+	user1 := &models.User{ID: "u1", Email: "u1@example.com"}
+	user2 := &models.User{ID: "u2", Email: "u2@example.com"}
+	group1 := &models.Group{ID: "g1", Name: "g1"}
+	group2 := &models.Group{ID: "g2", Name: "g2"}
 
 	tests := []struct {
 		name     string
-		id1      Identity
-		id2      *Identity
+		id1      models.Identity
+		id2      *models.Identity
 		expected bool
 	}{
 		{
 			name:     "Same User",
-			id1:      Identity{User: user1},
-			id2:      &Identity{User: user1},
+			id1:      models.Identity{User: user1},
+			id2:      &models.Identity{User: user1},
 			expected: true,
 		},
 		{
 			name:     "Different User",
-			id1:      Identity{User: user1},
-			id2:      &Identity{User: user2},
+			id1:      models.Identity{User: user1},
+			id2:      &models.Identity{User: user2},
 			expected: false,
 		},
 		{
 			name:     "Same Group",
-			id1:      Identity{Group: group1},
-			id2:      &Identity{Group: group1},
+			id1:      models.Identity{Group: group1},
+			id2:      &models.Identity{Group: group1},
 			expected: true,
 		},
 		{
 			name:     "Different Group",
-			id1:      Identity{Group: group1},
-			id2:      &Identity{Group: group2},
+			id1:      models.Identity{Group: group1},
+			id2:      &models.Identity{Group: group2},
 			expected: false,
 		},
 		{
 			name:     "User vs Group",
-			id1:      Identity{User: user1},
-			id2:      &Identity{Group: group1},
+			id1:      models.Identity{User: user1},
+			id2:      &models.Identity{Group: group1},
 			expected: false,
 		},
 		{
 			name:     "Nil Other",
-			id1:      Identity{User: user1},
+			id1:      models.Identity{User: user1},
 			id2:      nil,
 			expected: false,
 		},
@@ -139,56 +140,56 @@ func TestIdentity_Equals(t *testing.T) {
 func TestIdentity_GetMappableIdentifier(t *testing.T) {
 	tests := []struct {
 		name     string
-		identity Identity
+		identity models.Identity
 		expected string
 	}{
 		{
 			name: "User Email",
-			identity: Identity{
-				User: &User{Email: "John@Example.com"},
+			identity: models.Identity{
+				User: &models.User{Email: "John@Example.com"},
 			},
 			expected: "john@example.com",
 		},
 		{
 			name: "User Username",
-			identity: Identity{
-				User: &User{Username: "JohnDoe"},
+			identity: models.Identity{
+				User: &models.User{Username: "JohnDoe"},
 			},
 			expected: "johndoe",
 		},
 		{
 			name: "User ID",
-			identity: Identity{
+			identity: models.Identity{
 				ID:   "user-id",
-				User: &User{},
+				User: &models.User{},
 			},
 			expected: "user-id",
 		},
 		{
 			name: "Group Email",
-			identity: Identity{
-				Group: &Group{Email: "Admins@Example.com"},
+			identity: models.Identity{
+				Group: &models.Group{Email: "Admins@Example.com"},
 			},
 			expected: "admins@example.com",
 		},
 		{
 			name: "Group Name",
-			identity: Identity{
-				Group: &Group{Name: "Admins"},
+			identity: models.Identity{
+				Group: &models.Group{Name: "Admins"},
 			},
 			expected: "admins",
 		},
 		{
 			name: "Group ID",
-			identity: Identity{
+			identity: models.Identity{
 				ID:    "group-id",
-				Group: &Group{},
+				Group: &models.Group{},
 			},
 			expected: "group-id",
 		},
 		{
 			name: "Identity ID only",
-			identity: Identity{
+			identity: models.Identity{
 				ID: "some-id",
 			},
 			expected: "some-id",
@@ -203,14 +204,14 @@ func TestIdentity_GetMappableIdentifier(t *testing.T) {
 }
 
 func TestIdentity_GetLabel(t *testing.T) {
-	identity := Identity{Label: "Test Label"}
+	identity := models.Identity{Label: "Test Label"}
 	assert.Equal(t, "Test Label", identity.GetLabel())
 }
 
 func TestIdentity_TypeChecks(t *testing.T) {
-	userIdentity := Identity{User: &User{}}
-	groupIdentity := Identity{Group: &Group{}}
-	emptyIdentity := Identity{}
+	userIdentity := models.Identity{User: &models.User{}}
+	groupIdentity := models.Identity{Group: &models.Group{}}
+	emptyIdentity := models.Identity{}
 
 	assert.True(t, userIdentity.IsUser())
 	assert.False(t, userIdentity.IsGroup())
@@ -227,13 +228,13 @@ func TestIdentity_TypeChecks(t *testing.T) {
 }
 
 func TestIdentity_Providers(t *testing.T) {
-	identity := Identity{}
+	identity := models.Identity{}
 	assert.Nil(t, identity.GetProviders())
 
-	provider := &Provider{
+	provider := models.NewBaseProvider("aws-prod", models.ProviderConfig{
 		Name:     "aws-prod",
 		Provider: "aws",
-	}
+	}, models.NewProviderCapabilities())
 
 	identity.AddProvider(provider)
 	providers := identity.GetProviders()
