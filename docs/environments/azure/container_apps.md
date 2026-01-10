@@ -48,17 +48,22 @@ Create a Key Vault:
 - Navigate to the [Azure Portal](https://portal.azure.com/) and search for "Key vaults".
 - Click on "Create".
 - Select your subscription and resource group.
-- Enter a unique name for your Key Vault.
+- Enter a unique name (thand-prod) for your Key Vault.
 - Select your region.
 - Choose your pricing tier (Standard is sufficient for most use cases).
 - Click "Review + create", then "Create".
 
-Configure access for your Container App:
+![Azure Key Vault](step01.png)
 
-- In your Key Vault, go to "Access configuration" under Settings.
-- Ensure "Azure role-based access control" is selected (recommended) or use "Vault access policy".
-- If using RBAC, assign the "Key Vault Secrets User" role to your Container App's managed identity.
-- If using access policies, add an access policy granting "Get" and "List" permissions for secrets to your Container App's managed identity.
+Configure your access to the Key Vault. By default Azure does not automatically grant your user (principal) access to the Key Vault - even if you created it. You need to explicitly assign access as a Key Vault Administrator:
+
+- In your Key Vault, go to "Access control (IAM)" under the left hand menu.
+- Click Add, and select "Add role assignment".
+- Search for "Key Vault Administrator" under the roles and ensure its selected. Click Next.
+- Select your user/principal under Members and click Next.
+- Review and click "Assign".
+
+![Azure Key Vault](step02.png)
 
 Create the secrets:
 
@@ -69,13 +74,13 @@ Create the secrets:
 - Value: Provide your entire [provider](../../configuration/providers/) configuration in YAML or JSON format.
 - Click "Create".
 
+![Azure Key Vault](step03.png)
+
 Repeat the above steps to create two more secrets:
 - `thand-roles` - containing your [roles configuration](../../configuration/roles/)
 - `thand-workflows` - containing your [workflows configuration](../../configuration/workflows/)
 
 Documentation for configuring providers, roles and workflows can be found in the [Configuration](../../configuration/) section.
-
-![Azure Key Vault](step04.png)
 
 You might also need to store other secrets depending on your provider configurations. Or other environment specific secrets you want to manage via Key Vault. Unfortunately, you will need to create a secret per environment variable.
 
@@ -83,3 +88,67 @@ Otherwise, you can provide your configuration via a mounted volume or other meth
 
 ### Deploying Thand Agent on Azure Container Apps
 
+Head over to container apps in the Azure portal and create a new Container App.
+
+Fill in the required fields such as subscription, resource group, and container app name.
+
+* Deployment Name: thand
+* Deployment Source: Container image
+
+![Azure Container Apps](step04.png)
+
+Click Next to go to the Container settings.
+
+* Name: thand
+* Image type: Public
+* Registry login server: ghcr.io
+* Image and tag: thand-io/agent;latest
+
+![Azure Container Configuration](step05.png)
+
+Next, we need to configure the ingress settings. By default for this example, we will enable ingress and allow unauthenticated access. Adjust these settings as per your security requirements.
+
+We recommend using Microsoft Entra Identity (formerly Azure AD) for proxy aware identity authentication and authorization.
+
+* Ingress: Enabled
+* Ingress traffic: Accepting traffic from anywhere
+
+![Azure Container Ingress Settings](step06.png)
+
+Click create. We need to configure the secrets and environment variables post creation.
+
+When you're app has finished deploying, navigate to your Container App and go to the "Overview" tab. Under "Application Url" click and visit the link you should be presented with the following:
+
+![Thand Agent Running](step07.png)
+
+Keep this application URL handy as well need it for configuring the environment variables.
+
+## Configure Thand App Runner Service
+
+Now we've deployed all the necessary Azure resources, we need to configure our Thand Agent App Runner service to make use of them.
+
+- Navigate to the Azure Container Apps console. [Azure Container Apps Console](https://portal.azure.com/#blade/HubsExtension/BrowseResource/resourceType/Microsoft.App%2FcontainerApps)
+- Select your Thand Agent container app.
+- Click on "Application" -> "Containers" tab.
+- Click "Environment variables" tab.
+
+Next add the following:
+
+| Variable Name                     | Description                                                                                   | Example Value                                      |
+|----------------------------------|-----------------------------------------------------------------------------------------------|----------------------------------------------------|
+| `THAND_ENVIRONMENT_CONFIG_VAULT_URL` | Your KMS key ARN or alias                                                                | `https://thand-prod.vault.azure.net/`        |
+| `THAND_SECRET` | A value used to encrypt sensitive data at rest in the Thand Agent database. Use a strong, random string. | `your-strong-random-string`                        |
+| `THAND_ENVIRONMENT_CONFIG_REGION` | Your Azure region                                                                               | `eastus`                                       |
+| `THAND_LOGIN_ENDPOINT`            | The endpoint for your deployed Thand Agent                                                   | `https://thand.livelysand-271937.eastus.azurecontainerapps.io`      |
+| `THAND_PROVIDERS_VAULT`           | The name of the Secrets Manager secret containing your providers configuration               | `thand-providers`                                  |
+| `THAND_ROLES_VAULT`               | The name of the Secrets Manager secret containing your roles configuration                   | `thand-roles`                                     |
+| `THAND_WORKFLOWS_VAULT`           | The name of the Secrets Manager secret containing your workflows configuration               | `thand-workflows`                                 |
+| `THAND_ENVIRONMENT_PLATFORM`     | The environment platform for the Thand Agent                                                 | `azure`                                             |
+
+Your final environment variables should look something like this:
+
+![Thand Agent Environment Variables](step08.png)
+
+Click *Save as new revision* to apply the changes.
+
+s
