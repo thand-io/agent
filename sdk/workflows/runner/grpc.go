@@ -60,9 +60,15 @@ func (r *ResumableWorkflowRunner) ExecuteGRPCFunction(
 
 	if workflowTask.HasTemporalContext() {
 
+		activityContext := workflow.WithActivityOptions(workflowTask.GetTemporalContext(),
+			workflow.ActivityOptions{
+				RetryPolicy: DefaultRetryPolicy,
+			},
+		)
+
 		// Execute as Temporal activity
 		fut := workflow.ExecuteActivity(
-			workflowTask.GetTemporalContext(),
+			activityContext,
 			sdkConstants.TemporalGrpcActivityName,
 			grpcCall,
 			finalInput,

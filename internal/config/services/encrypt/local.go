@@ -6,13 +6,11 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 
-	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 	"golang.org/x/crypto/pbkdf2"
@@ -22,11 +20,7 @@ type localVault struct {
 	config *models.BasicConfig
 	key    []byte
 	gcm    cipher.AEAD
-}
-
-type encryptedData struct {
-	Nonce      string `json:"nonce"`
-	Ciphertext string `json:"ciphertext"`
+	mu     sync.Mutex // Protects GCM operations for thread safety
 }
 
 func NewLocalEncryptionFromConfig(config *models.BasicConfig) models.EncryptionImpl {
@@ -48,10 +42,15 @@ func (l *localVault) Initialize() error {
 	masterPassword := l.config.GetStringWithDefault("password", common.DefaultServerSecret)
 	salt := l.config.GetStringWithDefault("salt", common.DefaultServerSecret) // Use hostname as default salt
 
-	// Warn if using default secrets
+	// Fail if using default secrets - these are not secure for production use
 	if strings.EqualFold(masterPassword, common.DefaultServerSecret) ||
 		strings.EqualFold(salt, common.DefaultServerSecret) {
-		logrus.Warningln("local encryption service configured with default secrets. See https://docs.thand.io/configuration/file.html#encryption-service")
+		return fmt.Errorf("local encryption service configured with default secrets - this is insecure. Please set custom password and salt. See https://docs.thand.io/configuration/file.html#encryption-service")
+	}
+
+	// Validate salt length - minimum 16 bytes for security
+	if len(salt) < 16 {
+		return fmt.Errorf("salt must be at least 16 characters long, got %d characters", len(salt))
 	}
 
 	l.key = deriveKey(masterPassword, salt)
@@ -79,70 +78,49 @@ func (l *localVault) Shutdown() error {
 	return nil
 }
 
-func (l *localVault) Encrypt(ctx context.Context, plainText []byte) ([]byte, error) {
-
-	if len(plainText) == 0 {
-		return nil, fmt.Errorf("plaintext cannot be empty")
-	}
-
+// EncryptKey implements KEKProvider interface - encrypts a DEK with the local master key
+func (l *localVault) EncryptKey(ctx context.Context, dek []byte) ([]byte, error) {
 	// Generate random nonce
 	nonce := make([]byte, l.gcm.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		logrus.WithError(err).Errorln("Failed to generate nonce")
 		return nil, fmt.Errorf("failed to generate nonce: %w", err)
 	}
 
-	// Encrypt the value
-	ciphertext := l.gcm.Seal(nil, nonce, plainText, nil)
+	// Encrypt DEK with master key (mutex protects concurrent GCM access)
+	l.mu.Lock()
+	ciphertext := l.gcm.Seal(nonce, nonce, dek, nil)
+	l.mu.Unlock()
 
-	// Prepare encrypted data structure
-	encData := encryptedData{
-		Nonce:      base64.StdEncoding.EncodeToString(nonce),
-		Ciphertext: base64.StdEncoding.EncodeToString(ciphertext),
+	return ciphertext, nil
+}
+
+// DecryptKey implements KEKProvider interface - decrypts a DEK with the local master key
+func (l *localVault) DecryptKey(ctx context.Context, encryptedDEK []byte) ([]byte, error) {
+	nonceSize := l.gcm.NonceSize()
+	if len(encryptedDEK) < nonceSize {
+		return nil, fmt.Errorf("encrypted DEK too short")
 	}
 
-	// Marshal to JSON
-	data, err := json.Marshal(encData)
+	nonce, ciphertext := encryptedDEK[:nonceSize], encryptedDEK[nonceSize:]
+
+	// Decrypt DEK with master key (mutex protects concurrent GCM access)
+	l.mu.Lock()
+	dek, err := l.gcm.Open(nil, nonce, ciphertext, nil)
+	l.mu.Unlock()
+
 	if err != nil {
-		logrus.WithError(err).Errorln("Failed to marshal encrypted data")
-		return nil, fmt.Errorf("failed to marshal encrypted data: %w", err)
+		return nil, fmt.Errorf("failed to decrypt DEK: %w", err)
 	}
 
-	return data, nil
+	return dek, nil
+}
+
+func (l *localVault) Encrypt(ctx context.Context, plainText []byte) ([]byte, error) {
+	// Use envelope encryption with local master key as KEK provider
+	return EnvelopeEncrypt(ctx, plainText, l)
 }
 
 func (l *localVault) Decrypt(ctx context.Context, cipherText []byte) ([]byte, error) {
-
-	if len(cipherText) == 0 {
-		return nil, fmt.Errorf("ciphertext cannot be empty")
-	}
-
-	// Parse encrypted data
-	var encData encryptedData
-	if err := json.Unmarshal(cipherText, &encData); err != nil {
-		logrus.WithError(err).Errorln("Failed to parse encrypted data")
-		return nil, fmt.Errorf("failed to parse encrypted data: %w", err)
-	}
-
-	// Decode base64 data
-	nonce, err := base64.StdEncoding.DecodeString(encData.Nonce)
-	if err != nil {
-		logrus.WithError(err).Errorln("Failed to decode nonce")
-		return nil, fmt.Errorf("failed to decode nonce: %w", err)
-	}
-
-	ciphertext, err := base64.StdEncoding.DecodeString(encData.Ciphertext)
-	if err != nil {
-		logrus.WithError(err).Errorln("Failed to decode ciphertext")
-		return nil, fmt.Errorf("failed to decode ciphertext: %w", err)
-	}
-
-	// Decrypt
-	plaintext, err := l.gcm.Open(nil, nonce, ciphertext, nil)
-	if err != nil {
-		logrus.WithError(err).Errorln("Failed to decrypt secret")
-		return nil, fmt.Errorf("failed to decrypt secret: %w", err)
-	}
-
-	return plaintext, nil
+	// Use envelope decryption with local master key as KEK provider
+	return EnvelopeDecrypt(ctx, cipherText, l)
 }

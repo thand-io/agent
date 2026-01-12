@@ -4,12 +4,14 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
+	"golang.org/x/net/publicsuffix"
 )
 
 var ThandCookieName = "_thand_v1"
@@ -72,7 +74,8 @@ func CreateCookieName(provider string) string {
 // getSessionStore creates a session store with secure cookie settings
 func (s *Server) getSessionStore(secret string) sessions.Store {
 
-	domain := s.Config.GetLoginServerHostname()
+	hostname := s.Config.GetLoginServerHostname()
+	domain := getCookieDomain(hostname)
 
 	store := cookie.NewStore([]byte(secret))
 	store.Options(sessions.Options{
@@ -84,4 +87,37 @@ func (s *Server) getSessionStore(secret string) sessions.Store {
 		SameSite: http.SameSiteLaxMode, // Needed for OAuth2 redirects
 	})
 	return store
+}
+
+// getCookieDomain determines the appropriate cookie domain based on the hostname.
+// Uses publicsuffix library to properly handle multi-level TLDs like azurecontainerapps.io
+func getCookieDomain(hostname string) string {
+	// For localhost or empty hostname, use host-only cookies (most secure)
+	if hostname == "" || hostname == "localhost" || strings.HasPrefix(hostname, "127.") {
+		return ""
+	}
+
+	// Get the effective TLD+1 (registrable domain)
+	// This handles complex TLDs like azurecontainerapps.io properly
+	eTLDPlusOne, err := publicsuffix.EffectiveTLDPlusOne(hostname)
+	if err != nil {
+		// If we can't determine the public suffix, fall back to host-only cookies for safety
+		logrus.WithFields(logrus.Fields{
+			"hostname": hostname,
+			"error":    err,
+		}).Warnln("Failed to determine public suffix for cookie domain, using host-only cookies")
+		return ""
+	}
+
+	// For multi-subdomain setups (e.g., thand.livelysand-xxx.eastus.azurecontainerapps.io),
+	// the eTLD+1 would be eastus.azurecontainerapps.io, which is what we want.
+	// However, if hostname == eTLD+1, it means we're at the base domain already,
+	// so we should use host-only cookies instead of adding a dot prefix
+	if hostname == eTLDPlusOne {
+		// At base domain, use host-only cookies (no Domain attribute)
+		return ""
+	}
+
+	// For subdomains, set cookie domain with leading dot to share across subdomains
+	return "." + eTLDPlusOne
 }

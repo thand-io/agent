@@ -184,7 +184,8 @@ This will let the agent know where to find the KMS and Secret Manager resources.
 
 | Variable Name                     | Description                                                                                   | Example Value                                      |
 |----------------------------------|-----------------------------------------------------------------------------------------------|----------------------------------------------------|
-| `THAND_ENVIRONMENT_PLATFORM`             | The environment platform for the Thand Agent. This will override detection at startup.                                                 | `gcp`                                             |
+| `THAND_ENVIRONMENT_PLATFORM`             | The environment platform for the Thand Agent. This will override detection at startup.                                                 |`gcp`                                             |
+| `THAND_SECRET` | A value used to encrypt sensitive data at rest in the Thand Agent database. Use a strong, random string. | `your-strong-random-string`                        |
 | `THAND_PROVIDERS_VAULT`       | The name of the Secret Manager secret containing your providers configuration.                | `thand-providers`                                  |
 | `THAND_ROLES_VAULT`   | The name of the Secret Manager secret containing your roles configuration.                | `thand-roles`                              |
 | `THAND_WORKFLOWS_VAULT`   | The name of the Secret Manager secret containing your workflows configuration.                | `thand-workflows`                              |

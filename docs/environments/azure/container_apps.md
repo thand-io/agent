@@ -32,15 +32,24 @@ In this example, we will configure Thand to use Key Vault as its secret backend.
 
 A default provider for Azure using the managed identity attached to the Container App would look something like this:
 
-```yaml
-providers:
-  azure:
-    name: Azure Default
-    description: Default Azure provider using managed identity
-    provider: azure
-    enabled: true
-    config:
-      subscription_id: your-subscription-id
+{: .note}
+When storing secrets in Azure Key Vault, the configuration must be in JSON format. AWS Secrets Manager supports both YAML and JSON formats.
+
+```json
+{
+  "providers": {
+    "azure": {
+      "name": "Azure Default",
+      "description": "Default Azure provider using managed identity",
+      "provider": "azure",
+      "enabled": true,
+      "config": {
+        "subscription_id": "your-subscription-id",
+        "region": "eastus"
+      }
+    }
+  }
+}
 ```
 
 Create a Key Vault:
@@ -86,6 +95,14 @@ You might also need to store other secrets depending on your provider configurat
 
 Otherwise, you can provide your configuration via a mounted volume or other methods as described in the [Configuration](../../configuration/) section.
 
+### Encryption Key Setup
+
+To ensure that sensitive data stored by the Thand Agent is secure, we need to set up an encryption key in Azure Key Vault.
+
+To create a new encryption key:
+
+![Azure Key Vault](step04.png)
+
 ### Deploying Thand Agent on Azure Container Apps
 
 Head over to container apps in the Azure portal and create a new Container App.
@@ -127,6 +144,24 @@ Keep this application URL handy as well need it for configuring the environment 
 
 Now we've deployed all the necessary Azure resources, we need to configure our Thand Agent App Runner service to make use of them.
 
+### Managed Identity Configuration
+
+To allow the Thand Agent to access the Key Vault, we need to assign the appropriate permissions to the Container App's managed identity.
+
+![Azure Managed Identity](step09.png)
+
+Once Managed Identity is enabled for your Container App. You now have your Object or Principal ID. Click Azure role assignments and follow these steps:
+
+* Add role assignment
+* Scopre: Select your Key Vault
+* Subscription: Your subscription
+* Resource group: Your resource group
+* Role: Key Vault Reader
+
+![Azure Managed Identity Role Assignment](step10.png)
+
+### Setting Environment Variables
+
 - Navigate to the Azure Container Apps console. [Azure Container Apps Console](https://portal.azure.com/#blade/HubsExtension/BrowseResource/resourceType/Microsoft.App%2FcontainerApps)
 - Select your Thand Agent container app.
 - Click on "Application" -> "Containers" tab.
@@ -137,6 +172,7 @@ Next add the following:
 | Variable Name                     | Description                                                                                   | Example Value                                      |
 |----------------------------------|-----------------------------------------------------------------------------------------------|----------------------------------------------------|
 | `THAND_ENVIRONMENT_CONFIG_VAULT_URL` | Your KMS key ARN or alias                                                                | `https://thand-prod.vault.azure.net/`        |
+| `THAND_ENVIRONMENT_CONFIG_KEY_NAME` | The name of the KMS key used to encrypt sensitive data at rest in the Thand Agent database. | `thand`                              |
 | `THAND_SECRET` | A value used to encrypt sensitive data at rest in the Thand Agent database. Use a strong, random string. | `your-strong-random-string`                        |
 | `THAND_ENVIRONMENT_CONFIG_REGION` | Your Azure region                                                                               | `eastus`                                       |
 | `THAND_LOGIN_ENDPOINT`            | The endpoint for your deployed Thand Agent                                                   | `https://thand.livelysand-271937.eastus.azurecontainerapps.io`      |
@@ -150,5 +186,3 @@ Your final environment variables should look something like this:
 ![Thand Agent Environment Variables](step08.png)
 
 Click *Save as new revision* to apply the changes.
-
-s

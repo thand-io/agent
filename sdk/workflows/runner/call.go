@@ -2,7 +2,6 @@ package runner
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
@@ -93,8 +92,8 @@ func (r *ResumableWorkflowRunner) ExecuteCallFunction(
 		}
 
 		activityOptions := workflow.ActivityOptions{
-			TaskQueue:           r.GetConfig().GetTemporal().GetTaskQueue(),
-			StartToCloseTimeout: time.Minute * 5,
+			TaskQueue:   r.GetConfig().GetTemporal().GetTaskQueue(),
+			RetryPolicy: DefaultRetryPolicy,
 		}
 
 		ctx = workflow.WithActivityOptions(ctx, activityOptions)
