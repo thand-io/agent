@@ -251,9 +251,7 @@ func executeSync[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 
 		for {
 
-			logrus.WithFields(logrus.Fields{
-				"request": req,
-			}).Debugf("Making synchronization request: %s", name)
+			logrus.Debugf("Making synchronization request: %s", name)
 
 			resp, err := syncOp(ctx, req)
 
