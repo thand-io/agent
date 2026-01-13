@@ -15,6 +15,8 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
+var azureUserIDCache = make(map[string]string)
+
 // Never synchronize roles from Azure as they are
 // statically defined by Azure and cannot be modified
 func (p *azureProvider) CanSynchronizeRoles() bool {
@@ -157,6 +159,12 @@ func (p *azureProvider) getUserPrincipalID(ctx context.Context, user *models.Use
 		return "", fmt.Errorf("user email is required for Azure role assignments")
 	}
 
+	// Check cache first
+	if objectID, found := azureUserIDCache[user.Email]; found {
+		logrus.WithField("email", user.Email).Debug("Using cached Azure AD object ID")
+		return objectID, nil
+	}
+
 	// NOTE: We always use Microsoft Graph API to lookup the user's Azure AD object ID
 	// even if user.ID is set, because user.ID may be a Thand-internal ID, not an Azure AD object ID.
 
@@ -201,6 +209,7 @@ func (p *azureProvider) getUserPrincipalID(ctx context.Context, user *models.Use
 	}
 
 	objectID := *graphUser.GetId()
+	azureUserIDCache[user.Email] = objectID
 
 	// Validate the object ID is a proper GUID
 	if _, err := uuid.Parse(objectID); err != nil {
