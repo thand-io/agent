@@ -82,7 +82,7 @@ func (t *thandTask) executeApprovalsTask(
 	availableIdentities := elevationRequest.ResolveIdentities(
 		workflowTask.GetContext(),
 		t.config.GetProvidersByCapability(
-			models.ProviderCapabilityIdentities,
+			models.IdentityCapabilities...,
 		),
 	)
 

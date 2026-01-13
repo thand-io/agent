@@ -25,7 +25,7 @@ func (c *Config) GetIdentitiesCount() int64 {
 
 	identitiesCount := int64(0)
 
-	for _, provider := range c.GetProvidersByCapability(models.ProviderCapabilityIdentities) {
+	for _, provider := range c.GetProvidersByCapability(models.IdentityCapabilities...) {
 		count, err := provider.ListIdentities(ctx, &models.SearchRequest{})
 		
 		if err != nil {
@@ -77,7 +77,7 @@ func (c *Config) GetIdentity(identity string) (*models.Identity, error) {
 	}
 
 	// No provider prefix - query all identity providers
-	providerMap := c.GetProvidersByCapability(models.ProviderCapabilityIdentities)
+	providerMap := c.GetProvidersByCapability(models.IdentityCapabilities...)
 
 	if len(providerMap) == 0 {
 		return nil, fmt.Errorf("identity not found: %s (no identity providers configured)", identity)
@@ -147,7 +147,7 @@ func (c *Config) GetIdentitiesWithFilter(
 	identities := []models.SearchResult[models.Identity]{}
 
 	// Find providers with identity capabilities
-	providerMap := c.GetProvidersByCapabilityWithUser(user, models.ProviderCapabilityIdentities)
+	providerMap := c.GetProvidersByCapabilityWithUser(user, models.IdentityCapabilities...)
 
 	// If no identity providers found, return just the current user
 	if len(providerMap) == 0 {

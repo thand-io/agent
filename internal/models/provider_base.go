@@ -111,9 +111,7 @@ func NewBaseProvider(identifier string, provider ProviderConfig, capabilities *P
 	}
 
 	if base.HasAnyCapability(
-		ProviderCapabilityIdentities,
-		ProviderCapabilityUsers,
-		ProviderCapabilityGroups,
+		IdentityCapabilities...,
 	) {
 		// Initialize identities map or other structures if needed
 		base.identity = &IdentitySupport{
