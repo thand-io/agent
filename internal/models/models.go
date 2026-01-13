@@ -27,9 +27,14 @@ type HealthResponse struct {
 // MetricsInfo represents basic metrics information
 type MetricsInfo struct {
 	Uptime          string `json:"uptime"`
-	TotalRequests   int64  `json:"total_requests"`
-	RolesCount      int    `json:"roles_count"`
-	WorkflowsCount  int    `json:"workflows_count"`
-	ProvidersCount  int    `json:"providers_count"`
+	
+	RequestsCount   int64  `json:"requests_count"`
 	ElevateRequests int64  `json:"elevate_requests"`
+
+	RolesCount      int64    `json:"roles_count"`
+	WorkflowsCount  int64    `json:"workflows_count"`
+	ProvidersCount  int64    `json:"providers_count"`
+
+	IdentitiesCount int64    `json:"identities_count"`
+	TenantsCount    int64    `json:"tenants_count"`
 }

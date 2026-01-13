@@ -440,7 +440,6 @@ func (c *Config) SyncWithLoginServer() error {
 
 	// Next, if the sever is configured to use IAP, we need to add that to the
 	// authentication policy as well
-
 	if c.Login.Endpoint != nil &&
 		c.Login.Endpoint.EndpointConfig != nil &&
 		c.Login.Endpoint.EndpointConfig.Authentication != nil &&

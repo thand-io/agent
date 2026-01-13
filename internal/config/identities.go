@@ -20,6 +20,27 @@ const (
 
 type IdentityType string
 
+func (c *Config) GetIdentitiesCount() int64 {
+	ctx := context.Background()
+
+	identitiesCount := int64(0)
+
+	for _, provider := range c.GetProvidersByCapability(models.ProviderCapabilityIdentities) {
+		count, err := provider.ListIdentities(ctx, &models.SearchRequest{})
+		
+		if err != nil {
+			logrus.WithError(err).
+				WithField("provider", provider.GetName()).
+				Error("Failed to get identities count from provider")
+			continue
+		}
+
+		identitiesCount += int64(len(count))
+	}
+
+	return identitiesCount
+}
+
 // GetIdentity looks up an identity by its identifier.
 // The identity string can optionally include a provider prefix (e.g., "aws-prod:username").
 // If a prefix is provided, it queries only that specific provider.
