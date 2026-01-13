@@ -177,10 +177,14 @@ func (p *azureProvider) getUserPrincipalID(ctx context.Context, user *models.Use
 		return "", fmt.Errorf("failed to create Microsoft Graph client: %w", err)
 	}
 
+	// Sanitize email to prevent OData filter injection
+	// Escape single quotes by doubling them (OData escaping standard)
+	sanitizedEmail := strings.ReplaceAll(user.Email, "'", "''")
+
 	// Query the user by their email address using a filter
 	// This searches both 'mail' and 'userPrincipalName' fields
 	// GET https://graph.microsoft.com/v1.0/users?$filter=mail eq 'email' or userPrincipalName eq 'email'
-	filter := fmt.Sprintf("mail eq '%s' or userPrincipalName eq '%s'", user.Email, user.Email)
+	filter := fmt.Sprintf("mail eq '%s' or userPrincipalName eq '%s'", sanitizedEmail, sanitizedEmail)
 	requestConfig := &users.UsersRequestBuilderGetRequestConfiguration{
 		QueryParameters: &users.UsersRequestBuilderGetQueryParameters{
 			Filter: &filter,
@@ -197,8 +201,61 @@ func (p *azureProvider) getUserPrincipalID(ctx context.Context, user *models.Use
 		return "", fmt.Errorf("user '%s' not found in Azure AD", user.Email)
 	}
 
-	// Use the first matching user
-	graphUser := userList.GetValue()[0]
+	// Resolve the matching user from the result set, handling multiple matches
+	usersValue := userList.GetValue()
+	var graphUser = usersValue[0] // Default to first user
+
+	if len(usersValue) == 1 {
+		// Only one user returned, use it directly
+		logrus.WithField("email", user.Email).Debug("Single Azure AD user found")
+	} else {
+		// Multiple users returned; try to find an exact match on mail or userPrincipalName
+		logrus.WithFields(logrus.Fields{
+			"email":            user.Email,
+			"matches_returned": len(usersValue),
+		}).Warn("Multiple Azure AD users matched email filter; attempting exact match")
+
+		var exactMatches []int // Store indices of exact matches
+		for i, u := range usersValue {
+			if u == nil {
+				continue
+			}
+
+			// Check for exact match on mail field
+			if mail := u.GetMail(); mail != nil && strings.EqualFold(*mail, user.Email) {
+				exactMatches = append(exactMatches, i)
+				continue
+			}
+			// Check for exact match on userPrincipalName field
+			if upn := u.GetUserPrincipalName(); upn != nil && strings.EqualFold(*upn, user.Email) {
+				exactMatches = append(exactMatches, i)
+			}
+		}
+
+		switch len(exactMatches) {
+		case 0:
+			// No exact matches; use the first result but log a warning
+			logrus.WithFields(logrus.Fields{
+				"email":            user.Email,
+				"matches_returned": len(usersValue),
+				"user_id":          usersValue[0],
+			}).Warn("Multiple Azure AD users matched filter, but none matched exactly; using first result")
+			graphUser = usersValue[0]
+		case 1:
+			// Single exact match found, use it
+			logrus.WithField("email", user.Email).Info("Single exact Azure AD match found among multiple results")
+			graphUser = usersValue[exactMatches[0]]
+		default:
+			// Multiple exact matches; log a warning and use the first exact match
+			logrus.WithFields(logrus.Fields{
+				"email":            user.Email,
+				"exact_matches":    len(exactMatches),
+				"matches_returned": len(usersValue),
+			}).Warn("Multiple Azure AD users matched email exactly; using first exact match")
+			graphUser = usersValue[exactMatches[0]]
+		}
+	}
+
 	if graphUser == nil {
 		return "", fmt.Errorf("user '%s' found in Azure AD but response is invalid", user.Email)
 	}
