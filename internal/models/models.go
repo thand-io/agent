@@ -29,7 +29,7 @@ type MetricsInfo struct {
 	Uptime          string `json:"uptime"`
 	
 	RequestsCount   int64  `json:"requests_count"`
-	ElevateRequests int64  `json:"elevate_requests"`
+	ElevateRequests int64  `json:"elevate_requests_count"`
 
 	RolesCount      int64    `json:"roles_count"`
 	WorkflowsCount  int64    `json:"workflows_count"`
