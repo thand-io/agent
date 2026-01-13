@@ -98,4 +98,6 @@ config/roles/*.yaml
 config/roles/*.json
 config/workflows/*.yaml
 config/workflows/*.json
+config/temporal/*.key
+config/temporal/*.pem
 config/README.md

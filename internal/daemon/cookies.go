@@ -40,6 +40,7 @@ func (s *Server) setAuthCookie(c *gin.Context, authProvider string, localSession
 	if len(getEncodedCookie) > 2800 {
 		logrus.WithFields(logrus.Fields{
 			"provider": authProvider,
+			"encoded":  len(getEncodedCookie),
 		}).Errorln("Encoded session size exceeds cookie limit")
 		return fmt.Errorf("encoded session size exceeds cookie limit")
 	}
@@ -51,6 +52,7 @@ func (s *Server) setAuthCookie(c *gin.Context, authProvider string, localSession
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
 			"provider": authProvider,
+			"encoded":  len(getEncodedCookie),
 		}).WithError(err).Errorln("Failed to save auth cookie")
 		return fmt.Errorf("failed to save auth cookie: %v", err)
 	}
