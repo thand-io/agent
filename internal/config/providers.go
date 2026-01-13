@@ -231,7 +231,7 @@ func (c *Config) InitializeProviders() error {
 
 					temporalService := c.GetServices().GetTemporal()
 
-					// Revister all provider workflows and activities
+					// Register all provider workflows and activities
 					err := result.provider.RegisterWorkflows(temporalService)
 					if err != nil && !errors.Is(err, models.ErrNotImplemented) {
 						logrus.WithError(err).Errorln("Failed to register workflows for provider:", result.key)
