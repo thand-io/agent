@@ -217,32 +217,36 @@ func (c *Config) InitializeProviders() error {
 			models.ProviderCapabilityResources,
 			models.ProviderCapabilityRoles,
 			models.ProviderCapabilityPermissions,
+			models.ProviderCapabilityTenants,
 		) {
 
 			logrus.Infoln("Provider", result.key, "supports RBAC/Identities capabilities")
 
 			// Register provider workflows and activities with Temporal if available
-			if c.GetServices() != nil && c.GetServices().GetTemporal() == nil {
+			if c.IsServer() {
 
-				logrus.Warningln("Temporal service is not initialized, cannot register workflows/activities for provider:", result.key)
+				if c.GetServices() != nil && c.GetServices().HasTemporal() {
 
-			} else if c.IsServer() {
+					logrus.Infoln("Registering Temporal workflows/activities for provider", result.key)
 
-				temporalService := c.GetServices().GetTemporal()
+					temporalService := c.GetServices().GetTemporal()
 
-				// Revister all provider workflows and activities
-				err := result.provider.RegisterWorkflows(temporalService)
-				if err != nil && !errors.Is(err, models.ErrNotImplemented) {
-					logrus.WithError(err).Errorln("Failed to register workflows for provider:", result.key)
-					continue
+					// Register all provider workflows and activities
+					err := result.provider.RegisterWorkflows(temporalService)
+					if err != nil && !errors.Is(err, models.ErrNotImplemented) {
+						logrus.WithError(err).Errorln("Failed to register workflows for provider:", result.key)
+						continue
+					}
+
+					err = result.provider.RegisterActivities(temporalService)
+					if err != nil && !errors.Is(err, models.ErrNotImplemented) {
+						logrus.WithError(err).Errorln("Failed to register activities for provider:", result.key)
+						continue
+					}
+
 				}
 
-				err = result.provider.RegisterActivities(temporalService)
-				if err != nil && !errors.Is(err, models.ErrNotImplemented) {
-					logrus.WithError(err).Errorln("Failed to register activities for provider:", result.key)
-					continue
-				}
-
+				logrus.Infoln("Synchronizing provider", result.key)
 				c.synchronizeProvider(result.provider)
 
 			} else {

@@ -59,7 +59,9 @@ func (s *Server) getIdentities(c *gin.Context) {
 	}
 
 	identityProvidersCount := s.Config.GetProvidersByCapabilityWithUser(
-		foundUser.User, models.ProviderCapabilityIdentities)
+		foundUser.User, 
+		models.IdentityCapabilities...
+	)
 	identities, err := s.Config.GetIdentitiesWithFilter(
 		foundUser.User, config.IdentityType(identityType), searchRequest)
 

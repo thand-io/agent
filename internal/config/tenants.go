@@ -10,6 +10,27 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
+func (c *Config) GetTenantsCount() int64 {
+	ctx := context.Background()
+
+	tenantsCount := int64(0)
+
+	for _, provider := range c.GetProvidersByCapability(models.ProviderCapabilityTenants) {
+		count, err := provider.ListTenants(ctx, &models.SearchRequest{})
+		
+		if err != nil {
+			logrus.WithError(err).
+				WithField("provider", provider.GetName()).
+				Error("Failed to get tenants count from provider")
+			continue
+		}
+
+		tenantsCount += int64(len(count))
+	}
+
+	return tenantsCount
+}
+
 // GetTenant looks up a tenant by its identifier.
 // The tenant string can optionally include a provider prefix (e.g., "aws-prod:tenant-id").
 // If a prefix is provided, it queries only that specific provider.

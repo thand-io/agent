@@ -43,11 +43,11 @@ func (p *BaseProvider) SynchronizeGroups(ctx context.Context, req *SynchronizeGr
 // GetIdentity retrieves a specific identity (user or group) from GCP
 func (p *BaseProvider) GetIdentity(ctx context.Context, identity string) (*Identity, error) {
 
-	if p.identity == nil || !p.HasCapability(
-		ProviderCapabilityIdentities,
+	if p.identity == nil || !p.HasAnyCapability(
+		IdentityCapabilities...
 	) {
-		logrus.Warningln("provider has no identities")
-		return nil, fmt.Errorf("provider has no identities")
+		logrus.Warningln("provider does not support identities capability")
+		return nil, fmt.Errorf("provider does not support identities capability")
 	}
 
 	// Try to get from cache first
@@ -74,11 +74,11 @@ func (p *BaseProvider) GetIdentity(ctx context.Context, identity string) (*Ident
 // ListIdentities lists all identities (users and groups) from the provider
 func (p *BaseProvider) ListIdentities(ctx context.Context, searchRequest *SearchRequest) ([]SearchResult[Identity], error) {
 
-	if p.identity == nil || !p.HasCapability(
-		ProviderCapabilityIdentities,
+	if p.identity == nil || !p.HasAnyCapability(
+		IdentityCapabilities...
 	) {
-		logrus.Warningln("provider has no identities")
-		return nil, fmt.Errorf("provider has no identities")
+		logrus.Warningln("provider does not support identities capability")
+		return nil, fmt.Errorf("provider does not support identities capability")
 	}
 
 	p.identity.mu.RLock()

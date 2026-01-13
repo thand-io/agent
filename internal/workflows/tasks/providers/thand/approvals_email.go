@@ -86,7 +86,7 @@ func (a *approvalsNotifier) createApprovalEmailBody() (string, string) {
 		resolvedIdentities := elevateRequest.ResolveIdentities(
 			context.Background(),
 			a.config.GetProvidersByCapability(
-				models.ProviderCapabilityIdentities,
+				models.IdentityCapabilities...,
 			))
 
 		for _, identity := range elevateRequest.Identities {

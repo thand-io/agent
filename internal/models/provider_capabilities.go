@@ -8,6 +8,14 @@ import (
 
 type ProviderCapability string
 
+
+var IdentityCapabilities = []ProviderCapability{
+	ProviderCapabilityIdentities,
+	ProviderCapabilityGroups,
+	ProviderCapabilityUsers,
+}
+
+
 const (
 	// Identity synchronization capabilities
 	ProviderCapabilityIdentities ProviderCapability = "identities"
