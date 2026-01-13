@@ -39,7 +39,6 @@ func NewLogEntry(entry *logrus.Entry) *LogEntry {
 // MarshalJSON implements custom JSON marshaling for LogEntry
 // It safely handles error types and other non-serializable values
 func (l *LogEntry) MarshalJSON() ([]byte, error) {
-	type Alias LogEntry
 
 	// Create a sanitized copy of the data fields
 	sanitizedData := make(map[string]any)
