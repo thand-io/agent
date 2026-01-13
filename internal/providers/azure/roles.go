@@ -9,6 +9,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization"
 	"github.com/google/uuid"
 	msgraphsdk "github.com/microsoftgraph/msgraph-sdk-go"
+	"github.com/microsoftgraph/msgraph-sdk-go/users"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/data"
 	"github.com/thand-io/agent/internal/models"
@@ -89,6 +90,15 @@ func (p *azureProvider) createRoleAssignment(ctx context.Context, user *models.U
 	}
 
 	roleAssignmentID := uuid.New().String()
+
+	// Log the principal ID for debugging
+	logrus.WithFields(logrus.Fields{
+		"principal_id": principalID,
+		"user_email":   user.Email,
+		"role_id":      roleDefinitionID,
+		"scope":        scope,
+	}).Info("Creating Azure role assignment")
+
 	roleAssignment := armauthorization.RoleAssignmentCreateParameters{
 		Properties: &armauthorization.RoleAssignmentProperties{
 			RoleDefinitionID: &roleDefinitionID,
@@ -147,14 +157,8 @@ func (p *azureProvider) getUserPrincipalID(ctx context.Context, user *models.Use
 		return "", fmt.Errorf("user email is required for Azure role assignments")
 	}
 
-	// If the user's ID field already contains an Azure object ID (GUID format), use it
-	if len(user.ID) > 0 && len(user.ID) >= 32 {
-		// Validate it looks like a GUID
-		if _, err := uuid.Parse(user.ID); err == nil {
-			logrus.WithField("user_id", user.ID).Debug("Using existing Azure object ID from user.ID field")
-			return user.ID, nil
-		}
-	}
+	// NOTE: We always use Microsoft Graph API to lookup the user's Azure AD object ID
+	// even if user.ID is set, because user.ID may be a Thand-internal ID, not an Azure AD object ID.
 
 	// Use Microsoft Graph API to lookup the user by email and get their object ID
 	logrus.WithField("email", user.Email).Debug("Looking up Azure AD object ID via Microsoft Graph API")
@@ -165,23 +169,53 @@ func (p *azureProvider) getUserPrincipalID(ctx context.Context, user *models.Use
 		return "", fmt.Errorf("failed to create Microsoft Graph client: %w", err)
 	}
 
-	// Query the user by their email address (UPN)
-	// GET https://graph.microsoft.com/v1.0/users/{email}
-	graphUser, err := client.Users().ByUserId(user.Email).Get(ctx, nil)
+	// Query the user by their email address using a filter
+	// This searches both 'mail' and 'userPrincipalName' fields
+	// GET https://graph.microsoft.com/v1.0/users?$filter=mail eq 'email' or userPrincipalName eq 'email'
+	filter := fmt.Sprintf("mail eq '%s' or userPrincipalName eq '%s'", user.Email, user.Email)
+	requestConfig := &users.UsersRequestBuilderGetRequestConfiguration{
+		QueryParameters: &users.UsersRequestBuilderGetQueryParameters{
+			Filter: &filter,
+		},
+	}
+
+	userList, err := client.Users().Get(ctx, requestConfig)
 	if err != nil {
-		return "", fmt.Errorf("failed to lookup user '%s' in Azure AD via Microsoft Graph API: %w", user.Email, err)
+		return "", fmt.Errorf("failed to search for user '%s' in Azure AD via Microsoft Graph API: %w", user.Email, err)
+	}
+
+	// Check if we found any users
+	if userList == nil || len(userList.GetValue()) == 0 {
+		return "", fmt.Errorf("user '%s' not found in Azure AD", user.Email)
+	}
+
+	// Use the first matching user
+	graphUser := userList.GetValue()[0]
+	if graphUser == nil {
+		return "", fmt.Errorf("user '%s' found in Azure AD but response is invalid", user.Email)
 	}
 
 	// Extract the object ID from the response
-	if graphUser == nil || graphUser.GetId() == nil {
+	if graphUser.GetId() == nil {
 		return "", fmt.Errorf("user '%s' found in Azure AD but object ID is missing", user.Email)
 	}
 
 	objectID := *graphUser.GetId()
+
+	// Validate the object ID is a proper GUID
+	if _, err := uuid.Parse(objectID); err != nil {
+		logrus.WithFields(logrus.Fields{
+			"email":     user.Email,
+			"object_id": objectID,
+			"error":     err,
+		}).Error("Retrieved object ID is not a valid GUID")
+		return "", fmt.Errorf("user '%s' has invalid object ID '%s': %w", user.Email, objectID, err)
+	}
+
 	logrus.WithFields(logrus.Fields{
 		"email":     user.Email,
 		"object_id": objectID,
-	}).Debug("Successfully retrieved Azure AD object ID")
+	}).Info("Successfully retrieved Azure AD object ID")
 
 	return objectID, nil
 }
