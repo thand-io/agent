@@ -225,7 +225,7 @@ func (c *Config) InitializeProviders() error {
 			// Register provider workflows and activities with Temporal if available
 			if c.IsServer() {
 
-				if c.GetServices().HasTemporal() {
+				if c.GetServices() != nil && c.GetServices().HasTemporal() {
 
 					logrus.Infoln("Registering Temporal workflows/activities for provider", result.key)
 
