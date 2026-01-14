@@ -24,64 +24,51 @@ var TypedSearchAttributeDuration = temporal.NewSearchAttributeKeyInt64("duration
 var TypedSearchAttributeIdentities = temporal.NewSearchAttributeKeyKeywordList("identities")
 var TypedSearchAttributeApproved = temporal.NewSearchAttributeKeyBool(VarsContextApproved)
 
+// TemporalAuthAPIKey represents API Key authentication configuration
+type TemporalAuthAPIKey struct {
+	ApiKey string `mapstructure:"api_key" default:""`
+}
+
+// TemporalAuthMTLSInline represents inline mTLS certificates (PEM format)
+type TemporalAuthMTLSInline struct {
+	MtlsCert string `mapstructure:"mtls_cert" default:""`
+	MtlsKey  string `mapstructure:"mtls_key" default:""`
+}
+
+// TemporalAuthMTLSFile represents file-based mTLS certificates
+type TemporalAuthMTLSFile struct {
+	MtlsCertFile string `mapstructure:"mtls_cert_file" default:""`
+	MtlsKeyFile  string `mapstructure:"mtls_key_file" default:""`
+}
+
+// TemporalAuthMTLSVault represents Vault-backed key with cert in secret
+type TemporalAuthMTLSVault struct {
+	MtlsVaultName     string `mapstructure:"mtls_vault_name" default:""` // HSM key resource ID (AWS KMS ARN, Azure Key Vault key URL, GCP KMS resource name)
+	MtlsVaultType     string `mapstructure:"mtls_vault_type" default:""` // Optional: auto-detected from platform
+	MtlsVaultPassword string `mapstructure:"mtls_vault_password" default:""`
+}
+
 type TemporalConfig struct {
 	Host      string `mapstructure:"host" default:"localhost"`
 	Port      int    `mapstructure:"port" default:"7233"`
 	Namespace string `mapstructure:"namespace" default:"default"`
 
-	// API Key authentication
-	ApiKey string `mapstructure:"api_key" default:""`
-
-	// mTLS - inline certificates (PEM format)
-	MtlsCert string `mapstructure:"mtls_cert" default:""`
-	MtlsKey  string `mapstructure:"mtls_key" default:""`
-
-	// mTLS - file paths
-	MtlsCertFile string `mapstructure:"mtls_cert_file" default:""`
-	MtlsKeyFile  string `mapstructure:"mtls_key_file" default:""`
-
-	// mTLS - CSP vault secret (combined cert+key in PEM format)
-	MtlsCertKeySecret string `mapstructure:"mtls_cert_key_secret" default:""`
-
-	// mTLS - HSM-backed key (cert in secret, key in HSM)
-	MtlsCertSecret string `mapstructure:"mtls_cert_secret" default:""`  // Vault secret containing only certificate
-	MtlsHSMKeyID   string `mapstructure:"mtls_hsm_key_id" default:""`   // HSM key resource ID (AWS KMS ARN, Azure Key Vault key URL, GCP KMS resource name)
-	MtlsHSMKeyType string `mapstructure:"mtls_hsm_key_type" default:""` // Optional: auto-detected from platform
-
-	// CA certificate for server verification (optional)
-	MtlsCA       string `mapstructure:"mtls_ca" default:""`
-	MtlsCAFile   string `mapstructure:"mtls_ca_file" default:""`
-	MtlsCASecret string `mapstructure:"mtls_ca_secret" default:""`
+	// Authentication configurations - embed inline types for backward compatibility
+	TemporalAuthAPIKey     `mapstructure:",squash"` // API key
+	TemporalAuthMTLSInline `mapstructure:",squash"` // Inline mTLS
+	TemporalAuthMTLSFile   `mapstructure:",squash"` // File-based mTLS
+	TemporalAuthMTLSVault  `mapstructure:",squash"`  // Vault-based mTLS
 
 	// DisableVersioning disables worker versioning/deployments for testing
 	DisableVersioning bool `mapstructure:"disable_versioning" default:"false"`
-}
-
-// ToCertificateConfig converts TemporalConfig mTLS fields to CertificateConfig
-// for use with the certificate loader service
-func (t *TemporalConfig) ToCertificateConfig(platformConfig *BasicConfig) *CertificateConfig {
-	return &CertificateConfig{
-		CertPEM:        t.MtlsCert,
-		KeyPEM:         t.MtlsKey,
-		CertFile:       t.MtlsCertFile,
-		KeyFile:        t.MtlsKeyFile,
-		CertKeySecret:  t.MtlsCertKeySecret,
-		CertSecret:     t.MtlsCertSecret,
-		HSMKeyID:       t.MtlsHSMKeyID,
-		HSMKeyType:     t.MtlsHSMKeyType,
-		PlatformConfig: platformConfig,
-		CAPEM:          t.MtlsCA,
-		CAFile:         t.MtlsCAFile,
-		CASecret:       t.MtlsCASecret,
-	}
 }
 
 // HasMtlsConfig returns true if any mTLS configuration is present
 func (t *TemporalConfig) HasMtlsConfig() bool {
 	return len(t.MtlsCert) > 0 || len(t.MtlsKey) > 0 ||
 		len(t.MtlsCertFile) > 0 || len(t.MtlsKeyFile) > 0 ||
-		len(t.MtlsCertKeySecret) > 0 ||
-		len(t.MtlsCertSecret) > 0 || len(t.MtlsHSMKeyID) > 0
+		len(t.MtlsVaultName) > 0 || len(t.MtlsVaultType) > 0 ||
+		len(t.MtlsVaultPassword) > 0
 }
 
 type TemporalImpl interface {

@@ -229,28 +229,23 @@ func bindServiceEnvVars(v *viper.Viper) {
 	v.BindEnv("services.temporal.host", "THAND_SERVICES_TEMPORAL_HOST")
 	v.BindEnv("services.temporal.port", "THAND_SERVICES_TEMPORAL_PORT")
 	v.BindEnv("services.temporal.namespace", "THAND_SERVICES_TEMPORAL_NAMESPACE")
+	v.BindEnv("services.temporal.disable_versioning", "THAND_SERVICES_TEMPORAL_DISABLE_VERSIONING")
+
+	// Temporal authentication - API Key
 	v.BindEnv("services.temporal.api_key", "THAND_SERVICES_TEMPORAL_API_KEY")
 
-	// Temporal mTLS - inline certificates
+	// Temporal authentication - mTLS inline certificates
 	v.BindEnv("services.temporal.mtls_cert", "THAND_SERVICES_TEMPORAL_MTLS_CERT")
 	v.BindEnv("services.temporal.mtls_key", "THAND_SERVICES_TEMPORAL_MTLS_KEY")
 
-	// Temporal mTLS - file paths
+	// Temporal authentication - mTLS file paths
 	v.BindEnv("services.temporal.mtls_cert_file", "THAND_SERVICES_TEMPORAL_MTLS_CERT_FILE")
 	v.BindEnv("services.temporal.mtls_key_file", "THAND_SERVICES_TEMPORAL_MTLS_KEY_FILE")
 
-	// Temporal mTLS - CSP vault secrets
-	v.BindEnv("services.temporal.mtls_cert_key_secret", "THAND_SERVICES_TEMPORAL_MTLS_CERT_KEY_SECRET")
-
-	// Temporal mTLS - HSM-backed keys (cert in secret, key in HSM)
-	v.BindEnv("services.temporal.mtls_cert_secret", "THAND_SERVICES_TEMPORAL_MTLS_CERT_SECRET")
-	v.BindEnv("services.temporal.mtls_hsm_key_id", "THAND_SERVICES_TEMPORAL_MTLS_HSM_KEY_ID")
-	v.BindEnv("services.temporal.mtls_hsm_key_type", "THAND_SERVICES_TEMPORAL_MTLS_HSM_KEY_TYPE")
-
-	// Temporal CA certificates
-	v.BindEnv("services.temporal.mtls_ca", "THAND_SERVICES_TEMPORAL_MTLS_CA")
-	v.BindEnv("services.temporal.mtls_ca_file", "THAND_SERVICES_TEMPORAL_MTLS_CA_FILE")
-	v.BindEnv("services.temporal.mtls_ca_secret", "THAND_SERVICES_TEMPORAL_MTLS_CA_SECRET")
+	// Temporal authentication - mTLS vault configuration
+	v.BindEnv("services.temporal.mtls_vault.mtls_vault_name", "THAND_SERVICES_TEMPORAL_MTLS_VAULT_NAME")
+	v.BindEnv("services.temporal.mtls_vault.mtls_vault_type", "THAND_SERVICES_TEMPORAL_MTLS_VAULT_TYPE")
+	v.BindEnv("services.temporal.mtls_vault.mtls_vault_password", "THAND_SERVICES_TEMPORAL_MTLS_VAULT_PASSWORD")
 }
 
 // readAndUnmarshalConfig reads the configuration file and unmarshals it

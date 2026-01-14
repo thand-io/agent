@@ -436,9 +436,18 @@ Temporal provides durable workflow orchestration for access request workflows, a
 | `services.temporal.host` | string | `localhost` | Temporal server hostname |
 | `services.temporal.port` | integer | `7233` | Temporal server port |
 | `services.temporal.namespace` | string | `default` | Temporal namespace |
-| `services.temporal.api_key` | string | - | API key for Temporal Cloud |
-| `services.temporal.mtls_cert` | string | - | mTLS certificate (PEM content) |
-| `services.temporal.mtls_cert_path` | string | - | Path to mTLS certificate file |
+| `services.temporal.disable_versioning` | boolean | `false` | Disable worker versioning for testing |
+
+### Authentication Modes
+
+Thand Agent supports three authentication modes for Temporal:
+
+1. **API Key** - For Temporal Cloud
+2. **mTLS Inline** - Certificates embedded in configuration
+3. **mTLS File** - Certificates loaded from files
+4. **mTLS Vault** - Certificates stored in vault (supports PEM, PKCS12)
+
+---
 
 ### Local Development
 
@@ -460,9 +469,13 @@ services:
     namespace: default
 ```
 
-### Temporal Cloud
+---
 
-For production deployments, use Temporal Cloud with API key authentication:
+### API Key Authentication (Temporal Cloud)
+
+For production deployments using Temporal Cloud:
+
+**Configuration:**
 
 ```yaml
 services:
@@ -482,17 +495,327 @@ THAND_SERVICES_TEMPORAL_NAMESPACE=my-namespace.my-account
 THAND_SERVICES_TEMPORAL_API_KEY=your-temporal-cloud-api-key
 ```
 
-### Self-Hosted with mTLS
+---
 
-For self-hosted Temporal with mTLS authentication:
+### mTLS Authentication
+
+For self-hosted Temporal or Temporal Cloud with mTLS, you'll need client certificates. The agent supports three ways to provide these certificates.
+
+#### Generating Test Certificates
+
+You can generate test certificates using the `tcld` CLI tool:
+
+```bash
+# Install tcld (Temporal Cloud CLI)
+# See: https://docs.temporal.io/cloud/tcld
+
+# Generate a Certificate Authority (CA)
+tcld gen ca --org "your-org" -d 365d --ca-cert ca.pem --ca-key ca.key
+
+# Generate a client certificate signed by the CA
+tcld gen leaf \
+  --org "your-org" \
+  -d 364d \
+  --ca-cert ca.pem \
+  --ca-key ca.key \
+  --cert client.pem \
+  --key client.key
+
+# For inline configuration, combine cert and key
+cat client.pem client.key > client-combined.pem
+
+# For PKCS12 format (useful for Windows/.pfx)
+# Unencrypted
+openssl pkcs12 -export -out client.p12 \
+  -inkey client.key -in client.pem -passout pass:
+
+# Encrypted with password
+openssl pkcs12 -export -out client-encrypted.p12 \
+  -inkey client.key -in client.pem -passout pass:your-password
+```
+
+{: .note }
+> For production use with Temporal Cloud, generate certificates using `tcld generate-certificates` and follow Temporal's security best practices.
+
+---
+
+#### Option 1: mTLS Inline (Embedded Certificates)
+
+Embed certificate and key content directly in the configuration. Useful for environment variables or secret management systems.
+
+**Configuration Options:**
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `services.temporal.mtls_cert` | string | **Yes** | Client certificate in PEM format |
+| `services.temporal.mtls_key` | string | **Yes** | Private key in PEM format |
+
+**Example Configuration:**
 
 ```yaml
 services:
   temporal:
-    host: temporal.internal.example.com
+    host: temporal.example.com
     port: 7233
     namespace: production
-    mtls_cert_path: /etc/thand/temporal-cert.pem
+    mtls_cert: |
+      -----BEGIN CERTIFICATE-----
+      MIICpDCCAYwCCQDU+pQ3ZUD30jANBgkqhkiG9w0BAQsFADAUMRIwEAYDVQQDDAls
+      ...
+      -----END CERTIFICATE-----
+    mtls_key: |
+      -----BEGIN RSA PRIVATE KEY-----
+      MIIEpAIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo4lgOEePzNm0tfn1iHD5teQPLzC5M
+      ...
+      -----END RSA PRIVATE KEY-----
+```
+
+**Environment Variables:**
+
+```bash
+THAND_SERVICES_TEMPORAL_HOST=temporal.example.com
+THAND_SERVICES_TEMPORAL_MTLS_CERT="$(cat client.pem)"
+THAND_SERVICES_TEMPORAL_MTLS_KEY="$(cat client.key)"
+```
+
+**Combined Certificate (cert + key in single value):**
+
+```yaml
+services:
+  temporal:
+    host: temporal.example.com
+    port: 7233
+    namespace: production
+    mtls_cert: |
+      -----BEGIN CERTIFICATE-----
+      ...certificate content...
+      -----END CERTIFICATE-----
+      -----BEGIN RSA PRIVATE KEY-----
+      ...key content...
+      -----END RSA PRIVATE KEY-----
+    mtls_key: ""  # Leave empty when using combined cert
+```
+
+---
+
+#### Option 2: mTLS File (Certificate Files)
+
+Load certificates from filesystem paths. Recommended for local development and when certificates are managed by configuration management tools.
+
+**Configuration Options:**
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `services.temporal.mtls_cert_file` | string | **Yes** | Path to client certificate file (PEM) |
+| `services.temporal.mtls_key_file` | string | **Yes** | Path to private key file (PEM) |
+
+**Example Configuration:**
+
+```yaml
+services:
+  temporal:
+    host: temporal.example.com
+    port: 7233
+    namespace: production
+    mtls_cert_file: /etc/thand/certs/temporal-client.pem
+    mtls_key_file: /etc/thand/certs/temporal-client.key
+```
+
+**Environment Variables:**
+
+```bash
+THAND_SERVICES_TEMPORAL_HOST=temporal.example.com
+THAND_SERVICES_TEMPORAL_MTLS_CERT_FILE=/etc/thand/certs/temporal-client.pem
+THAND_SERVICES_TEMPORAL_MTLS_KEY_FILE=/etc/thand/certs/temporal-client.key
+```
+
+**Docker Volume Mount:**
+
+```bash
+docker run -d \
+  -v /path/to/certs:/etc/thand/certs:ro \
+  -e THAND_SERVICES_TEMPORAL_HOST=temporal.example.com \
+  -e THAND_SERVICES_TEMPORAL_MTLS_CERT_FILE=/etc/thand/certs/client.pem \
+  -e THAND_SERVICES_TEMPORAL_MTLS_KEY_FILE=/etc/thand/certs/client.key \
+  thand-agent
+```
+
+---
+
+#### Option 3: mTLS Vault (Certificate in Secret Storage)
+
+Store certificates in your configured vault service. The agent supports multiple certificate formats with automatic detection.
+
+**Configuration Options:**
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `services.temporal.mtls_vault.mtls_vault_name` | string | **Yes** | Vault secret key/name containing certificate |
+| `services.temporal.mtls_vault.mtls_vault_type` | string | No | Certificate format: `pem`, `pkcs12`, `p12`, `pfx`, `der` (auto-detected if not specified) |
+| `services.temporal.mtls_vault.mtls_vault_password` | string | No | Password for encrypted PKCS12 certificates |
+
+**Supported Certificate Formats:**
+
+- **PEM** - Text-based format (combined cert+key or separate)
+- **PKCS12/P12/PFX** - Binary format (with or without password)
+- **DER** - Binary format
+
+**Example: PEM Format in Vault**
+
+```yaml
+services:
+  temporal:
+    host: temporal.example.com
+    port: 7233
+    namespace: production
+    mtls_vault:
+      mtls_vault_name: temporal-client-cert
+      mtls_vault_type: pem  # Optional - will auto-detect
+```
+
+Store in vault (combined cert+key):
+```bash
+# AWS Secrets Manager
+aws secretsmanager create-secret \
+  --name temporal-client-cert \
+  --secret-string "$(cat client-combined.pem)"
+
+# GCP Secret Manager
+cat client-combined.pem | gcloud secrets create temporal-client-cert \
+  --data-file=-
+
+# HashiCorp Vault
+vault kv put secret/temporal-client-cert value=@client-combined.pem
+```
+
+**Example: Encrypted PKCS12 in Vault**
+
+```yaml
+services:
+  temporal:
+    host: temporal.example.com
+    port: 7233
+    namespace: production
+    mtls_vault:
+      mtls_vault_name: temporal-client-p12
+      mtls_vault_type: pkcs12
+      mtls_vault_password: "your-pkcs12-password"
+```
+
+Store in vault:
+```bash
+# Create encrypted PKCS12
+openssl pkcs12 -export -out client.p12 \
+  -inkey client.key -in client.pem \
+  -passout pass:your-pkcs12-password
+
+# AWS Secrets Manager (base64 encode binary)
+aws secretsmanager create-secret \
+  --name temporal-client-p12 \
+  --secret-binary fileb://client.p12
+
+# GCP Secret Manager
+gcloud secrets create temporal-client-p12 --data-file=client.p12
+```
+
+**Example: Unencrypted PKCS12 (Auto-Detected)**
+
+```yaml
+services:
+  temporal:
+    host: temporal.example.com
+    port: 7233
+    namespace: production
+    mtls_vault:
+      mtls_vault_name: temporal-client-p12
+      # No type or password needed - will auto-detect format
+```
+
+**Format Auto-Detection:**
+
+The agent automatically detects certificate formats in this order:
+1. PEM (looks for `-----BEGIN` markers)
+2. PKCS12 (tries to parse as PKCS12)
+3. DER (tries to parse as DER-encoded certificate)
+
+If auto-detection fails, specify `mtls_vault_type` explicitly.
+
+---
+
+### Complete mTLS Examples
+
+#### Development with File-Based Certificates
+
+```yaml
+# config.yaml
+services:
+  temporal:
+    host: localhost
+    port: 7233
+    namespace: default
+    mtls_cert_file: ./certs/dev-client.pem
+    mtls_key_file: ./certs/dev-client.key
+```
+
+#### Production with Vault-Stored Certificates
+
+```yaml
+# config.yaml
+environment:
+  platform: aws
+  config:
+    region: us-east-1
+
+services:
+  vault:
+    provider: aws
+  
+  temporal:
+    host: production.tmprl.cloud
+    port: 7233
+    namespace: production.my-org
+    mtls_vault:
+      mtls_vault_name: prod/temporal-client-cert
+      mtls_vault_type: pem
+```
+
+#### Kubernetes with Secrets
+
+```yaml
+# kubernetes-deployment.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: temporal-certs
+type: Opaque
+data:
+  client.pem: <base64-encoded-cert>
+  client.key: <base64-encoded-key>
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: thand-agent
+spec:
+  template:
+    spec:
+      containers:
+      - name: agent
+        env:
+        - name: THAND_SERVICES_TEMPORAL_HOST
+          value: temporal.example.com
+        - name: THAND_SERVICES_TEMPORAL_MTLS_CERT_FILE
+          value: /etc/temporal/certs/client.pem
+        - name: THAND_SERVICES_TEMPORAL_MTLS_KEY_FILE
+          value: /etc/temporal/certs/client.key
+        volumeMounts:
+        - name: temporal-certs
+          mountPath: /etc/temporal/certs
+          readOnly: true
+      volumes:
+      - name: temporal-certs
+        secret:
+          secretName: temporal-certs
 ```
 
 ---

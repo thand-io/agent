@@ -92,6 +92,7 @@ require (
 	k8s.io/api v0.34.3
 	k8s.io/apimachinery v0.34.3
 	k8s.io/client-go v0.34.3
+	software.sslmate.com/src/go-pkcs12 v0.7.0
 )
 
 // removed replace github.com/moby/moby => github.com/docker/docker (not needed for v24)

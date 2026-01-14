@@ -2,12 +2,10 @@ package temporal
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
-	"github.com/thand-io/agent/internal/config/services/certificates"
 	"github.com/thand-io/agent/internal/models"
 	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	"go.temporal.io/api/workflowservice/v1"
@@ -17,20 +15,23 @@ import (
 )
 
 type TemporalClient struct {
-	config         *models.TemporalConfig
-	client         client.Client
-	worker         worker.Worker
-	identity       string
-	vault          models.VaultImpl
-	platformConfig *models.BasicConfig
+	config   *models.TemporalConfig
+	client   client.Client
+	worker   worker.Worker
+	identity string
+	vault    models.VaultImpl
+	pki      models.PublicKeyInfrastructure
 }
 
-func NewTemporalClient(config *models.TemporalConfig, identity string, vault models.VaultImpl, platformConfig *models.BasicConfig) *TemporalClient {
+func NewTemporalClient(
+	config *models.TemporalConfig,
+	identity string,
+	vault models.VaultImpl,
+) *TemporalClient {
 	return &TemporalClient{
-		config:         config,
-		identity:       identity,
-		vault:          vault,
-		platformConfig: platformConfig,
+		config:   config,
+		identity: identifier,
+		vault:    vault,
 	}
 }
 
@@ -168,48 +169,13 @@ func (c *TemporalClient) Shutdown() error {
 // configureAuth configures client authentication using API key or mTLS
 func (a *TemporalClient) configureAuth(options *client.Options) error {
 	// API Key takes precedence over mTLS
-	if len(a.config.ApiKey) > 0 {
-		logrus.Info("Configuring Temporal client with API Key authentication")
-		options.ConnectionOptions = client.ConnectionOptions{
-			TLS: &tls.Config{},
-		}
-		options.Credentials = client.NewAPIKeyStaticCredentials(a.config.ApiKey)
-		return nil
+	if a.hasAPIKeyAuth() {
+		return a.configureAPIKeyAuth(options)
 	}
 
 	// Check for mTLS configuration
 	if a.config.HasMtlsConfig() {
-		logrus.Info("Configuring Temporal client with mTLS authentication")
-
-		// Create certificate loader
-		certLoader := certificates.NewCertificateLoader(a.vault)
-
-		// Load certificates from configured source (pass platform config for HSM support)
-		loaded, err := certLoader.LoadCertificate(a.config.ToCertificateConfig(a.platformConfig))
-		if err != nil {
-			return fmt.Errorf("failed to load mTLS certificates: %w", err)
-		}
-
-		// Log certificate source for troubleshooting
-		logrus.WithField("source", loaded.Source).Debug("Loaded mTLS certificate")
-
-		// Build TLS configuration
-		tlsConfig := &tls.Config{
-			Certificates: []tls.Certificate{loaded.Certificate},
-			MinVersion:   tls.VersionTLS12,
-		}
-
-		// Add custom CA if provided
-		if loaded.CAPool != nil {
-			tlsConfig.RootCAs = loaded.CAPool
-			logrus.Debug("Using custom CA certificate for server verification")
-		}
-
-		options.ConnectionOptions = client.ConnectionOptions{
-			TLS: tlsConfig,
-		}
-
-		return nil
+		return a.configureMTLSAuth(options)
 	}
 
 	// No authentication configured (insecure - typically for local development)
