@@ -128,6 +128,8 @@ func (e *localClient) Initialize() error {
 			e.temporal = temporal.NewTemporalClient(
 				e.config.Temporal,
 				e.environment.GetIdentifier(),
+				e.vault,
+				e.environment.Config,
 			)
 			if err := e.temporal.Initialize(); err != nil {
 				logrus.Errorf("Error initializing temporal: %v", err)
