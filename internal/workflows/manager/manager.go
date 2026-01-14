@@ -191,9 +191,12 @@ func (m *ThandWorkflowManager) executeElevationWorkflow(
 		)
 	}
 
+	sanitizedRequest := request
+	sanitizedRequest.Session = nil
+
 	logrus.WithFields(logrus.Fields{
 		"workflow_name": workflowDsl.Document.Name,
-		"request":       request,
+		"request":       sanitizedRequest,
 	}).Info("Starting workflow execution")
 
 	authProvider, foundAuthProvider := m.config.GetProviderByName(request.Authenticator)
