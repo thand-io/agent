@@ -12,63 +12,30 @@ environment:
     password: "changeme"
 
 # Services Configuration
-# The services configuration inherits from environment configuration
 services:
   temporal:
-    # Connection settings
-    # host: "temporal.example.com"
-    # port: 7233
-    # namespace: "default"
-
-    # Authentication Option 1: API Key (Temporal Cloud)
-    # api_key: "your-temporal-api-key"
-
-    # Authentication Option 2: mTLS with CSP vault secret (combined cert+key)
-    # Requires vault to be configured (AWS Secrets Manager, Azure Key Vault, GCP Secret Manager)
-    # Secret should contain both certificate and private key in combined PEM format:
-    #   -----BEGIN CERTIFICATE-----
-    #   ...
-    #   -----END CERTIFICATE-----
-    #   -----BEGIN PRIVATE KEY-----
-    #   ...
-    #   -----END PRIVATE KEY-----
-    # mtls_cert_key_secret: "temporal/mtls/client-cert"
-    # mtls_ca_secret: "temporal/mtls/ca-cert"  # Optional: Custom CA for server verification
-
-    # Authentication Option 2b: mTLS with HSM-backed key (MOST SECURE for production)
-    # Private key is managed by CSP HSM and never leaves the hardware security module
-    # Certificate is stored in vault, key operations are performed in HSM
-    # AWS Example (KMS key ARN + Secrets Manager):
-    # mtls_cert_secret: "temporal/mtls/client-cert"  # Secret containing only certificate
-    # mtls_hsm_key_id: "arn:aws:kms:us-west-2:123456789012:key/abc123-..."  # AWS KMS key ARN
-    # GCP Example (Cloud KMS resource name + Secret Manager):
-    # mtls_cert_secret: "temporal-mtls-cert"
-    # mtls_hsm_key_id: "projects/my-project/locations/us-west1/keyRings/thand/cryptoKeys/temporal-key"
-    # Azure Example (Key Vault key URL + Key Vault secret):
-    # mtls_cert_secret: "temporal-mtls-cert"
-    # mtls_hsm_key_id: "https://my-keyvault.vault.azure.net/keys/temporal-key"
-    # mtls_ca_secret: "temporal/mtls/ca-cert"  # Optional: Custom CA
-
-    # Authentication Option 3: mTLS with file paths (Kubernetes mounted secrets)
-    # mtls_cert_file: "/etc/temporal/certs/tls.crt"
-    # mtls_key_file: "/etc/temporal/certs/tls.key"
-    # mtls_ca_file: "/etc/temporal/certs/ca.crt"  # Optional: Custom CA
-
-    # Authentication Option 4: mTLS with inline certificates (development/testing only)
-    # mtls_cert: |
-    #   -----BEGIN CERTIFICATE-----
-    #   MIIDXTCCAkWgAwIBAgIJAKL0UG+mRhmfMA0GCSqGSIb3DQEBCwUAMEUxCzAJBgNV
-    #   ...
-    #   -----END CERTIFICATE-----
-    # mtls_key: |
-    #   -----BEGIN PRIVATE KEY-----
-    #   MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDXhzR7NqPNa1PE
-    #   ...
-    #   -----END PRIVATE KEY-----
-    # mtls_ca: |
-    #   -----BEGIN CERTIFICATE-----
-    #   ...
-    #   -----END CERTIFICATE-----
+    host: "localhost"
+    port: 7233
+    namespace: "default"
+    
+    # Choose ONE authentication method:
+    
+    # 1. API Key (Temporal Cloud)
+    # api_key: "your-api-key"
+    
+    # 2. Inline certificates
+    # mtls_cert: "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"
+    # mtls_key: "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+    
+    # 3. File paths (Kubernetes)
+    # mtls_cert_file: "/etc/temporal/certs/client.pem"
+    # mtls_key_file: "/etc/temporal/certs/client.key"
+    
+    # 4. Vault (Production)
+    # mtls_vault:
+    #   mtls_vault_name: "temporal-client-cert"
+    #   mtls_vault_type: "pem"  # pem, pkcs12, or auto-detect
+    #   mtls_vault_password: ""  # For encrypted PKCS12
 
 # Server Configuration
 server:

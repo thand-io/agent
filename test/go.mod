@@ -14,6 +14,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/iam v1.53.1
 	github.com/cloudevents/sdk-go/v2 v2.16.2
 	github.com/google/uuid v1.6.0
+	github.com/hashicorp/go-version v1.8.0
 	github.com/serverlessworkflow/sdk-go/v3 v3.2.0
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.39.0
@@ -171,7 +172,6 @@ require (
 	github.com/hashicorp/go-slug v0.18.0 // indirect
 	github.com/hashicorp/go-sockaddr v1.0.7 // indirect
 	github.com/hashicorp/go-tfe v1.97.0 // indirect
-	github.com/hashicorp/go-version v1.8.0 // indirect
 	github.com/hashicorp/hcl v1.0.1-vault-7 // indirect
 	github.com/hashicorp/jsonapi v1.5.0 // indirect
 	github.com/hashicorp/vault/api v1.22.0 // indirect
@@ -310,6 +310,7 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
+	software.sslmate.com/src/go-pkcs12 v0.7.0 // indirect
 )
 
 replace github.com/thand-io/agent => ../
