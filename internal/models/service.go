@@ -29,6 +29,9 @@ type ServicesConfig struct {
 	// LLM - used for large language model interactions
 	LargeLanguageModel *LargeLanguageModelConfig `mapstructure:"llm"`
 
+	// Public Key Infrastructure - used for managing keys and certificates
+	PublicKeyInfrastructure *PublicKeyInfrastructureConfig `mapstructure:"pki"`
+
 	// Temporal - used for workflow processing and orchestration
 	Temporal *TemporalConfig `mapstructure:"temporal"`
 }
@@ -88,6 +91,10 @@ func (e *ServicesConfig) GetSchedulerConfig() *ServiceConfig {
 
 func (e *ServicesConfig) GetLLMConfig() *LargeLanguageModelConfig {
 	return e.LargeLanguageModel
+}
+
+func (e *ServicesConfig) GetPublicKeyInfrastructureConfig() *PublicKeyInfrastructureConfig {
+	return e.PublicKeyInfrastructure
 }
 
 func (e *ServicesConfig) GetTemporalConfig() *TemporalConfig {

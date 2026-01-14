@@ -136,6 +136,7 @@
             <table class="table" x-show="filteredLogs.length > 0">
                 <thead>
                     <tr>
+                        <th style="width: 30px;"></th>
                         <th style="width: 210px;">Timestamp</th>
                         <th style="width: 80px;">Level</th>
                         <th style="width: 120px;">Source</th>
@@ -144,7 +145,19 @@
                 </thead>
                 <tbody>
                     <template x-for="(log, index) in filteredLogs" :key="index">
-                        <tr :class="getLogRowClass(log)">
+                        <tr :class="getLogRowClass(log)" x-data="{ expanded: false }">
+                            <td style="padding: 0.5rem 0.25rem;">
+                                <button 
+                                    x-show="hasComplexData(log)"
+                                    @click="expanded = !expanded"
+                                    class="chevron-button"
+                                    :class="{ 'expanded': expanded }"
+                                    style="background: none; border: none; cursor: pointer; padding: 0.25rem; display: flex; align-items: center; color: hsl(var(--muted-foreground));">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="9 18 15 12 9 6"></polyline>
+                                    </svg>
+                                </button>
+                            </td>
                             <td>
                                 <span style="font-size: 0.75rem; font-family: monospace;" x-text="formatTimestamp(log.time)"></span>
                             </td>
@@ -157,11 +170,15 @@
                             <td>
                                 <div style="font-size: 0.875rem; line-height: 1.4;">
                                     <span x-text="log.message"></span>
-                                    <div x-show="log.context" style="margin-top: 0.25rem;">
-                                        <details>
-                                            <summary style="cursor: pointer; color: hsl(var(--muted-foreground)); font-size: 0.75rem;">Context</summary>
-                                            <pre style="margin-top: 0.5rem; padding: 0.5rem; background: hsl(var(--muted)); border-radius: 0.25rem; font-size: 0.75rem; overflow-x: auto;" x-text="JSON.stringify(log.context, null, 2)"></pre>
-                                        </details>
+                                    <span x-show="hasOnlyErrorData(log)" style="color: hsl(var(--muted-foreground));">
+                                        <span> - </span>
+                                        <span x-text="getErrorMessage(log)"></span>
+                                    </span>
+                                </div>
+                                <div x-show="expanded && hasComplexData(log)" style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid hsl(var(--border));">
+                                    <div style="padding: 0.75rem; background: hsl(var(--muted)); border-radius: 0.25rem; border: 1px solid hsl(var(--border));">
+                                        <div style="font-size: 0.75rem; font-weight: 600; margin-bottom: 0.5rem; color: hsl(var(--muted-foreground));">Data</div>
+                                        <pre style="margin: 0; padding: 0.75rem; background: hsl(var(--background)); border-radius: 0.25rem; font-size: 0.75rem; overflow-x: auto; max-height: 400px; overflow-y: auto; font-family: monospace; line-height: 1.5;" x-text="JSON.stringify(log.data, null, 2)"></pre>
                                     </div>
                                 </div>
                             </td>
@@ -224,7 +241,9 @@ function logViewer() {
 
             // Filter by level
             if (this.selectedLevel) {
-                filtered = filtered.filter(log => log.level === this.selectedLevel);
+                filtered = filtered.filter(log => 
+                    (log.level || '').toUpperCase() === this.selectedLevel.toUpperCase()
+                );
             }
 
             // Filter by search query
@@ -352,6 +371,24 @@ function logViewer() {
             if (this.loading) return 'Loading...';
             if (this.error) return 'Error';
             return this.autoRefresh ? 'Live' : 'Connected';
+        },
+
+        hasComplexData(log) {
+            if (!log.data || typeof log.data !== 'object') return false;
+            const keys = Object.keys(log.data);
+            // Has data with more than just 'error', or has no keys
+            return keys.length > 1 || (keys.length === 1 && keys[0] !== 'error');
+        },
+
+        hasOnlyErrorData(log) {
+            if (!log.data || typeof log.data !== 'object') return false;
+            const keys = Object.keys(log.data);
+            return keys.length === 1 && keys[0] === 'error' && log.data.error;
+        },
+
+        getErrorMessage(log) {
+            if (!log.data || !log.data.error) return '';
+            return log.data.error;
         }
     }
 }
@@ -359,6 +396,18 @@ function logViewer() {
 
 <style>
 /* Additional styles for log viewer */
+.chevron-button {
+    transition: transform 0.2s ease;
+}
+
+.chevron-button.expanded {
+    transform: rotate(90deg);
+}
+
+.chevron-button:hover {
+    color: hsl(var(--foreground)) !important;
+}
+
 .badge-error {
     background-color: hsl(0 84% 60% / 0.1);
     color: hsl(0 84% 60%);

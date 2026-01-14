@@ -685,13 +685,26 @@ func (s *Server) readyHandler(c *gin.Context) {
 func (s *Server) metricsHandler(c *gin.Context) {
 	uptime := time.Since(s.StartTime)
 
+	identitiesCount := int64(0)
+	tenantsCount := int64(0)
+
+	if s.Config.IsServer() {
+		identitiesCount = s.Config.GetIdentitiesCount()
+		tenantsCount = s.Config.GetTenantsCount()
+	}
+
 	metrics := models.MetricsInfo{
 		Uptime:          uptime.String(),
-		TotalRequests:   atomic.LoadInt64(&s.TotalRequests),
-		RolesCount:      len(s.Config.Roles.Definitions),
-		WorkflowsCount:  len(s.Config.Workflows.Definitions),
-		ProvidersCount:  len(s.Config.Providers.Definitions),
+		
+		RequestsCount:   atomic.LoadInt64(&s.TotalRequests),
 		ElevateRequests: atomic.LoadInt64(&s.ElevateRequests),
+
+		RolesCount:      int64(len(s.Config.Roles.Definitions)),
+		WorkflowsCount:  int64(len(s.Config.Workflows.Definitions)),
+		ProvidersCount:  int64(len(s.Config.Providers.Definitions)),
+		
+		IdentitiesCount: identitiesCount,
+		TenantsCount:    tenantsCount,
 	}
 
 	c.JSON(http.StatusOK, metrics)

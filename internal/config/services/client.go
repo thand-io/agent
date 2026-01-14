@@ -18,6 +18,7 @@ type localClient struct {
 	vault     models.VaultImpl
 	scheduler models.SchedulerImpl
 	llm       models.LargeLanguageModelImpl
+	pki       models.PublicKeyInfrastructure
 	temporal  models.TemporalImpl
 }
 
@@ -59,6 +60,8 @@ func (e *localClient) Initialize() error {
 	// First lets figure out which platform and clients we want to configure
 	// By default we'll use local.
 
+	// These are code services and are not dependent on each other
+	// so we can initialise them in parallel
 	e.encrypt = e.configureEncryption()
 	e.vault = e.configureVault()
 	e.scheduler = e.configureScheduler()
@@ -119,6 +122,23 @@ func (e *localClient) Initialize() error {
 
 	}
 
+	if e.config.PublicKeyInfrastructure != nil {
+
+		wg.Go(func() {
+
+			logrus.Infof("Initializing public key infrastructure...")
+
+			e.pki = e.configurePublicKeyInfrastructure()
+			if e.pki != nil {
+				if err := e.pki.Initialize(e.encrypt, e.vault); err != nil {
+					logrus.Errorf("Error initializing public key infrastructure: %v", err)
+					e.pki = nil // Disable PKI if initialization fails
+				}
+			}
+		})
+
+	}
+
 	if e.config.Temporal != nil {
 
 		wg.Go(func() {
@@ -128,6 +148,7 @@ func (e *localClient) Initialize() error {
 			e.temporal = temporal.NewTemporalClient(
 				e.config.Temporal,
 				e.environment.GetIdentifier(),
+				e.vault,
 			)
 			if err := e.temporal.Initialize(); err != nil {
 				logrus.Errorf("Error initializing temporal: %v", err)

@@ -20,6 +20,27 @@ const (
 
 type IdentityType string
 
+func (c *Config) GetIdentitiesCount() int64 {
+	ctx := context.Background()
+
+	identitiesCount := int64(0)
+
+	for _, provider := range c.GetProvidersByCapability(models.IdentityCapabilities...) {
+		count, err := provider.ListIdentities(ctx, &models.SearchRequest{})
+		
+		if err != nil {
+			logrus.WithError(err).
+				WithField("provider", provider.GetName()).
+				Error("Failed to get identities count from provider")
+			continue
+		}
+
+		identitiesCount += int64(len(count))
+	}
+
+	return identitiesCount
+}
+
 // GetIdentity looks up an identity by its identifier.
 // The identity string can optionally include a provider prefix (e.g., "aws-prod:username").
 // If a prefix is provided, it queries only that specific provider.
@@ -56,7 +77,7 @@ func (c *Config) GetIdentity(identity string) (*models.Identity, error) {
 	}
 
 	// No provider prefix - query all identity providers
-	providerMap := c.GetProvidersByCapability(models.ProviderCapabilityIdentities)
+	providerMap := c.GetProvidersByCapability(models.IdentityCapabilities...)
 
 	if len(providerMap) == 0 {
 		return nil, fmt.Errorf("identity not found: %s (no identity providers configured)", identity)
@@ -126,7 +147,7 @@ func (c *Config) GetIdentitiesWithFilter(
 	identities := []models.SearchResult[models.Identity]{}
 
 	// Find providers with identity capabilities
-	providerMap := c.GetProvidersByCapabilityWithUser(user, models.ProviderCapabilityIdentities)
+	providerMap := c.GetProvidersByCapabilityWithUser(user, models.IdentityCapabilities...)
 
 	// If no identity providers found, return just the current user
 	if len(providerMap) == 0 {

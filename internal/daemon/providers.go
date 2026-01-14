@@ -40,8 +40,8 @@ func (s *Server) getProviderIdentities(c *gin.Context) {
 		return
 	}
 
-	if !provider.HasCapability(models.ProviderCapabilityIdentities) {
-		s.getErrorPage(c, http.StatusNotImplemented, "The provider does not implement identities")
+	if !provider.HasAnyCapability(models.IdentityCapabilities...) {
+		s.getErrorPage(c, http.StatusNotImplemented, "The provider does not implement identities, users or groups")
 		return
 	}
 

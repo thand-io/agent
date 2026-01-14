@@ -266,7 +266,7 @@ func TestBaseProvider_GetIdentity_WithoutCapability(t *testing.T) {
 	identity, err := p.GetIdentity(ctx, "user1")
 	assert.Error(t, err)
 	assert.Nil(t, identity)
-	assert.Contains(t, err.Error(), "no identities")
+	assert.Contains(t, err.Error(), "does not support identities")
 }
 
 func TestBaseProvider_ListIdentities(t *testing.T) {
@@ -354,7 +354,7 @@ func TestBaseProvider_ListIdentities_WithoutCapability(t *testing.T) {
 	results, err := p.ListIdentities(ctx, nil)
 	assert.Error(t, err)
 	assert.Nil(t, results)
-	assert.Contains(t, err.Error(), "no identities")
+	assert.Contains(t, err.Error(), "does not support identities")
 }
 
 func TestBaseProvider_ListIdentities_Search(t *testing.T) {
