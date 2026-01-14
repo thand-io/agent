@@ -12,14 +12,30 @@ environment:
     password: "changeme"
 
 # Services Configuration
-# The services configuration inherits from environment configuration
 services:
   temporal:
-    # host: "us-central1.gcp.api.temporal.io"
-    # port: 7233
-    # namespace: "default"
-    # mtls_pem: "" # Path to mTLS PEM file if required
-    # api_key: "" # Temporal API Key
+    host: "localhost"
+    port: 7233
+    namespace: "default"
+    
+    # Choose ONE authentication method:
+    
+    # 1. API Key (Temporal Cloud)
+    # api_key: "your-api-key"
+    
+    # 2. Inline certificates
+    # mtls_cert: "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"
+    # mtls_key: "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+    
+    # 3. File paths (Kubernetes)
+    # mtls_cert_file: "/etc/temporal/certs/client.pem"
+    # mtls_key_file: "/etc/temporal/certs/client.key"
+    
+    # 4. Vault (Production)
+    # mtls_vault:
+    #   mtls_vault_name: "temporal-client-cert"
+    #   mtls_vault_type: "pem"  # pem, pkcs12, or auto-detect
+    #   mtls_vault_password: ""  # For encrypted PKCS12
 
 # Server Configuration
 server:
