@@ -156,8 +156,5 @@ func (a *TemporalClient) parseDERFormat(data []byte) (tls.Certificate, error) {
 
 	// Note: This will not work for mTLS without a private key
 	// Users should use PEM or PKCS12 format for complete certificate+key
-	return tls.Certificate{
-		Certificate: [][]byte{certificate.Raw},
-		Leaf:        certificate,
-	}, fmt.Errorf("DER format does not contain private key, use PEM or PKCS12 format instead")
+	return tls.Certificate{}, fmt.Errorf("DER format does not contain private key, use PEM or PKCS12 format instead")
 }

@@ -41,7 +41,11 @@ func DetectCertificateFormat(data []byte) string {
 	}
 
 	// Default to PEM if uncertain (most common format)
-	logrus.WithField("first_bytes", fmt.Sprintf("%x", data[0:Min(16, len(data))])).Debug("Unable to detect format, defaulting to PEM")
+	endIdx := len(data)
+	if endIdx > 16 {
+		endIdx = 16
+	}
+	logrus.WithField("first_bytes", fmt.Sprintf("%x", data[0:endIdx])).Debug("Unable to detect format, defaulting to PEM")
 	return "pem"
 }
 
@@ -204,12 +208,4 @@ func ParseASN1Length(data []byte) (int64, int) {
 	}
 
 	return length, 1 + numLengthBytes
-}
-
-// Min returns the minimum of two integers
-func Min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

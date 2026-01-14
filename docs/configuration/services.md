@@ -652,7 +652,7 @@ Store certificates in your configured vault service. The agent supports multiple
 |--------|------|----------|-------------|
 | `services.temporal.mtls_vault_name` | string | **Yes** | Vault secret key/name containing certificate |
 | `services.temporal.mtls_vault_type` | string | No | Certificate format: `pem`, `pkcs12`, `p12`, `pfx`, `der` (auto-detected if not specified) |
-| `services.temporal.mtls_vault_password` | string | No | Password for encrypted PKCS12 certificates |
+| `services.temporal.mtls_vault_type` | string | No | Certificate format: `pem`, `pkcs12`, `p12`, `pfx` (auto-detected if not specified) |
 
 **Supported Certificate Formats:**
 
