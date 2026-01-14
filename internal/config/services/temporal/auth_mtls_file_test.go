@@ -13,8 +13,8 @@ import (
 
 func TestConfigureMTLSFile(t *testing.T) {
 	// Use real test certificate files
-	certFile := "test_client.pem"
-	keyFile := "test_client.key"
+	certFile := "testdata/test_client.pem"
+	keyFile := "testdata/test_client.key"
 
 	// Verify test files exist
 	_, err := os.Stat(certFile)

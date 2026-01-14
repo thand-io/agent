@@ -1,0 +1,10 @@
+# Ignore generated test certificates - they can be regenerated with generate_certs.sh
+*.pem
+*.p12
+*.der
+*.key
+*.crt
+*.csr
+
+# Keep the generation script
+!generate_certs.sh

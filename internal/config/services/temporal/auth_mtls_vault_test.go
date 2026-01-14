@@ -41,7 +41,7 @@ func (m *MockVault) StoreSecret(key string, value []byte) error {
 
 func TestConfigureMTLSVault_PEM_Combined(t *testing.T) {
 	// Load real combined PEM certificate (cert + key)
-	combinedPEM, err := os.ReadFile("test_client_combined.pem")
+	combinedPEM, err := os.ReadFile("testdata/test_client_combined.pem")
 	require.NoError(t, err, "failed to read combined PEM certificate")
 
 	mockVault := new(MockVault)
@@ -72,7 +72,7 @@ func TestConfigureMTLSVault_PEM_Combined(t *testing.T) {
 
 func TestConfigureMTLSVault_PEM_Separate(t *testing.T) {
 	// Load real PEM certificate (cert only)
-	certPEM, err := os.ReadFile("test_client.pem")
+	certPEM, err := os.ReadFile("testdata/test_client.pem")
 	require.NoError(t, err, "failed to read PEM certificate")
 
 	mockVault := new(MockVault)
@@ -101,7 +101,7 @@ func TestConfigureMTLSVault_PEM_Separate(t *testing.T) {
 
 func TestConfigureMTLSVault_PKCS12_Unencrypted(t *testing.T) {
 	// Load real unencrypted PKCS12 certificate
-	p12Data, err := os.ReadFile("test_client.p12")
+	p12Data, err := os.ReadFile("testdata/test_client.p12")
 	require.NoError(t, err, "failed to read PKCS12 certificate")
 
 	mockVault := new(MockVault)
@@ -132,7 +132,7 @@ func TestConfigureMTLSVault_PKCS12_Unencrypted(t *testing.T) {
 
 func TestConfigureMTLSVault_PKCS12_Encrypted(t *testing.T) {
 	// Load real encrypted PKCS12 certificate (password: "test-password")
-	p12Data, err := os.ReadFile("test_client_encrypted.p12")
+	p12Data, err := os.ReadFile("testdata/test_client_encrypted.p12")
 	require.NoError(t, err, "failed to read encrypted PKCS12 certificate")
 
 	mockVault := new(MockVault)
@@ -164,7 +164,7 @@ func TestConfigureMTLSVault_PKCS12_Encrypted(t *testing.T) {
 
 func TestConfigureMTLSVault_PKCS12_WrongPassword(t *testing.T) {
 	// Load real encrypted PKCS12 certificate (password: "test-password")
-	p12Data, err := os.ReadFile("test_client_encrypted.p12")
+	p12Data, err := os.ReadFile("testdata/test_client_encrypted.p12")
 	require.NoError(t, err, "failed to read encrypted PKCS12 certificate")
 
 	mockVault := new(MockVault)
@@ -193,7 +193,7 @@ func TestConfigureMTLSVault_PKCS12_WrongPassword(t *testing.T) {
 
 func TestConfigureMTLSVault_AutoDetect_PEM(t *testing.T) {
 	// Load real combined PEM certificate
-	combinedPEM, err := os.ReadFile("test_client_combined.pem")
+	combinedPEM, err := os.ReadFile("testdata/test_client_combined.pem")
 	require.NoError(t, err, "failed to read combined PEM certificate")
 
 	mockVault := new(MockVault)
@@ -224,7 +224,7 @@ func TestConfigureMTLSVault_AutoDetect_PEM(t *testing.T) {
 
 func TestConfigureMTLSVault_AutoDetect_PKCS12(t *testing.T) {
 	// Load real unencrypted PKCS12 certificate
-	p12Data, err := os.ReadFile("test_client.p12")
+	p12Data, err := os.ReadFile("testdata/test_client.p12")
 	require.NoError(t, err, "failed to read PKCS12 certificate")
 
 	mockVault := new(MockVault)

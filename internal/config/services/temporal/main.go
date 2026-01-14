@@ -20,7 +20,6 @@ type TemporalClient struct {
 	worker   worker.Worker
 	identity string
 	vault    models.VaultImpl
-	pki      models.PublicKeyInfrastructure
 }
 
 func NewTemporalClient(

@@ -15,11 +15,11 @@ func loadTestCertificates(t *testing.T) (certPEM, keyPEM string) {
 	t.Helper()
 
 	// Load certificate
-	certData, err := os.ReadFile("test_client.pem")
+	certData, err := os.ReadFile("testdata/test_client.pem")
 	require.NoError(t, err, "failed to read test certificate")
 
 	// Load key
-	keyData, err := os.ReadFile("test_client.key")
+	keyData, err := os.ReadFile("testdata/test_client.key")
 	require.NoError(t, err, "failed to read test key")
 
 	return string(certData), string(keyData)

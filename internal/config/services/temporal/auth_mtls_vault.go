@@ -5,10 +5,10 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"net/http"
 	"strings"
 
 	"github.com/sirupsen/logrus"
+	"github.com/thand-io/agent/internal/common"
 	"software.sslmate.com/src/go-pkcs12"
 )
 
@@ -31,9 +31,9 @@ func (a *TemporalClient) configureMTLSVault() (*tls.Config, error) {
 
 	// Auto-detect format or use specified type
 	format := a.config.MtlsVaultType
-	if format == "" {
-		format = detectCertificateFormat(certData)
-		if format == "" {
+	if len(format) == 0 {
+		format = common.DetectCertificateFormat(certData)
+		if len(format) == 0 {
 			return nil, fmt.Errorf("failed to auto-detect certificate format")
 		}
 		logrus.WithField("detected_format", format).Debug("Auto-detected certificate format")
@@ -63,57 +63,6 @@ func (a *TemporalClient) configureMTLSVault() (*tls.Config, error) {
 
 	logrus.Info("Successfully configured mTLS with vault certificate")
 	return tlsConfig, nil
-}
-
-// detectCertificateFormat attempts to detect the format of certificate data
-// using MIME type detection and content analysis
-func detectCertificateFormat(data []byte) string {
-	if len(data) == 0 {
-		logrus.Warn("No data provided for certificate format detection")
-		return ""
-	}
-
-	// Use Go's MIME type detection
-	mimeType := http.DetectContentType(data)
-
-	// Check for text-based formats (PEM)
-	if strings.HasPrefix(mimeType, "text/") {
-		// Double-check for PEM markers
-		if len(data) > 0 && data[0] == '-' {
-			return "pem"
-		}
-	}
-
-	// Check for binary formats
-	if strings.Contains(mimeType, "application/") || strings.Contains(mimeType, "octet-stream") {
-		// Check for PKCS12 magic bytes (ASN.1 SEQUENCE tag 0x30)
-		if len(data) >= 2 && data[0] == 0x30 {
-			// PKCS12 uses ASN.1 encoding starting with SEQUENCE
-			// Second byte indicates length encoding:
-			// 0x80-0x83 = indefinite or long form (typical for PKCS12)
-			// 0x82 is most common for PKCS12 files
-			if data[1] >= 0x80 && data[1] <= 0x83 {
-				return "pkcs12"
-			}
-			// Could also be DER-encoded certificate
-			// Try to distinguish by looking for PFX OID (1.2.840.113549.1.12.10.1.3)
-			if len(data) > 20 {
-				// PKCS12 has a specific structure we can detect
-				// Look for the PFX version number early in the structure
-				return "pkcs12"
-			}
-			return "der"
-		}
-	}
-
-	// Check explicitly for PEM format (starts with -----BEGIN)
-	if len(data) > 10 && string(data[0:5]) == "-----" {
-		return "pem"
-	}
-
-	// Default to PEM if uncertain
-	logrus.WithField("mime_type", mimeType).Debug("Defaulting to PEM format")
-	return "pem"
 }
 
 // parsePEMFormat parses certificate and key from PEM format

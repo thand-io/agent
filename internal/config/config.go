@@ -243,9 +243,9 @@ func bindServiceEnvVars(v *viper.Viper) {
 	v.BindEnv("services.temporal.mtls_key_file", "THAND_SERVICES_TEMPORAL_MTLS_KEY_FILE")
 
 	// Temporal authentication - mTLS vault configuration
-	v.BindEnv("services.temporal.mtls_vault.mtls_vault_name", "THAND_SERVICES_TEMPORAL_MTLS_VAULT_NAME")
-	v.BindEnv("services.temporal.mtls_vault.mtls_vault_type", "THAND_SERVICES_TEMPORAL_MTLS_VAULT_TYPE")
-	v.BindEnv("services.temporal.mtls_vault.mtls_vault_password", "THAND_SERVICES_TEMPORAL_MTLS_VAULT_PASSWORD")
+	v.BindEnv("services.temporal.mtls_vault_name", "THAND_SERVICES_TEMPORAL_MTLS_VAULT_NAME")
+	v.BindEnv("services.temporal.mtls_vault_type", "THAND_SERVICES_TEMPORAL_MTLS_VAULT_TYPE")
+	v.BindEnv("services.temporal.mtls_vault_password", "THAND_SERVICES_TEMPORAL_MTLS_VAULT_PASSWORD")
 }
 
 // readAndUnmarshalConfig reads the configuration file and unmarshals it
