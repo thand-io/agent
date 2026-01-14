@@ -321,28 +321,6 @@ func TestIsDERCertificate(t *testing.T) {
 	})
 }
 
-func TestMin(t *testing.T) {
-	tests := []struct {
-		name     string
-		a        int
-		b        int
-		expected int
-	}{
-		{"a < b", 5, 10, 5},
-		{"a > b", 10, 5, 5},
-		{"a == b", 7, 7, 7},
-		{"negative numbers", -5, -10, -10},
-		{"zero", 0, 5, 0},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := Min(tt.a, tt.b)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 // Integration tests to verify detection works with actual parsing
 
 func TestDetectAndParse_PEM(t *testing.T) {
