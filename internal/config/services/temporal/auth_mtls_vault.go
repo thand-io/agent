@@ -147,7 +147,7 @@ func (a *TemporalClient) parsePKCS12Format(data []byte) (tls.Certificate, error)
 func (a *TemporalClient) parseDERFormat(data []byte) (tls.Certificate, error) {
 	// DER format typically contains just the certificate, not the private key
 	// This is less common for TLS client certificates
-	certificate, err := x509.ParseCertificate(data)
+	_, err := x509.ParseCertificate(data)
 	if err != nil {
 		return tls.Certificate{}, fmt.Errorf("failed to parse DER certificate: %w", err)
 	}
