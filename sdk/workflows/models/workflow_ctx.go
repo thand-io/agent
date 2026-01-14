@@ -16,7 +16,7 @@ import (
 
 func NewWorkflowContext(workflow *model.Workflow) (*WorkflowTask, error) {
 
-	workflowID := fmt.Sprintf("thand_wf_%d", time.Now().UTC().UnixNano())
+	workflowID := fmt.Sprintf("thand_%d", time.Now().UTC().UnixNano())
 
 	if workflow == nil {
 		return nil, fmt.Errorf("workflow definition cannot be nil")

@@ -76,7 +76,7 @@ func validateInputs(llm models.LargeLanguageModelImpl, providers map[string]mode
 func validateEvaluationResponse(evaluationResponse *ElevationRequestResponse, reason string) error {
 	if !evaluationResponse.Success {
 		logrus.WithFields(logrus.Fields{
-			"request":   reason,
+			"reason":   reason,
 			"rationale": evaluationResponse.Rationale,
 		}).Warn("failed to elevate")
 		return fmt.Errorf("failed to elevate: %s", evaluationResponse.Rationale)
@@ -115,7 +115,7 @@ func getQueryableInfo(ctx context.Context, llm models.LargeLanguageModelImpl, pr
 
 	if !queryableInfo.Success {
 		logrus.WithFields(logrus.Fields{
-			"request":   reason,
+			"reason":    reason,
 			"duration":  evaluationResponse.Duration.String(),
 			"rationale": queryableInfo.Rationale,
 		}).Warn("failed to query elevation info")
