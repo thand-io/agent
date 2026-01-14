@@ -55,5 +55,5 @@ func (a *TemporalClient) hasMTLSFile() bool {
 
 // hasMTLSVault checks if vault-based mTLS configuration is present
 func (a *TemporalClient) hasMTLSVault() bool {
-	return a.config.MtlsVault != nil && len(a.config.MtlsVaultName) > 0
+	return len(a.config.MtlsVaultName) > 0
 }

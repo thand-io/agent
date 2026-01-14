@@ -57,7 +57,7 @@ type TemporalConfig struct {
 	TemporalAuthAPIKey     `mapstructure:",squash"` // API key
 	TemporalAuthMTLSInline `mapstructure:",squash"` // Inline mTLS
 	TemporalAuthMTLSFile   `mapstructure:",squash"` // File-based mTLS
-	TemporalAuthMTLSVault  `mapstructure:",squash"`  // Vault-based mTLS
+	TemporalAuthMTLSVault  `mapstructure:",squash"` // Vault-based mTLS
 
 	// DisableVersioning disables worker versioning/deployments for testing
 	DisableVersioning bool `mapstructure:"disable_versioning" default:"false"`

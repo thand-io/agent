@@ -30,7 +30,7 @@ func NewTemporalClient(
 ) *TemporalClient {
 	return &TemporalClient{
 		config:   config,
-		identity: identifier,
+		identity: identity,
 		vault:    vault,
 	}
 }

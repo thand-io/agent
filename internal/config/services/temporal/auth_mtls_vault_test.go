@@ -48,7 +48,7 @@ func TestConfigureMTLSVault_PEM_Combined(t *testing.T) {
 	mockVault.On("GetSecret", "temporal-mtls-cert").Return(combinedPEM, nil)
 
 	config := &models.TemporalConfig{
-		MtlsVault: &models.TemporalAuthMTLSVault{
+		TemporalAuthMTLSVault: models.TemporalAuthMTLSVault{
 			MtlsVaultName: "temporal-mtls-cert",
 			MtlsVaultType: "pem",
 		},
@@ -79,7 +79,7 @@ func TestConfigureMTLSVault_PEM_Separate(t *testing.T) {
 	mockVault.On("GetSecret", "temporal-mtls-cert").Return(certPEM, nil)
 
 	config := &models.TemporalConfig{
-		MtlsVault: &models.TemporalAuthMTLSVault{
+		TemporalAuthMTLSVault: models.TemporalAuthMTLSVault{
 			MtlsVaultName: "temporal-mtls-cert",
 			MtlsVaultType: "pem",
 		},
@@ -108,7 +108,7 @@ func TestConfigureMTLSVault_PKCS12_Unencrypted(t *testing.T) {
 	mockVault.On("GetSecret", "temporal-mtls-cert").Return(p12Data, nil)
 
 	config := &models.TemporalConfig{
-		MtlsVault: &models.TemporalAuthMTLSVault{
+		TemporalAuthMTLSVault: models.TemporalAuthMTLSVault{
 			MtlsVaultName: "temporal-mtls-cert",
 			MtlsVaultType: "pkcs12",
 		},
@@ -139,7 +139,7 @@ func TestConfigureMTLSVault_PKCS12_Encrypted(t *testing.T) {
 	mockVault.On("GetSecret", "temporal-mtls-cert").Return(p12Data, nil)
 
 	config := &models.TemporalConfig{
-		MtlsVault: &models.TemporalAuthMTLSVault{
+		TemporalAuthMTLSVault: models.TemporalAuthMTLSVault{
 			MtlsVaultName:     "temporal-mtls-cert",
 			MtlsVaultType:     "pkcs12",
 			MtlsVaultPassword: "test-password",
@@ -171,7 +171,7 @@ func TestConfigureMTLSVault_PKCS12_WrongPassword(t *testing.T) {
 	mockVault.On("GetSecret", "temporal-mtls-cert").Return(p12Data, nil)
 
 	config := &models.TemporalConfig{
-		MtlsVault: &models.TemporalAuthMTLSVault{
+		TemporalAuthMTLSVault: models.TemporalAuthMTLSVault{
 			MtlsVaultName:     "temporal-mtls-cert",
 			MtlsVaultType:     "pkcs12",
 			MtlsVaultPassword: "wrong-password",
@@ -200,7 +200,7 @@ func TestConfigureMTLSVault_AutoDetect_PEM(t *testing.T) {
 	mockVault.On("GetSecret", "temporal-mtls-cert").Return(combinedPEM, nil)
 
 	config := &models.TemporalConfig{
-		MtlsVault: &models.TemporalAuthMTLSVault{
+		TemporalAuthMTLSVault: models.TemporalAuthMTLSVault{
 			MtlsVaultName: "temporal-mtls-cert",
 			// No MtlsVaultType specified - should auto-detect as PEM
 		},
@@ -231,7 +231,7 @@ func TestConfigureMTLSVault_AutoDetect_PKCS12(t *testing.T) {
 	mockVault.On("GetSecret", "temporal-mtls-cert").Return(p12Data, nil)
 
 	config := &models.TemporalConfig{
-		MtlsVault: &models.TemporalAuthMTLSVault{
+		TemporalAuthMTLSVault: models.TemporalAuthMTLSVault{
 			MtlsVaultName: "temporal-mtls-cert",
 			// No MtlsVaultType specified - should auto-detect as PKCS12
 		},
@@ -258,7 +258,7 @@ func TestConfigureMTLSVault_VaultError(t *testing.T) {
 	mockVault.On("GetSecret", "temporal-mtls-cert").Return(nil, assert.AnError)
 
 	config := &models.TemporalConfig{
-		MtlsVault: &models.TemporalAuthMTLSVault{
+		TemporalAuthMTLSVault: models.TemporalAuthMTLSVault{
 			MtlsVaultName: "temporal-mtls-cert",
 			MtlsVaultType: "pem",
 		},
@@ -284,7 +284,7 @@ func TestConfigureMTLSVault_InvalidFormat(t *testing.T) {
 	mockVault.On("GetSecret", "temporal-mtls-cert").Return(invalidData, nil)
 
 	config := &models.TemporalConfig{
-		MtlsVault: &models.TemporalAuthMTLSVault{
+		TemporalAuthMTLSVault: models.TemporalAuthMTLSVault{
 			MtlsVaultName: "temporal-mtls-cert",
 			// No type specified - should try to auto-detect and fail
 		},
@@ -335,9 +335,7 @@ func TestHasMTLSVault(t *testing.T) {
 			config := &models.TemporalConfig{}
 			
 			if !tt.vaultIsNil {
-				config.MtlsVault = &models.TemporalAuthMTLSVault{
-					MtlsVaultName: tt.vaultName,
-				}
+				config.MtlsVaultName = tt.vaultName
 			}
 
 			temporalClient := &TemporalClient{
