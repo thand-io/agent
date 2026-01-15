@@ -112,7 +112,7 @@ Fill in the required fields such as subscription, resource group, and container 
 * Deployment Name: thand
 * Deployment Source: Container image
 
-![Azure Container Apps](step04.png)
+![Azure Container Apps](step05.png)
 
 Click Next to go to the Container settings.
 
@@ -121,7 +121,7 @@ Click Next to go to the Container settings.
 * Registry login server: ghcr.io
 * Image and tag: thand-io/agent;latest
 
-![Azure Container Configuration](step05.png)
+![Azure Container Configuration](step06.png)
 
 Next, we need to configure the ingress settings. By default for this example, we will enable ingress and allow unauthenticated access. Adjust these settings as per your security requirements.
 
@@ -130,13 +130,13 @@ We recommend using Microsoft Entra Identity (formerly Azure AD) for proxy aware 
 * Ingress: Enabled
 * Ingress traffic: Accepting traffic from anywhere
 
-![Azure Container Ingress Settings](step06.png)
+![Azure Container Ingress Settings](step07.png)
 
 Click create. We need to configure the secrets and environment variables post creation.
 
 When you're app has finished deploying, navigate to your Container App and go to the "Overview" tab. Under "Application Url" click and visit the link you should be presented with the following:
 
-![Thand Agent Running](step07.png)
+![Thand Agent Running](step08.png)
 
 Keep this application URL handy as well need it for configuring the environment variables.
 
@@ -159,6 +159,30 @@ Once Managed Identity is enabled for your Container App. You now have your Objec
 * Role: Key Vault Reader
 
 ![Azure Managed Identity Role Assignment](step10.png)
+
+Now do the same for the following roles:
+
+| Role                          | Resource Name              | Resource Type  |
+|-------------------------------|----------------------------|----------------|
+| User Access Administrator     | Azure subscription 1       | Subscription   |
+| Reader                        | Azure subscription 1       | Subscription   |
+| Key Vault Secrets User        | Azure subscription 1       | Subscription   |
+| Key Vault Crypto User         | Azure subscription 1       | Subscription   |
+
+And you should end up with something like this:
+
+![Container Managed Identity Role Assignments](step11.png)
+
+Lastly, the azure provider has support for syncing Entra ID (formerly Azure AD) users and groups using the managed identity. As we've given our managed identity the necessary permissions. Lets double check that our external application has the necessary API permissions in Entra ID.
+
+Visit the [Azure Portal](https://portal.azure.com/) and navigate to "Entra ID" -> "Enterprise applications". There search for your principal ID and then click on it.
+
+Go to "Permissions" and ensure the following API permissions are granted:
+
+![External Application Permissions](step12.png)
+
+{: .note}
+It can take up 30 minutes for the API permissions to propagate. If you run into permission issues during syncs, please wait and try again later.
 
 ### Setting Environment Variables
 
@@ -183,6 +207,7 @@ Next add the following:
 
 Your final environment variables should look something like this:
 
-![Thand Agent Environment Variables](step08.png)
+![Thand Agent Environment Variables](step13.png)
 
 Click *Save as new revision* to apply the changes.
+
