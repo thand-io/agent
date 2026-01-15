@@ -345,8 +345,9 @@ func handleErrorResponse(request *models.ElevateRequest, res *resty.Response) er
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"request": request,
-		"error":   errorResponse,
+		"request_reason":   request.Reason,
+		"request_duration": request.Duration,
+		"error":            errorResponse,
 	}).Error("Failed to elevate access")
 
 	return fmt.Errorf("failed to elevate access: %s with details: %s", errorResponse.Title, errorResponse.Message)
