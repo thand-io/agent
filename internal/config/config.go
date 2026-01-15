@@ -180,6 +180,12 @@ func bindServerEnvVars(v *viper.Viper) {
 
 // bindCloudProviderEnvVars binds cloud provider specific environment variables
 func bindCloudProviderEnvVars(v *viper.Viper) {
+
+	// Local environment variables
+	v.BindEnv("environment.config.salt", "THAND_SERVICES_ENCRYPTION_SALT")
+	v.BindEnv("environment.config.password", "THAND_SERVICES_ENCRYPTION_PASSWORD")
+
+
 	// GCP environment variables
 	v.BindEnv("environment.config.project_id", "THAND_ENVIRONMENT_CONFIG_PROJECT_ID")
 	v.BindEnv("environment.config.location", "THAND_ENVIRONMENT_CONFIG_LOCATION")
@@ -187,6 +193,7 @@ func bindCloudProviderEnvVars(v *viper.Viper) {
 	v.BindEnv("environment.config.key_name", "THAND_ENVIRONMENT_CONFIG_KEY_NAME")
 
 	// Azure environment variables
+	v.BindEnv("environment.config.subscription_id", "THAND_ENVIRONMENT_CONFIG_SUBSCRIPTION_ID")
 	v.BindEnv("environment.config.vault_url", "THAND_ENVIRONMENT_CONFIG_VAULT_URL")
 
 	// AWS environment variables
@@ -219,6 +226,10 @@ func bindLoggingEnvVars(v *viper.Viper) {
 
 // bindServiceEnvVars binds service configuration environment variables
 func bindServiceEnvVars(v *viper.Viper) {
+
+	// Encryption service environment variables
+	v.BindEnv("services.encryption.provider", "THAND_SERVICES_ENCRYPTION_PROVIDER")
+
 	// LLM service environment variables
 	v.BindEnv("services.llm.provider", "THAND_SERVICES_LLM_PROVIDER")
 	v.BindEnv("services.llm.api_key", "THAND_SERVICES_LLM_API_KEY")

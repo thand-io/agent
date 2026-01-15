@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"time"
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
@@ -62,7 +63,8 @@ func (r *ResumableWorkflowRunner) ExecuteGRPCFunction(
 
 		activityContext := workflow.WithActivityOptions(workflowTask.GetTemporalContext(),
 			workflow.ActivityOptions{
-				RetryPolicy: DefaultRetryPolicy,
+				StartToCloseTimeout: 10 * time.Minute,
+				RetryPolicy:         DefaultRetryPolicy,
 			},
 		)
 

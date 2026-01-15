@@ -3,6 +3,7 @@ package thand
 import (
 	"errors"
 	"fmt"
+	"time"
 	"strings"
 	"sync"
 
@@ -211,8 +212,9 @@ func (t *thandTask) executeNotifyTemporalParallel(
 	serviceClient := t.config.GetServices()
 
 	ao := workflow.ActivityOptions{
-		TaskQueue:   serviceClient.GetTemporal().GetTaskQueue(),
-		RetryPolicy: sdkWorkflowsRunner.DefaultRetryPolicy,
+		TaskQueue:           serviceClient.GetTemporal().GetTaskQueue(),
+		StartToCloseTimeout: 10 * time.Minute,
+		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 	}
 	aoctx := workflow.WithActivityOptions(temporalContext, ao)
 

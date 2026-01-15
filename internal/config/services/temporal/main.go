@@ -57,7 +57,12 @@ func (a *TemporalClient) Initialize() error {
 	temporalClient, err := client.Dial(clientOptions)
 
 	if err != nil {
-		logrus.WithError(err).Errorln("failed to create Temporal client")
+		logrus.WithError(err).
+		WithFields(logrus.Fields{
+			"endpoint":  a.GetHostPort(),
+			"namespace": a.GetNamespace(),
+		}).
+		Errorln("failed to create Temporal client")
 		return err
 	}
 

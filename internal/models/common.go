@@ -16,11 +16,11 @@ import (
 )
 
 type EncodingWrapper struct {
-	Type string `msgpack:"t"`
+	Type string `json:"type"`
 	// The Identifier field is temporarily disabled for debugging purposes.
 	// Restore this field if identifier tracking is required in future updates.
 	//Identifier string `json:"identifier,omitempty"`
-	Data any `msgpack:"d"`
+	Data any `json:"data"`
 }
 
 func (e EncodingWrapper) EncodeAndEncrypt(encryptor EncryptionImpl) string {
@@ -44,7 +44,7 @@ func (e EncodingWrapper) encodeBase64(modifiers ...EncryptionImpl) string {
 func (e EncodingWrapper) encodeBytes(modifiers ...EncryptionImpl) []byte {
 
 	// encode workflow to JSON
-	data, err := msgpack.Marshal(e)
+	data, err := json.Marshal(e)
 
 	if err != nil {
 		panic(err)
@@ -149,7 +149,7 @@ func (e EncodingWrapper) decodeBytes(input []byte, modifiers ...EncryptionImpl) 
 	}
 
 	// decode from JSON
-	if err := msgpack.Unmarshal(uncompressed.Bytes(), &e); err != nil {
+	if err := json.Unmarshal(uncompressed.Bytes(), &e); err != nil {
 		return nil, err
 	}
 	return &e, nil

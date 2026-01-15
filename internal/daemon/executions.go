@@ -513,6 +513,12 @@ func (s *Server) workflowExecutionInfo(
 func (s *Server) signalRunningWorkflow(c *gin.Context) {
 
 	workflowId := c.Param("id")
+
+	if len(workflowId) == 0 {
+		s.getErrorPage(c, http.StatusBadRequest, "Workflow ID is required")
+		return
+	}
+
 	// get input from the query parameters
 	input := c.Query("input")
 

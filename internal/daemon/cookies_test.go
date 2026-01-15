@@ -1,9 +1,13 @@
 package daemon
 
 import (
+	"context"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/thand-io/agent/internal/models"
 )
 
 func TestGetCookieDomain(t *testing.T) {
@@ -208,4 +212,179 @@ func TestGetCookieDomain_PlatformSpecific(t *testing.T) {
 			assert.Equal(t, tc.expected, result, "GCP Cloud Run hostname: %s", tc.hostname)
 		}
 	})
+}
+
+// Test session encoding and decoding to validate user data preservation
+func TestSessionEncodingDecoding(t *testing.T) {
+	encryptor := newMockEncryptor()
+
+	t.Run("encode and decode session with user", func(t *testing.T) {
+		// Create a session with user data
+		user := &models.User{
+			ID:       "user-123",
+			Username: "testuser",
+			Email:    "test@example.com",
+			Name:     "Test User",
+			Groups:   []string{"admin", "developers"},
+			Source:   "github",
+		}
+
+		session := &models.Session{
+			UUID:         uuid.New(),
+			User:         user,
+			Token:        "test-token-123",
+			AccessToken:  "access-token-abc",
+			RefreshToken: "refresh-token-xyz",
+			Expiry:       time.Now().Add(1 * time.Hour),
+		}
+
+		exportableSession := &models.ExportableSession{
+			Session:  session,
+			Provider: "github",
+		}
+
+		// Encode the session
+		encoded := exportableSession.GetEncodedSession(encryptor)
+		assert.NotEmpty(t, encoded, "Encoded session should not be empty")
+
+		// Create a LocalSession
+		localSession := exportableSession.ToLocalSession(encryptor)
+		assert.NotNil(t, localSession, "LocalSession should not be nil")
+		assert.Equal(t, encoded, localSession.Session, "LocalSession should contain the encoded session")
+
+		// Decode the session
+		decoded, err := localSession.GetDecodedSession(encryptor)
+		assert.NoError(t, err, "Should decode session without error")
+		assert.NotNil(t, decoded, "Decoded session should not be nil")
+
+		// Verify provider is preserved
+		assert.Equal(t, "github", decoded.Provider, "Provider should be preserved")
+
+		// Verify session fields are preserved
+		assert.NotNil(t, decoded.Session, "Decoded Session should not be nil")
+		if decoded.Session != nil {
+			assert.Equal(t, session.UUID, decoded.Session.UUID, "UUID should be preserved")
+			assert.Equal(t, session.Token, decoded.Session.Token, "Token should be preserved")
+			assert.Equal(t, session.AccessToken, decoded.Session.AccessToken, "AccessToken should be preserved")
+			assert.Equal(t, session.RefreshToken, decoded.Session.RefreshToken, "RefreshToken should be preserved")
+			assert.True(t, session.Expiry.Equal(decoded.Session.Expiry), "Expiry should be preserved")
+
+			// Verify user data is preserved
+			assert.NotNil(t, decoded.Session.User, "User should not be nil after decoding")
+			if decoded.Session.User != nil {
+				assert.Equal(t, user.ID, decoded.Session.User.ID, "User ID should be preserved")
+				assert.Equal(t, user.Username, decoded.Session.User.Username, "Username should be preserved")
+				assert.Equal(t, user.Email, decoded.Session.User.Email, "Email should be preserved")
+				assert.Equal(t, user.Name, decoded.Session.User.Name, "Name should be preserved")
+				assert.Equal(t, user.Source, decoded.Session.User.Source, "Source should be preserved")
+				assert.Equal(t, user.Groups, decoded.Session.User.Groups, "Groups should be preserved")
+			}
+		}
+	})
+
+	t.Run("encode and decode session without user", func(t *testing.T) {
+		session := &models.Session{
+			UUID:        uuid.New(),
+			User:        nil, // No user
+			Token:       "test-token-456",
+			AccessToken: "access-token-def",
+			Expiry:      time.Now().Add(2 * time.Hour),
+		}
+
+		exportableSession := &models.ExportableSession{
+			Session:  session,
+			Provider: "okta",
+		}
+
+		// Encode and decode
+		localSession := exportableSession.ToLocalSession(encryptor)
+		decoded, err := localSession.GetDecodedSession(encryptor)
+
+		assert.NoError(t, err, "Should decode session without error")
+		assert.NotNil(t, decoded, "Decoded session should not be nil")
+		assert.Equal(t, "okta", decoded.Provider, "Provider should be preserved")
+
+		if decoded.Session != nil {
+			assert.Equal(t, session.Token, decoded.Session.Token, "Token should be preserved")
+			// User should be nil since we didn't set one
+			// Note: This might fail if embedded struct doesn't handle nil properly
+		}
+	})
+
+	t.Run("encode and decode multiple sessions", func(t *testing.T) {
+		sessions := []*models.ExportableSession{
+			{
+				Session: &models.Session{
+					UUID:        uuid.New(),
+					User:        &models.User{ID: "user-1", Email: "user1@example.com", Name: "User One"},
+					Token:       "token-1",
+					AccessToken: "access-1",
+					Expiry:      time.Now().Add(1 * time.Hour),
+				},
+				Provider: "github",
+			},
+			{
+				Session: &models.Session{
+					UUID:        uuid.New(),
+					User:        &models.User{ID: "user-2", Email: "user2@example.com", Name: "User Two"},
+					Token:       "token-2",
+					AccessToken: "access-2",
+					Expiry:      time.Now().Add(2 * time.Hour),
+				},
+				Provider: "okta",
+			},
+			{
+				Session: &models.Session{
+					UUID:        uuid.New(),
+					User:        &models.User{ID: "user-3", Email: "user3@example.com", Name: "User Three"},
+					Token:       "token-3",
+					AccessToken: "access-3",
+					Expiry:      time.Now().Add(3 * time.Hour),
+				},
+				Provider: "aws",
+			},
+		}
+
+		for i, exportableSession := range sessions {
+			// Encode and decode each session
+			localSession := exportableSession.ToLocalSession(encryptor)
+			decoded, err := localSession.GetDecodedSession(encryptor)
+
+			assert.NoError(t, err, "Session %d: Should decode without error", i)
+			assert.NotNil(t, decoded, "Session %d: Decoded session should not be nil", i)
+			assert.Equal(t, exportableSession.Provider, decoded.Provider, "Session %d: Provider should match", i)
+
+			if decoded.Session != nil && decoded.Session.User != nil {
+				assert.Equal(t, exportableSession.Session.User.ID, decoded.Session.User.ID,
+					"Session %d: User ID should be preserved", i)
+				assert.Equal(t, exportableSession.Session.User.Email, decoded.Session.User.Email,
+					"Session %d: User Email should be preserved", i)
+				assert.Equal(t, exportableSession.Session.User.Name, decoded.Session.User.Name,
+					"Session %d: User Name should be preserved", i)
+			}
+		}
+	})
+}
+
+// Mock encryptor for testing (no actual encryption)
+type mockEncryptor struct{}
+
+func newMockEncryptor() *mockEncryptor {
+	return &mockEncryptor{}
+}
+
+func (m *mockEncryptor) Initialize() error {
+	return nil
+}
+
+func (m *mockEncryptor) Shutdown() error {
+	return nil
+}
+
+func (m *mockEncryptor) Encrypt(ctx context.Context, data []byte) ([]byte, error) {
+	return data, nil
+}
+
+func (m *mockEncryptor) Decrypt(ctx context.Context, data []byte) ([]byte, error) {
+	return data, nil
 }

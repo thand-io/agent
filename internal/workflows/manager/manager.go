@@ -292,8 +292,12 @@ func (m *ThandWorkflowManager) ResumeWorkflow(
 	workflowTask *models.ElevateWorkflowTask,
 ) (*models.ElevateWorkflowTask, error) {
 
-	ctx := workflowTask.GetContext()
+	if len(workflowTask.GetWorkflowID()) == 0 {
+		return nil, fmt.Errorf("workflow ID is required to resume workflow")
+	}
 
+	ctx := workflowTask.GetContext()
+	
 	// Check if workfow has already been registered on temporal
 	serviceClient := m.config.GetServices()
 
