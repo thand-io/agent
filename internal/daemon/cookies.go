@@ -107,7 +107,7 @@ func getCookieDomain(hostname string) string {
 		logrus.WithFields(logrus.Fields{
 			"hostname": hostname,
 			"error":    err,
-		}).Warnln("Failed to determine public suffix for cookie domain, using host-only cookies")
+		}).Debugln("Failed to determine public suffix for cookie domain, using host-only cookies")
 		return ""
 	}
 

@@ -7,7 +7,7 @@ nav_order: 1
 description: Setup guide for using Azure Container to deploy the Thand Agent.
 ---
 
-# App Runner Setup
+# Container App Setup
 {: .no_toc }
 
 Complete guide to deploying Thand Agent on Azure Container Apps with IAM integration.

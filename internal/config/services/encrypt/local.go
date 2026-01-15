@@ -13,6 +13,7 @@ import (
 
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/pbkdf2"
 )
 
@@ -45,12 +46,12 @@ func (l *localVault) Initialize() error {
 	// Fail if using default secrets - these are not secure for production use
 	if strings.EqualFold(masterPassword, common.DefaultServerSecret) ||
 		strings.EqualFold(salt, common.DefaultServerSecret) {
-		return fmt.Errorf("local encryption service configured with default secrets - this is insecure. Please set custom password and salt. See https://docs.thand.io/configuration/file.html#encryption-service")
+		logrus.Warningln("local encryption service configured with default secrets. See https://docs.thand.io/configuration/file.html#encryption-service")
 	}
 
 	// Validate salt length - minimum 16 bytes for security
 	if len(salt) < 16 {
-		return fmt.Errorf("salt must be at least 16 characters long, got %d characters", len(salt))
+		logrus.Warningln("local encryption service configured with weak salt (less than 16 bytes). See https://docs.thand.io/configuration/file.html#encryption-service")	
 	}
 
 	l.key = deriveKey(masterPassword, salt)
