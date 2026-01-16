@@ -136,3 +136,24 @@ func (c *Config) loadWorkflowsVaultData() (string, error) {
 
 	return string(data), nil
 }
+
+func (c *Config) GetWorkflows() WorkflowConfig {
+	return c.Workflows
+}
+
+func (c *Config) GetWorkflowByName(name string) (*models.Workflow, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if workflow, exists := c.Workflows.Definitions[name]; exists {
+		return &workflow, nil
+	}
+	return nil, fmt.Errorf("workflow not found: %s", name)
+}
+
+func (p *WorkflowConfig) GetWorkflowByName(name string) (*models.Workflow, error) {
+	if workflow, exists := p.Definitions[name]; exists {
+		return &workflow, nil
+	}
+	return nil, fmt.Errorf("workflow not found: %s", name)
+}

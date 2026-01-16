@@ -30,17 +30,17 @@ Thand is a decentralized system with limited single points of failure, and no re
 
 ### Communication Flow
 
-```
-Agent <--HTTPS--> Thand Server/Cloud
-                      |
-                   gRPC
-                      |
-                   Temporal
-                      |
-                   gRPC
-                      |
-            Provider Agents (AWS/GCP/Azure)
-```
+<pre class="mermaid">
+flowchart TD
+  Agent["Agent"]
+  ThandServer["Thand Server/Cloud"]
+  Temporal["Temporal"]
+  Providers["Cloud/Local Agents (UAC/SUDO/AWS/GCP/Azure)"]
+
+  Agent <-->|HTTPS| ThandServer
+  ThandServer -.->|gRPC| Temporal
+  Temporal -.->|gRPC| Providers
+</pre>
 
 ---
 
@@ -190,39 +190,40 @@ If you're evaluating Thand, you probably wan to understand the potential impact 
 
 ### Data Flows
 
-```
-┌──────────────┐
-│              │
-│   User's     │  1. OAuth2/SAML Authentication
-│   Browser    ├─────────────────────── or ───────────────┐
-│              │                        │                 │
-└──────────────┘                        v                 v
-                               ┌─────────────────┐  ┌─────────────────┐
-┌──────────────┐               │                 │  │                 │
-│              │  2. Request   │  Thand Server   │  │     Thand.io.   │
-│    Thand     │  Elevation    │ (Your Infra)    │  │ (Request router)│
-│    Agent     ├──────────────>│                 │  │                 │
-│   (Local)    │               └────────┬────────┘  └────────┬────────┘
-│              │                        │                    │
-└──────┬───────┘                     gRPC                   gRPC
-       │                               │                     │
-       │                               v                     │
-       │                        ┌──────────────┐             │
-       │   4. Encrypted         │   Temporal   │             │
-       │   Session Token        │  (Workflow   │ <────────────
-       │   (via callback)       │   Engine)    │
-       │<───────────────────────┤              │
-       │                        └──────┬───────┘
-       │                               │
-       │                            gRPC
-       │                               │
-       │                               v
-       │                     ┌────────────────────────────┐
-       │   5. Direct Access  │ Thand Server/ LocalAgents  │
-       │   (ephemeral creds) │  AWS/GCP/Azure             │
-       └────────────────────>│ (Your Infra)               │
-                             └────────────────────────────┘
-```
+<pre class="mermaid">
+---
+config:
+  layout: elk
+---
+flowchart TD
+  subgraph UB["User's System"]
+    Browser["User's Browser/CLI"]
+    LocalAgent["Thand Agent (UAC/SUDO)"]
+  end
+  subgraph YI["Your Infrastructure"]
+    ThandServer["Thand Server (Your Infra)"]
+    CloudAgent["Thand Agent (AWS/GCP/Azure)"]
+  end
+  subgraph TC["Thand Cloud (Optional)"]
+    ThandCloud["Thand.io (Request router)"]
+  end
+
+  Browser -->|1. OAuth2/SAML Authentication| ThandServer
+  Browser -->|1. OAuth2/SAML Authentication| ThandCloud
+  Browser -->|3. Request Elevation| ThandServer
+  Browser -->|3. Request Elevation| ThandCloud
+  ThandServer -.gRPC.-> Temporal["Temporal (Workflow Engine)"]
+  ThandCloud -.gRPC.-> Temporal
+  Temporal -.gRPC.-> CloudAgent
+  Temporal -.gRPC.-> LocalAgent 
+  ThandServer --> |2. Encrypted Session Token| LocalAgent
+  ThandCloud --> |2. Encrypted Session Token| LocalAgent
+</pre>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.12.1/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({ startOnLoad: true });
+</script>
 
 **Key Points**:
 1. User authenticates via OAuth2/SAML (browser-based flow)

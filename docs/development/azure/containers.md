@@ -1,6 +1,7 @@
 ---
 layout: default
-title: Development - Azure
+title: Azure
+parent: Development
 nav_order: 3
 has_children: true
 description: Building and Pushing Thand to Azure Container Registry
@@ -29,22 +30,7 @@ az acr login --name thand
 
 This command authenticates your Docker client with the Azure Container Registry named "thand".
 
-### 2. Build the Linux Binary
-
-Build the agent binary for Linux AMD64 architecture:
-
-```bash
-GOOS=linux GOARCH=amd64 GOEXPERIMENT=jsonv2 go build -ldflags "-s -w" -o dist/agent-linux-amd64 .
-```
-
-**Build flags explained:**
-- `GOOS=linux` - Target operating system
-- `GOARCH=amd64` - Target architecture
-- `GOEXPERIMENT=jsonv2` - Enable JSON v2 experiment
-- `-ldflags "-s -w"` - Strip debug information to reduce binary size
-- `-o dist/agent-linux-amd64` - Output path for the binary
-
-### 3. Build the Docker Image
+### 2. Build the Docker Image
 
 Build the Docker image for the Linux AMD64 platform:
 
@@ -57,7 +43,7 @@ docker build --platform linux/amd64 -f Dockerfile -t thand.azurecr.io/thand-io/a
 - `-f Dockerfile` - Use the Dockerfile in the current directory
 - `-t thand.azurecr.io/thand-io/agent:latest` - Tag the image with registry path and version
 
-### 4. Push the Image to Azure Container Registry
+### 3. Push the Image to Azure Container Registry
 
 Push the built image to ACR:
 
@@ -72,9 +58,6 @@ You can run all commands in sequence:
 ```bash
 # Login to ACR
 az acr login --name thand
-
-# Build the binary
-GOOS=linux GOARCH=amd64 GOEXPERIMENT=jsonv2 go build -ldflags "-s -w" -o dist/agent-linux-amd64 .
 
 # Build the Docker image
 docker build --platform linux/amd64 -f Dockerfile -t thand.azurecr.io/thand-io/agent:latest .

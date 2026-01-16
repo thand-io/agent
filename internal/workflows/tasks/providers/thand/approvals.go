@@ -172,6 +172,20 @@ func (t *thandTask) executeApprovalsTask(
 
 	if approvalEvent, ok := approval.(*cloudevents.Event); ok {
 
+		/*
+			{
+			"specversion": "1.0",
+			"id": "123e4567-e89b-12d3-a456-426614174000",
+			"type": "com.thand.approval",
+			"source": "urn:thand:test",
+			"data": {
+				"approved": true
+			},
+			"user": "approver1@thand.io",
+			"signature": "abc123signature"
+			}
+		*/
+
 		approvalEvent.DataAs(&approvalData)
 		extensions := approvalEvent.Extensions()
 
