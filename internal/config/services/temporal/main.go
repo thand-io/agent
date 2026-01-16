@@ -3,6 +3,7 @@ package temporal
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
@@ -20,6 +21,8 @@ type TemporalClient struct {
 	worker   worker.Worker
 	identity string
 	vault    models.VaultImpl
+
+	mu sync.Mutex
 }
 
 func NewTemporalClient(
@@ -57,11 +60,18 @@ func (a *TemporalClient) Initialize() error {
 	temporalClient, err := client.Dial(clientOptions)
 
 	if err != nil {
-		logrus.WithError(err).Errorln("failed to create Temporal client")
+		logrus.WithError(err).
+			WithFields(logrus.Fields{
+				"endpoint":  a.GetHostPort(),
+				"namespace": a.GetNamespace(),
+			}).
+			Errorln("failed to create Temporal client")
 		return err
 	}
 
+	a.mu.Lock()
 	a.client = temporalClient
+	a.mu.Unlock()
 
 	// Now that we have a client, lets validate the configuraiton of the external namespace
 	err = a.validateTemporalNamespace()
@@ -96,20 +106,34 @@ func (a *TemporalClient) Initialize() error {
 	}
 
 	// Create worker with configured options
-	a.worker = worker.New(
+	newWorker := worker.New(
 		temporalClient,
 		a.GetTaskQueue(),
 		workerOptions,
 	)
 
-	go func() {
+	// Only start the worker if it hasn't been started before
+	// Temporal workers cannot be restarted once stopped, so we track
+	// whether this worker instance has been started to prevent panics
+	a.mu.Lock()
+	if a.worker == nil {
+		a.worker = newWorker
+		defer a.mu.Unlock()
+
 		logrus.Infof("Starting Temporal worker with Build ID: %s", buildID)
 
-		err := a.worker.Run(worker.InterruptCh())
+		// Use the worker instance captured in the closure to avoid race conditions
+		// with the Shutdown() method. This ensures we always run the worker we created.
+		err := a.worker.Start()
 		if err != nil {
-			logrus.WithError(err).Errorln("failed to start Temporal worker")
+			logrus.WithError(err).Error("Failed to start temporal")
+			a.worker = nil
+			return err
 		}
-	}()
+
+	} else {
+		logrus.Warn("Temporal worker already started, skipping worker initialization")
+	}
 
 	return nil
 }
@@ -154,6 +178,10 @@ func (c *TemporalClient) IsVersioningDisabled() bool {
 }
 
 func (c *TemporalClient) Shutdown() error {
+	// Signal the worker goroutine to not start if it hasn't started yet
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	// Stop worker first before closing the client
 	// The worker depends on the client connection
 	if c.worker != nil {
@@ -162,6 +190,10 @@ func (c *TemporalClient) Shutdown() error {
 	if c.client != nil {
 		c.client.Close()
 	}
+
+	c.worker = nil
+	c.client = nil
+
 	return nil
 }
 

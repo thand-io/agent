@@ -209,6 +209,7 @@ Next, Under **Runtime environment variables**, add the following:
 | Variable Name                     | Description                                                                                   | Example Value                                      |
 |----------------------------------|-----------------------------------------------------------------------------------------------|----------------------------------------------------|
 | `THAND_ENVIRONMENT_CONFIG_KMS_ARN` | Your KMS key ARN or alias                                                                | `arn:aws:kms:REGION:ACCOUNT_ID:key/KEY_ID`        |
+| `THAND_SECRET` | A value used to encrypt sensitive data at rest in the Thand Agent database. Use a strong, random string. | `your-strong-random-string`                        |
 | `THAND_ENVIRONMENT_CONFIG_REGION` | Your AWS region                                                                               | `us-east-1`                                       |
 | `THAND_LOGIN_ENDPOINT`            | The endpoint for your deployed Thand Agent                                                   | `https://abc123.us-east-1.awsapprunner.com`      |
 | `THAND_PROVIDERS_VAULT`           | The name of the Secrets Manager secret containing your providers configuration               | `thand-providers`                                  |

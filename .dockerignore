@@ -3,7 +3,6 @@
 
 # Documentation
 *.md
-docs/
 
 # Build artifacts
 bin/
@@ -43,3 +42,9 @@ examples/
 scripts/
 
 config/
+
+third_party/
+
+deploy/
+
+dist/

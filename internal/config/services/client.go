@@ -62,9 +62,9 @@ func (e *localClient) Initialize() error {
 
 	// These are code services and are not dependent on each other
 	// so we can initialise them in parallel
-	e.encrypt = e.configureEncryption()
-	e.vault = e.configureVault()
-	e.scheduler = e.configureScheduler()
+	encryptionService := e.configureEncryption()
+	vaultService := e.configureVault()
+	schedulerService := e.configureScheduler()
 
 	// Lets in parallel initialise all the internal services we need
 	var wg sync.WaitGroup
@@ -73,10 +73,11 @@ func (e *localClient) Initialize() error {
 
 		logrus.Infof("Initializing encryption...")
 
-		if e.encrypt != nil {
-			if err := e.encrypt.Initialize(); err != nil {
+		if encryptionService != nil {
+			if err := encryptionService.Initialize(); err != nil {
 				logrus.Errorf("Error initializing encryption: %v", err)
-				e.encrypt = nil // Disable encryption if initialization fails
+			} else {
+				e.encrypt = encryptionService
 			}
 		}
 	})
@@ -85,10 +86,11 @@ func (e *localClient) Initialize() error {
 
 		logrus.Infof("Initializing vault...")
 
-		if e.vault != nil {
-			if err := e.vault.Initialize(); err != nil {
+		if vaultService != nil {
+			if err := vaultService.Initialize(); err != nil {
 				logrus.Errorf("Error initializing vault: %v", err)
-				e.vault = nil // Disable vault if initialization fails
+			} else {
+				e.vault = vaultService
 			}
 		}
 	})
@@ -97,10 +99,11 @@ func (e *localClient) Initialize() error {
 
 		logrus.Infof("Initializing scheduler...")
 
-		if e.scheduler != nil {
-			if err := e.scheduler.Initialize(); err != nil {
+		if schedulerService != nil {
+			if err := schedulerService.Initialize(); err != nil {
 				logrus.Errorf("Error initializing scheduler: %v", err)
-				e.scheduler = nil // Disable scheduler if initialization fails
+			} else {
+				e.scheduler = schedulerService
 			}
 		}
 	})
@@ -111,11 +114,12 @@ func (e *localClient) Initialize() error {
 
 			logrus.Infof("Initializing large language model...")
 
-			e.llm = e.configureLargeLanguageModel()
-			if e.llm != nil {
-				if err := e.llm.Initialize(); err != nil {
+			llmService := e.configureLargeLanguageModel()
+			if llmService != nil {
+				if err := llmService.Initialize(); err != nil {
 					logrus.Errorf("Error initializing large language model: %v", err)
-					e.llm = nil // Disable LLM if initialization fails
+				} else {
+					e.llm = llmService
 				}
 			}
 		})
@@ -128,11 +132,12 @@ func (e *localClient) Initialize() error {
 
 			logrus.Infof("Initializing public key infrastructure...")
 
-			e.pki = e.configurePublicKeyInfrastructure()
-			if e.pki != nil {
+			pkiService := e.configurePublicKeyInfrastructure()
+			if pkiService != nil {
 				if err := e.pki.Initialize(e.encrypt, e.vault); err != nil {
 					logrus.Errorf("Error initializing public key infrastructure: %v", err)
-					e.pki = nil // Disable PKI if initialization fails
+				} else {
+					e.pki = pkiService
 				}
 			}
 		})
@@ -145,14 +150,15 @@ func (e *localClient) Initialize() error {
 
 			logrus.Infof("Initializing temporal...")
 
-			e.temporal = temporal.NewTemporalClient(
+			temporalService := temporal.NewTemporalClient(
 				e.config.Temporal,
 				e.environment.GetIdentifier(),
 				e.vault,
 			)
-			if err := e.temporal.Initialize(); err != nil {
+			if err := temporalService.Initialize(); err != nil {
 				logrus.Errorf("Error initializing temporal: %v", err)
-				e.temporal = nil // Disable temporal if initialization fails
+			} else {
+				e.temporal = temporalService
 			}
 		})
 

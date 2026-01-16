@@ -34,7 +34,9 @@ RUN mkdir -p third_party/iam-dataset/aws third_party/iam-dataset/azure third_par
 RUN ls -la third_party/iam-dataset/aws/ && ls -la third_party/iam-dataset/azure/ && ls -la third_party/iam-dataset/gcp/
 
 # Build the application with CGO enabled for sqlite3 support
-RUN GOEXPERIMENT=jsonv2 CGO_ENABLED=1 GOOS=linux go build -a \
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    GOEXPERIMENT=jsonv2 CGO_ENABLED=1 GOOS=linux go build -a \
     -ldflags "-X github.com/thand-io/agent/internal/common.Version=${VERSION} -X github.com/thand-io/agent/internal/common.GitCommit=${COMMIT}" \
     -o bin/thand .
 

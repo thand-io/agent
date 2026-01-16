@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -312,4 +313,154 @@ func (c *Config) getProviderImplementation(providerKey string, providerName stri
 	}
 
 	return nil, fmt.Errorf("unknown config mode, cannot load providers")
+}
+
+func (c *Config) GetProviders() ProviderDefinitionsConfig {
+	return c.Providers
+}
+
+func (c *Config) GetProvider(providerName string) (string, models.Provider, error) {
+
+	// Get the first provider by provider name
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	for foundName, provider := range c.providerInstances {
+		if strings.Compare(provider.GetProvider(), providerName) == 0 {
+			return foundName, provider, nil
+		}
+	}
+
+	return "", nil, fmt.Errorf("provider not found: %s", providerName)
+}
+
+func (c *Config) GetProviderByName(name string) (models.Provider, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if provider, exists := c.providerInstances[name]; exists {
+		return provider, nil
+	}
+	return nil, fmt.Errorf("provider not found: %s", name)
+}
+
+func (c *Config) HasProvider(name string) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	_, exists := c.providerInstances[name]
+	return exists
+}
+
+func (c *Config) AddProvider(name string, provider models.Provider) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.providerInstances == nil {
+		c.providerInstances = make(map[string]models.Provider)
+	}
+
+	c.providerInstances[name] = provider
+}
+
+func (c *Config) GetProvidersByCapability(capability ...models.ProviderCapability) map[string]models.Provider {
+	return c.GetProvidersByCapabilityWithUser(nil, capability...)
+}
+
+func (c *Config) GetProvidersByCapabilityWithUser(user *models.User, capability ...models.ProviderCapability) map[string]models.Provider {
+
+	providers := make(map[string]models.Provider)
+
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	for name, provider := range c.providerInstances {
+		// Skip providers that don't have a client initialized
+
+		if !provider.HasPermission(user) {
+			continue
+		}
+
+		if len(capability) != 0 && !provider.HasAnyCapability(capability...) {
+			continue
+		}
+
+		providers[name] = provider
+	}
+	return providers
+}
+
+func (p *ProviderDefinitionsConfig) GetProviderByName(name string) (*models.ProviderConfig, error) {
+	if provider, exists := p.Definitions[name]; exists {
+		return &provider, nil
+	}
+	return nil, fmt.Errorf("provider not found: %s", name)
+}
+
+func (r *Config) GetProviderRole(roleName string, providers ...string) *models.ProviderRole {
+	return r.GetProviderRoleWithIdentity(nil, roleName, providers...)
+}
+
+func (r *Config) GetProviderRoleWithIdentity(identity *models.Identity, roleName string, providers ...string) *models.ProviderRole {
+
+	ctx := context.TODO()
+
+	for _, providerName := range providers {
+
+		p, err := r.GetProviderByName(providerName)
+
+		if err != nil || p == nil {
+			continue
+		}
+
+		// Check provider-level permissions
+		// If identity is nil, pass nil user to HasPermission which handles it appropriately
+		var user *models.User
+
+		if identity != nil {
+			user = identity.GetUser()
+		}
+
+		if !p.HasPermission(user) {
+			continue
+		}
+
+		providerRole, err := p.GetRole(ctx, roleName)
+
+		if err != nil {
+			continue
+		}
+
+		if providerRole != nil {
+			return providerRole
+		}
+	}
+
+	return nil
+}
+
+func (r *Config) GetProviderPermission(permissionName string, providers ...string) *models.ProviderPermission {
+
+	ctx := context.TODO()
+
+	for _, providerName := range providers {
+
+		p, err := r.GetProviderByName(providerName)
+
+		if err != nil || p == nil {
+			continue
+		}
+
+		providerPermission, err := p.GetPermission(ctx, permissionName)
+
+		if err != nil {
+			continue
+		}
+
+		if providerPermission != nil {
+			return providerPermission
+		}
+	}
+
+	return nil
 }

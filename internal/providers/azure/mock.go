@@ -45,3 +45,19 @@ func (p *azureProviderMock) Synchronize(
 ) error {
 	return PreSynchronizeActivities(ctx, temporalService, p, req)
 }
+
+// SynchronizeGroups returns empty groups for mock testing
+func (p *azureProviderMock) SynchronizeGroups(ctx context.Context, req *models.SynchronizeGroupsRequest) (*models.SynchronizeGroupsResponse, error) {
+	return &models.SynchronizeGroupsResponse{
+		Identities: []models.Identity{},
+		Pagination: nil,
+	}, nil
+}
+
+// SynchronizeUsers returns empty users for mock testing
+func (p *azureProviderMock) SynchronizeUsers(ctx context.Context, req *models.SynchronizeUsersRequest) (*models.SynchronizeUsersResponse, error) {
+	return &models.SynchronizeUsersResponse{
+		Identities: []models.Identity{},
+		Pagination: nil,
+	}, nil
+}

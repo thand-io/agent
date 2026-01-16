@@ -3,9 +3,9 @@ package thand
 import (
 	"errors"
 	"fmt"
+	"time"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
@@ -13,7 +13,7 @@ import (
 	"github.com/thand-io/agent/internal/models"
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
-	"go.temporal.io/sdk/temporal"
+	sdkWorkflowsRunner "github.com/thand-io/agent/sdk/workflows/runner"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -213,12 +213,8 @@ func (t *thandTask) executeNotifyTemporalParallel(
 
 	ao := workflow.ActivityOptions{
 		TaskQueue:           serviceClient.GetTemporal().GetTaskQueue(),
-		StartToCloseTimeout: time.Minute * 5,
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    time.Second * 2,
-			BackoffCoefficient: 2.0,
-			MaximumAttempts:    3,
-		},
+		StartToCloseTimeout: 10 * time.Minute,
+		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 	}
 	aoctx := workflow.WithActivityOptions(temporalContext, ao)
 

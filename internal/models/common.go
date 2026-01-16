@@ -148,7 +148,7 @@ func (e EncodingWrapper) decodeBytes(input []byte, modifiers ...EncryptionImpl) 
 		return nil, err
 	}
 
-	// decode JSON
+	// decode from JSON
 	if err := json.Unmarshal(uncompressed.Bytes(), &e); err != nil {
 		return nil, err
 	}

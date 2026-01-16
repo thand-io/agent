@@ -94,7 +94,8 @@ func (r *ResumableWorkflowRunner) ExecuteCallFunction(
 
 		activityOptions := workflow.ActivityOptions{
 			TaskQueue:           r.GetConfig().GetTemporal().GetTaskQueue(),
-			StartToCloseTimeout: time.Minute * 5,
+			StartToCloseTimeout: 10 * time.Minute,
+			RetryPolicy:         DefaultRetryPolicy,
 		}
 
 		ctx = workflow.WithActivityOptions(ctx, activityOptions)

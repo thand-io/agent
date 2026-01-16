@@ -14,6 +14,40 @@ definitions:
       url:
         type: string
     type: object
+  config.RoleConfig:
+    properties:
+      definitions:
+        additionalProperties:
+          $ref: '#/definitions/github_com_thand-io_agent_internal_models.Role'
+        description: Store everything in memory
+        type: object
+      path:
+        type: string
+      url:
+        $ref: '#/definitions/model.Endpoint'
+      vault:
+        description: vault secret / path to use
+        type: string
+    type: object
+  config.WorkflowConfig:
+    properties:
+      definitions:
+        additionalProperties:
+          $ref: '#/definitions/github_com_thand-io_agent_internal_models.Workflow'
+        description: Store everything in memory
+        type: object
+      path:
+        type: string
+      plugins:
+        allOf:
+        - $ref: '#/definitions/config.WorkflowPluginConfig'
+        description: Load dynamic plugin registry for custom call tools
+      url:
+        $ref: '#/definitions/model.Endpoint'
+      vault:
+        description: vault secret / path to use
+        type: string
+    type: object
   config.WorkflowPlugin:
     type: object
   config.WorkflowPluginConfig:
@@ -131,11 +165,11 @@ definitions:
     - ModeServer
     - ModeAgent
     - ModeClient
-  github_com_thand-io_agent_internal_config.ProviderConfig:
+  github_com_thand-io_agent_internal_config.ProviderDefinitionsConfig:
     properties:
       definitions:
         additionalProperties:
-          $ref: '#/definitions/github_com_thand-io_agent_internal_models.Provider'
+          $ref: '#/definitions/models.ProviderConfig'
         description: Load providers directly from config using mapstructure:",remain"
         type: object
       path:
@@ -168,49 +202,15 @@ definitions:
       logging:
         $ref: '#/definitions/github_com_thand-io_agent_internal_models.LoggingConfig'
       providers:
-        $ref: '#/definitions/github_com_thand-io_agent_internal_config.ProviderConfig'
+        $ref: '#/definitions/github_com_thand-io_agent_internal_config.ProviderDefinitionsConfig'
       roles:
-        $ref: '#/definitions/github_com_thand-io_agent_internal_config.RoleConfig'
+        $ref: '#/definitions/config.RoleConfig'
       services:
         $ref: '#/definitions/github_com_thand-io_agent_internal_models.ServicesConfig'
       success:
         type: boolean
       workflows:
-        $ref: '#/definitions/github_com_thand-io_agent_internal_config.WorkflowConfig'
-    type: object
-  github_com_thand-io_agent_internal_config.RoleConfig:
-    properties:
-      definitions:
-        additionalProperties:
-          $ref: '#/definitions/github_com_thand-io_agent_internal_models.Role'
-        description: Store everything in memory
-        type: object
-      path:
-        type: string
-      url:
-        $ref: '#/definitions/model.Endpoint'
-      vault:
-        description: vault secret / path to use
-        type: string
-    type: object
-  github_com_thand-io_agent_internal_config.WorkflowConfig:
-    properties:
-      definitions:
-        additionalProperties:
-          $ref: '#/definitions/github_com_thand-io_agent_internal_models.Workflow'
-        description: Store everything in memory
-        type: object
-      path:
-        type: string
-      plugins:
-        allOf:
-        - $ref: '#/definitions/config.WorkflowPluginConfig'
-        description: Load dynamic plugin registry for custom call tools
-      url:
-        $ref: '#/definitions/model.Endpoint'
-      vault:
-        description: vault secret / path to use
-        type: string
+        $ref: '#/definitions/config.WorkflowConfig'
     type: object
   github_com_thand-io_agent_internal_models.BasicConfig:
     additionalProperties: {}
@@ -275,10 +275,12 @@ definitions:
       allow:
         items:
           type: string
+        maxItems: 100
         type: array
       deny:
         items:
           type: string
+        maxItems: 100
         type: array
     type: object
   github_com_thand-io_agent_internal_models.Identity:
@@ -319,8 +321,9 @@ definitions:
   github_com_thand-io_agent_internal_models.LocalSession:
     properties:
       endpoint:
+        allOf:
+        - $ref: '#/definitions/model.Endpoint'
         description: Optional endpoint associated with the session
-        type: string
       expiry:
         description: Expiry time of the session
         type: string
@@ -370,38 +373,13 @@ definitions:
       allow:
         items:
           type: string
+        maxItems: 500
         type: array
       deny:
         items:
           type: string
+        maxItems: 500
         type: array
-    type: object
-  github_com_thand-io_agent_internal_models.Provider:
-    properties:
-      capabilities:
-        allOf:
-        - $ref: '#/definitions/models.ProviderCapabilities'
-        description: Allows the user to specify what this provider can do
-      config:
-        allOf:
-        - $ref: '#/definitions/github_com_thand-io_agent_internal_models.BasicConfig'
-        description: Provider-specific configuration
-      description:
-        type: string
-      enabled:
-        description: Whether this provider is enabled
-        type: boolean
-      name:
-        type: string
-      provider:
-        description: e.g. aws, gcp, azure
-        type: string
-      role:
-        allOf:
-        - $ref: '#/definitions/github_com_thand-io_agent_internal_models.Role'
-        description: The base role for this provider
-      version:
-        $ref: '#/definitions/version.Version'
     type: object
   github_com_thand-io_agent_internal_models.ProviderPermission:
     properties:
@@ -445,10 +423,12 @@ definitions:
       allow:
         items:
           type: string
+        maxItems: 500
         type: array
       deny:
         items:
           type: string
+        maxItems: 500
         type: array
     type: object
   github_com_thand-io_agent_internal_models.Role:
@@ -460,6 +440,7 @@ definitions:
           type: string
         type: array
       description:
+        maxLength: 500
         type: string
       enabled:
         default: true
@@ -473,8 +454,11 @@ definitions:
         description: roles to inherit from or provider specific roles/policies etc
         items:
           type: string
+        maxItems: 50
         type: array
       name:
+        maxLength: 100
+        minLength: 1
         type: string
       permissions:
         allOf:
@@ -484,6 +468,7 @@ definitions:
         description: providers that can assign this role
         items:
           type: string
+        maxItems: 5
         type: array
       resources:
         allOf:
@@ -499,21 +484,27 @@ definitions:
         description: The workflows to execute
         items:
           type: string
+        maxItems: 5
         type: array
+    required:
+    - name
     type: object
   github_com_thand-io_agent_internal_models.RoleScopes:
     properties:
       domains:
         items:
           type: string
+        maxItems: 50
         type: array
       groups:
         items:
           type: string
+        maxItems: 100
         type: array
       users:
         items:
           type: string
+        maxItems: 500
         type: array
     type: object
   github_com_thand-io_agent_internal_models.ServicesConfig:
@@ -526,6 +517,10 @@ definitions:
         allOf:
         - $ref: '#/definitions/models.LargeLanguageModelConfig'
         description: LLM - used for large language model interactions
+      publicKeyInfrastructure:
+        allOf:
+        - $ref: '#/definitions/models.PublicKeyInfrastructureConfig'
+        description: Public Key Infrastructure - used for managing keys and certificates
       scheduler:
         allOf:
         - $ref: '#/definitions/models.ServiceConfig'
@@ -570,17 +565,23 @@ definitions:
   github_com_thand-io_agent_internal_models.Workflow:
     properties:
       description:
+        maxLength: 500
         type: string
       enabled:
         default: true
         description: By default enable the workflow
         type: boolean
       name:
+        maxLength: 100
+        minLength: 1
         type: string
       version:
         $ref: '#/definitions/version.Version'
       workflow:
         $ref: '#/definitions/model.Workflow'
+    required:
+    - name
+    - workflow
     type: object
   github_com_thand-io_agent_internal_models.WorkflowExecutionInfo:
     properties:
@@ -642,6 +643,8 @@ definitions:
         $ref: '#/definitions/model.OAuth2AuthenticationPolicy'
       oidc:
         $ref: '#/definitions/model.OpenIdConnectAuthenticationPolicy'
+      proxy_bearer:
+        $ref: '#/definitions/model.ProxyBearerAuthenticationPolicy'
     type: object
   model.BackoffDefinition:
     properties:
@@ -972,6 +975,13 @@ definitions:
       schema:
         $ref: '#/definitions/model.Schema'
     type: object
+  model.ProxyBearerAuthenticationPolicy:
+    properties:
+      token:
+        type: string
+      use:
+        type: string
+    type: object
   model.RetryBackoff:
     properties:
       constant:
@@ -1175,7 +1185,9 @@ definitions:
       enabled:
         type: boolean
       interval:
-        description: in minutes
+        description: in minutes (max 30 days)
+        maximum: 43200
+        minimum: 1
         type: integer
       synchronizable:
         type: boolean
@@ -1210,7 +1222,9 @@ definitions:
       enabled:
         type: boolean
       interval:
-        description: in minutes
+        description: in minutes (max 30 days)
+        maximum: 43200
+        minimum: 1
         type: integer
       synchronizable:
         type: boolean
@@ -1235,13 +1249,17 @@ definitions:
     type: object
   models.MetricsInfo:
     properties:
-      elevate_requests:
+      elevate_requests_count:
+        type: integer
+      identities_count:
         type: integer
       providers_count:
         type: integer
+      requests_count:
+        type: integer
       roles_count:
         type: integer
-      total_requests:
+      tenants_count:
         type: integer
       uptime:
         type: string
@@ -1258,7 +1276,9 @@ definitions:
       enabled:
         type: boolean
       interval:
-        description: in minutes
+        description: in minutes (max 30 days)
+        maximum: 43200
+        minimum: 1
         type: integer
       synchronizable:
         type: boolean
@@ -1295,6 +1315,43 @@ definitions:
         description: Tenant discovery capability
       users:
         $ref: '#/definitions/models.UsersConfiguration'
+      webhook:
+        $ref: '#/definitions/models.NotifierConfiguration'
+    type: object
+  models.ProviderConfig:
+    properties:
+      capabilities:
+        allOf:
+        - $ref: '#/definitions/models.ProviderCapabilities'
+        description: Allows the user to specify what this provider can do
+      config:
+        allOf:
+        - $ref: '#/definitions/github_com_thand-io_agent_internal_models.BasicConfig'
+        description: Provider-specific configuration
+      description:
+        maxLength: 500
+        type: string
+      enabled:
+        description: Whether this provider is enabled
+        type: boolean
+      name:
+        maxLength: 100
+        minLength: 1
+        type: string
+      provider:
+        description: e.g. aws, gcp, azure
+        maxLength: 50
+        minLength: 2
+        type: string
+      role:
+        allOf:
+        - $ref: '#/definitions/github_com_thand-io_agent_internal_models.Role'
+        description: The base role for this provider
+      version:
+        $ref: '#/definitions/version.Version'
+    required:
+    - name
+    - provider
     type: object
   models.ProviderIdentitiesResponse:
     properties:
@@ -1438,12 +1495,24 @@ definitions:
       enabled:
         type: boolean
     type: object
+  models.PublicKeyInfrastructureConfig:
+    properties:
+      config:
+        allOf:
+        - $ref: '#/definitions/github_com_thand-io_agent_internal_models.BasicConfig'
+        description: Provider-specific configuration
+      provider:
+        description: aws|gcp|azure|local (defaults to environment platform)
+        type: string
+    type: object
   models.ResourcesConfiguration:
     properties:
       enabled:
         type: boolean
       interval:
-        description: in minutes
+        description: in minutes (max 30 days)
+        maximum: 43200
+        minimum: 1
         type: integer
       synchronizable:
         type: boolean
@@ -1457,6 +1526,7 @@ definitions:
           type: string
         type: array
       description:
+        maxLength: 500
         type: string
       enabled:
         default: true
@@ -1470,8 +1540,11 @@ definitions:
         description: roles to inherit from or provider specific roles/policies etc
         items:
           type: string
+        maxItems: 50
         type: array
       name:
+        maxLength: 100
+        minLength: 1
         type: string
       permissions:
         allOf:
@@ -1481,6 +1554,7 @@ definitions:
         description: providers that can assign this role
         items:
           type: string
+        maxItems: 5
         type: array
       resources:
         allOf:
@@ -1496,14 +1570,19 @@ definitions:
         description: The workflows to execute
         items:
           type: string
+        maxItems: 5
         type: array
+    required:
+    - name
     type: object
   models.RolesConfiguration:
     properties:
       enabled:
         type: boolean
       interval:
-        description: in minutes
+        description: in minutes (max 30 days)
+        maximum: 43200
+        minimum: 1
         type: integer
       synchronizable:
         type: boolean
@@ -1579,9 +1658,22 @@ definitions:
       host:
         default: localhost
         type: string
-      mtlsCertificate:
+      mtlsCert:
         type: string
-      mtlsCertificatePath:
+      mtlsCertFile:
+        type: string
+      mtlsKey:
+        type: string
+      mtlsKeyFile:
+        type: string
+      mtlsVaultName:
+        description: HSM key resource ID (AWS KMS ARN, Azure Key Vault key URL, GCP
+          KMS resource name)
+        type: string
+      mtlsVaultPassword:
+        type: string
+      mtlsVaultType:
+        description: 'Optional: auto-detected from platform'
         type: string
       namespace:
         default: default
@@ -1595,7 +1687,9 @@ definitions:
       enabled:
         type: boolean
       interval:
-        description: in minutes
+        description: in minutes (max 30 days)
+        maximum: 43200
+        minimum: 1
         type: integer
       synchronizable:
         type: boolean
@@ -1605,7 +1699,9 @@ definitions:
       enabled:
         type: boolean
       interval:
-        description: in minutes
+        description: in minutes (max 30 days)
+        maximum: 43200
+        minimum: 1
         type: integer
       synchronizable:
         type: boolean

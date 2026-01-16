@@ -18,6 +18,7 @@ import (
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
+	sdkWorkflowsRunner "github.com/thand-io/agent/sdk/workflows/runner"
 )
 
 const ThandAuthorizeTask = "authorize"
@@ -308,14 +309,9 @@ func (t *thandTask) executeTemporalParallel(
 	serviceClient := t.config.GetServices()
 
 	ao := workflow.ActivityOptions{
-		TaskQueue:           serviceClient.GetTemporal().GetTaskQueue(),
-		StartToCloseTimeout: time.Minute * 5,
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    1 * time.Second,
-			BackoffCoefficient: 2.0,
-			MaximumInterval:    100 * time.Second,
-			MaximumAttempts:    10,
-		},
+		TaskQueue:   serviceClient.GetTemporal().GetTaskQueue(),
+		StartToCloseTimeout: 10 * time.Minute,
+		RetryPolicy: sdkWorkflowsRunner.DefaultRetryPolicy,
 	}
 	aoctx := workflow.WithActivityOptions(temporalContext, ao)
 

@@ -1,7 +1,6 @@
 package config
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -15,7 +14,6 @@ import (
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
-	"github.com/thand-io/agent/internal/config/services"
 	"github.com/thand-io/agent/internal/models"
 	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
@@ -103,115 +101,6 @@ func (c *Config) GetRoles() RoleConfig {
 	return c.Roles
 }
 
-func (c *Config) GetWorkflows() WorkflowConfig {
-	return c.Workflows
-}
-
-func (c *Config) GetProviders() ProviderDefinitionsConfig {
-	return c.Providers
-}
-
-func (c *Config) GetServices() models.ServicesClientImpl {
-
-	c.initializeServiceClientOnce.Do(func() {
-		newClient := services.NewServicesClient(
-			&c.Environment,
-			&c.Services,
-			&c.Secret,
-		)
-		err := newClient.Initialize()
-		if err != nil {
-			logrus.WithError(err).Fatalf("Failed to initialize services client: %v", err)
-			return
-		}
-		c.servicesClient = newClient
-	})
-
-	return c.servicesClient
-
-}
-
-func (c *Config) GetProvider(providerName string) (string, models.Provider, error) {
-
-	// Get the first provider by provider name
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	for foundName, provider := range c.providerInstances {
-		if strings.Compare(provider.GetProvider(), providerName) == 0 {
-			return foundName, provider, nil
-		}
-	}
-
-	return "", nil, fmt.Errorf("provider not found: %s", providerName)
-}
-
-func (c *Config) GetProviderByName(name string) (models.Provider, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	if provider, exists := c.providerInstances[name]; exists {
-		return provider, nil
-	}
-	return nil, fmt.Errorf("provider not found: %s", name)
-}
-
-func (c *Config) HasProvider(name string) bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	_, exists := c.providerInstances[name]
-	return exists
-}
-
-func (c *Config) AddProvider(name string, provider models.Provider) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.providerInstances == nil {
-		c.providerInstances = make(map[string]models.Provider)
-	}
-
-	c.providerInstances[name] = provider
-}
-
-func (c *Config) GetProvidersByCapability(capability ...models.ProviderCapability) map[string]models.Provider {
-	return c.GetProvidersByCapabilityWithUser(nil, capability...)
-}
-
-func (c *Config) GetProvidersByCapabilityWithUser(user *models.User, capability ...models.ProviderCapability) map[string]models.Provider {
-
-	providers := make(map[string]models.Provider)
-
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	for name, provider := range c.providerInstances {
-		// Skip providers that don't have a client initialized
-
-		if !provider.HasPermission(user) {
-			continue
-		}
-
-		if len(capability) != 0 && !provider.HasAnyCapability(capability...) {
-			continue
-		}
-
-		providers[name] = provider
-	}
-	return providers
-}
-
-func (c *Config) GetWorkflowByName(name string) (*models.Workflow, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	if workflow, exists := c.Workflows.Definitions[name]; exists {
-		return &workflow, nil
-	}
-	return nil, fmt.Errorf("workflow not found: %s", name)
-}
-
 func (c *Config) GetVault() models.VaultImpl {
 	return c.GetServices().GetVault()
 }
@@ -256,17 +145,6 @@ type RoleConfig struct {
 	rolesIndex bleve.Index
 }
 
-func (r *RoleConfig) GetRoleByName(name string) (*models.Role, error) {
-	if role, exists := r.Definitions[name]; exists {
-		// Ensure the role has a name (use the key if not set)
-		if len(role.Name) == 0 {
-			role.Name = name
-		}
-		return &role, nil
-	}
-	return nil, fmt.Errorf("role not found: %s", name)
-}
-
 type WorkflowConfig struct {
 	Path  string          `mapstructure:"path" json:"path"`
 	URL   *model.Endpoint `mapstructure:"url" json:"url"`
@@ -277,13 +155,6 @@ type WorkflowConfig struct {
 
 	// Store everything in memory
 	Definitions map[string]models.Workflow `mapstructure:",remain" json:"definitions"`
-}
-
-func (p *WorkflowConfig) GetWorkflowByName(name string) (*models.Workflow, error) {
-	if workflow, exists := p.Definitions[name]; exists {
-		return &workflow, nil
-	}
-	return nil, fmt.Errorf("workflow not found: %s", name)
 }
 
 func (p *WorkflowConfig) GetDefinitions() map[string]models.Workflow {
@@ -315,13 +186,6 @@ type ProviderDefinitionsConfig struct {
 
 func (p *ProviderDefinitionsConfig) GetDefinitions() map[string]models.ProviderConfig {
 	return p.Definitions
-}
-
-func (p *ProviderDefinitionsConfig) GetProviderByName(name string) (*models.ProviderConfig, error) {
-	if provider, exists := p.Definitions[name]; exists {
-		return &provider, nil
-	}
-	return nil, fmt.Errorf("provider not found: %s", name)
 }
 
 type ProviderPluginConfig struct {
@@ -584,74 +448,6 @@ func (r *Config) GetWorkflowFromElevationRequest(
 
 	return &workflow, nil
 
-}
-
-func (r *Config) GetProviderRole(roleName string, providers ...string) *models.ProviderRole {
-	return r.GetProviderRoleWithIdentity(nil, roleName, providers...)
-}
-
-func (r *Config) GetProviderRoleWithIdentity(identity *models.Identity, roleName string, providers ...string) *models.ProviderRole {
-
-	ctx := context.TODO()
-
-	for _, providerName := range providers {
-
-		p, err := r.GetProviderByName(providerName)
-
-		if err != nil || p == nil {
-			continue
-		}
-
-		// Check provider-level permissions
-		// If identity is nil, pass nil user to HasPermission which handles it appropriately
-		var user *models.User
-
-		if identity != nil {
-			user = identity.GetUser()
-		}
-
-		if !p.HasPermission(user) {
-			continue
-		}
-
-		providerRole, err := p.GetRole(ctx, roleName)
-
-		if err != nil {
-			continue
-		}
-
-		if providerRole != nil {
-			return providerRole
-		}
-	}
-
-	return nil
-}
-
-func (r *Config) GetProviderPermission(permissionName string, providers ...string) *models.ProviderPermission {
-
-	ctx := context.TODO()
-
-	for _, providerName := range providers {
-
-		p, err := r.GetProviderByName(providerName)
-
-		if err != nil || p == nil {
-			continue
-		}
-
-		providerPermission, err := p.GetPermission(ctx, permissionName)
-
-		if err != nil {
-			continue
-		}
-
-		if providerPermission != nil {
-			return providerPermission
-		}
-	}
-
-	return nil
 }
 
 func (r *Config) HasThandService() bool {
