@@ -69,7 +69,7 @@ type WorkflowTask struct {
 	// Entrypoint is the current task name to start from
 	Entrypoint string          `json:"entrypoint,omitempty"` // The entrypoint of the workflow - allows for resumption
 	Status     ctx.StatusPhase `json:"status,omitempty"`
-	StartedAt  time.Time       `json:"started_at,omitempty"`
+	StartedAt  time.Time       `json:"started_at"`
 
 	// Never store the actual workflow workflow. We can just load it from the
 	// workflow engine
@@ -158,6 +158,12 @@ func (wr *WorkflowTask) SetTaskReferenceFromName(taskName string) error {
 }
 
 func (r *WorkflowTask) GetTaskName() string {
+
+	if r.state.Definition != nil {
+		if taskItem, ok := r.state.Definition.(*model.TaskItem); ok {
+			return taskItem.Key
+		}
+	}
 
 	if r.state != nil && len(r.state.Name) > 0 {
 		return r.state.Name

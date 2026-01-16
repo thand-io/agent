@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	models "github.com/thand-io/agent/internal/models"
+	"github.com/thand-io/agent/internal/workflows/common"
 	thandModel "github.com/thand-io/agent/internal/workflows/tasks/model"
 	thandTask "github.com/thand-io/agent/internal/workflows/tasks/providers/thand"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
@@ -57,6 +58,12 @@ func (m *ThandWorkflowManager) createElevationWorkflowHandler() func(workflow.Co
 
 		log := workflow.GetLogger(rootCtx)
 		log.Info("Primary workflow execution started")
+
+		// Now that the workflow has been setup, update the search attributes
+		if err := common.UpdateSearchAttributes(workflowTask); err != nil {
+			log.Error("Failed to update workflow search attributes", "Error", err)
+			return nil, err
+		}
 
 		// Get workflow info including the BuildID set by the worker
 		workflowInfo := workflow.GetInfo(rootCtx)

@@ -2189,6 +2189,55 @@ paths:
       summary: Get workflow execution
       tags:
       - executions
+  /execution/{id}/approve:
+    get:
+      consumes:
+      - application/json
+      description: Accept a simple approval decision and signal the workflow execution
+      parameters:
+      - description: Workflow execution ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Approval decision (true|false)
+        in: query
+        name: approved
+        required: true
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Approval processed and workflow signaled
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Approve workflow execution
+      tags:
+      - executions
   /execution/{id}/cancel:
     get:
       consumes:
