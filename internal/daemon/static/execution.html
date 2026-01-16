@@ -32,7 +32,7 @@
                                 <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background-color: hsl(var(--secondary)); border-radius: 1.5rem; border: 1px solid hsl(var(--border));">
                                     <div style="width: 8px; height: 8px; border-radius: 50%;" 
                                          :style="{ 'background-color': hasCurrentTask() ? '#10b981' : (isWorkflowCompleted() ? '#3b82f6' : '#f59e0b') }"></div>
-                                    <span style="font-size: 0.875rem; font-weight: 500;" x-text="hasCurrentTask() ? `Running: ${execution.task}` : (isWorkflowCompleted() ? 'Completed' : (isWorkflowFailed() ? 'Failed' : 'Initializing'))"></span>
+                                    <span style="font-size: 0.875rem; font-weight: 500;" x-text="hasCurrentTask() ? `Running: ${getCurrentTaskName()}` : (isWorkflowCompleted() ? 'Completed' : (isWorkflowFailed() ? 'Failed' : 'Initializing'))"></span>
                                 </div>
                             </div>
                             
@@ -137,7 +137,7 @@
                                             </div>
                                             
                                             <!-- Status Badge (hide if current task is a form) -->
-                                            <template x-if="!(isCurrentTask(task) && isThandFormTask(task))">
+                                            <template x-if="!(isCurrentTask(task) && (isThandFormTask(task) || getThandTaskType(task) === 'approvals'))">
                                                 <div :class="getTaskBadgeClass(task)"
                                                      style="font-size: 0.75rem; padding: 0.25rem 0.5rem;"
                                                      :style="{
@@ -158,6 +158,14 @@
                                                    @click.stop>
                                                     View Form
                                                 </a>
+                                            </template>
+                                            
+                                            <!-- Approve / Reject Buttons for thand approval tasks -->
+                                            <template x-if="isCurrentTask(task) && getThandTaskType(task) === 'approvals'">
+                                                <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
+                                                    <button class="button button-primary" style="font-size: 0.75rem; padding: 0.375rem 0.75rem;" @click.stop.prevent="signalApproval(true)">Approve</button>
+                                                    <button class="button button-destructive" style="font-size: 0.75rem; padding: 0.375rem 0.75rem;" @click.stop.prevent="signalApproval(false)">Reject</button>
+                                                </div>
                                             </template>
                                         </div>
                                     </template>
@@ -202,7 +210,7 @@
                     <template x-if="hasCurrentTask()">
                         <div style="padding: 1.5rem; background-color: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 0.5rem;">
                             <h4 style="margin-bottom: 1rem; font-size: 1rem; font-weight: 600;">
-                                Current Step: <span x-text="execution.task || 'Unknown'"></span>
+                                Current Step: <span x-text="getCurrentTaskName() || 'Unknown'"></span>
                             </h4>
                             <div style="display: grid; gap: 1rem;">
                                 <!-- Execution Status -->
@@ -646,7 +654,7 @@
                 isCurrentTask(task) {
                     // Check if this task matches the current task from execution
                     const taskKey = this.getTaskKey(task);
-                    return taskKey === this.execution?.task;
+                    return taskKey === this.getCurrentTaskName();
                 },
                 
                 hasTaskExecuted(task) {
@@ -658,7 +666,7 @@
                 getLatestTaskStatus(task) {
                     // Get status based on execution data
                     const taskKey = this.getTaskKey(task);
-                    if (taskKey === this.execution?.task) {
+                    if (taskKey === this.getCurrentTaskName()) {
                         return this.execution?.status?.toLowerCase() || 'running';
                     } else if (this.hasTaskExecuted(task)) {
                         return 'completed';
@@ -754,7 +762,17 @@
                     if (this.isWorkflowComplete()) {
                         return false;
                     }
-                    return !!this.execution?.task;
+
+                    // Prefer explicit execution.task, fallback to last history entry
+                    return !!this.getCurrentTaskName();
+                },
+
+                // Return the currently running task name, preferring explicit `execution.task`
+                getCurrentTaskName() {
+                    if (this.execution?.task) return this.execution.task;
+                    const hist = this.execution?.history;
+                    if (hist && hist.length > 0) return hist[hist.length - 1];
+                    return null;
                 },
                 
                 getWorkflowName() {
@@ -981,6 +999,29 @@
                             }, 2000);
                         }
                         document.body.removeChild(textArea);
+                    }
+                },
+
+                // Signal approval decision (approve=true => approved, false => rejected)
+                async signalApproval(approve) {
+                    if (this.isWorkflowComplete()) return;
+
+                    if (!confirm(`Are you sure you want to ${approve ? 'approve' : 'reject'} this request?`)) return;
+
+                    const url = `${this.apiBasePath}/execution/${encodeURIComponent(this.workflowId)}/approvals?approved=${approve}`;
+
+                    try {
+                        const resp = await fetch(url, { method: 'GET', credentials: 'same-origin' });
+                        if (!resp.ok) {
+                            const text = await resp.text();
+                            throw new Error(`${resp.status} ${resp.statusText}: ${text}`);
+                        }
+
+                        // Refresh the workflow state after signaling
+                        await this.fetchWorkflowStatus('signal');
+                    } catch (err) {
+                        console.error('Failed to send approval signal:', err);
+                        alert('Failed to send approval signal: ' + (err.message || err));
                     }
                 },
                 

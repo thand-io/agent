@@ -506,6 +506,9 @@ func (s *Server) setupRoutes(router *gin.Engine) {
 			api.GET("/execution/:id/terminate", s.terminateRunningWorkflow)
 			api.GET("/execution/:id/signal", s.signalRunningWorkflow)
 
+			// Approval shortcut: send approval/denial for current execution
+			api.GET("/execution/:id/approvals", s.approveRunningWorkflow)
+
 			// Form API endpoints
 			api.GET("/execution/:id/form", s.getFormPage)
 			api.POST("/execution/:id/form", s.submitForm)
@@ -694,15 +697,15 @@ func (s *Server) metricsHandler(c *gin.Context) {
 	}
 
 	metrics := models.MetricsInfo{
-		Uptime:          uptime.String(),
-		
+		Uptime: uptime.String(),
+
 		RequestsCount:   atomic.LoadInt64(&s.TotalRequests),
 		ElevateRequests: atomic.LoadInt64(&s.ElevateRequests),
 
-		RolesCount:      int64(len(s.Config.Roles.Definitions)),
-		WorkflowsCount:  int64(len(s.Config.Workflows.Definitions)),
-		ProvidersCount:  int64(len(s.Config.Providers.Definitions)),
-		
+		RolesCount:     int64(len(s.Config.Roles.Definitions)),
+		WorkflowsCount: int64(len(s.Config.Workflows.Definitions)),
+		ProvidersCount: int64(len(s.Config.Providers.Definitions)),
+
 		IdentitiesCount: identitiesCount,
 		TenantsCount:    tenantsCount,
 	}

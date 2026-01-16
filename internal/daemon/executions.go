@@ -4,14 +4,17 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
+	thand "github.com/thand-io/agent/internal/workflows/tasks/providers/thand"
 	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 
@@ -271,31 +274,37 @@ func (s *Server) getWorkflowExecutionState(c *gin.Context, workflowID string) (*
 
 		if err == nil {
 
-			err = queryResponse.QueryResult.Get(&workflowTask)
+			if queryResponse == nil || queryResponse.QueryResult == nil {
+				logrus.WithField("workflowID", workflowID).Debug("Query returned nil response or missing QueryResult")
+			} else {
 
-			if err == nil {
+				err = queryResponse.QueryResult.Get(&workflowTask)
 
-				elevationReq := workflowTask.GetContextAsMap()
+				if err == nil {
 
-				if elevationReq != nil {
+					elevationReq := workflowTask.GetContextAsMap()
 
-					// Copy over task status phases to the response
-					phases := []string{}
-					for phase := range workflowTask.TasksStatusPhase {
-						phases = append(phases, phase)
+					if elevationReq != nil {
+
+						// Copy over task status phases to the response
+						phases := []string{}
+						for phase := range workflowTask.TasksStatusPhase {
+							phases = append(phases, phase)
+						}
+						workflowExecInfo.History = phases
+
+						workflowExecInfo.Input = workflowTask.Input
+						workflowExecInfo.Output = workflowTask.Output
+						workflowExecInfo.Context = workflowTask.Context
+
+					} else {
+						logrus.Debug("Failed to parse workflow task as elevation request: context was nil")
 					}
-					workflowExecInfo.History = phases
-
-					workflowExecInfo.Input = workflowTask.Input
-					workflowExecInfo.Output = workflowTask.Output
-					workflowExecInfo.Context = workflowTask.Context
 
 				} else {
-					logrus.WithError(err).Debug("Failed to parse workflow task as elevation request")
+					logrus.WithError(err).Debug("Failed to parse workflow task from query response")
 				}
 
-			} else {
-				logrus.WithError(err).Debug("Failed to parse workflow task from query response")
 			}
 
 		} else {
@@ -614,6 +623,104 @@ func (s *Server) signalRunningWorkflow(c *gin.Context) {
 		c.JSON(http.StatusOK, data.ExecutionStatePageResponse)
 	}
 
+}
+
+// approveRunningWorkflow accepts a simple approval decision and signals the
+// workflow execution.
+//
+// @Summary		Approve workflow execution
+// @Description	Accept a simple approval decision and signal the workflow execution
+// @Tags		executions
+// @Accept		json
+// @Produce		json
+// @Param		id		path		string			true	"Workflow execution ID"
+// @Param		approved	query		bool			true	"Approval decision (true|false)"
+// @Success		200		{object}	map[string]any	"Approval processed and workflow signaled"
+// @Failure		400		{object}	map[string]any	"Bad request"
+// @Failure		401		{object}	map[string]any	"Unauthorized"
+// @Failure		403		{object}	map[string]any	"Forbidden"
+// @Failure		500		{object}	map[string]any	"Internal server error"
+// @Router		/execution/{id}/approvals [get]
+// @Security		BearerAuth
+func (s *Server) approveRunningWorkflow(c *gin.Context) {
+	workflowId := c.Param("id")
+	if len(workflowId) == 0 {
+		s.getErrorPage(c, http.StatusBadRequest, "Workflow ID is required")
+		return
+	}
+
+	approvedStr := c.Query("approved")
+	if len(approvedStr) == 0 {
+		s.getErrorPage(c, http.StatusBadRequest, "approved query parameter is required (true|false)")
+		return
+	}
+
+	approved := strings.EqualFold(approvedStr, "true") || approvedStr == "1" || strings.EqualFold(approvedStr, "yes")
+
+	// require authenticated user when running in server mode
+	_, foundUser, err := s.getUser(c)
+	if err != nil {
+		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for approval", err)
+		return
+	}
+
+	// Create CloudEvent
+	event := cloudevents.NewEvent()
+	event.SetSpecVersion("1.0")
+	event.SetID(uuid.New().String())
+	event.SetTime(time.Now())
+	event.SetSource("urn:thand:web")
+	event.SetType(thand.ThandApprovalEventType)
+	event.SetData(cloudevents.ApplicationJSON, map[string]any{"approved": approved})
+
+	// Attach user identity as extension
+	event.SetExtension(models.VarsContextUser, foundUser.User.GetIdentity())
+
+	// If Temporal is available signal directly
+	serviceClient := s.Config.GetServices()
+	if serviceClient != nil && serviceClient.HasTemporal() {
+		temporalService := serviceClient.GetTemporal()
+		temporalClient := temporalService.GetClient()
+
+		ctx := context.Background()
+		err = temporalClient.SignalWorkflow(ctx, workflowId, sdkWorkflowsModel.TemporalEmptyRunId, sdkWorkflowsModel.TemporalEventSignalName, event)
+		if err != nil {
+			s.getErrorPage(c, http.StatusInternalServerError, "Failed to signal workflow", err)
+			return
+		}
+
+		// Refresh state and render
+		data, err := s.getWorkflowExecutionState(c, workflowId)
+		if err != nil {
+			s.getErrorPage(c, http.StatusInternalServerError, err.Error(), err)
+			return
+		}
+
+		if s.canAcceptHtml(c) {
+			s.renderHtml(c, "execution.html", data)
+		} else {
+			c.JSON(http.StatusOK, data.ExecutionStatePageResponse)
+		}
+		return
+	}
+
+	// Fallback: build encoded input and redirect to /signal endpoint
+	if serviceClient == nil || !serviceClient.HasEncryption() {
+		s.getErrorPage(c, http.StatusInternalServerError, "Encryption service is required to create encoded signal callback", nil)
+		return
+	}
+
+	encodedInput := models.EncodingWrapper{
+		Type: sdkConstants.ENCODED_WORKFLOW_SIGNAL,
+		Data: event,
+	}.EncodeAndEncrypt(serviceClient.GetEncryption())
+
+	params := url.Values{}
+	params.Set("input", encodedInput)
+
+	redirectUrl := fmt.Sprintf("%s/execution/%s/signal?%s", s.Config.GetApiBasePath(), url.PathEscape(workflowId), params.Encode())
+
+	c.Redirect(http.StatusTemporaryRedirect, redirectUrl)
 }
 
 // extractFailureMessage extracts a human-readable error message from a Temporal Failure
