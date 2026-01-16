@@ -13,6 +13,13 @@ type PublicKeyInfrastructureConfig struct {
 	Config   *BasicConfig `mapstructure:",remain"`  // Provider-specific configuration
 }
 
+func (e *PublicKeyInfrastructureConfig) GetProvider() string {
+	if e == nil || len(e.Provider) == 0 {
+		return "local"
+	}
+	return e.Provider
+}
+
 // PublicKeyInfrastructure provides PKI and certificate management capabilities
 // across multiple cloud providers and local implementations
 type PublicKeyInfrastructure interface {

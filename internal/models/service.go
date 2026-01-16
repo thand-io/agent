@@ -17,6 +17,9 @@ func (e *ServiceConfig) GetProvider() string {
 
 type ServicesConfig struct {
 
+	// Analytics - used for telemetry and usage data
+	Analytics *AnalyticsConfig `mapstructure:"analytics"`
+
 	// Encryption - used for encrypting sensitive data
 	Encryption *ServiceConfig `mapstructure:"encryption"`
 
@@ -81,6 +84,10 @@ func (e *ServicesConfig) GetSchedulerConfigWithDefaults(defaults *BasicConfig) *
 	return e.getConfigWithDefaults(e.Scheduler, defaults)
 }
 
+func (e *ServicesConfig) GetAnalyticsConfig() *AnalyticsConfig {
+	return e.Analytics
+}
+
 func (e *ServicesConfig) GetVaultConfig() *ServiceConfig {
 	return e.Vault
 }
@@ -104,6 +111,9 @@ func (e *ServicesConfig) GetTemporalConfig() *TemporalConfig {
 type ServicesClientImpl interface {
 	Initialize() error
 	Shutdown() error
+
+	GetAnalytics() Analytics
+	HasAnalytics() bool
 
 	GetEncryption() EncryptionImpl
 	HasEncryption() bool

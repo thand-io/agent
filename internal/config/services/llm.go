@@ -11,8 +11,8 @@ func (e *localClient) configureLargeLanguageModel() models.LargeLanguageModelImp
 
 	llmConfig := e.GetServicesConfig().GetLLMConfig()
 
-	if e.config.LargeLanguageModel != nil && len(e.config.LargeLanguageModel.Provider) > 0 {
-		provider = e.config.LargeLanguageModel.Provider
+	if llmConfig != nil && len(llmConfig.GetProvider()) > 0 {
+		provider = llmConfig.GetProvider()
 	}
 
 	// Initialise LLM client

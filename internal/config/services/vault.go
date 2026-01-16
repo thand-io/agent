@@ -10,7 +10,7 @@ func (e *localClient) configureVault() models.VaultImpl {
 	provider := "local"
 	vaultConfig := e.GetServicesConfig().GetVaultConfig()
 
-	if e.config.Vault != nil && len(e.config.Vault.Provider) > 0 {
+	if vaultConfig != nil && len(vaultConfig.GetProvider()) > 0 {
 		provider = vaultConfig.GetProvider()
 	} else if e.environment != nil && len(e.environment.Platform) > 0 {
 		provider = string(e.environment.Platform)

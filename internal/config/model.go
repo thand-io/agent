@@ -133,6 +133,14 @@ func (c *Config) HasLargeLanguageModel() bool {
 	return c.GetServices().HasLargeLanguageModel()
 }
 
+func (c *Config) GetAnalytics() models.Analytics {
+	return c.GetServices().GetAnalytics()
+}
+
+func (c *Config) HasAnalytics() bool {
+	return c.GetServices().HasAnalytics()
+}
+
 type RoleConfig struct {
 	Path  string          `mapstructure:"path" json:"path"`
 	URL   *model.Endpoint `mapstructure:"url" json:"url"`

@@ -13,6 +13,13 @@ type LargeLanguageModelConfig struct {
 	Model    string `mapstructure:"model"`    // e.g. gpt-4, gpt-3.5-turbo, etc
 }
 
+func (e *LargeLanguageModelConfig) GetProvider() string {
+	if e == nil || len(e.Provider) == 0 {
+		return "local"
+	}
+	return e.Provider
+}
+
 type LargeLanguageModelImpl interface {
 	Initialize() error
 	GenerateContent(

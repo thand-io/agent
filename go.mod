@@ -59,6 +59,7 @@ require (
 	github.com/kardianos/service v1.2.4
 	github.com/microsoftgraph/msgraph-sdk-go v1.91.0
 	github.com/okta/okta-sdk-golang/v2 v2.20.0
+	github.com/posthog/posthog-go v1.9.0
 	github.com/senseyeio/duration v0.0.0-20180430131211-7c2a214ada46
 	github.com/serverlessworkflow/sdk-go/v3 v3.2.0
 	github.com/simpleforce/simpleforce v0.0.0-20220429021116-acf4ac67ef68
@@ -223,6 +224,7 @@ require (
 	github.com/hashicorp/go-secure-stdlib/strutil v0.1.2 // indirect
 	github.com/hashicorp/go-slug v0.18.0 // indirect
 	github.com/hashicorp/go-sockaddr v1.0.7 // indirect
+	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/hashicorp/hcl v1.0.1-vault-7 // indirect
 	github.com/hashicorp/jsonapi v1.5.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
