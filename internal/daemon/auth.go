@@ -499,6 +499,21 @@ func (s *Server) getAuthCallbackPage(c *gin.Context, auth models.AuthWrapper) {
 		return
 	}
 
+	// Submit Analytics event
+	if s.Config.HasAnalytics() {
+		properties := map[string]any{
+			"provider": provider.GetProvider(),
+		}
+		if session.User != nil {
+			properties["principal"] = session.User.GetIdentity()
+		}
+		if err := s.Config.GetAnalytics().Capture(
+			"auth-callback", properties,
+		); err != nil {
+			logrus.WithError(err).Warn("failed to capture analytics event: auth-callback")
+		}
+	}
+
 	if len(auth.Callback) == 0 {
 		// Use 303 See Other to force a GET redirect from the POST callback
 		c.Redirect(http.StatusSeeOther, "/")

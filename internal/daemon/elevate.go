@@ -264,6 +264,32 @@ func (s *Server) elevate(c *gin.Context, request models.ElevateRequest) {
 		return
 	}
 
+	// Submit Analytics event
+	if s.Config.HasAnalytics() {
+
+		providers := []string{}
+
+		for _, providerName := range request.Providers {
+			foundProvider, err := s.Config.GetProviderByName(providerName)
+			if err == nil && foundProvider != nil {
+				// Get the underlying provider type
+				providers = append(providers, foundProvider.GetProvider())
+			}
+		}
+
+		properties := map[string]any{
+			"providers": providers,
+		}
+		if foundUser != nil && foundUser.User != nil {
+			properties["principal"] = foundUser.User.GetIdentity()
+		}
+		if err := s.Config.GetAnalytics().Capture(
+			"elevate-request", properties,
+		); err != nil {
+			logrus.WithError(err).Warn("failed to capture elevate-request analytics event")
+		}
+	}
+
 	// We now redirect the user to the next workflow step.
 	c.Redirect(http.StatusTemporaryRedirect,
 		workflowTask.GetRedirectURL(),

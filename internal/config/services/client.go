@@ -14,6 +14,7 @@ type localClient struct {
 	config      *models.ServicesConfig
 	secret      *string
 
+	Analytics models.Analytics
 	encrypt   models.EncryptionImpl
 	vault     models.VaultImpl
 	scheduler models.SchedulerImpl
@@ -62,12 +63,26 @@ func (e *localClient) Initialize() error {
 
 	// These are code services and are not dependent on each other
 	// so we can initialise them in parallel
+	analyticsService := e.configureAnalytics()
 	encryptionService := e.configureEncryption()
 	vaultService := e.configureVault()
 	schedulerService := e.configureScheduler()
 
 	// Lets in parallel initialise all the internal services we need
 	var wg sync.WaitGroup
+
+	wg.Go(func() {
+
+		logrus.Infof("Initializing Analytics...")
+
+		if analyticsService != nil {
+			if err := analyticsService.Initialize(); err != nil {
+				logrus.Errorf("Error initializing Analytics: %v", err)
+			} else {
+				e.Analytics = analyticsService
+			}
+		}
+	})
 
 	wg.Go(func() {
 
@@ -178,6 +193,19 @@ func (e *localClient) Shutdown() error {
 		e.temporal.Shutdown()
 	}
 	return nil
+}
+
+func (e *localClient) GetAnalytics() models.Analytics {
+	return e.Analytics
+}
+
+// GetAnalitics is kept for backward compatibility.
+// Deprecated: use GetAnalytics instead.
+func (e *localClient) GetAnalitics() models.Analytics {
+	return e.GetAnalytics()
+}
+func (e *localClient) HasAnalytics() bool {
+	return e.Analytics != nil
 }
 
 func (e *localClient) GetLargeLanguageModel() models.LargeLanguageModelImpl {

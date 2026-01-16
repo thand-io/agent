@@ -74,6 +74,21 @@ func Load(configFile string) (*Config, error) {
 		return nil, err
 	}
 
+	go func() {
+		if config.HasAnalytics() {
+			analytics := config.GetAnalytics()
+			if err := analytics.Capture("environment", map[string]any{
+				"architecture": config.Environment.Architecture,
+				"os":           config.Environment.OperatingSystem,
+				"os_version":   config.Environment.OperatingSystemVersion,
+				"platform":     config.Environment.Platform,
+				"ephemeral":    config.Environment.Ephemeral,
+			}); err != nil {
+				logrus.WithError(err).Warn("failed to capture environment analytics event")
+			}
+		}
+	}()
+
 	return config, nil
 }
 
@@ -184,7 +199,6 @@ func bindCloudProviderEnvVars(v *viper.Viper) {
 	// Local environment variables
 	v.BindEnv("environment.config.salt", "THAND_SERVICES_ENCRYPTION_SALT")
 	v.BindEnv("environment.config.password", "THAND_SERVICES_ENCRYPTION_PASSWORD")
-
 
 	// GCP environment variables
 	v.BindEnv("environment.config.project_id", "THAND_ENVIRONMENT_CONFIG_PROJECT_ID")
