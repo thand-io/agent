@@ -551,7 +551,7 @@ func (s *Server) healthHandler(c *gin.Context) {
 	}
 
 	if services.HasAnalytics() {
-		servicesHealth["Analytics"] = models.HealthStatusHealthy
+		servicesHealth["analytics"] = models.HealthStatusHealthy
 	}
 
 	if services.HasLargeLanguageModel() {

@@ -25,7 +25,7 @@ type AnalyticsConfig struct {
 
 func (e *AnalyticsConfig) GetProvider() string {
 	if e == nil || len(e.Provider) == 0 {
-		return "local"
+		return "posthog"
 	}
 	return e.Provider
 }

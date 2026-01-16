@@ -63,6 +63,10 @@ func (a *posthogAnalytics) Shutdown() error {
 
 func (a *posthogAnalytics) Capture(event string, metadata map[string]any) error {
 
+	if a.client == nil {
+		return fmt.Errorf("posthog client is not initialized")
+	}
+
 	distinctID := common.GetClientIdentifier()
 	properties := posthog.NewProperties()
 
