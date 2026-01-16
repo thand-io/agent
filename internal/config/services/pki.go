@@ -11,8 +11,8 @@ func (e *localClient) configurePublicKeyInfrastructure() models.PublicKeyInfrast
 
 	pkiConfig := e.GetServicesConfig().GetPublicKeyInfrastructureConfig()
 
-	if e.config.PublicKeyInfrastructure != nil && len(e.config.PublicKeyInfrastructure.Provider) > 0 {
-		provider = e.config.PublicKeyInfrastructure.Provider
+	if pkiConfig != nil && len(pkiConfig.GetProvider()) > 0 {
+		provider = pkiConfig.GetProvider()
 	}
 
 	// Initialise PKI client

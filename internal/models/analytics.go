@@ -22,3 +22,10 @@ type AnalyticsConfig struct {
 	// Config - additional configuration parameters for the Analytics service
 	Config *BasicConfig `mapstructure:"config"`
 }
+
+func (e *AnalyticsConfig) GetProvider() string {
+	if e == nil || len(e.Provider) == 0 {
+		return "local"
+	}
+	return e.Provider
+}

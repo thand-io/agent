@@ -11,7 +11,7 @@ func (e *localClient) configureScheduler() models.SchedulerImpl {
 
 	schedulerConfig := e.GetServicesConfig().GetSchedulerConfig()
 
-	if e.config.Scheduler != nil && len(e.config.Scheduler.Provider) > 0 {
+	if schedulerConfig != nil && len(schedulerConfig.GetProvider()) > 0 {
 		provider = schedulerConfig.GetProvider()
 	} else if e.environment != nil && len(e.environment.Platform) > 0 {
 		provider = string(e.environment.Platform)

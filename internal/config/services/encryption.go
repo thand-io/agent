@@ -10,8 +10,8 @@ func (e *localClient) configureEncryption() models.EncryptionImpl {
 	provider := "local"
 	encryptConfig := e.GetServicesConfig().GetEncryptionConfig()
 
-	if e.config.Encryption != nil && len(e.config.Encryption.Provider) > 0 {
-		provider = encryptConfig.Provider
+	if encryptConfig != nil && len(encryptConfig.GetProvider()) > 0 {
+		provider = encryptConfig.GetProvider()
 	} else if e.environment != nil && len(e.environment.Platform) > 0 {
 		provider = string(e.environment.Platform)
 	}

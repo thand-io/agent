@@ -199,11 +199,6 @@ func (e *localClient) GetAnalytics() models.Analytics {
 	return e.Analytics
 }
 
-// GetAnalitics is kept for backward compatibility.
-// Deprecated: use GetAnalytics instead.
-func (e *localClient) GetAnalitics() models.Analytics {
-	return e.GetAnalytics()
-}
 func (e *localClient) HasAnalytics() bool {
 	return e.Analytics != nil
 }

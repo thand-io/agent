@@ -12,8 +12,8 @@ func (e *localClient) configureAnalytics() models.Analytics {
 
 	analyticsConfig := e.GetServicesConfig().GetAnalyticsConfig()
 
-	if e.config.Analytics != nil && len(e.config.Analytics.Provider) > 0 {
-		provider = analyticsConfig.Provider
+	if analyticsConfig != nil && len(analyticsConfig.GetProvider()) > 0 {
+		provider = analyticsConfig.GetProvider()
 	}
 
 	if analyticsConfig != nil && analyticsConfig.Disabled {
