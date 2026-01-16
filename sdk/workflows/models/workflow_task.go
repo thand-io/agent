@@ -159,7 +159,7 @@ func (wr *WorkflowTask) SetTaskReferenceFromName(taskName string) error {
 
 func (r *WorkflowTask) GetTaskName() string {
 
-	if r.state.Definition != nil {
+	if r.state != nil && r.state.Definition != nil {
 		if taskItem, ok := r.state.Definition.(*model.TaskItem); ok {
 			return taskItem.Key
 		}

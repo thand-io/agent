@@ -640,7 +640,7 @@ func (s *Server) signalRunningWorkflow(c *gin.Context) {
 // @Failure		401		{object}	map[string]any	"Unauthorized"
 // @Failure		403		{object}	map[string]any	"Forbidden"
 // @Failure		500		{object}	map[string]any	"Internal server error"
-// @Router		/execution/{id}/approve [get]
+// @Router		/execution/{id}/approvals [get]
 // @Security		BearerAuth
 func (s *Server) approveRunningWorkflow(c *gin.Context) {
 	workflowId := c.Param("id")

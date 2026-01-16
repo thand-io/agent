@@ -1002,43 +1002,6 @@
                     }
                 },
 
-                // Try to locate a pre-built approval/signal callback URL in the execution input
-                getApprovalCallbackUrl() {
-                    const input = this.execution?.input;
-                    if (!input) return null;
-
-                    let obj = input;
-                    if (typeof obj === 'string') {
-                        try {
-                            obj = JSON.parse(obj);
-                        } catch (e) {
-                            // leave as string
-                        }
-                    }
-
-                    // Common keys
-                    const keys = ['callbackUrl','callback_url','signalCallbackUrl','signal_callback_url','resumeUrl','resume_url','signalUrl','signal_url'];
-                    for (const k of keys) {
-                        if (obj && obj[k]) return obj[k];
-                    }
-
-                    // Search for a full signal URL inside the serialized input (best-effort)
-                    try {
-                        const s = JSON.stringify(obj);
-                        const parts = s.split('"');
-                        for (const p of parts) {
-                            if (!p) continue;
-                            if ((p.startsWith('http://') || p.startsWith('https://')) && p.includes('/execution/') && p.includes('/signal?')) {
-                                return p;
-                            }
-                        }
-                    } catch (e) {
-                        // ignore
-                    }
-
-                    return null;
-                },
-
                 // Signal approval decision (approve=true => approved, false => rejected)
                 async signalApproval(approve) {
                     if (this.isWorkflowComplete()) return;

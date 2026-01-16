@@ -46,5 +46,3 @@ config/
 third_party/
 
 deploy/
-
-dist/
