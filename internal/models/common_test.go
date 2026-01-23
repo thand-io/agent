@@ -1,7 +1,11 @@
 package models_test
 
 import (
+	"bytes"
+	"compress/zlib"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"testing"
 
 	"github.com/thand-io/agent/internal/models"
@@ -512,4 +516,178 @@ func TestEncodingWrapper_DecodeAndDecrypt(t *testing.T) {
 	if decoded.Type != data.Type {
 		t.Errorf("DecodeAndDecrypt() Type = %v, want %v", decoded.Type, data.Type)
 	}
+}
+
+// TestEncodingWrapper_URLSafeEncoding verifies that EncodeBase64 produces URL-safe base64
+// (contains - and _ instead of + and /) which is safe for use in URLs without additional encoding
+func TestEncodingWrapper_URLSafeEncoding(t *testing.T) {
+	tests := []struct {
+		name string
+		data models.EncodingWrapper
+	}{
+		{
+			name: "encode with characters that would produce + or / in standard base64",
+			data: models.EncodingWrapper{
+				Type: sdkConstants.ENCODED_SESSION,
+				Data: map[string]any{
+					// These values are crafted to potentially produce + or / in standard base64
+					"session_id": "test-session-with-special-chars-?????",
+					"user_data":  "user@example.com+test/path",
+					"metadata":   ">>><<<???",
+				},
+			},
+		},
+		{
+			name: "encode workflow with potential unsafe chars",
+			data: models.EncodingWrapper{
+				Type: sdkConstants.ENCODED_WORKFLOW_TASK,
+				Data: map[string]any{
+					"task_id":     "task-123-456-789",
+					"description": "Test task with special characters: + / = ? & %",
+					"url":         "https://example.com/path?query=value&other=test",
+				},
+			},
+		},
+		{
+			name: "encode auth data",
+			data: models.EncodingWrapper{
+				Type: sdkConstants.ENCODED_AUTH,
+				Data: map[string]any{
+					"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+					"user":  "user@domain.com",
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			encoded := tt.data.EncodeBase64()
+
+			// Verify the encoded string doesn't contain + or / characters
+			// URL-safe base64 uses - and _ instead
+			for i, char := range encoded {
+				if char == '+' {
+					t.Errorf("EncodeBase64() contains '+' at position %d, should use '-' for URL-safe encoding", i)
+				}
+				if char == '/' {
+					t.Errorf("EncodeBase64() contains '/' at position %d, should use '_' for URL-safe encoding", i)
+				}
+			}
+
+			// Verify the encoded string only contains valid URL-safe base64 characters
+			// Valid characters: A-Z, a-z, 0-9, -, _, and optional = for padding
+			for i, char := range encoded {
+				valid := (char >= 'A' && char <= 'Z') ||
+					(char >= 'a' && char <= 'z') ||
+					(char >= '0' && char <= '9') ||
+					char == '-' || char == '_' || char == '='
+				if !valid {
+					t.Errorf("EncodeBase64() contains invalid character '%c' at position %d", char, i)
+				}
+			}
+
+			// Verify round-trip works
+			var wrapper models.EncodingWrapper
+			decoded, err := wrapper.Decode(encoded)
+			if err != nil {
+				t.Errorf("Failed to decode URL-safe base64: %v", err)
+			}
+			if decoded.Type != tt.data.Type {
+				t.Errorf("Round trip Type mismatch: got %v, want %v", decoded.Type, tt.data.Type)
+			}
+		})
+	}
+}
+
+// TestEncodingWrapper_BackwardCompatibility tests that the decode function can handle
+// both standard base64 (with + and /) and URL-safe base64 (with - and _)
+func TestEncodingWrapper_BackwardCompatibility(t *testing.T) {
+	// Create test data that, when properly encoded, will contain + or / characters in standard base64
+	testData := models.EncodingWrapper{
+		Type: sdkConstants.ENCODED_SESSION,
+		Data: map[string]any{
+			// These values are designed to produce base64 strings with + or / when using standard encoding
+			"session_id": "test-session-????????????????",
+			"user_data":  "user@example.com+++++",
+			"metadata":   ">>>>>>>><<<<<<<<<<",
+		},
+	}
+
+	// First, encode using the current implementation (URL-safe)
+	urlSafeEncoded := testData.EncodeBase64()
+
+	// Create a standard base64 encoded version by manually encoding the same data with standard base64
+	// We'll use the internal encoding process but with standard base64
+	jsonData, err := json.Marshal(testData)
+	if err != nil {
+		t.Fatalf("Failed to marshal test data: %v", err)
+	}
+
+	// Compress with zlib (same as the internal process)
+	var compressed bytes.Buffer
+	writer := zlib.NewWriter(&compressed)
+	_, err = writer.Write(jsonData)
+	if err != nil {
+		t.Fatalf("Failed to compress data: %v", err)
+	}
+	writer.Close()
+
+	// Encode with standard base64 (to create legacy format with + and /)
+	standardBase64Encoded := base64.StdEncoding.EncodeToString(compressed.Bytes())
+
+	t.Run("decode URL-safe base64", func(t *testing.T) {
+		var wrapper models.EncodingWrapper
+		decoded, err := wrapper.Decode(urlSafeEncoded)
+
+		if err != nil {
+			t.Errorf("Decode() failed for URL-safe base64: %v", err)
+			return
+		}
+
+		if decoded == nil {
+			t.Error("Decode() returned nil for URL-safe base64")
+			return
+		}
+
+		if decoded.Type != testData.Type {
+			t.Errorf("Decode() Type = %v, want %v", decoded.Type, testData.Type)
+		}
+	})
+
+	t.Run("decode standard base64 (backward compatibility)", func(t *testing.T) {
+		// Only run this test if the standard encoded version actually contains + or /
+		// (which indicates it's different from URL-safe encoding)
+		containsPlusOrSlash := false
+		for _, char := range standardBase64Encoded {
+			if char == '+' || char == '/' {
+				containsPlusOrSlash = true
+				break
+			}
+		}
+
+		if !containsPlusOrSlash {
+			t.Skip("Test data doesn't produce + or / in standard base64, skipping backward compatibility test")
+			return
+		}
+
+		var wrapper models.EncodingWrapper
+		decoded, err := wrapper.Decode(standardBase64Encoded)
+
+		if err != nil {
+			t.Errorf("Decode() failed for standard base64: %v", err)
+			return
+		}
+
+		if decoded == nil {
+			t.Error("Decode() returned nil for standard base64")
+			return
+		}
+
+		if decoded.Type != testData.Type {
+			t.Errorf("Decode() Type = %v, want %v", decoded.Type, testData.Type)
+		}
+
+		t.Logf("Successfully decoded standard base64 with + or / characters (backward compatibility confirmed)")
+	})
 }

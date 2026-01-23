@@ -37,8 +37,8 @@ func (e EncodingWrapper) EncodeBytes() []byte {
 
 func (e EncodingWrapper) encodeBase64(modifiers ...EncryptionImpl) string {
 	finalData := e.encodeBytes(modifiers...)
-	// base64 encode the data
-	return base64.StdEncoding.EncodeToString(finalData)
+	// base64 URL-safe encode the data (uses - and _ instead of + and / for URL safety)
+	return base64.URLEncoding.EncodeToString(finalData)
 }
 
 func (e EncodingWrapper) encodeBytes(modifiers ...EncryptionImpl) []byte {
@@ -99,11 +99,18 @@ func (e EncodingWrapper) DecodeBytes(input []byte) (*EncodingWrapper, error) {
 }
 
 func (e EncodingWrapper) decode(input string, modifiers ...EncryptionImpl) (*EncodingWrapper, error) {
-	decoded, err := base64.StdEncoding.DecodeString(input)
+	// Use URL-safe base64 decoding (uses - and _ instead of + and / for URL safety)
+	decoded, err := base64.URLEncoding.DecodeString(input)
 
+	// For backward compatibility: if URL-safe decoding fails, try standard base64 decoding
+	// This ensures existing tokens encoded with standard base64 (containing + or /) still work
 	if err != nil {
-		return nil, err
+		decoded, err = base64.StdEncoding.DecodeString(input)
+		if err != nil {
+			return nil, err
+		}
 	}
+
 	return e.decodeBytes(decoded, modifiers...)
 }
 
