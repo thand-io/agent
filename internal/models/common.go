@@ -102,9 +102,15 @@ func (e EncodingWrapper) decode(input string, modifiers ...EncryptionImpl) (*Enc
 	// Use URL-safe base64 decoding (uses - and _ instead of + and / for URL safety)
 	decoded, err := base64.URLEncoding.DecodeString(input)
 
+	// For backward compatibility: if URL-safe decoding fails, try standard base64 decoding
+	// This ensures existing tokens encoded with standard base64 (containing + or /) still work
 	if err != nil {
-		return nil, err
+		decoded, err = base64.StdEncoding.DecodeString(input)
+		if err != nil {
+			return nil, err
+		}
 	}
+
 	return e.decodeBytes(decoded, modifiers...)
 }
 
