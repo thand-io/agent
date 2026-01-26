@@ -313,6 +313,7 @@ func (t *thandTask) executeTemporalParallel(
 		StartToCloseTimeout: 10 * time.Minute,
 		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 	}
+
 	aoctx := workflow.WithActivityOptions(temporalContext, ao)
 
 	// Create channel and results slice
@@ -460,8 +461,8 @@ func (t *thandTask) scheduleRevocation(
 
 	newTask := models.NewElevateWorkflowTask(newWorkflowTask)
 
-	// If we have a temporal context, use workflow.SignalExternalWorkflow to avoid blocking
-	// the workflow goroutine. Direct client calls cause deadlocks in workflow context.
+	// If we have a temporal context, use workflow.SignalExternalWorkflow in a goroutine
+	// to avoid blocking the workflow. We signal via a background goroutine.
 	if workflowTask.HasTemporalContext() {
 
 		signalInput := models.TemporalTerminationRequest{
@@ -474,21 +475,40 @@ func (t *thandTask) scheduleRevocation(
 		}
 
 		temporalContext := workflowTask.GetTemporalContext()
+		serviceClient := t.config.GetServices()
 
-		// Send the signal to the current workflow - fire and forget pattern
-		// (like emit.go does). Don't wait on the future as we're signaling ourselves.
-		workflow.SignalExternalWorkflow(
-			temporalContext,
-			workflowTask.GetWorkflowID(),
-			sdkWorkflowsModel.TemporalEmptyRunId,
-			sdkWorkflowsModel.TemporalTerminateSignalName,
-			signalInput,
-		)
+		// Create a channel to receive the error from the goroutine
+		errCh := workflow.NewChannel(temporalContext)
+
+		// Temporal client is blocking in nature, so run in a separate goroutine
+		// and channel the result back
+		workflow.Go(temporalContext, func(ctx workflow.Context) {
+
+			temporalClient := serviceClient.GetTemporal().GetClient()
+
+			err := temporalClient.SignalWorkflow(
+				workflowTask.GetContext(),
+				workflowTask.WorkflowID,
+				sdkWorkflowsModel.TemporalEmptyRunId,
+				sdkWorkflowsModel.TemporalTerminateSignalName,
+				signalInput,
+			)
+
+			errCh.Send(ctx, err)
+		})
+
+		// Wait for the result
+		var signalErr error
+		errCh.Receive(temporalContext, &signalErr)
+
+		if signalErr != nil {
+			log.WithError(signalErr).Error("Failed to signal workflow for revocation")
+			return fmt.Errorf("failed to signal workflow: %w", signalErr)
+		}
 
 		log.WithFields(logrus.Fields{
-			"task":        newTask.GetTaskName(),
-			"workflow_id": workflowTask.GetWorkflowID(),
-			"scheduled":   revocationAt.Format(time.RFC3339),
+			"task": newTask.GetTaskName(),
+			"url":  t.config.GetResumeCallbackUrl(newTask),
 		}).Info("Scheduled revocation via Temporal")
 
 	} else if t.config.GetServices().HasScheduler() {
