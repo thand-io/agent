@@ -32,7 +32,9 @@ func (r *ResumableWorkflowRunner) ExecuteEmitTask(
 		return nil, fmt.Errorf("workflow task is not set")
 	}
 
-	if workflowTask.HasTemporalContext() {
+	if workflowTask.HasTemporalContext() &&
+		r.GetConfig().HasTemporal() &&
+		r.GetConfig().GetTemporal().HasClient() {
 
 		// Create the cloud event based on the emit task specification
 		event, err := r.CreateCloudEventFromEmit(emit, input)
@@ -46,14 +48,37 @@ func (r *ResumableWorkflowRunner) ExecuteEmitTask(
 			return nil, fmt.Errorf("failed to get temporal context")
 		}
 
-		// Send the signal to the current workflow using the event signal channel
-		workflow.SignalExternalWorkflow(
-			ctx,
-			workflowTask.GetWorkflowID(),
-			sdkWorkflowsModel.TemporalEmptyRunId, // empty run ID means current run
-			sdkWorkflowsModel.TemporalEventSignalName,
-			event,
-		)
+		temporalContext := workflowTask.GetTemporalContext()
+		serviceClient := r.GetConfig()
+
+		// Create a channel to receive the error from the goroutine
+		errCh := workflow.NewChannel(temporalContext)
+
+		// Temporal client is blocking in nature, so run in a separate goroutine
+		// and channel the result back
+		workflow.Go(temporalContext, func(ctx workflow.Context) {
+
+			temporalClient := serviceClient.GetTemporal().GetClient()
+
+			err := temporalClient.SignalWorkflow(
+				workflowTask.GetContext(),
+				workflowTask.GetWorkflowID(),
+				sdkWorkflowsModel.TemporalEmptyRunId, // empty run ID means current run
+				sdkWorkflowsModel.TemporalEventSignalName,
+				event,
+			)
+
+			errCh.Send(ctx, err)
+		})
+
+		// Wait for the result
+		var signalErr error
+		errCh.Receive(temporalContext, &signalErr)
+
+		if signalErr != nil {
+			log.WithError(signalErr).Error("Failed to emit event")
+			return event, fmt.Errorf("failed to emit event: %w", signalErr)
+		}
 
 		log.WithFields(logrus.Fields{
 			"taskName":    taskName,

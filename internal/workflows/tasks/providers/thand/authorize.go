@@ -461,9 +461,11 @@ func (t *thandTask) scheduleRevocation(
 
 	newTask := models.NewElevateWorkflowTask(newWorkflowTask)
 
-	// If we have a temporal context, use workflow.SignalExternalWorkflow in a goroutine
+	// If we have a temporal context, use workflow.SignalWorkflow in a goroutine
 	// to avoid blocking the workflow. We signal via a background goroutine.
-	if workflowTask.HasTemporalContext() {
+	if workflowTask.HasTemporalContext() &&
+		t.config.GetServices().HasTemporal() &&
+		t.config.GetServices().GetTemporal().HasClient() {
 
 		signalInput := models.TemporalTerminationRequest{
 			Reason:      "Revocation scheduled",
