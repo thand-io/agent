@@ -461,9 +461,10 @@ func (t *thandTask) scheduleRevocation(
 
 	newTask := models.NewElevateWorkflowTask(newWorkflowTask)
 
-	// If we have a temporal context, use workflow.SignalExternalWorkflow in a goroutine
-	// to avoid blocking the workflow. We signal via a background goroutine.
-	if workflowTask.HasTemporalContext() {
+	serviceClient := t.config.GetServices()
+
+	// If we have a temporal client, we can use that to schedule the revocation
+	if serviceClient.HasTemporal() && serviceClient.GetTemporal().HasClient() {
 
 		signalInput := models.TemporalTerminationRequest{
 			Reason:      "Revocation scheduled",
@@ -474,36 +475,19 @@ func (t *thandTask) scheduleRevocation(
 			signalInput.EntryPoint = revocationTask
 		}
 
-		temporalContext := workflowTask.GetTemporalContext()
-		serviceClient := t.config.GetServices()
+		temporalClient := serviceClient.GetTemporal().GetClient()
 
-		// Create a channel to receive the error from the goroutine
-		errCh := workflow.NewChannel(temporalContext)
+		err := temporalClient.SignalWorkflow(
+			workflowTask.GetContext(),
+			workflowTask.WorkflowID,
+			sdkWorkflowsModel.TemporalEmptyRunId,
+			sdkWorkflowsModel.TemporalTerminateSignalName,
+			signalInput,
+		)
 
-		// Temporal client is blocking in nature, so run in a separate goroutine
-		// and channel the result back
-		workflow.Go(temporalContext, func(ctx workflow.Context) {
-
-			temporalClient := serviceClient.GetTemporal().GetClient()
-
-			err := temporalClient.SignalWorkflow(
-				workflowTask.GetContext(),
-				workflowTask.WorkflowID,
-				sdkWorkflowsModel.TemporalEmptyRunId,
-				sdkWorkflowsModel.TemporalTerminateSignalName,
-				signalInput,
-			)
-
-			errCh.Send(ctx, err)
-		})
-
-		// Wait for the result
-		var signalErr error
-		errCh.Receive(temporalContext, &signalErr)
-
-		if signalErr != nil {
-			log.WithError(signalErr).Error("Failed to signal workflow for revocation")
-			return fmt.Errorf("failed to signal workflow: %w", signalErr)
+		if err != nil {
+			log.WithError(err).Error("Failed to signal workflow for revocation")
+			return fmt.Errorf("failed to signal workflow: %w", err)
 		}
 
 		log.WithFields(logrus.Fields{

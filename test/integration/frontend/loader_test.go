@@ -1,4 +1,4 @@
-package workflows_test
+package ui_e2e
 
 import (
 	"encoding/json"
@@ -7,16 +7,16 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 
 	"github.com/hashicorp/go-version"
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
+	_ "github.com/thand-io/agent/internal/workflows/tasks/model" // Register custom thand tasks
 	testcommon "github.com/thand-io/agent/test/integration/common"
 	"gopkg.in/yaml.v3"
 )
 
-// TestCase represents a workflow test case loaded from testdata
+// TestCase represents a UI E2E test case loaded from testdata
 type TestCase struct {
 	Name      string
 	Path      string
@@ -27,12 +27,12 @@ type TestCase struct {
 
 // TestCaseLoader loads test cases from the testdata directory
 type TestCaseLoader struct {
-	infra    *TestInfrastructure
+	infra    *UITestInfrastructure
 	basePath string
 }
 
 // NewTestCaseLoader creates a new test case loader
-func NewTestCaseLoader(infra *TestInfrastructure) *TestCaseLoader {
+func NewTestCaseLoader(infra *UITestInfrastructure) *TestCaseLoader {
 	return &TestCaseLoader{
 		infra:    infra,
 		basePath: "testdata",
@@ -83,16 +83,34 @@ func (l *TestCaseLoader) loadProviders(testPath string) (map[string]models.Provi
 		return nil, fmt.Errorf("failed to read providers.yaml: %w", err)
 	}
 
-	// Substitute environment variables from infrastructure
-	content = l.substituteVariables(content)
-
-	var data struct {
-		Version   string                           `yaml:"version"`
-		Providers map[string]models.ProviderConfig `yaml:"providers"`
+	// Convert YAML to JSON first (required for proper workflow DSL parsing)
+	var yamlData map[string]interface{}
+	if err := yaml.Unmarshal(content, &yamlData); err != nil {
+		return nil, fmt.Errorf("failed to parse providers YAML: %w", err)
 	}
 
-	if err := yaml.Unmarshal(content, &data); err != nil {
-		return nil, fmt.Errorf("failed to parse providers.yaml: %w", err)
+	jsonData, err := json.Marshal(yamlData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert providers to JSON: %w", err)
+	}
+
+	var data struct {
+		Providers map[string]models.ProviderConfig `json:"providers"`
+	}
+
+	if err := json.Unmarshal(jsonData, &data); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal providers: %w", err)
+	}
+
+	// Interpolate environment variables if the infrastructure is available
+	if l.infra != nil {
+		for key, provider := range data.Providers {
+			// Replace placeholders with actual test infrastructure endpoints
+			if provider.Config != nil {
+				l.interpolateProviderConfig(&provider, l.infra)
+				data.Providers[key] = provider
+			}
+		}
 	}
 
 	return data.Providers, nil
@@ -105,13 +123,23 @@ func (l *TestCaseLoader) loadRoles(testPath string) (map[string]models.Role, err
 		return nil, fmt.Errorf("failed to read roles.yaml: %w", err)
 	}
 
-	var data struct {
-		Version string                 `yaml:"version"`
-		Roles   map[string]models.Role `yaml:"roles"`
+	// Convert YAML to JSON first
+	var yamlData map[string]interface{}
+	if err := yaml.Unmarshal(content, &yamlData); err != nil {
+		return nil, fmt.Errorf("failed to parse roles YAML: %w", err)
 	}
 
-	if err := yaml.Unmarshal(content, &data); err != nil {
-		return nil, fmt.Errorf("failed to parse roles.yaml: %w", err)
+	jsonData, err := json.Marshal(yamlData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert roles to JSON: %w", err)
+	}
+
+	var data struct {
+		Roles map[string]models.Role `json:"roles"`
+	}
+
+	if err := json.Unmarshal(jsonData, &data); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal roles: %w", err)
 	}
 
 	return data.Roles, nil
@@ -124,52 +152,62 @@ func (l *TestCaseLoader) loadWorkflows(testPath string) (map[string]models.Workf
 		return nil, fmt.Errorf("failed to read workflow.yaml: %w", err)
 	}
 
-	// Convert YAML to JSON first (required for proper workflow DSL parsing)
-	var yamlData any
+	// Convert YAML to JSON first
+	var yamlData map[string]interface{}
 	if err := yaml.Unmarshal(content, &yamlData); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal YAML: %w", err)
+		return nil, fmt.Errorf("failed to parse workflow YAML: %w", err)
 	}
 
 	jsonData, err := json.Marshal(yamlData)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert YAML to JSON: %w", err)
+		return nil, fmt.Errorf("failed to convert workflow to JSON: %w", err)
 	}
 
-	var data models.WorkflowDefinitions
+	var data struct {
+		Workflows map[string]models.Workflow `json:"workflows"`
+	}
+
 	if err := json.Unmarshal(jsonData, &data); err != nil {
-		return nil, fmt.Errorf("failed to parse workflow.yaml: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal workflows: %w", err)
 	}
 
 	return data.Workflows, nil
 }
 
-// substituteVariables replaces ${VAR} placeholders with actual values from infrastructure
-func (l *TestCaseLoader) substituteVariables(content []byte) []byte {
-	str := string(content)
-
-	// Parse MailHog host and port
-	mailhogHost, mailhogPort, err := net.SplitHostPort(l.infra.MailHogSMTP)
-	if err != nil {
-		// If no port in SMTP, use full string as host and empty port
-		mailhogHost = l.infra.MailHogSMTP
-		mailhogPort = ""
+// interpolateProviderConfig replaces test infrastructure placeholders with actual endpoints
+func (l *TestCaseLoader) interpolateProviderConfig(provider *models.ProviderConfig, infra *UITestInfrastructure) {
+	if provider.Config == nil {
+		return
 	}
 
-	// Define variable substitutions
-	substitutions := map[string]string{
-		"${LOCALSTACK_ENDPOINT}": l.infra.LocalStackEndpoint,
-		"${MAILHOG_HOST}":        mailhogHost,
-		"${MAILHOG_PORT}":        mailhogPort,
-		"${MAILHOG_SMTP}":        l.infra.MailHogSMTP,
-		"${MAILHOG_API}":         l.infra.MailHogAPI,
-		"${TEMPORAL_ENDPOINT}":   l.infra.TemporalEndpoint,
+	// BasicConfig is a map[string]any type
+	configMap := *provider.Config
+
+	// Replace LocalStack endpoint
+	if _, hasEndpoint := configMap["endpoint"]; hasEndpoint {
+		configMap["endpoint"] = infra.LocalStackEndpoint
 	}
 
-	for placeholder, value := range substitutions {
-		str = strings.ReplaceAll(str, placeholder, value)
+	// Replace AWS endpoint
+	if _, hasAWSEndpoint := configMap["aws_endpoint"]; hasAWSEndpoint {
+		configMap["aws_endpoint"] = infra.LocalStackEndpoint
 	}
 
-	return []byte(str)
+	// Replace SMTP config
+	if _, hasSMTP := configMap["smtp"]; hasSMTP {
+		smtpConfig, ok := configMap["smtp"].(map[string]interface{})
+		if ok {
+			smtpConfig["host"] = infra.MailHogSMTP
+			smtpConfig["port"] = "1025"
+		}
+	}
+
+	// Replace OIDC endpoints
+	if _, hasIssuer := configMap["issuer_url"]; hasIssuer {
+		configMap["issuer_url"] = infra.MockOIDCEndpoint + "/default"
+	}
+
+	// provider.Config is already a pointer to the map, changes are applied directly
 }
 
 // CreateConfigFromTestCase creates a Config object from a test case
@@ -200,23 +238,25 @@ func (l *TestCaseLoader) CreateConfigFromTestCase(tc *TestCase) (*config.Config,
 	// Set up providers
 	cfg.Providers.Definitions = tc.Providers
 
-	// Configure Temporal connection - parse host:port from endpoint
-	host, portStr, err := net.SplitHostPort(l.infra.TemporalEndpoint)
-	if err != nil {
-		// If no port in endpoint, use full endpoint as host with default port
-		host = l.infra.TemporalEndpoint
-		portStr = testcommon.TemporalDefaultPort
-	}
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid port in Temporal endpoint: %w", err)
-	}
+	if l.infra != nil {
+		// Configure Temporal connection - parse host:port from endpoint
+		host, portStr, err := net.SplitHostPort(l.infra.TemporalEndpoint)
+		if err != nil {
+			// If no port in endpoint, use full endpoint as host with default port
+			host = l.infra.TemporalEndpoint
+			portStr = testcommon.TemporalDefaultPort
+		}
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid port in Temporal endpoint: %w", err)
+		}
 
-	cfg.Services.Temporal = &models.TemporalConfig{
-		Host:              host,
-		Port:              port,
-		Namespace:         testcommon.TemporalTestNamespace,
-		DisableVersioning: true, // Disable versioning for integration tests
+		cfg.Services.Temporal = &models.TemporalConfig{
+			Host:              host,
+			Port:              port,
+			Namespace:         testcommon.TemporalTestNamespace,
+			DisableVersioning: true, // Disable versioning for integration tests
+		}
 	}
 
 	// Initialize providers (this creates the actual provider implementations)
@@ -229,7 +269,7 @@ func (l *TestCaseLoader) CreateConfigFromTestCase(tc *TestCase) (*config.Config,
 	return cfg, nil
 }
 
-// ListTestCases returns all available test case names
+// ListTestCases returns all available test cases in the testdata directory
 func (l *TestCaseLoader) ListTestCases() ([]string, error) {
 	entries, err := os.ReadDir(l.basePath)
 	if err != nil {
@@ -240,12 +280,25 @@ func (l *TestCaseLoader) ListTestCases() ([]string, error) {
 	for _, entry := range entries {
 		if entry.IsDir() {
 			// Check if it has the required files
-			workflowPath := filepath.Join(l.basePath, entry.Name(), "workflow.yaml")
-			if _, err := os.Stat(workflowPath); err == nil {
+			testPath := filepath.Join(l.basePath, entry.Name())
+			if l.hasRequiredFiles(testPath) {
 				testCases = append(testCases, entry.Name())
 			}
 		}
 	}
 
 	return testCases, nil
+}
+
+// hasRequiredFiles checks if a test case directory has all required files
+func (l *TestCaseLoader) hasRequiredFiles(testPath string) bool {
+	requiredFiles := []string{"providers.yaml", "roles.yaml", "workflow.yaml"}
+
+	for _, file := range requiredFiles {
+		if _, err := os.Stat(filepath.Join(testPath, file)); os.IsNotExist(err) {
+			return false
+		}
+	}
+
+	return true
 }

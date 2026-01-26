@@ -118,11 +118,18 @@ func (m *ThandWorkflowManager) createElevationWorkflowHandler() func(workflow.Co
 
 		// Setup signal channels and handlers
 		resumeSignal, terminateSignal := sdkWorkflows.SetupSignalChannels(cancelCtx)
-		sdkWorkflows.SetupTerminationHandler(rootCtx, terminateSignal, cancelHandler, &terminationRequest)
+
+		sdkWorkflows.SetupTerminationHandler(
+			rootCtx,
+			terminateSignal,
+			cancelHandler,
+			&terminationRequest,
+		)
 
 		// Setup workflow selector
 		workflowSelector := sdkWorkflows.SetupWorkflowSelector(
 			cancelCtx, resumeSignal, workflowTask.GetWorkflowTask())
+
 		workflowSelector.Select(cancelCtx)
 
 		log.Info("Starting main workflow execution loop")

@@ -12,6 +12,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.1
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.3
 	github.com/aws/aws-sdk-go-v2/service/iam v1.53.1
+	github.com/chromedp/chromedp v0.11.2
 	github.com/cloudevents/sdk-go/v2 v2.16.2
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-version v1.8.0
@@ -94,6 +95,8 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/chromedp/cdproto v0.0.0-20241022234722-4d5d5faf59fb // indirect
+	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/cloudflare/cloudflare-go v0.116.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
@@ -144,6 +147,9 @@ require (
 	github.com/go-playground/validator/v10 v10.28.0 // indirect
 	github.com/go-resty/resty/v2 v2.17.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
+	github.com/gobwas/httphead v0.1.0 // indirect
+	github.com/gobwas/pool v0.2.1 // indirect
+	github.com/gobwas/ws v1.4.0 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/goccy/go-yaml v1.18.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
