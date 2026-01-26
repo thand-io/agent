@@ -487,7 +487,6 @@ func (t *thandTask) scheduleRevocation(
 
 		log.WithFields(logrus.Fields{
 			"task":        newTask.GetTaskName(),
-			"url":         t.config.GetResumeCallbackUrl(newTask),
 			"workflow_id": workflowTask.GetWorkflowID(),
 			"scheduled":   revocationAt.Format(time.RFC3339),
 		}).Info("Scheduled revocation via Temporal")
