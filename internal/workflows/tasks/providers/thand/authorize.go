@@ -309,9 +309,9 @@ func (t *thandTask) executeTemporalParallel(
 	serviceClient := t.config.GetServices()
 
 	ao := workflow.ActivityOptions{
-		TaskQueue:   serviceClient.GetTemporal().GetTaskQueue(),
+		TaskQueue:           serviceClient.GetTemporal().GetTaskQueue(),
 		StartToCloseTimeout: 10 * time.Minute,
-		RetryPolicy: sdkWorkflowsRunner.DefaultRetryPolicy,
+		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 	}
 	aoctx := workflow.WithActivityOptions(temporalContext, ao)
 
@@ -460,10 +460,9 @@ func (t *thandTask) scheduleRevocation(
 
 	newTask := models.NewElevateWorkflowTask(newWorkflowTask)
 
-	serviceClient := t.config.GetServices()
-
-	// If we have a temporal client, we can use that to schedule the revocation
-	if serviceClient.HasTemporal() && serviceClient.GetTemporal().HasClient() {
+	// If we have a temporal context, use workflow.SignalExternalWorkflow to avoid blocking
+	// the workflow goroutine. Direct client calls cause deadlocks in workflow context.
+	if workflowTask.HasTemporalContext() {
 
 		signalInput := models.TemporalTerminationRequest{
 			Reason:      "Revocation scheduled",
@@ -474,24 +473,23 @@ func (t *thandTask) scheduleRevocation(
 			signalInput.EntryPoint = revocationTask
 		}
 
-		temporalClient := serviceClient.GetTemporal().GetClient()
+		temporalContext := workflowTask.GetTemporalContext()
 
-		err := temporalClient.SignalWorkflow(
-			workflowTask.GetContext(),
-			workflowTask.WorkflowID,
+		// Send the signal to the current workflow - fire and forget pattern
+		// (like emit.go does). Don't wait on the future as we're signaling ourselves.
+		workflow.SignalExternalWorkflow(
+			temporalContext,
+			workflowTask.GetWorkflowID(),
 			sdkWorkflowsModel.TemporalEmptyRunId,
 			sdkWorkflowsModel.TemporalTerminateSignalName,
 			signalInput,
 		)
 
-		if err != nil {
-			log.WithError(err).Error("Failed to signal workflow for revocation")
-			return fmt.Errorf("failed to signal workflow: %w", err)
-		}
-
 		log.WithFields(logrus.Fields{
-			"task": newTask.GetTaskName(),
-			"url":  t.config.GetResumeCallbackUrl(newTask),
+			"task":        newTask.GetTaskName(),
+			"url":         t.config.GetResumeCallbackUrl(newTask),
+			"workflow_id": workflowTask.GetWorkflowID(),
+			"scheduled":   revocationAt.Format(time.RFC3339),
 		}).Info("Scheduled revocation via Temporal")
 
 	} else if t.config.GetServices().HasScheduler() {
