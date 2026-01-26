@@ -12,6 +12,7 @@ import (
 )
 
 const TemporalSynchronizeWorkflowName = "synchronize"
+const TemporalSignalWorkflowActivityName = "signal-workflow"
 const TemporalPatchProviderUpstreamActivityName = "patch-provider-upstream"
 
 func CreateTemporalProviderWorkflowIdentifier(identifier, base string) string {

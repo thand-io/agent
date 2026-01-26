@@ -62,6 +62,14 @@ func (c *Config) registerTemporalActivities() error {
 		config: c,
 	}
 
+	// Allows us to signal workflows for events
+	temporalWorker.RegisterActivityWithOptions(
+		thandActivities.SignalWorkflow,
+		activity.RegisterOptions{
+			Name: models.TemporalSignalWorkflowActivityName,
+		},
+	)
+
 	if c.HasThandService() {
 
 		logrus.Info("Registering upstream patching activities for Thand service")

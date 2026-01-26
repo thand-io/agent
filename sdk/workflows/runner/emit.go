@@ -3,10 +3,12 @@ package runner
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
+	"github.com/thand-io/agent/internal/models"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 	"go.temporal.io/sdk/workflow"
 )
@@ -32,9 +34,7 @@ func (r *ResumableWorkflowRunner) ExecuteEmitTask(
 		return nil, fmt.Errorf("workflow task is not set")
 	}
 
-	if workflowTask.HasTemporalContext() &&
-		r.GetConfig().HasTemporal() &&
-		r.GetConfig().GetTemporal().HasClient() {
+	if workflowTask.HasTemporalContext() {
 
 		// Create the cloud event based on the emit task specification
 		event, err := r.CreateCloudEventFromEmit(emit, input)
@@ -48,36 +48,29 @@ func (r *ResumableWorkflowRunner) ExecuteEmitTask(
 			return nil, fmt.Errorf("failed to get temporal context")
 		}
 
-		temporalContext := workflowTask.GetTemporalContext()
-		serviceClient := r.GetConfig()
+		// WorkflowInfo
+		workflowInfo := workflow.GetInfo(ctx)
 
-		// Create a channel to receive the error from the goroutine
-		errCh := workflow.NewChannel(temporalContext)
+		ao := workflow.LocalActivityOptions{
+			StartToCloseTimeout: 10 * time.Minute,
+			RetryPolicy:         DefaultRetryPolicy,
+		}
 
-		// Temporal client is blocking in nature, so run in a separate goroutine
-		// and channel the result back
-		workflow.Go(temporalContext, func(ctx workflow.Context) {
+		ctx = workflow.WithLocalActivityOptions(ctx, ao)
 
-			temporalClient := serviceClient.GetTemporal().GetClient()
+		fut := workflow.ExecuteLocalActivity(
+			ctx,
+			models.TemporalSignalWorkflowActivityName,
+			workflowInfo.WorkflowExecution.ID,
+			workflowInfo.WorkflowExecution.RunID,
+			sdkWorkflowsModel.TemporalEventSignalName,
+			event,
+		)
 
-			err := temporalClient.SignalWorkflow(
-				workflowTask.GetContext(),
-				workflowTask.GetWorkflowID(),
-				sdkWorkflowsModel.TemporalEmptyRunId, // empty run ID means current run
-				sdkWorkflowsModel.TemporalEventSignalName,
-				event,
-			)
+		err = fut.Get(ctx, nil)
 
-			errCh.Send(ctx, err)
-		})
-
-		// Wait for the result
-		var signalErr error
-		errCh.Receive(temporalContext, &signalErr)
-
-		if signalErr != nil {
-			log.WithError(signalErr).Error("Failed to emit event")
-			return event, fmt.Errorf("failed to emit event: %w", signalErr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to emit cloud event: %w", err)
 		}
 
 		log.WithFields(logrus.Fields{

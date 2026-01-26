@@ -18,6 +18,7 @@ import (
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
+	runner "github.com/thand-io/agent/sdk/workflows/runner"
 	sdkWorkflowsRunner "github.com/thand-io/agent/sdk/workflows/runner"
 )
 
@@ -463,49 +464,42 @@ func (t *thandTask) scheduleRevocation(
 
 	// If we have a temporal context, use workflow.SignalWorkflow in a goroutine
 	// to avoid blocking the workflow. We signal via a background goroutine.
-	if workflowTask.HasTemporalContext() &&
-		t.config.GetServices().HasTemporal() &&
-		t.config.GetServices().GetTemporal().HasClient() {
+	if workflowTask.HasTemporalContext() {
 
-		signalInput := models.TemporalTerminationRequest{
+		terminationRequest := models.TemporalTerminationRequest{
 			Reason:      "Revocation scheduled",
 			ScheduledAt: &revocationAt,
 		}
 
 		if len(revocationTask) > 0 {
-			signalInput.EntryPoint = revocationTask
+			terminationRequest.EntryPoint = revocationTask
 		}
 
-		temporalContext := workflowTask.GetTemporalContext()
-		serviceClient := t.config.GetServices()
+		ctx := workflowTask.GetTemporalContext()
 
-		// Create a channel to receive the error from the goroutine
-		errCh := workflow.NewChannel(temporalContext)
+		// WorkflowInfo
+		workflowInfo := workflow.GetInfo(ctx)
 
-		// Temporal client is blocking in nature, so run in a separate goroutine
-		// and channel the result back
-		workflow.Go(temporalContext, func(ctx workflow.Context) {
+		ao := workflow.LocalActivityOptions{
+			StartToCloseTimeout: 10 * time.Minute,
+			RetryPolicy:         runner.DefaultRetryPolicy,
+		}
 
-			temporalClient := serviceClient.GetTemporal().GetClient()
+		ctx = workflow.WithLocalActivityOptions(ctx, ao)
 
-			err := temporalClient.SignalWorkflow(
-				workflowTask.GetContext(),
-				workflowTask.WorkflowID,
-				sdkWorkflowsModel.TemporalEmptyRunId,
-				sdkWorkflowsModel.TemporalTerminateSignalName,
-				signalInput,
-			)
+		fut := workflow.ExecuteLocalActivity(
+			ctx,
+			models.TemporalSignalWorkflowActivityName,
+			workflowInfo.WorkflowExecution.ID,
+			workflowInfo.WorkflowExecution.RunID,
+			sdkWorkflowsModel.TemporalTerminateSignalName,
+			terminationRequest,
+		)
 
-			errCh.Send(ctx, err)
-		})
+		err := fut.Get(ctx, nil)
 
-		// Wait for the result
-		var signalErr error
-		errCh.Receive(temporalContext, &signalErr)
-
-		if signalErr != nil {
-			log.WithError(signalErr).Error("Failed to signal workflow for revocation")
-			return fmt.Errorf("failed to signal workflow: %w", signalErr)
+		if err != nil {
+			return fmt.Errorf("failed to signal workflow: %w", err)
 		}
 
 		log.WithFields(logrus.Fields{
