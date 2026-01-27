@@ -146,7 +146,7 @@ func Synchronize(
 		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeTenants, &SynchronizeTenantsRequest{},
 			func(ctx context.Context, req *SynchronizeTenantsRequest) (*SynchronizeTenantsResponse, error) {
 				logrus.WithFields(logrus.Fields{
-					"provider": provider.GetIdentifier(),
+					"provider":   provider.GetIdentifier(),
 					"pagination": req.Pagination,
 				}).Debug("Starting tenant synchronization")
 				return provider.SynchronizeTenants(ctx, req)
@@ -154,7 +154,7 @@ func Synchronize(
 			func(resp *SynchronizeTenantsResponse) {
 				logrus.WithFields(logrus.Fields{
 					"provider": provider.GetIdentifier(),
-					"count": len(resp.Tenants),
+					"count":    len(resp.Tenants),
 				}).Info("Synchronized tenants")
 				provider.AddTenants(resp.Tenants...)
 			})
@@ -165,7 +165,7 @@ func Synchronize(
 		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeIdentities, &SynchronizeIdentitiesRequest{},
 			func(ctx context.Context, req *SynchronizeIdentitiesRequest) (*SynchronizeIdentitiesResponse, error) {
 				logrus.WithFields(logrus.Fields{
-					"provider": provider.GetIdentifier(),
+					"provider":   provider.GetIdentifier(),
 					"pagination": req.Pagination,
 				}).Debug("Starting identity synchronization")
 				return provider.SynchronizeIdentities(ctx, req)
@@ -173,7 +173,7 @@ func Synchronize(
 			func(resp *SynchronizeIdentitiesResponse) {
 				logrus.WithFields(logrus.Fields{
 					"provider": provider.GetIdentifier(),
-					"count": len(resp.Identities),
+					"count":    len(resp.Identities),
 				}).Info("Synchronized identities")
 				provider.AddIdentities(resp.Identities...)
 			})
@@ -184,7 +184,7 @@ func Synchronize(
 		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeUsers, &SynchronizeUsersRequest{},
 			func(ctx context.Context, req *SynchronizeUsersRequest) (*SynchronizeUsersResponse, error) {
 				logrus.WithFields(logrus.Fields{
-					"provider": provider.GetIdentifier(),
+					"provider":   provider.GetIdentifier(),
 					"pagination": req.Pagination,
 				}).Debug("Starting user synchronization")
 				return provider.SynchronizeUsers(ctx, req)
@@ -192,7 +192,7 @@ func Synchronize(
 			func(resp *SynchronizeUsersResponse) {
 				logrus.WithFields(logrus.Fields{
 					"provider": provider.GetIdentifier(),
-					"count": len(resp.Identities),
+					"count":    len(resp.Identities),
 				}).Debug("Synchronized users")
 				provider.AddIdentities(resp.Identities...)
 			})
@@ -203,7 +203,7 @@ func Synchronize(
 		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeGroups, &SynchronizeGroupsRequest{},
 			func(ctx context.Context, req *SynchronizeGroupsRequest) (*SynchronizeGroupsResponse, error) {
 				logrus.WithFields(logrus.Fields{
-					"provider": provider.GetIdentifier(),
+					"provider":   provider.GetIdentifier(),
 					"pagination": req.Pagination,
 				}).Debug("Starting group synchronization")
 				return provider.SynchronizeGroups(ctx, req)
@@ -211,7 +211,7 @@ func Synchronize(
 			func(resp *SynchronizeGroupsResponse) {
 				logrus.WithFields(logrus.Fields{
 					"provider": provider.GetIdentifier(),
-					"count": len(resp.Identities),
+					"count":    len(resp.Identities),
 				}).Debug("Synchronized groups")
 				provider.AddIdentities(resp.Identities...)
 			})
@@ -222,7 +222,7 @@ func Synchronize(
 		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeResources, &SynchronizeResourcesRequest{},
 			func(ctx context.Context, req *SynchronizeResourcesRequest) (*SynchronizeResourcesResponse, error) {
 				logrus.WithFields(logrus.Fields{
-					"provider": provider.GetIdentifier(),
+					"provider":   provider.GetIdentifier(),
 					"pagination": req.Pagination,
 				}).Debug("Starting resource synchronization")
 				return provider.SynchronizeResources(ctx, req)
@@ -230,7 +230,7 @@ func Synchronize(
 			func(resp *SynchronizeResourcesResponse) {
 				logrus.WithFields(logrus.Fields{
 					"provider": provider.GetIdentifier(),
-					"count": len(resp.Resources),
+					"count":    len(resp.Resources),
 				}).Debug("Synchronized resources")
 				provider.AddResources(resp.Resources...)
 			})
@@ -241,7 +241,7 @@ func Synchronize(
 		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeRoles, &SynchronizeRolesRequest{},
 			func(ctx context.Context, req *SynchronizeRolesRequest) (*SynchronizeRolesResponse, error) {
 				logrus.WithFields(logrus.Fields{
-					"provider": provider.GetIdentifier(),
+					"provider":   provider.GetIdentifier(),
 					"pagination": req.Pagination,
 				}).Debug("Starting role synchronization")
 				return provider.SynchronizeRoles(ctx, req)
@@ -249,7 +249,7 @@ func Synchronize(
 			func(resp *SynchronizeRolesResponse) {
 				logrus.WithFields(logrus.Fields{
 					"provider": provider.GetIdentifier(),
-					"count": len(resp.Roles),
+					"count":    len(resp.Roles),
 				}).Debug("Synchronized roles")
 				provider.AddRoles(resp.Roles...)
 			})
@@ -260,16 +260,16 @@ func Synchronize(
 		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizePermissions, &SynchronizePermissionsRequest{},
 			func(ctx context.Context, req *SynchronizePermissionsRequest) (*SynchronizePermissionsResponse, error) {
 				logrus.WithFields(logrus.Fields{
-					"provider": provider.GetIdentifier(),
+					"provider":   provider.GetIdentifier(),
 					"pagination": req.Pagination,
 				}).
-				Debug("Starting permission synchronization")
+					Debug("Starting permission synchronization")
 				return provider.SynchronizePermissions(ctx, req)
 			},
 			func(resp *SynchronizePermissionsResponse) {
 				logrus.WithFields(logrus.Fields{
 					"provider": provider.GetIdentifier(),
-					"count": len(resp.Permissions),
+					"count":    len(resp.Permissions),
 				}).Debug("Synchronized permissions")
 				provider.AddPermissions(resp.Permissions...)
 			})
@@ -373,6 +373,16 @@ func PatchProviderUpstream(
 		identitiesResp, ok := payload.(SynchronizeIdentitiesResponse)
 		if ok {
 			providerReq.Identities = identitiesResp.Identities
+		}
+	case SynchronizeUsers:
+		usersResp, ok := payload.(SynchronizeUsersResponse)
+		if ok {
+			providerReq.Identities = usersResp.Identities
+		}
+	case SynchronizeGroups:
+		groupsResp, ok := payload.(SynchronizeGroupsResponse)
+		if ok {
+			providerReq.Identities = groupsResp.Identities
 		}
 	case SynchronizeRoles:
 		rolesResp, ok := payload.(SynchronizeRolesResponse)

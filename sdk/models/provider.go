@@ -7,6 +7,10 @@ import internal "github.com/thand-io/agent/internal/models"
 // an optional base role, and whether the provider is enabled.
 type Provider = internal.Provider
 
+// ProviderConfig defines the configuration for a specific provider,
+// including connection details and authentication settings.
+type ProviderConfig = internal.ProviderConfig
+
 // ProviderCapability represents a capability that a provider can support,
 // such as RBAC, authorization, notifications, or identity management.
 type ProviderCapability = internal.ProviderCapability
@@ -29,4 +33,6 @@ type ProviderIdentities = internal.ProviderIdentities
 // ProviderPatchRequest represents a request to patch provider data.
 type ProviderPatchRequest = internal.ProviderPatchRequest
 
+// ProviderDefinitions defines a collection of provider configurations,
+// mapping provider names to their respective configurations.
 type ProviderDefinitions = internal.ProviderDefinitions
