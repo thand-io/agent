@@ -458,13 +458,8 @@ func (t *thandTask) scheduleRevocation(
 
 	log := workflowTask.GetLogger()
 
-	newWorkflowTask := workflowTask.Clone().(*sdkWorkflowsModel.WorkflowTask)
-	newWorkflowTask.SetEntrypoint(revocationTask)
-
-	newTask := models.NewElevateWorkflowTask(newWorkflowTask)
-
-	// If we have a temporal context, use workflow.SignalWorkflow in a goroutine
-	// to avoid blocking the workflow. We signal via a background goroutine.
+	// If we have a temporal context, use it to schedule the revocation
+	// via the local activity to signal the workflow.
 	if workflowTask.HasTemporalContext() {
 
 		terminationRequest := models.TemporalTerminationRequest{
@@ -504,11 +499,16 @@ func (t *thandTask) scheduleRevocation(
 		}
 
 		log.WithFields(logrus.Fields{
-			"task": newTask.GetTaskName(),
-			"url":  t.config.GetResumeCallbackUrl(newTask),
+			"task": workflowTask.GetTaskName(),
+			"url":  t.config.GetResumeCallbackUrl(workflowTask),
 		}).Info("Scheduled revocation via Temporal")
 
 	} else if t.config.GetServices().HasScheduler() {
+
+		newWorkflowTask := workflowTask.Clone().(*sdkWorkflowsModel.WorkflowTask)
+		newWorkflowTask.SetEntrypoint(revocationTask)
+
+		newTask := models.NewElevateWorkflowTask(newWorkflowTask)
 
 		err := t.config.GetServices().GetScheduler().AddJob(
 			models.NewAtJob(
