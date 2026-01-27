@@ -8,7 +8,7 @@ import (
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
-	"github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 	"go.temporal.io/sdk/workflow"
 )
@@ -60,7 +60,7 @@ func (r *ResumableWorkflowRunner) ExecuteEmitTask(
 
 		fut := workflow.ExecuteLocalActivity(
 			ctx,
-			models.TemporalSignalWorkflowActivityName,
+			sdkConstants.TemporalSignalWorkflowActivityName,
 			workflowInfo.WorkflowExecution.ID,
 			workflowInfo.WorkflowExecution.RunID,
 			sdkWorkflowsModel.TemporalEventSignalName,

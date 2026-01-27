@@ -17,6 +17,7 @@ import (
 	"github.com/thand-io/agent/internal/common"
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 	runner "github.com/thand-io/agent/sdk/workflows/runner"
 	sdkWorkflowsRunner "github.com/thand-io/agent/sdk/workflows/runner"
@@ -489,7 +490,7 @@ func (t *thandTask) scheduleRevocation(
 
 		fut := workflow.ExecuteLocalActivity(
 			ctx,
-			models.TemporalSignalWorkflowActivityName,
+			sdkConstants.TemporalSignalWorkflowActivityName,
 			workflowInfo.WorkflowExecution.ID,
 			workflowInfo.WorkflowExecution.RunID,
 			sdkWorkflowsModel.TemporalTerminateSignalName,

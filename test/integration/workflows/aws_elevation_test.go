@@ -18,6 +18,7 @@ import (
 	"github.com/thand-io/agent/internal/workflows/manager"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/failure/v1"
 	"go.temporal.io/sdk/client"
 )
 
@@ -576,8 +577,91 @@ func verifyWorkflowHasTimer(t *testing.T, ctx context.Context, temporalClient cl
 
 	// The workflow should be running (waiting on a timer for revocation)
 	status := desc.WorkflowExecutionInfo.Status
+	t.Logf("Current workflow status: %s (%d)", status.String(), status)
+
+	// If workflow failed, provide diagnostic information
+	if status == enums.WORKFLOW_EXECUTION_STATUS_FAILED {
+		t.Logf("========== WORKFLOW FAILURE DIAGNOSTICS ==========")
+		t.Logf("Workflow ID: %s", workflowID)
+		if desc.WorkflowExecutionInfo.CloseTime != nil {
+			t.Logf("Workflow closed at: %v", desc.WorkflowExecutionInfo.CloseTime)
+		}
+
+		// Log pending activities that may have failed
+		if len(desc.PendingActivities) > 0 {
+			t.Logf("Pending activities (%d):", len(desc.PendingActivities))
+			for i, activity := range desc.PendingActivities {
+				t.Logf("  Activity %d: %s (state: %s, attempt: %d)",
+					i, activity.ActivityType.Name, activity.State.String(), activity.Attempt)
+				if activity.LastFailure != nil {
+					t.Logf("    Last failure: %s", activity.LastFailure.Message)
+					if activity.LastFailure.Cause != nil {
+						t.Logf("    Cause: %s", activity.LastFailure.Cause.Message)
+					}
+				}
+			}
+		}
+
+		// Fetch workflow history to find the failure reason
+		t.Log("Fetching workflow history...")
+		iter := temporalClient.GetWorkflowHistory(ctx, workflowID, "", false, enums.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+		eventCount := 0
+		for iter.HasNext() {
+			event, err := iter.Next()
+			if err != nil {
+				t.Logf("Error fetching history: %v", err)
+				break
+			}
+			eventCount++
+
+			// Log workflow execution failed events
+			if attrs := event.GetWorkflowExecutionFailedEventAttributes(); attrs != nil {
+				t.Logf(">>> WORKFLOW EXECUTION FAILED (Event %d) <<<", event.GetEventId())
+				if attrs.Failure != nil {
+					logFailureChain(t, "  ", attrs.Failure)
+				}
+			}
+
+			// Log activity task failed events
+			if attrs := event.GetActivityTaskFailedEventAttributes(); attrs != nil {
+				t.Logf(">>> ACTIVITY TASK FAILED (Event %d) <<<", event.GetEventId())
+				t.Logf("  Scheduled Event ID: %d", attrs.ScheduledEventId)
+				t.Logf("  Started Event ID: %d", attrs.StartedEventId)
+				if attrs.Failure != nil {
+					logFailureChain(t, "  ", attrs.Failure)
+				}
+			}
+
+			// Log activity task scheduled to see what activity was being run
+			if attrs := event.GetActivityTaskScheduledEventAttributes(); attrs != nil {
+				if attrs.ActivityType != nil {
+					t.Logf("Activity scheduled (Event %d): %s", event.GetEventId(), attrs.ActivityType.Name)
+				}
+			}
+
+			// Log local activity failed events
+			if attrs := event.GetMarkerRecordedEventAttributes(); attrs != nil {
+				if attrs.MarkerName == "LocalActivity" && attrs.Failure != nil {
+					t.Logf(">>> LOCAL ACTIVITY FAILED (Event %d) <<<", event.GetEventId())
+					logFailureChain(t, "  ", attrs.Failure)
+				}
+			}
+
+			// Log workflow task failed events (can indicate workflow code issues)
+			if attrs := event.GetWorkflowTaskFailedEventAttributes(); attrs != nil {
+				t.Logf(">>> WORKFLOW TASK FAILED (Event %d) <<<", event.GetEventId())
+				t.Logf("  Cause: %s", attrs.Cause.String())
+				if attrs.Failure != nil {
+					logFailureChain(t, "  ", attrs.Failure)
+				}
+			}
+		}
+		t.Logf("Total events in history: %d", eventCount)
+		t.Logf("========== END FAILURE DIAGNOSTICS ==========")
+	}
+
 	require.Equal(t, enums.WORKFLOW_EXECUTION_STATUS_RUNNING, status,
-		"Workflow should be running (waiting on revocation timer)")
+		"Workflow should be running (waiting on revocation timer), but got %s", status.String())
 
 	t.Logf("✓ Workflow is running with status: %s", status.String())
 
@@ -587,4 +671,81 @@ func verifyWorkflowHasTimer(t *testing.T, ctx context.Context, temporalClient cl
 	t.Logf("Workflow has %d pending activities", len(desc.PendingActivities))
 
 	t.Log("✓ Workflow has timer scheduled for revocation")
+}
+
+// logFailureChain recursively logs the full failure chain with proper indentation
+func logFailureChain(t *testing.T, indent string, f *failure.Failure) {
+	if f == nil {
+		return
+	}
+
+	t.Logf("%sMessage: %s", indent, f.Message)
+
+	if f.StackTrace != "" {
+		// Only show first few lines of stack trace to avoid clutter
+		lines := strings.Split(f.StackTrace, "\n")
+		maxLines := 10
+		if len(lines) > maxLines {
+			t.Logf("%sStack trace (first %d lines):", indent, maxLines)
+			for i := 0; i < maxLines; i++ {
+				t.Logf("%s  %s", indent, lines[i])
+			}
+			t.Logf("%s  ... (%d more lines)", indent, len(lines)-maxLines)
+		} else if len(lines) > 0 {
+			t.Logf("%sStack trace:", indent)
+			for _, line := range lines {
+				if line != "" {
+					t.Logf("%s  %s", indent, line)
+				}
+			}
+		}
+	}
+
+	if f.Source != "" {
+		t.Logf("%sSource: %s", indent, f.Source)
+	}
+
+	// Log failure info based on type
+	if appInfo := f.GetApplicationFailureInfo(); appInfo != nil {
+		t.Logf("%sType: ApplicationFailure", indent)
+		t.Logf("%sError Type: %s", indent, appInfo.Type)
+		if appInfo.NonRetryable {
+			t.Logf("%sNon-Retryable: true", indent)
+		}
+		if appInfo.Details != nil && len(appInfo.Details.Payloads) > 0 {
+			t.Logf("%sDetails payloads: %d", indent, len(appInfo.Details.Payloads))
+			for i, p := range appInfo.Details.Payloads {
+				t.Logf("%s  Payload %d: %s", indent, i, string(p.Data))
+			}
+		}
+	}
+
+	if actInfo := f.GetActivityFailureInfo(); actInfo != nil {
+		t.Logf("%sType: ActivityFailure", indent)
+		t.Logf("%sActivity Type: %s", indent, actInfo.ActivityType.GetName())
+		t.Logf("%sActivity ID: %s", indent, actInfo.ActivityId)
+		t.Logf("%sScheduled Event ID: %d", indent, actInfo.ScheduledEventId)
+		t.Logf("%sStarted Event ID: %d", indent, actInfo.StartedEventId)
+		t.Logf("%sIdentity: %s", indent, actInfo.Identity)
+	}
+
+	if timeoutInfo := f.GetTimeoutFailureInfo(); timeoutInfo != nil {
+		t.Logf("%sType: TimeoutFailure", indent)
+		t.Logf("%sTimeout Type: %s", indent, timeoutInfo.TimeoutType.String())
+	}
+
+	if cancelInfo := f.GetCanceledFailureInfo(); cancelInfo != nil {
+		t.Logf("%sType: CanceledFailure", indent)
+	}
+
+	if serverInfo := f.GetServerFailureInfo(); serverInfo != nil {
+		t.Logf("%sType: ServerFailure", indent)
+		t.Logf("%sNon-Retryable: %v", indent, serverInfo.NonRetryable)
+	}
+
+	// Recursively log the cause
+	if f.Cause != nil {
+		t.Logf("%sCaused by:", indent)
+		logFailureChain(t, indent+"  ", f.Cause)
+	}
 }

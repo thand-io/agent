@@ -16,53 +16,6 @@ type thandActivities struct {
 	config *Config
 }
 
-func (t *thandActivities) SignalWorkflow(
-	ctx context.Context,
-	workflowId string,
-	runId string,
-	signalName string,
-	signalInput any,
-) error {
-
-	services := t.config.GetServices()
-
-	if !services.HasTemporal() {
-		return temporal.NewNonRetryableApplicationError(
-			"Temporal service is not configured",
-			"TemporalServiceNotConfigured",
-			nil,
-		)
-	}
-
-	if !services.GetTemporal().HasClient() {
-		return temporal.NewNonRetryableApplicationError(
-			"Temporal client is not configured",
-			"TemporalClientNotConfigured",
-			nil,
-		)
-	}
-
-	log := activity.GetLogger(ctx)
-
-	log.Info("Signaling workflow")
-
-	err := services.GetTemporal().GetClient().SignalWorkflow(
-		ctx,
-		workflowId,
-		runId,
-		signalName,
-		signalInput,
-	)
-
-	if err != nil {
-		log.Error("Failed to signal workflow")
-		return err
-	}
-
-	return nil
-
-}
-
 // PatchProviderUpstreamDummy is a no-op activity for thand server/agents that are not
 // configured to use the Thand service
 func (t *thandActivities) PatchProviderUpstreamDummy(
