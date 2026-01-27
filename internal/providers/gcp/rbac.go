@@ -441,3 +441,30 @@ func (p *gcpProvider) unbindUserFromRoleByName(projectID string, user *models.Us
 
 	return nil
 }
+
+// statementsToGcpPermissions converts CSP-agnostic statements to GCP permissions list
+// Maps: Grant="allow"→included permissions, Grant="deny"→logged warning (GCP doesn't support deny in custom roles)
+// Note: Targets are not used in GCP custom roles; resource scope is handled via IAM bindings
+func statementsToGcpPermissions(statements []models.Statement) []string {
+	var permissions []string
+
+	for _, stmt := range statements {
+		if stmt.Grant == "allow" {
+			permissions = append(permissions, stmt.Operations...)
+		} else if stmt.Grant == "deny" {
+			logrus.Warnf("GCP custom roles don't support deny permissions, skipping deny statement with operations: %v", stmt.Operations)
+		}
+	}
+
+	// Deduplicate permissions
+	uniquePerms := make(map[string]bool)
+	result := make([]string, 0, len(permissions))
+	for _, perm := range permissions {
+		if !uniquePerms[perm] {
+			uniquePerms[perm] = true
+			result = append(result, perm)
+		}
+	}
+
+	return result
+}

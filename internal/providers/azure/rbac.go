@@ -66,3 +66,33 @@ func (p *azureProvider) RevokeRole(
 
 	return nil, nil
 }
+
+// statementsToAzureActions converts CSP-agnostic statements to Azure role actions and notActions
+// Maps: Grant="allow"→Actions, Grant="deny"→NotActions
+// Returns: (actions, notActions, targets for assignableScopes)
+func statementsToAzureActions(statements []models.Statement) (actions, notActions []string, targets []string) {
+	for _, stmt := range statements {
+		if stmt.Grant == "allow" {
+			actions = append(actions, stmt.Operations...)
+		} else if stmt.Grant == "deny" {
+			notActions = append(notActions, stmt.Operations...)
+		}
+
+		// Collect unique targets for assignableScopes
+		for _, target := range stmt.Targets {
+			// Only add if not already present
+			found := false
+			for _, existing := range targets {
+				if existing == target {
+					found = true
+					break
+				}
+			}
+			if !found {
+				targets = append(targets, target)
+			}
+		}
+	}
+
+	return actions, notActions, targets
+}

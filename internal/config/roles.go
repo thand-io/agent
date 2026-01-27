@@ -544,6 +544,25 @@ func (c *Config) mergeRole(composite *models.Role, inherited *models.Role) {
 		&composite.Groups.Allow, &composite.Groups.Deny,
 		inheritedAllowGroups, inheritedDenyGroups,
 	)
+
+	// Merge statements (new CSP-agnostic format)
+	// Only merge if either role uses statements
+	if len(composite.Statements) > 0 || len(inherited.Statements) > 0 {
+		// Get effective statements for both roles (handles backward compatibility)
+		compositeStmts := composite.GetEffectiveStatements()
+		inheritedStmts := inherited.GetEffectiveStatements()
+
+		// Filter inherited statements by composite's providers
+		filteredInheritedStmts := c.filterStatementsByProvider(inheritedStmts, composite.Providers)
+
+		// Merge statements using models.mergeStatements (parent=composite, child=inherited)
+		composite.Statements = models.MergeStatements(compositeStmts, filteredInheritedStmts)
+
+		// Clear legacy Permissions if we're now using Statements
+		if len(composite.Statements) > 0 {
+			composite.Permissions = models.Permissions{}
+		}
+	}
 }
 
 // mergePermissionsWithConflictResolution merges permissions with proper conflict resolution.
@@ -727,6 +746,49 @@ func (c *Config) filterByProvider(items []string, allowedProviders []string) []s
 		}
 		// else: has provider prefix but doesn't match - exclude
 	}
+	return result
+}
+
+// filterStatementsByProvider filters statements based on allowed providers
+// Similar to filterByProvider but works on Statement slices
+func (c *Config) filterStatementsByProvider(statements []models.Statement, allowedProviders []string) []models.Statement {
+	if len(statements) == 0 {
+		return nil
+	}
+	if len(allowedProviders) == 0 {
+		return statements
+	}
+
+	// Build a set of allowed providers for O(1) lookup
+	allowedSet := make(map[string]struct{}, len(allowedProviders))
+	for _, p := range allowedProviders {
+		allowedSet[p] = struct{}{}
+	}
+
+	result := make([]models.Statement, 0, len(statements))
+	for _, stmt := range statements {
+		// Filter operations by provider
+		filteredOps := c.filterByProvider(stmt.Operations, allowedProviders)
+		if len(filteredOps) == 0 {
+			continue // Skip statements with no matching operations
+		}
+
+		// Filter targets by provider
+		filteredTargets := c.filterByProvider(stmt.Targets, allowedProviders)
+		if len(filteredTargets) == 0 {
+			// Keep wildcard if no targets match
+			filteredTargets = []string{"*"}
+		}
+
+		// Create filtered statement
+		result = append(result, models.Statement{
+			Grant:      stmt.Grant,
+			Operations: filteredOps,
+			Targets:    filteredTargets,
+			Conditions: stmt.Conditions,
+		})
+	}
+
 	return result
 }
 

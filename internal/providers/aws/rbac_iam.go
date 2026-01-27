@@ -32,10 +32,13 @@ func (p *awsProvider) authorizeRoleTraditionalIAM(
 		}
 	}
 
-	// Attach policies to the role if they don't exist
-	err = p.attachPoliciesToRole(ctx, existingRole.RoleName, role.Permissions.Allow)
-	if err != nil {
-		return nil, fmt.Errorf("failed to attach policies to role: %w", err)
+	// Attach policies to the role using effective statements (handles backward compatibility)
+	statements := role.GetEffectiveStatements()
+	if len(statements) > 0 {
+		err = p.attachPoliciesToRole(ctx, existingRole.RoleName, statements)
+		if err != nil {
+			return nil, fmt.Errorf("failed to attach policies to role: %w", err)
+		}
 	}
 
 	// Bind the user to the role (assuming user will assume this role)
@@ -117,22 +120,13 @@ func (p *awsProvider) createRole(ctx context.Context, role *models.Role, targetA
 }
 
 // attachPoliciesToRole creates and attaches an inline policy with the specified permissions
-func (p *awsProvider) attachPoliciesToRole(ctx context.Context, roleName *string, permissions []string) error {
-	if len(permissions) == 0 {
-		return nil // No permissions to attach
+func (p *awsProvider) attachPoliciesToRole(ctx context.Context, roleName *string, statements []models.Statement) error {
+	if len(statements) == 0 {
+		return nil // No statements to attach
 	}
 
-	// Create a policy document using proper structs
-	policyDocument := PolicyDocument{
-		Version: "2012-10-17",
-		Statement: []Statement{
-			{
-				Effect:   "Allow",
-				Action:   permissions,
-				Resource: "*",
-			},
-		},
-	}
+	// Convert CSP-agnostic statements to AWS policy document
+	policyDocument := statementsToAwsPolicy(statements)
 
 	policyDocumentJSON, err := json.Marshal(policyDocument)
 	if err != nil {

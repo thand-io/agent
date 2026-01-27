@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
@@ -124,4 +125,29 @@ type Statement struct {
 	Action    any    `json:"Action,omitempty"`    // Can be string or []string
 	Resource  any    `json:"Resource,omitempty"`  // Can be string or []string
 	Principal any    `json:"Principal,omitempty"` // For assume role policies
+}
+
+// statementsToAwsPolicy converts CSP-agnostic statements to AWS PolicyDocument
+// Maps: Grant→Effect, Operations→Action, Targets→Resource
+func statementsToAwsPolicy(statements []models.Statement) PolicyDocument {
+	awsStatements := make([]Statement, len(statements))
+
+	for i, stmt := range statements {
+		// Capitalize grant ("allow" → "Allow", "deny" → "Deny")
+		effect := stmt.Grant
+		if len(effect) > 0 {
+			effect = strings.ToUpper(effect[:1]) + effect[1:]
+		}
+
+		awsStatements[i] = Statement{
+			Effect:   effect,
+			Action:   stmt.Operations, // Keep as []string
+			Resource: stmt.Targets,    // Keep as []string
+		}
+	}
+
+	return PolicyDocument{
+		Version:   "2012-10-17",
+		Statement: awsStatements,
+	}
 }

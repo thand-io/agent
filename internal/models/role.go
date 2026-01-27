@@ -10,6 +10,15 @@ import (
 	"github.com/thand-io/agent/internal/common"
 )
 
+// Statement represents a CSP-agnostic permission statement
+// Field names are provider-agnostic, but values are provider-specific
+type Statement struct {
+	Grant      string         `json:"grant" validate:"required,oneof=allow deny"`                      // "allow" or "deny" (agnostic terminology)
+	Operations []string       `json:"operations" validate:"required,min=1,max=500,dive,min=1,max=500"` // Provider-specific operations: ["s3:GetObject"] for AWS, ["storage.buckets.get"] for GCP
+	Targets    []string       `json:"targets" validate:"required,min=1,max=100,dive,min=1,max=1000"`   // Provider-specific resource identifiers
+	Conditions map[string]any `json:"conditions,omitempty" validate:"max=10,dive,keys,min=1,max=100"`  // Optional provider-specific conditions
+}
+
 type Role struct {
 	Version        *version.Version `json:"version,omitempty"`
 	Identifier     string           `json:"-"`
@@ -19,7 +28,8 @@ type Role struct {
 	Workflows      []string         `json:"workflows,omitempty" validate:"max=5,dive,min=1,max=100"` // The workflows to execute
 	Inherits       []string         `json:"inherits,omitempty" validate:"max=50,dive,min=1,max=100"` // roles to inherit from or provider specific roles/policies etc
 	Groups         Groups           `json:"groups"`                                                  // groups to add the user to
-	Permissions    Permissions      `json:"permissions"`                                             // granular permissions for the role
+	Permissions    Permissions      `json:"permissions"`                                             // granular permissions for the role (deprecated, use Statements)
+	Statements     []Statement      `json:"statements,omitempty" validate:"max=100,dive"`            // CSP-agnostic permission statements (replaces Permissions)
 	Resources      Resources        `json:"resources"`                                               // resource access rules, apis, files, systems etc
 	Scopes         *RoleScopes      `json:"scopes,omitempty"`                                        // scope of who can be assigned this role
 	Providers      []string         `json:"providers" validate:"max=5,dive,min=2,max=100"`           // providers that can assign this role
@@ -230,6 +240,13 @@ func (h *RoleDefinitions) Validate() error {
 		}
 		if len(role.Workflows) > MaxWorkflows {
 			return fmt.Errorf("role '%s' exceeds maximum workflows limit (%d > %d)", roleKey, len(role.Workflows), MaxWorkflows)
+		}
+
+		// Validate mutual exclusivity between Permissions and Statements
+		hasPermissions := len(role.Permissions.Allow) > 0 || len(role.Permissions.Deny) > 0
+		hasStatements := len(role.Statements) > 0
+		if hasPermissions && hasStatements {
+			return fmt.Errorf("role '%s' cannot have both 'permissions' and 'statements' defined - use 'statements' for new roles", roleKey)
 		}
 	}
 
