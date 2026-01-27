@@ -576,8 +576,9 @@ func verifyWorkflowHasTimer(t *testing.T, ctx context.Context, temporalClient cl
 
 	// The workflow should be running (waiting on a timer for revocation)
 	status := desc.WorkflowExecutionInfo.Status
+
 	require.Equal(t, enums.WORKFLOW_EXECUTION_STATUS_RUNNING, status,
-		"Workflow should be running (waiting on revocation timer)")
+		"Workflow should be running (waiting on revocation timer), but got %s", status.String())
 
 	t.Logf("✓ Workflow is running with status: %s", status.String())
 
