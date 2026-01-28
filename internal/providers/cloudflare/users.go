@@ -44,9 +44,10 @@ func (p *cloudflareProvider) SynchronizeUsers(ctx context.Context, req *models.S
 			ID:    member.ID,
 			Label: member.User.Email,
 			User: &models.User{
-				ID:    member.User.ID,
-				Email: member.User.Email,
-				Name:  fmt.Sprintf("%s %s", member.User.FirstName, member.User.LastName),
+				ID:     member.User.ID,
+				Email:  member.User.Email,
+				Name:   fmt.Sprintf("%s %s", member.User.FirstName, member.User.LastName),
+				Source: "cloudflare",
 			},
 		}
 

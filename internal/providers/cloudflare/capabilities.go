@@ -7,4 +7,5 @@ var CloudflareCapabilities = models.NewProviderCapabilities().
 	WithDefaultRolesConfiguration().
 	WithDefaultResourcesConfiguration().
 	WithDefaultPermissionsConfiguration().
-	WithDefaultProvisioningConfiguration()
+	WithDefaultProvisioningConfiguration().
+	WithDefaultTenantsConfiguration()
