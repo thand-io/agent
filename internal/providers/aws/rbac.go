@@ -121,14 +121,15 @@ type PolicyDocument struct {
 
 // Statement represents a policy statement
 type Statement struct {
-	Effect    string `json:"Effect"`
-	Action    any    `json:"Action,omitempty"`    // Can be string or []string
-	Resource  any    `json:"Resource,omitempty"`  // Can be string or []string
-	Principal any    `json:"Principal,omitempty"` // For assume role policies
+	Effect    string         `json:"Effect"`
+	Action    any            `json:"Action,omitempty"`    // Can be string or []string
+	Resource  any            `json:"Resource,omitempty"`  // Can be string or []string
+	Principal any            `json:"Principal,omitempty"` // For assume role policies
+	Condition map[string]any `json:"Condition,omitempty"` // IAM policy conditions
 }
 
 // statementsToAwsPolicy converts CSP-agnostic statements to AWS PolicyDocument
-// Maps: Grant→Effect, Operations→Action, Targets→Resource
+// Maps: Grant→Effect, Operations→Action, Targets→Resource, Conditions→Condition
 func statementsToAwsPolicy(statements []models.Statement) PolicyDocument {
 	awsStatements := make([]Statement, len(statements))
 
@@ -140,9 +141,10 @@ func statementsToAwsPolicy(statements []models.Statement) PolicyDocument {
 		}
 
 		awsStatements[i] = Statement{
-			Effect:   effect,
-			Action:   stmt.Operations, // Keep as []string
-			Resource: stmt.Targets,    // Keep as []string
+			Effect:    effect,
+			Action:    stmt.Operations, // Keep as []string
+			Resource:  stmt.Targets,    // Keep as []string
+			Condition: stmt.Conditions, // Pass through conditions as-is
 		}
 	}
 
