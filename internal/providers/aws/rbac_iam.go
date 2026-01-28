@@ -32,10 +32,9 @@ func (p *awsProvider) authorizeRoleTraditionalIAM(
 		}
 	}
 
-	// Attach policies to the role using effective statements (handles backward compatibility)
-	statements := role.GetEffectiveStatements()
-	if len(statements) > 0 {
-		err = p.attachPoliciesToRole(ctx, existingRole.RoleName, statements)
+	// Attach policies to the role using permissions (handles backward compatibility)
+	if len(role.Permissions.Allow) > 0 || len(role.Permissions.Deny) > 0 {
+		err = p.attachPoliciesToRole(ctx, existingRole.RoleName, role.Permissions)
 		if err != nil {
 			return nil, fmt.Errorf("failed to attach policies to role: %w", err)
 		}
@@ -120,13 +119,13 @@ func (p *awsProvider) createRole(ctx context.Context, role *models.Role, targetA
 }
 
 // attachPoliciesToRole creates and attaches an inline policy with the specified permissions
-func (p *awsProvider) attachPoliciesToRole(ctx context.Context, roleName *string, statements []models.Statement) error {
-	if len(statements) == 0 {
-		return nil // No statements to attach
+func (p *awsProvider) attachPoliciesToRole(ctx context.Context, roleName *string, permissions models.Permissions) error {
+	if len(permissions.Allow) == 0 && len(permissions.Deny) == 0 {
+		return nil // No permissions to attach
 	}
 
-	// Convert CSP-agnostic statements to AWS policy document
-	policyDocument := statementsToAwsPolicy(statements)
+	// Convert CSP-agnostic permissions to AWS policy document
+	policyDocument := permissionsToAwsPolicy(permissions)
 
 	policyDocumentJSON, err := json.Marshal(policyDocument)
 	if err != nil {

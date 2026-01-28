@@ -93,7 +93,7 @@ func (p *gcpProvider) AuthorizeRole(
 				role.GetName(),
 				role.GetDescription(),
 				stage,
-				role.Permissions.Allow,
+				role.Permissions,
 			)
 			if err != nil {
 				return nil, temporal.NewApplicationErrorWithOptions(
@@ -243,16 +243,19 @@ func (p *gcpProvider) GetAuthorizedAccessUrl(
 }
 
 // createRole creates a custom role.
-func (p *gcpProvider) createRole(projectID, name, title, description, stage string, permissions []string) (*iam.Role, error) {
+func (p *gcpProvider) createRole(projectID, name, title, description, stage string, permissions models.Permissions) (*iam.Role, error) {
 
 	service := p.GetIamClient()
+
+	// Convert permissions to GCP format
+	gcpPermissions := permissionsToGcpPermissions(permissions)
 
 	request := &iam.CreateRoleRequest{
 		Role: &iam.Role{
 			Name:                name,
 			Title:               title,
 			Description:         description,
-			IncludedPermissions: permissions,
+			IncludedPermissions: gcpPermissions,
 			Stage:               stage,
 		},
 		RoleId: name,
@@ -442,24 +445,26 @@ func (p *gcpProvider) unbindUserFromRoleByName(projectID string, user *models.Us
 	return nil
 }
 
-// statementsToGcpPermissions converts CSP-agnostic statements to GCP permissions list
-// Maps: Grant="allow"→included permissions, Grant="deny"→logged warning (GCP doesn't support deny in custom roles)
+// permissionsToGcpPermissions converts CSP-agnostic Permissions to GCP permissions list
+// Only Allow statements are used (GCP custom roles don't support deny)
 // Note: Targets are not used in GCP custom roles; resource scope is handled via IAM bindings
-func statementsToGcpPermissions(statements []models.Statement) []string {
-	var permissions []string
+func permissionsToGcpPermissions(permissions models.Permissions) []string {
+	var gcpPermissions []string
 
-	for _, stmt := range statements {
-		if stmt.Grant == "allow" {
-			permissions = append(permissions, stmt.Operations...)
-		} else if stmt.Grant == "deny" {
-			logrus.Warnf("GCP custom roles don't support deny permissions, skipping deny statement with operations: %v", stmt.Operations)
-		}
+	// Process Allow statements
+	for _, stmt := range permissions.Allow {
+		gcpPermissions = append(gcpPermissions, stmt.Operations...)
+	}
+
+	// Log warning for Deny statements (GCP doesn't support deny in custom roles)
+	if len(permissions.Deny) > 0 {
+		logrus.Warnf("GCP custom roles don't support deny permissions, skipping %d deny statements", len(permissions.Deny))
 	}
 
 	// Deduplicate permissions
 	uniquePerms := make(map[string]bool)
-	result := make([]string, 0, len(permissions))
-	for _, perm := range permissions {
+	result := make([]string, 0, len(gcpPermissions))
+	for _, perm := range gcpPermissions {
 		if !uniquePerms[perm] {
 			uniquePerms[perm] = true
 			result = append(result, perm)

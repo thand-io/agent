@@ -31,11 +31,11 @@ func TestKubernetesRoles(t *testing.T) {
 				},
 			},
 			Permissions: models.Permissions{
-				Allow: []string{
+				Allow: stmts(
 					"k8s:pods:get,list,watch",
 					"k8s:services:get,list",
 					"k8s:events:get,list",
-				},
+				),
 			},
 			Enabled: true,
 		},
@@ -58,7 +58,7 @@ func TestKubernetesRoles(t *testing.T) {
 				},
 			},
 			Permissions: models.Permissions{
-				Allow: []string{
+				Allow: stmts(
 					"k8s:pods:get,list,watch",
 					"k8s:services:get,list,create,update,patch,delete",
 					"k8s:configmaps:get,list,create,update,delete",
@@ -66,7 +66,7 @@ func TestKubernetesRoles(t *testing.T) {
 					"k8s:apps/deployments:get,list,create,update,patch,delete,watch",
 					"k8s:apps/replicasets:get,list",
 					"k8s:events:get,list,create",
-				},
+				),
 			},
 			Enabled: true,
 		},
@@ -89,9 +89,9 @@ func TestKubernetesRoles(t *testing.T) {
 				},
 			},
 			Permissions: models.Permissions{
-				Allow: []string{
+				Allow: stmts(
 					"k8s:*:*",
-				},
+				),
 			},
 			Enabled: true,
 		},
@@ -109,12 +109,12 @@ func TestKubernetesRoles(t *testing.T) {
 				"kubernetes-prod",
 			},
 			Permissions: models.Permissions{
-				Allow: []string{
+				Allow: stmts(
 					"k8s:pods:get,list,watch",
 					"k8s:services:get,list,watch",
 					"k8s:nodes:get,list,watch",
 					"k8s:events:get,list,watch",
-				},
+				),
 			},
 			Enabled: true,
 		},
@@ -231,11 +231,11 @@ func TestKubernetesRoleScenarios(t *testing.T) {
 				Name:        "Kubernetes Base",
 				Description: "Base Kubernetes permissions",
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"k8s:pods:get,list",
 						"k8s:services:get,list",
 						"k8s:events:get,list",
-					},
+					),
 				},
 				Enabled: true,
 			},
@@ -244,11 +244,11 @@ func TestKubernetesRoleScenarios(t *testing.T) {
 				Description: "Developer access to Kubernetes",
 				Inherits:    []string{"k8s-base"},
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"k8s:pods:watch",
 						"k8s:configmaps:get,list,create,update",
 						"k8s:apps/deployments:get,list,create,update,patch",
-					},
+					),
 				},
 				Resources: models.Resources{
 					Allow: []string{
@@ -266,13 +266,13 @@ func TestKubernetesRoleScenarios(t *testing.T) {
 				Description: "SRE access to Kubernetes",
 				Inherits:    []string{"k8s-developer"},
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"k8s:pods:delete",
 						"k8s:services:create,update,patch,delete",
 						"k8s:apps/deployments:delete,watch",
 						"k8s:nodes:get,list,watch",
 						"k8s:persistentvolumes:get,list,watch",
-					},
+					),
 				},
 				Resources: models.Resources{
 					Allow: []string{
@@ -337,13 +337,13 @@ func TestKubernetesRoleScenarios(t *testing.T) {
 				Name:        "Team A Developer",
 				Description: "Developer access for Team A namespaces",
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"k8s:pods:*",
 						"k8s:services:*",
 						"k8s:configmaps:*",
 						"k8s:secrets:get,list",
 						"k8s:apps/deployments:*",
-					},
+					),
 				},
 				Resources: models.Resources{
 					Allow: []string{
@@ -363,12 +363,12 @@ func TestKubernetesRoleScenarios(t *testing.T) {
 				Name:        "Team B Developer",
 				Description: "Developer access for Team B namespaces",
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"k8s:pods:get,list,create,update,delete",
 						"k8s:services:get,list,create,update,delete",
 						"k8s:configmaps:get,list,create,update,delete",
 						"k8s:apps/deployments:get,list,create,update,patch,delete",
-					},
+					),
 				},
 				Resources: models.Resources{
 					Allow: []string{
@@ -385,13 +385,13 @@ func TestKubernetesRoleScenarios(t *testing.T) {
 				Description: "Read access across teams",
 				Inherits:    []string{"team-a-dev", "team-b-dev"},
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"k8s:events:get,list,watch",
 						"k8s:nodes:get,list",
-					},
-					Deny: []string{
+					),
+					Deny: stmts(
 						"k8s:*:create,update,patch,delete",
-					},
+					),
 				},
 				Scopes: &models.RoleScopes{
 					Groups: []string{"managers", "leads"},
@@ -471,13 +471,13 @@ func TestKubernetesRoleScenarios(t *testing.T) {
 				Name:        "Cluster Admin",
 				Description: "Cluster-wide admin with some restrictions",
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"k8s:*:*",
-					},
-					Deny: []string{
+					),
+					Deny: stmts(
 						"k8s:secrets:*", // Cannot access secrets
 						"k8s:certificatesigningrequests:*",
-					},
+					),
 				},
 				Scopes: &models.RoleScopes{
 					Users: []string{

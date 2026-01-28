@@ -101,9 +101,8 @@ func (p *awsProvider) findOrCreatePermissionSet(ctx context.Context, instanceArn
 			// Permission set exists, ensure it has the required policies attached
 
 			// Attach inline permissions if any
-			statements := role.GetEffectiveStatements()
-			if len(statements) > 0 {
-				err = p.attachPermissionsToPermissionSet(ctx, instanceArn, permissionSetArn, statements)
+			if len(role.Permissions.Allow) > 0 || len(role.Permissions.Deny) > 0 {
+				err = p.attachPermissionsToPermissionSet(ctx, instanceArn, permissionSetArn, role.Permissions)
 				if err != nil {
 					return "", fmt.Errorf("failed to attach permissions to existing permission set: %w", err)
 				}
@@ -134,10 +133,9 @@ func (p *awsProvider) findOrCreatePermissionSet(ctx context.Context, instanceArn
 
 	permissionSetArn := *createResp.PermissionSet.PermissionSetArn
 
-	// Create inline policy for the permission set using effective statements
-	statements := role.GetEffectiveStatements()
-	if len(statements) > 0 {
-		err = p.attachPermissionsToPermissionSet(ctx, instanceArn, permissionSetArn, statements)
+	// Create inline policy for the permission set using permissions
+	if len(role.Permissions.Allow) > 0 || len(role.Permissions.Deny) > 0 {
+		err = p.attachPermissionsToPermissionSet(ctx, instanceArn, permissionSetArn, role.Permissions)
 		if err != nil {
 			return "", fmt.Errorf("failed to attach permissions to permission set: %w", err)
 		}
@@ -155,13 +153,13 @@ func (p *awsProvider) findOrCreatePermissionSet(ctx context.Context, instanceArn
 }
 
 // attachPermissionsToPermissionSet creates an inline policy for the permission set
-func (p *awsProvider) attachPermissionsToPermissionSet(ctx context.Context, instanceArn, permissionSetArn string, statements []models.Statement) error {
-	if len(statements) == 0 {
-		return nil // No statements to attach
+func (p *awsProvider) attachPermissionsToPermissionSet(ctx context.Context, instanceArn, permissionSetArn string, permissions models.Permissions) error {
+	if len(permissions.Allow) == 0 && len(permissions.Deny) == 0 {
+		return nil // No permissions to attach
 	}
 
-	// Convert CSP-agnostic statements to AWS policy document
-	policyDocument := statementsToAwsPolicy(statements)
+	// Convert CSP-agnostic permissions to AWS policy document
+	policyDocument := permissionsToAwsPolicy(permissions)
 
 	policyDocumentJSON, err := json.Marshal(policyDocument)
 	if err != nil {

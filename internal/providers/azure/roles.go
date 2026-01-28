@@ -46,25 +46,42 @@ func (p *azureProvider) getRoleDefinition(ctx context.Context, roleName string) 
 }
 
 // createRoleDefinition creates a custom role definition
-func (p *azureProvider) createRoleDefinition(ctx context.Context, roleName, description string, permissions []string) (*armauthorization.RoleDefinition, error) {
+func (p *azureProvider) createRoleDefinition(ctx context.Context, roleName, description string, permissions models.Permissions) (*armauthorization.RoleDefinition, error) {
 	scope := p.getScope()
 	roleDefinitionID := uuid.New().String()
 
-	// Convert permissions to Azure actions
-	var actions []*string
-	for _, perm := range permissions {
-		actions = append(actions, &perm)
+	// Convert permissions to Azure actions and notActions
+	actions, notActions, targets := permissionsToAzureActions(permissions)
+
+	// Convert to Azure pointer format
+	var actionPtrs []*string
+	for _, action := range actions {
+		actionPtrs = append(actionPtrs, &action)
+	}
+
+	var notActionPtrs []*string
+	for _, notAction := range notActions {
+		notActionPtrs = append(notActionPtrs, &notAction)
+	}
+
+	// Use targets as assignable scopes if provided, otherwise use default scope
+	assignableScopes := []*string{&scope}
+	if len(targets) > 0 {
+		assignableScopes = make([]*string, len(targets))
+		for i, target := range targets {
+			assignableScopes[i] = &target
+		}
 	}
 
 	roleDefinition := armauthorization.RoleDefinition{
 		Properties: &armauthorization.RoleDefinitionProperties{
 			RoleName:         &roleName,
 			Description:      &description,
-			AssignableScopes: []*string{&scope},
+			AssignableScopes: assignableScopes,
 			Permissions: []*armauthorization.Permission{
 				{
-					Actions:    actions,
-					NotActions: []*string{},
+					Actions:    actionPtrs,
+					NotActions: notActionPtrs,
 				},
 			},
 		},

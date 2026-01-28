@@ -17,11 +17,11 @@ func TestProviderSpecificInheritance(t *testing.T) {
 			"app-role": {
 				Name: "AWS Test Role",
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"s3:GetObject",
 						"s3:ListBucket",
 						"ec2:DescribeInstances",
-					},
+					),
 				},
 				Enabled: true,
 			},
@@ -29,7 +29,7 @@ func TestProviderSpecificInheritance(t *testing.T) {
 				Name:     "Application Role",
 				Inherits: []string{"app-role"},
 				Permissions: models.Permissions{
-					Allow: []string{"app:deploy"},
+					Allow: stmts("app:deploy"),
 				},
 				Enabled: true,
 			},
@@ -70,11 +70,11 @@ func TestProviderSpecificInheritance(t *testing.T) {
 			"service-role": {
 				Name: "GCP Service Account",
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"compute.instances.get",
 						"compute.instances.list",
 						"storage.objects.get",
-					},
+					),
 				},
 				Enabled: true,
 			},
@@ -82,7 +82,7 @@ func TestProviderSpecificInheritance(t *testing.T) {
 				Name:     "Developer Role",
 				Inherits: []string{"service-role"},
 				Permissions: models.Permissions{
-					Allow: []string{"cloudrun.services.deploy"},
+					Allow: stmts("cloudrun.services.deploy"),
 				},
 				Enabled: true,
 			},
@@ -124,11 +124,11 @@ func TestProviderSpecificInheritance(t *testing.T) {
 			"azure-role": {
 				Name: "Custom Azure Role",
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"Microsoft.Compute/virtualMachines/read",
 						"Microsoft.Compute/virtualMachines/start/action",
 						"Microsoft.Storage/storageAccounts/listKeys/action",
-					},
+					),
 				},
 				Enabled: true,
 			},
@@ -136,7 +136,7 @@ func TestProviderSpecificInheritance(t *testing.T) {
 				Name:     "Operations Role",
 				Inherits: []string{"azure-role"},
 				Permissions: models.Permissions{
-					Allow: []string{"ops.deploy"},
+					Allow: stmts("ops.deploy"),
 				},
 				Enabled: true,
 			},
@@ -178,7 +178,7 @@ func TestProviderSpecificInheritance(t *testing.T) {
 			"nonexistent:arn:aws:iam::123456789012:role/TestRole": {
 				Name: "Fallback Role",
 				Permissions: models.Permissions{
-					Allow: []string{"fallback:action"},
+					Allow: stmts("fallback:action"),
 				},
 				Enabled: true,
 			},
@@ -186,7 +186,7 @@ func TestProviderSpecificInheritance(t *testing.T) {
 				Name:     "Parent Role",
 				Inherits: []string{"nonexistent:arn:aws:iam::123456789012:role/TestRole"},
 				Permissions: models.Permissions{
-					Allow: []string{"parent:action"},
+					Allow: stmts("parent:action"),
 				},
 				Enabled: true,
 			},
@@ -306,7 +306,7 @@ func TestProviderParsingLogicConsolidated(t *testing.T) {
 			"inc-role": {
 				Name: "AWS Role",
 				Permissions: models.Permissions{
-					Allow: []string{"s3:GetObject"},
+					Allow: stmts("s3:GetObject"),
 				},
 				Enabled: true,
 			},
@@ -314,7 +314,7 @@ func TestProviderParsingLogicConsolidated(t *testing.T) {
 				Name:     "Test Role",
 				Inherits: []string{"inc-role"},
 				Permissions: models.Permissions{
-					Allow: []string{"test:action"},
+					Allow: stmts("test:action"),
 				},
 				Enabled: true,
 			},
@@ -360,7 +360,7 @@ func TestProviderRoleLookup(t *testing.T) {
 				Inherits:  []string{"aws-prod:AdministratorAccess"},
 				Providers: []string{"aws-prod"},
 				Permissions: models.Permissions{
-					Allow: []string{"internal:check"},
+					Allow: stmts("internal:check"),
 				},
 				Enabled: true,
 			},
@@ -517,7 +517,7 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 				Inherits:  []string{"aws-prod:AdministratorAccess"},
 				Providers: []string{"aws-prod"},
 				Permissions: models.Permissions{
-					Allow: []string{"admin:all"},
+					Allow: stmts("admin:all"),
 				},
 				Enabled: true,
 			},
@@ -565,7 +565,7 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 				Inherits:  []string{"aws-prod:AdministratorAccess"},
 				Providers: []string{"aws-prod"},
 				Permissions: models.Permissions{
-					Allow: []string{"admin:all"},
+					Allow: stmts("admin:all"),
 				},
 				Enabled: true,
 			},
@@ -740,7 +740,7 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 				Inherits:  []string{"aws-secure:AdministratorAccess"},
 				Providers: []string{"aws-secure"},
 				Permissions: models.Permissions{
-					Allow: []string{"base:permission"},
+					Allow: stmts("base:permission"),
 				},
 				// Role-level scopes: only admins group
 				Scopes: &models.RoleScopes{

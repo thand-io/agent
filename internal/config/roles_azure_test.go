@@ -8,6 +8,14 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
+// stmts converts a []string to models.Statements for test convenience
+func stmtsAzure(ops ...string) models.Statements {
+	if len(ops) == 0 {
+		return nil
+	}
+	return models.Statements{{Operations: ops}}
+}
+
 // TestAzureRoles tests Azure-specific role configurations based on config/roles/azure.yaml
 func TestAzureRoles(t *testing.T) {
 	// Azure role definitions based on config/roles/azure.yaml
@@ -22,13 +30,13 @@ func TestAzureRoles(t *testing.T) {
 				"custom_storage_admin",
 			},
 			Permissions: models.Permissions{
-				Allow: []string{
+				Allow: stmts(
 					"Microsoft.Compute/*/read",
 					"Microsoft.Compute/availabilitySets/*",
 					"Microsoft.Compute/proximityPlacementGroups/*",
 					"Microsoft.Compute/virtualMachines/*",
 					"Microsoft.Compute/disks/*",
-				},
+				),
 			},
 			Resources: models.Resources{
 				Allow: []string{
@@ -44,10 +52,10 @@ func TestAzureRoles(t *testing.T) {
 			Name:        "Custom Storage Admin",
 			Description: "Custom role for storage administration",
 			Permissions: models.Permissions{
-				Allow: []string{
+				Allow: stmts(
 					"Microsoft.Storage/storageAccounts/blobServices/containers/*",
 					"Microsoft.Storage/storageAccounts/blobServices/generateUserDelegationKey/action",
-				},
+				),
 			},
 			Enabled: true,
 		},
@@ -118,14 +126,14 @@ func TestAzureRoleScenarios(t *testing.T) {
 				Name:        "Azure Developer",
 				Description: "Developer access to Azure resources",
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"Microsoft.Compute/virtualMachines/read",
 						"Microsoft.Compute/virtualMachines/start/action",
 						"Microsoft.Compute/virtualMachines/restart/action",
 						"Microsoft.Storage/storageAccounts/blobServices/containers/read",
 						"Microsoft.Storage/storageAccounts/blobServices/containers/write",
 						"Microsoft.Web/sites/*",
-					},
+					),
 				},
 				Resources: models.Resources{
 					Allow: []string{
@@ -200,9 +208,9 @@ func TestAzureRoleScenarios(t *testing.T) {
 				Name:        "Custom Reader",
 				Description: "Custom read-only role",
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"*/read",
-					},
+					),
 				},
 				Enabled: true,
 			},
@@ -210,11 +218,11 @@ func TestAzureRoleScenarios(t *testing.T) {
 				Name:        "Custom Blob Reader",
 				Description: "Custom storage blob reading role",
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"Microsoft.Storage/storageAccounts/blobServices/containers/read",
 						"Microsoft.Storage/storageAccounts/blobServices/generateUserDelegationKey/action",
 						"Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read",
-					},
+					),
 				},
 				Enabled: true,
 			},
@@ -226,10 +234,10 @@ func TestAzureRoleScenarios(t *testing.T) {
 					"custom_blob_reader",
 				},
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"Microsoft.DataFactory/datafactories/read",
 						"Microsoft.DataFactory/factories/read",
-					},
+					),
 				},
 				Scopes: &models.RoleScopes{
 					Groups: []string{"analysts", "data-team"},
@@ -289,14 +297,14 @@ func TestAzureRoleScenarios(t *testing.T) {
 				Name:        "Subscription Admin",
 				Description: "Admin access to specific Azure subscriptions",
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"*",
-					},
-					Deny: []string{
+					),
+					Deny: stmts(
 						"Microsoft.Authorization/*/Delete",
 						"Microsoft.Authorization/*/Write",
 						"Microsoft.Authorization/elevateAccess/Action",
-					},
+					),
 				},
 				Resources: models.Resources{
 					Allow: []string{

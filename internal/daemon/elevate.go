@@ -173,13 +173,22 @@ func (s *Server) handleDynamicRequest(c *gin.Context, dynamicRequest models.Elev
 		return
 	}
 
+	// Convert string permissions to Statements (backwards compatibility)
+	allowStatements := make(models.Statements, len(dynamicRequest.Permissions))
+	for i, perm := range dynamicRequest.Permissions {
+		allowStatements[i] = models.Statement{
+			Operations: []string{perm},
+			Targets:    []string{},
+		}
+	}
+
 	// Create a dynamic role based on the request
 	dynamicRole := &models.Role{
 		Name:        "dynamic-role-" + time.Now().Format("20060102-150405"),
 		Description: "Dynamically created role: " + dynamicRequest.Reason,
 		Workflows:   []string{dynamicRequest.Workflow},
 		Permissions: models.Permissions{
-			Allow: dynamicRequest.Permissions,
+			Allow: allowStatements,
 		},
 		Inherits:  dynamicRequest.Inherits,
 		Providers: dynamicRequest.Providers,

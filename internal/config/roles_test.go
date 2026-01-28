@@ -8,6 +8,14 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
+// stmts converts a []string to models.Statements for test convenience
+func stmts(ops ...string) models.Statements {
+	if len(ops) == 0 {
+		return nil
+	}
+	return models.Statements{{Operations: ops}}
+}
+
 // Test GetCompositeRole functionality
 func TestGetCompositeRole(t *testing.T) {
 	tests := []struct {
@@ -27,8 +35,8 @@ func TestGetCompositeRole(t *testing.T) {
 					Name:        "basic",
 					Description: "Basic role",
 					Permissions: models.Permissions{
-						Allow: []string{"read"},
-						Deny:  []string{"delete"},
+						Allow: stmts("read"),
+						Deny:  stmts("delete"),
 					},
 					Enabled: true,
 				},
@@ -45,8 +53,8 @@ func TestGetCompositeRole(t *testing.T) {
 				Name:        "basic",
 				Description: "Basic role",
 				Permissions: models.Permissions{
-					Allow: []string{"read"},
-					Deny:  []string{"delete"},
+					Allow: stmts("read"),
+					Deny:  stmts("delete"),
 				},
 				Enabled: true,
 			},
@@ -59,7 +67,7 @@ func TestGetCompositeRole(t *testing.T) {
 					Name:        "base",
 					Description: "Base role",
 					Permissions: models.Permissions{
-						Allow: []string{"read"},
+						Allow: stmts("read"),
 					},
 					Resources: models.Resources{
 						Allow: []string{"resource1"},
@@ -71,8 +79,8 @@ func TestGetCompositeRole(t *testing.T) {
 					Description: "Extended role",
 					Inherits:    []string{"base"},
 					Permissions: models.Permissions{
-						Allow: []string{"write"},
-						Deny:  []string{"admin"},
+						Allow: stmts("write"),
+						Deny:  stmts("admin"),
 					},
 					Resources: models.Resources{
 						Allow: []string{"resource2"},
@@ -92,8 +100,8 @@ func TestGetCompositeRole(t *testing.T) {
 				Description: "Extended role",
 				Inherits:    []string{"base"},
 				Permissions: models.Permissions{
-					Allow: []string{"write", "read"},
-					Deny:  []string{"admin"},
+					Allow: stmts("write", "read"),
+					Deny:  stmts("admin"),
 				},
 				Resources: models.Resources{
 					Allow: []string{"resource2", "resource1"},
@@ -109,7 +117,7 @@ func TestGetCompositeRole(t *testing.T) {
 					Name:        "read-role",
 					Description: "Read role",
 					Permissions: models.Permissions{
-						Allow: []string{"read"},
+						Allow: stmts("read"),
 					},
 					Workflows: []string{"read-workflow"},
 					Enabled:   true,
@@ -118,7 +126,7 @@ func TestGetCompositeRole(t *testing.T) {
 					Name:        "write-role",
 					Description: "Write role",
 					Permissions: models.Permissions{
-						Allow: []string{"write"},
+						Allow: stmts("write"),
 					},
 					Workflows: []string{"write-workflow"},
 					Enabled:   true,
@@ -128,7 +136,7 @@ func TestGetCompositeRole(t *testing.T) {
 					Description: "Admin role",
 					Inherits:    []string{"read-role", "write-role"},
 					Permissions: models.Permissions{
-						Allow: []string{"admin"},
+						Allow: stmts("admin"),
 					},
 					Workflows: []string{"admin-workflow"},
 					Enabled:   true,
@@ -146,7 +154,7 @@ func TestGetCompositeRole(t *testing.T) {
 				Description: "Admin role",
 				Inherits:    []string{"read-role", "write-role"},
 				Permissions: models.Permissions{
-					Allow: []string{"admin", "read", "write"},
+					Allow: stmts("admin", "read", "write"),
 				},
 				Workflows: []string{"admin-workflow"}, // Only the role's own workflows, not inherited
 				Enabled:   true,
@@ -160,7 +168,7 @@ func TestGetCompositeRole(t *testing.T) {
 					Name:        "scoped",
 					Description: "Scoped role",
 					Permissions: models.Permissions{
-						Allow: []string{"special"},
+						Allow: stmts("special"),
 					},
 					Scopes: &models.RoleScopes{
 						Users: []string{"test@example.com"},
@@ -172,7 +180,7 @@ func TestGetCompositeRole(t *testing.T) {
 					Description: "Public role",
 					Inherits:    []string{"scoped"},
 					Permissions: models.Permissions{
-						Allow: []string{"read"},
+						Allow: stmts("read"),
 					},
 					Enabled: true,
 				},
@@ -190,7 +198,7 @@ func TestGetCompositeRole(t *testing.T) {
 				Description: "Public role",
 				Inherits:    []string{"scoped"},
 				Permissions: models.Permissions{
-					Allow: []string{"read", "special"},
+					Allow: stmts("read", "special"),
 				},
 				Enabled: true,
 			},
@@ -203,7 +211,7 @@ func TestGetCompositeRole(t *testing.T) {
 					Name:        "scoped",
 					Description: "Scoped role",
 					Permissions: models.Permissions{
-						Allow: []string{"special"},
+						Allow: stmts("special"),
 					},
 					Scopes: &models.RoleScopes{
 						Users: []string{"other@example.com"},
@@ -215,7 +223,7 @@ func TestGetCompositeRole(t *testing.T) {
 					Description: "Public role",
 					Inherits:    []string{"scoped"},
 					Permissions: models.Permissions{
-						Allow: []string{"read"},
+						Allow: stmts("read"),
 					},
 					Enabled: true,
 				},
@@ -233,7 +241,7 @@ func TestGetCompositeRole(t *testing.T) {
 				Description: "Public role",
 				Inherits:    []string{"scoped"},
 				Permissions: models.Permissions{
-					Allow: []string{"read"},
+					Allow: stmts("read"),
 				},
 				Enabled: true,
 			},
@@ -307,7 +315,7 @@ func TestGetCompositeRole(t *testing.T) {
 					Name:        "group-role",
 					Description: "Group specific role",
 					Permissions: models.Permissions{
-						Allow: []string{"group-action"},
+						Allow: stmts("group-action"),
 					},
 					Scopes: &models.RoleScopes{
 						Groups: []string{"developers"},
@@ -319,7 +327,7 @@ func TestGetCompositeRole(t *testing.T) {
 					Description: "User role inheriting group role",
 					Inherits:    []string{"group-role"},
 					Permissions: models.Permissions{
-						Allow: []string{"user-action"},
+						Allow: stmts("user-action"),
 					},
 					Enabled: true,
 				},
@@ -337,7 +345,7 @@ func TestGetCompositeRole(t *testing.T) {
 				Description: "User role inheriting group role",
 				Inherits:    []string{"group-role"},
 				Permissions: models.Permissions{
-					Allow: []string{"user-action", "group-action"},
+					Allow: stmts("user-action", "group-action"),
 				},
 				Enabled: true,
 			},
@@ -402,7 +410,7 @@ func TestGetCompositeRole_ProviderSpecificInheritance(t *testing.T) {
 			Name:        "admin",
 			Description: "Admin role in AWS",
 			Permissions: models.Permissions{
-				Allow: []string{"aws:admin"},
+				Allow: stmts("aws:admin"),
 			},
 			Enabled: true,
 		},
@@ -411,7 +419,7 @@ func TestGetCompositeRole_ProviderSpecificInheritance(t *testing.T) {
 			Description: "Base role",
 			Inherits:    []string{"aws-prod:admin"},
 			Permissions: models.Permissions{
-				Allow: []string{"base:read"},
+				Allow: stmts("base:read"),
 			},
 			Enabled: true,
 		},
@@ -590,8 +598,8 @@ func TestAllowDenyConflictResolution(t *testing.T) {
 			"child": {
 				Name: "Child Role",
 				Permissions: models.Permissions{
-					Allow: []string{"read", "list"},
-					Deny:  []string{"write", "delete"},
+					Allow: stmts("read", "list"),
+					Deny:  stmts("write", "delete"),
 				},
 				Resources: models.Resources{
 					Allow: []string{"bucket1"},
@@ -603,8 +611,8 @@ func TestAllowDenyConflictResolution(t *testing.T) {
 				Name:     "Parent Role",
 				Inherits: []string{"child"},
 				Permissions: models.Permissions{
-					Allow: []string{"write"}, // This should override child's deny for "write"
-					Deny:  []string{"read"},  // This should override child's allow for "read"
+					Allow: stmts("write"), // This should override child's deny for "write"
+					Deny:  stmts("read"),  // This should override child's allow for "read"
 				},
 				Resources: models.Resources{
 					Allow: []string{"bucket2"}, // This should override child's deny for "bucket2"
@@ -651,8 +659,8 @@ func TestAllowDenyConflictResolution(t *testing.T) {
 			"grandchild": {
 				Name: "Grandchild Role",
 				Permissions: models.Permissions{
-					Allow: []string{"read", "list"},
-					Deny:  []string{"write"},
+					Allow: stmts("read", "list"),
+					Deny:  stmts("write"),
 				},
 				Enabled: true,
 			},
@@ -660,8 +668,8 @@ func TestAllowDenyConflictResolution(t *testing.T) {
 				Name:     "Child Role",
 				Inherits: []string{"grandchild"},
 				Permissions: models.Permissions{
-					Allow: []string{"write"}, // Overrides grandchild's deny
-					Deny:  []string{"list"},  // Overrides grandchild's allow
+					Allow: stmts("write"), // Overrides grandchild's deny
+					Deny:  stmts("list"),  // Overrides grandchild's allow
 				},
 				Enabled: true,
 			},
@@ -669,8 +677,8 @@ func TestAllowDenyConflictResolution(t *testing.T) {
 				Name:     "Parent Role",
 				Inherits: []string{"child"},
 				Permissions: models.Permissions{
-					Allow: []string{"delete", "list"}, // "list" overrides child's deny
-					Deny:  []string{"read"},           // Overrides grandchild's allow (inherited through child)
+					Allow: stmts("delete", "list"), // "list" overrides child's deny
+					Deny:  stmts("read"),           // Overrides grandchild's allow (inherited through child)
 				},
 				Enabled: true,
 			},
@@ -706,7 +714,7 @@ func TestAllowDenyConflictResolution(t *testing.T) {
 			"permissive-child": {
 				Name: "Permissive Child",
 				Permissions: models.Permissions{
-					Allow: []string{"read", "write", "delete"},
+					Allow: stmts("read", "write", "delete"),
 				},
 				Enabled: true,
 			},
@@ -714,7 +722,7 @@ func TestAllowDenyConflictResolution(t *testing.T) {
 				Name:     "Restrictive Parent",
 				Inherits: []string{"permissive-child"},
 				Permissions: models.Permissions{
-					Deny: []string{"delete", "write"}, // Parent denies what child allows
+					Deny: stmts("delete", "write"), // Parent denies what child allows
 				},
 				Enabled: true,
 			},

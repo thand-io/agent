@@ -8,6 +8,14 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
+// stmts converts a []string to models.Statements for test convenience
+func stmtsAws(ops ...string) models.Statements {
+	if len(ops) == 0 {
+		return nil
+	}
+	return models.Statements{{Operations: ops}}
+}
+
 // TestAWSRoles tests AWS-specific role configurations based on config/roles/aws.yaml
 func TestAWSRoles(t *testing.T) {
 	// AWS role definitions based on config/roles/aws.yaml
@@ -24,12 +32,12 @@ func TestAWSRoles(t *testing.T) {
 			},
 			// Removed IAM policy inheritance for test simplicity
 			Permissions: models.Permissions{
-				Allow: []string{
+				Allow: stmts(
 					"ec2:*",
 					"s3:*",
 					"rds:*",
 					"*", // Administrative access
-				},
+				),
 			},
 			Resources: models.Resources{
 				Allow: []string{
@@ -59,13 +67,13 @@ func TestAWSRoles(t *testing.T) {
 			Workflows:   []string{"slack_approval"},
 			// Removed IAM policy inheritance for test simplicity
 			Permissions: models.Permissions{
-				Allow: []string{
+				Allow: stmts(
 					"ec2:describeInstances",
 					"s3:listBuckets",
 					"ec2:Describe*", // Read-only EC2 access
 					"s3:Get*",       // Read-only S3 access
 					"s3:List*",      // List S3 access
-				},
+				),
 			},
 			Providers: []string{
 				"aws-thand-dev",
@@ -173,7 +181,7 @@ func TestAWSRoles(t *testing.T) {
 					"arn:aws:iam::aws:policy/AdministratorAccess",
 				},
 				Permissions: models.Permissions{
-					Allow: []string{"custom:action"},
+					Allow: stmtsAws("custom:action"),
 				},
 				Enabled: true,
 			},
@@ -181,7 +189,7 @@ func TestAWSRoles(t *testing.T) {
 				Name:        "AdministratorAccess",
 				Description: "AWS managed admin policy",
 				Permissions: models.Permissions{
-					Allow: []string{"*"},
+					Allow: stmtsAws("*"),
 				},
 				Enabled: true,
 			},
@@ -213,13 +221,13 @@ func TestAWSRoleScenarios(t *testing.T) {
 				Name:        "Developer",
 				Description: "Developer access to staging",
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"ec2:DescribeInstances",
 						"s3:GetObject",
 						"s3:PutObject",
 						"logs:DescribeLogGroups",
 						"logs:DescribeLogStreams",
-					},
+					),
 				},
 				Resources: models.Resources{
 					Allow: []string{
@@ -279,10 +287,10 @@ func TestAWSRoleScenarios(t *testing.T) {
 				Name:        "Base User",
 				Description: "Basic user permissions",
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"iam:GetUser",
 						"iam:ListMFADevices",
-					},
+					),
 				},
 				Enabled: true,
 			},
@@ -290,9 +298,9 @@ func TestAWSRoleScenarios(t *testing.T) {
 				Name:        "S3 Admin",
 				Description: "S3 administrative access",
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"s3:*",
-					},
+					),
 				},
 				Resources: models.Resources{
 					Allow: []string{
@@ -309,14 +317,14 @@ func TestAWSRoleScenarios(t *testing.T) {
 					"s3_admin",
 				},
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"ec2:*",
 						"rds:*",
-					},
-					Deny: []string{
+					),
+					Deny: stmts(
 						"iam:DeleteRole",
 						"iam:DeleteUser",
-					},
+					),
 				},
 				Scopes: &models.RoleScopes{
 					Users: []string{
@@ -409,11 +417,11 @@ func TestAWSRoleScenarios(t *testing.T) {
 					"arn:aws:iam::aws:policy/AdministratorAccess", // Provider role - should remain
 				},
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"ec2:*",
 						"s3:*",
 						"rds:*",
-					},
+					),
 				},
 				Resources: models.Resources{
 					Allow: []string{
@@ -441,10 +449,10 @@ func TestAWSRoleScenarios(t *testing.T) {
 				Description: "Basic access to user resources.",
 				Workflows:   []string{"slack_approval"},
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"ec2:describeInstances",
 						"s3:listBuckets",
-					},
+					),
 				},
 				Providers: []string{
 					"aws-thand-dev",

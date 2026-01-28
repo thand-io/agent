@@ -3,7 +3,6 @@ package aws
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
@@ -128,24 +127,41 @@ type Statement struct {
 	Condition map[string]any `json:"Condition,omitempty"` // IAM policy conditions
 }
 
-// statementsToAwsPolicy converts CSP-agnostic statements to AWS PolicyDocument
-// Maps: Grant→Effect, Operations→Action, Targets→Resource, Conditions→Condition
-func statementsToAwsPolicy(statements []models.Statement) PolicyDocument {
-	awsStatements := make([]Statement, len(statements))
+// permissionsToAwsPolicy converts CSP-agnostic Permissions to AWS PolicyDocument
+// The effect (Allow/Deny) comes from the parent Permissions.Allow or Permissions.Deny
+func permissionsToAwsPolicy(permissions models.Permissions) PolicyDocument {
+	awsStatements := []Statement{}
 
-	for i, stmt := range statements {
-		// Capitalize grant ("allow" → "Allow", "deny" → "Deny")
-		effect := stmt.Grant
-		if len(effect) > 0 {
-			effect = strings.ToUpper(effect[:1]) + effect[1:]
+	// Process Allow statements
+	for _, stmt := range permissions.Allow {
+		// Default resource to "*" if no targets specified (backwards compatibility)
+		resource := any(stmt.Targets)
+		if len(stmt.Targets) == 0 {
+			resource = "*"
 		}
 
-		awsStatements[i] = Statement{
-			Effect:    effect,
-			Action:    stmt.Operations, // Keep as []string
-			Resource:  stmt.Targets,    // Keep as []string
-			Condition: stmt.Conditions, // Pass through conditions as-is
+		awsStatements = append(awsStatements, Statement{
+			Effect:    "Allow",
+			Action:    stmt.Operations,
+			Resource:  resource,
+			Condition: stmt.Conditions,
+		})
+	}
+
+	// Process Deny statements
+	for _, stmt := range permissions.Deny {
+		// Default resource to "*" if no targets specified (backwards compatibility)
+		resource := any(stmt.Targets)
+		if len(stmt.Targets) == 0 {
+			resource = "*"
 		}
+
+		awsStatements = append(awsStatements, Statement{
+			Effect:    "Deny",
+			Action:    stmt.Operations,
+			Resource:  resource,
+			Condition: stmt.Conditions,
+		})
 	}
 
 	return PolicyDocument{

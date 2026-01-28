@@ -93,7 +93,7 @@ func (p *kubernetesProvider) authorizeNamespacedRole(
 				"thand.io/role":    roleName,
 			},
 		},
-		Rules: p.convertPermissionsToRules(role.Permissions.Allow),
+		Rules: p.convertPermissionsToRules(role.Permissions),
 	}
 
 	_, err := client.RbacV1().Roles(namespace).Create(ctx, k8sRole, metav1.CreateOptions{})
@@ -197,7 +197,7 @@ func (p *kubernetesProvider) authorizeClusterRole(
 				"thand.io/role":    roleName,
 			},
 		},
-		Rules: p.convertPermissionsToRules(role.Permissions.Allow),
+		Rules: p.convertPermissionsToRules(role.Permissions),
 	}
 
 	_, err := client.RbacV1().
@@ -283,24 +283,32 @@ func (p *kubernetesProvider) authorizeClusterRole(
 }
 
 // convertPermissionsToRules converts thand permissions to Kubernetes RBAC rules
-func (p *kubernetesProvider) convertPermissionsToRules(permissions []string) []rbacv1.PolicyRule {
+func (p *kubernetesProvider) convertPermissionsToRules(permissions models.Permissions) []rbacv1.PolicyRule {
 	var rules []rbacv1.PolicyRule
 
 	// Group permissions by API group and resource
 	ruleMap := make(map[string]*rbacv1.PolicyRule)
 
-	for _, permission := range permissions {
-		rule := p.parsePermission(permission)
-		if rule != nil {
-			key := fmt.Sprintf("%s:%s", strings.Join(rule.APIGroups, ","), strings.Join(rule.Resources, ","))
-			if existingRule, exists := ruleMap[key]; exists {
-				// Merge verbs
-				existingRule.Verbs = append(existingRule.Verbs, rule.Verbs...)
-				existingRule.Verbs = p.deduplicateSlice(existingRule.Verbs)
-			} else {
-				ruleMap[key] = rule
+	// Process Allow statements (Kubernetes RBAC is allow-only)
+	for _, stmt := range permissions.Allow {
+		for _, operation := range stmt.Operations {
+			rule := p.parsePermission(operation)
+			if rule != nil {
+				key := fmt.Sprintf("%s:%s", strings.Join(rule.APIGroups, ","), strings.Join(rule.Resources, ","))
+				if existingRule, exists := ruleMap[key]; exists {
+					// Merge verbs
+					existingRule.Verbs = append(existingRule.Verbs, rule.Verbs...)
+					existingRule.Verbs = p.deduplicateSlice(existingRule.Verbs)
+				} else {
+					ruleMap[key] = rule
+				}
 			}
 		}
+	}
+
+	// Log warning for Deny statements (Kubernetes RBAC doesn't support deny)
+	if len(permissions.Deny) > 0 {
+		logrus.Warnf("Kubernetes RBAC doesn't support deny permissions, skipping %d deny statements", len(permissions.Deny))
 	}
 
 	// Convert map back to slice

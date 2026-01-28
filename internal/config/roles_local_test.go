@@ -101,7 +101,7 @@ func TestGroupsInheritance(t *testing.T) {
 					Allow: []string{"viewers", "users"},
 				},
 				Permissions: models.Permissions{
-					Allow: []string{"read"},
+					Allow: stmts("read"),
 				},
 				Enabled: true,
 			},
@@ -113,7 +113,7 @@ func TestGroupsInheritance(t *testing.T) {
 					Deny:  []string{"viewers"}, // Editors don't need viewer group
 				},
 				Permissions: models.Permissions{
-					Allow: []string{"write"},
+					Allow: stmts("write"),
 				},
 				Enabled: true,
 			},
@@ -125,7 +125,7 @@ func TestGroupsInheritance(t *testing.T) {
 					Deny:  []string{"users"}, // Admins don't need users group
 				},
 				Permissions: models.Permissions{
-					Allow: []string{"admin"},
+					Allow: stmts("admin"),
 				},
 				Enabled: true,
 			},

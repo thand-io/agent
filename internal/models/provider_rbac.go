@@ -393,40 +393,52 @@ func validateRolePermissionLists(role *Role, providerPermissions []SearchResult[
 	return nil
 }
 
-func validatePermissions(providerPermissions []SearchResult[ProviderPermission], permissions []string) ([]string, error) {
+func validatePermissions(providerPermissions []SearchResult[ProviderPermission], statements Statements) (Statements, error) {
 
-	validatedPermissions := []string{}
+	validatedStatements := Statements{}
 
-	// Now lets check are remove permissions that don't exist
-	for _, perm := range permissions {
+	// Validate each statement
+	for _, stmt := range statements {
 
-		if strings.HasSuffix(perm, ":*") || strings.HasSuffix(perm, ".*") {
-			// Permission ends with a wildcard. Lets expand this
-			// out to include all permissions. As some IAMs do not
-			// support wildcarding.
-			validatedPermissions = append(validatedPermissions,
-				expandPermissionsWildcard(providerPermissions, perm)...)
+		validatedOperations := []string{}
 
-		} else if permission := getCondensedActions(perm); permission != nil {
+		for _, perm := range stmt.Operations {
 
-			// If the last part is delimited by comma, e.g., k8s:pods:get,list,watch
-			// lets use a more complex parsing with regex and then expand those
-			// into individual permissions
-			validatedPermissions = append(validatedPermissions, permission...)
-			// We have a match, now expand it
+			if strings.HasSuffix(perm, ":*") || strings.HasSuffix(perm, ".*") {
+				// Permission ends with a wildcard. Lets expand this
+				// out to include all permissions. As some IAMs do not
+				// support wildcarding.
+				validatedOperations = append(validatedOperations,
+					expandPermissionsWildcard(providerPermissions, perm)...)
 
-		} else if !slices.ContainsFunc(providerPermissions, func(p SearchResult[ProviderPermission]) bool {
-			found := strings.Compare(p.Result.Name, perm) == 0
-			if found {
-				validatedPermissions = append(validatedPermissions, p.Result.Name)
+			} else if permission := getCondensedActions(perm); permission != nil {
+
+				// If the last part is delimited by comma, e.g., k8s:pods:get,list,watch
+				// lets use a more complex parsing with regex and then expand those
+				// into individual permissions
+				validatedOperations = append(validatedOperations, permission...)
+				// We have a match, now expand it
+
+			} else if !slices.ContainsFunc(providerPermissions, func(p SearchResult[ProviderPermission]) bool {
+				found := strings.Compare(p.Result.Name, perm) == 0
+				if found {
+					validatedOperations = append(validatedOperations, p.Result.Name)
+				}
+				return found
+			}) {
+				return nil, fmt.Errorf("the requested permission: %s was not found", perm)
 			}
-			return found
-		}) {
-			return nil, fmt.Errorf("the requested permission: %s was not found", perm)
 		}
+
+		// Create validated statement with expanded operations
+		validatedStatements = append(validatedStatements, Statement{
+			Operations: validatedOperations,
+			Targets:    stmt.Targets,
+			Conditions: stmt.Conditions,
+		})
 	}
 
-	return validatedPermissions, nil
+	return validatedStatements, nil
 }
 
 func expandPermissionsWildcard(providerPermissions []SearchResult[ProviderPermission], permission string) []string {

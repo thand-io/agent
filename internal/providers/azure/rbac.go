@@ -24,7 +24,7 @@ func (p *azureProvider) AuthorizeRole(
 	existingRole, err := p.getRoleDefinition(ctx, role.Name)
 	if err != nil {
 		// If role doesn't exist, create it as a custom role
-		existingRole, err = p.createRoleDefinition(ctx, role.Name, role.Description, role.Permissions.Allow)
+		existingRole, err = p.createRoleDefinition(ctx, role.Name, role.Description, role.Permissions)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create role definition: %w", err)
 		}
@@ -67,20 +67,33 @@ func (p *azureProvider) RevokeRole(
 	return nil, nil
 }
 
-// statementsToAzureActions converts CSP-agnostic statements to Azure role actions and notActions
-// Maps: Grant="allow"→Actions, Grant="deny"→NotActions
+// permissionsToAzureActions converts CSP-agnostic Permissions to Azure role actions and notActions
+// Allow statements become Actions, Deny statements become NotActions
 // Returns: (actions, notActions, targets for assignableScopes)
-func statementsToAzureActions(statements []models.Statement) (actions, notActions []string, targets []string) {
-	for _, stmt := range statements {
-		if stmt.Grant == "allow" {
-			actions = append(actions, stmt.Operations...)
-		} else if stmt.Grant == "deny" {
-			notActions = append(notActions, stmt.Operations...)
-		}
-
+func permissionsToAzureActions(permissions models.Permissions) (actions, notActions []string, targets []string) {
+	// Process Allow statements -> Actions
+	for _, stmt := range permissions.Allow {
+		actions = append(actions, stmt.Operations...)
 		// Collect unique targets for assignableScopes
 		for _, target := range stmt.Targets {
-			// Only add if not already present
+			found := false
+			for _, existing := range targets {
+				if existing == target {
+					found = true
+					break
+				}
+			}
+			if !found {
+				targets = append(targets, target)
+			}
+		}
+	}
+
+	// Process Deny statements -> NotActions
+	for _, stmt := range permissions.Deny {
+		notActions = append(notActions, stmt.Operations...)
+		// Collect unique targets for assignableScopes
+		for _, target := range stmt.Targets {
 			found := false
 			for _, existing := range targets {
 				if existing == target {

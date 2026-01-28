@@ -19,11 +19,11 @@ func TestGCPRoles(t *testing.T) {
 				"slack_approval",
 			},
 			Permissions: models.Permissions{
-				Allow: []string{
+				Allow: stmts(
 					"compute.instances.*",
 					"storage.buckets.*",
 					"iam.serviceAccounts.*",
-				},
+				),
 			},
 			Resources: models.Resources{
 				Allow: []string{
@@ -92,14 +92,14 @@ func TestGCPRoleScenarios(t *testing.T) {
 				Name:        "GCP Developer",
 				Description: "Developer access to GCP resources",
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"compute.instances.get",
 						"compute.instances.list",
 						"storage.objects.get",
 						"storage.objects.list",
 						"storage.objects.create",
 						"cloudsql.instances.connect",
-					},
+					),
 				},
 				Resources: models.Resources{
 					Allow: []string{
@@ -174,10 +174,10 @@ func TestGCPRoleScenarios(t *testing.T) {
 				Name:        "GCP Base",
 				Description: "Base GCP permissions",
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"resourcemanager.projects.get",
 						"iam.serviceAccounts.list",
-					},
+					),
 				},
 				Enabled: true,
 			},
@@ -185,11 +185,11 @@ func TestGCPRoleScenarios(t *testing.T) {
 				Name:        "GCP Monitoring",
 				Description: "GCP monitoring permissions",
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"monitoring.*",
 						"logging.logEntries.list",
 						"logging.logEntries.create",
-					},
+					),
 				},
 				Enabled: true,
 			},
@@ -201,13 +201,13 @@ func TestGCPRoleScenarios(t *testing.T) {
 					"gcp_monitoring",
 				},
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"compute.instances.start",
 						"compute.instances.stop",
 						"compute.instances.reset",
 						"storage.buckets.list",
 						"cloudsql.instances.restart",
-					},
+					),
 				},
 				Resources: models.Resources{
 					Allow: []string{
@@ -283,9 +283,9 @@ func TestGCPRoleScenarios(t *testing.T) {
 				Name:        "Project A Access",
 				Description: "Access to project A resources",
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"compute.instances.*",
-					},
+					),
 				},
 				Resources: models.Resources{
 					Allow: []string{
@@ -298,9 +298,9 @@ func TestGCPRoleScenarios(t *testing.T) {
 				Name:        "Project B Access",
 				Description: "Access to project B resources",
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"storage.buckets.*",
-					},
+					),
 				},
 				Resources: models.Resources{
 					Allow: []string{
@@ -317,9 +317,9 @@ func TestGCPRoleScenarios(t *testing.T) {
 					"project_b_access",
 				},
 				Permissions: models.Permissions{
-					Allow: []string{
+					Allow: stmts(
 						"iam.serviceAccounts.*",
-					},
+					),
 				},
 				Enabled: true,
 			},

@@ -10,15 +10,6 @@ import (
 	"github.com/thand-io/agent/internal/common"
 )
 
-// Statement represents a CSP-agnostic permission statement
-// Field names are provider-agnostic, but values are provider-specific
-type Statement struct {
-	Grant      string         `json:"grant" validate:"required,oneof=allow deny"`                      // "allow" or "deny" (agnostic terminology)
-	Operations []string       `json:"operations" validate:"required,min=1,max=500,dive,min=1,max=500"` // Provider-specific operations: ["s3:GetObject"] for AWS, ["storage.buckets.get"] for GCP
-	Targets    []string       `json:"targets" validate:"required,min=1,max=100,dive,min=1,max=1000"`   // Provider-specific resource identifiers
-	Conditions map[string]any `json:"conditions,omitempty" validate:"max=10,dive,keys,min=1,max=100"`  // Optional provider-specific conditions
-}
-
 type Role struct {
 	Version        *version.Version `json:"version,omitempty"`
 	Identifier     string           `json:"-"`
@@ -28,8 +19,7 @@ type Role struct {
 	Workflows      []string         `json:"workflows,omitempty" validate:"max=5,dive,min=1,max=100"` // The workflows to execute
 	Inherits       []string         `json:"inherits,omitempty" validate:"max=50,dive,min=1,max=100"` // roles to inherit from or provider specific roles/policies etc
 	Groups         Groups           `json:"groups"`                                                  // groups to add the user to
-	Permissions    Permissions      `json:"permissions"`                                             // granular permissions for the role (deprecated, use Statements)
-	Statements     []Statement      `json:"statements,omitempty" validate:"max=100,dive"`            // CSP-agnostic permission statements (replaces Permissions)
+	Permissions    Permissions      `json:"permissions"`                                             // CSP-agnostic permission statements (replaces Permissions)
 	Resources      Resources        `json:"resources"`                                               // resource access rules, apis, files, systems etc
 	Scopes         *RoleScopes      `json:"scopes,omitempty"`                                        // scope of who can be assigned this role
 	Providers      []string         `json:"providers" validate:"max=5,dive,min=2,max=100"`           // providers that can assign this role
@@ -132,8 +122,54 @@ type Groups struct {
 
 // Permissions defines permission-based access controls with allow and deny lists.
 type Permissions struct {
-	Allow []string `json:"allow,omitempty" validate:"max=500,dive,min=1,max=500"`
-	Deny  []string `json:"deny,omitempty" validate:"max=500,dive,min=1,max=500"`
+	Allow Statements `json:"allow,omitempty" validate:"max=500,dive,min=1,max=500"`
+	Deny  Statements `json:"deny,omitempty" validate:"max=500,dive,min=1,max=500"`
+}
+
+type Statements []Statement
+
+// UnmarshalJSON provides backwards compatibility for Statements.
+// It accepts both the old format (array of strings) and new format (array of Statement objects).
+// When a string is encountered, it is converted to a Statement with the string as an Operation.
+func (s *Statements) UnmarshalJSON(data []byte) error {
+	// First, try to unmarshal as an array of raw messages
+	var rawItems []json.RawMessage
+	if err := json.Unmarshal(data, &rawItems); err != nil {
+		return err
+	}
+
+	result := make(Statements, 0, len(rawItems))
+	for _, raw := range rawItems {
+		// Try to unmarshal as a string first (backwards compatibility)
+		var str string
+		if err := json.Unmarshal(raw, &str); err == nil {
+			// It's a string, convert to Statement with the string as an operation
+			result = append(result, Statement{
+				Operations: []string{str},
+				Targets:    []string{},
+				Conditions: nil,
+			})
+			continue
+		}
+
+		// Try to unmarshal as a Statement object
+		var stmt Statement
+		if err := json.Unmarshal(raw, &stmt); err != nil {
+			return fmt.Errorf("failed to unmarshal statement: %w", err)
+		}
+		result = append(result, stmt)
+	}
+
+	*s = result
+	return nil
+}
+
+// Statement represents a CSP-agnostic permission statement
+// Field names are provider-agnostic, but values are provider-specific
+type Statement struct { // "allow" or "deny" (agnostic terminology)
+	Operations []string       `json:"operations" validate:"required,min=1,max=500,dive,min=1,max=500"` // Provider-specific operations: ["s3:GetObject"] for AWS, ["storage.buckets.get"] for GCP
+	Targets    []string       `json:"targets,omitempty" validate:"max=100,dive,min=1,max=1000"`        // Provider-specific resource identifiers
+	Conditions map[string]any `json:"conditions,omitempty" validate:"max=10,dive,keys,min=1,max=100"`  // Optional provider-specific conditions
 }
 
 // RoleScopes defines the scope of a role in terms of users, groups, and domains (identities).
@@ -242,12 +278,6 @@ func (h *RoleDefinitions) Validate() error {
 			return fmt.Errorf("role '%s' exceeds maximum workflows limit (%d > %d)", roleKey, len(role.Workflows), MaxWorkflows)
 		}
 
-		// Validate mutual exclusivity between Permissions and Statements
-		hasPermissions := len(role.Permissions.Allow) > 0 || len(role.Permissions.Deny) > 0
-		hasStatements := len(role.Statements) > 0
-		if hasPermissions && hasStatements {
-			return fmt.Errorf("role '%s' cannot have both 'permissions' and 'statements' defined - use 'statements' for new roles", roleKey)
-		}
 	}
 
 	return nil

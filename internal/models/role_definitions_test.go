@@ -323,7 +323,7 @@ func TestRoleDefinitions_RoundTrip(t *testing.T) {
 					Name:        "Admin",
 					Description: "Admin role",
 					Permissions: models.Permissions{
-						Allow: []string{"*"},
+						Allow: models.Statements{{Operations: []string{"*"}}},
 					},
 				},
 			},
