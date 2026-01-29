@@ -46,6 +46,6 @@ workflows:
         - denied:
             thand: notify
             with:
-              notifiers:
-                email:
-                  provider: email-test
+              provider: email-test
+              to: testuser@thand.io
+              message: "User's AWS access request has been denied."
