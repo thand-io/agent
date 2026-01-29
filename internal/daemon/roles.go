@@ -148,6 +148,77 @@ func (s *Server) getRolesPage(c *gin.Context) {
 	s.getRoles(c)
 }
 
+// RolePageData represents the data passed to the role.html template
+type RolePageData struct {
+	TemplateData
+	RoleKey       string
+	Role          *models.Role
+	CompositeRole *models.Role
+}
+
+// getRolePage handles GET /role/:role
+//
+//	@Summary		Get role page
+//	@Description	Display a page showing the composite role with all inherited permissions resolved
+//	@Tags			roles
+//	@Accept			html
+//	@Produce		html
+//	@Param			role	path		string	true	"Role key"
+//	@Success		200		{object}	nil		"Role page HTML"
+//	@Failure		400		{object}	map[string]any	"Bad request"
+//	@Failure		401		{object}	map[string]any	"Unauthorized"
+//	@Failure		404		{object}	map[string]any	"Role not found"
+//	@Failure		500		{object}	map[string]any	"Internal server error"
+//	@Router			/role/{role} [get]
+func (s *Server) getRolePage(c *gin.Context) {
+	roleKey := c.Param("role")
+
+	if len(roleKey) == 0 {
+		s.getErrorPage(c, http.StatusBadRequest, "Role name is required")
+		return
+	}
+
+	// Get the authenticated user's session
+	_, session, err := s.getUser(c)
+	if err != nil {
+		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user", err)
+		return
+	}
+
+	// Get the base role by name
+	baseRole, err := s.Config.GetRoleByName(roleKey)
+	if err != nil {
+		s.getErrorPage(c, http.StatusNotFound, "Role not found", err)
+		return
+	}
+
+	// Create identity from the authenticated user
+	identity := &models.Identity{
+		ID:    session.User.GetIdentity(),
+		Label: session.User.GetName(),
+		User:  session.User,
+	}
+
+	// Evaluate the composite role with all inherited permissions resolved
+	compositeRole, err := s.Config.GetCompositeRole(identity, baseRole)
+	if err != nil {
+		s.getErrorPage(c, http.StatusInternalServerError, "Failed to evaluate composite role", err)
+		return
+	}
+
+	if s.canAcceptHtml(c) {
+		data := RolePageData{
+			TemplateData:  s.GetTemplateData(c),
+			RoleKey:       roleKey,
+			Role:          baseRole,
+			CompositeRole: compositeRole,
+		}
+		s.renderHtml(c, "role.html", data)
+	} else {
+		c.JSON(http.StatusOK, compositeRole)
+	}
+}
+
 // postEvaluateRole handles POST /api/v1/roles/evaluate
 //
 //	@Summary		Evaluate composite role

@@ -25,6 +25,23 @@ func newThandCondition() *cloudresourcemanager.Expr {
 	}
 }
 
+// isPrimitiveRole checks if a role is a GCP primitive/basic role.
+// Primitive roles (owner, editor, viewer) do not support IAM conditions.
+// See: https://cloud.google.com/iam/docs/conditions-overview#limitations
+func isPrimitiveRole(roleName string) bool {
+	primitiveRoles := []string{
+		"roles/owner",
+		"roles/editor",
+		"roles/viewer",
+	}
+	for _, primitive := range primitiveRoles {
+		if roleName == primitive {
+			return true
+		}
+	}
+	return false
+}
+
 // Authorize grants access for a user to a role
 func (p *gcpProvider) AuthorizeRole(
 	ctx context.Context,
@@ -252,7 +269,6 @@ func (p *gcpProvider) createRole(projectID, name, title, description, stage stri
 
 	request := &iam.CreateRoleRequest{
 		Role: &iam.Role{
-			Name:                name,
 			Title:               title,
 			Description:         description,
 			IncludedPermissions: gcpPermissions,
@@ -310,24 +326,43 @@ func validateAndFormatMember(user *models.User) (string, error) {
 // addMemberToPolicy adds a member to a role binding in the policy, creating a new binding if necessary
 // Returns true if the policy was modified
 func addMemberToPolicy(policy *cloudresourcemanager.Policy, roleName, member string) bool {
-	// Check if binding already exists with our thand condition
+	isPrimitive := isPrimitiveRole(roleName)
+
+	// Warn if using a primitive role since conditions cannot be applied
+	if isPrimitive {
+		logrus.WithFields(logrus.Fields{
+			"role":   roleName,
+			"member": member,
+		}).Warn("Binding to primitive role without IAM condition - GCP does not support conditions on primitive roles. Consider using predefined roles instead for better tracking.")
+	}
+
+	// Check if binding already exists
 	for _, binding := range policy.Bindings {
-		if binding.Role == roleName && isThandManagedBinding(binding) {
-			if slices.Contains(binding.Members, member) {
-				return false // Already bound, no modification needed
+		if binding.Role == roleName {
+			// For primitive roles, match any binding without condition
+			// For other roles, match our thand-managed binding
+			if (isPrimitive && binding.Condition == nil) || (!isPrimitive && isThandManagedBinding(binding)) {
+				if slices.Contains(binding.Members, member) {
+					return false // Already bound, no modification needed
+				}
+				// Add member to existing binding
+				binding.Members = append(binding.Members, member)
+				return true
 			}
-			// Add member to existing thand-managed binding
-			binding.Members = append(binding.Members, member)
-			return true
 		}
 	}
 
-	// No binding exists for this role with our condition, create a new one
+	// No binding exists for this role, create a new one
 	newBinding := &cloudresourcemanager.Binding{
-		Role:      roleName,
-		Members:   []string{member},
-		Condition: newThandCondition(),
+		Role:    roleName,
+		Members: []string{member},
 	}
+
+	// Only add condition for non-primitive roles
+	if !isPrimitive {
+		newBinding.Condition = newThandCondition()
+	}
+
 	policy.Bindings = append(policy.Bindings, newBinding)
 	return true
 }
@@ -335,8 +370,16 @@ func addMemberToPolicy(policy *cloudresourcemanager.Policy, roleName, member str
 // removeMemberFromPolicy removes a member from a role binding in the policy
 // Returns true if the member was found and removed, false otherwise
 func removeMemberFromPolicy(policy *cloudresourcemanager.Policy, roleName, member string) bool {
+	isPrimitive := isPrimitiveRole(roleName)
+
 	for i, binding := range policy.Bindings {
-		if binding.Role == roleName && isThandManagedBinding(binding) {
+		if binding.Role != roleName {
+			continue
+		}
+
+		// For primitive roles, match any binding without condition
+		// For other roles, match our thand-managed binding
+		if (isPrimitive && binding.Condition == nil) || (!isPrimitive && isThandManagedBinding(binding)) {
 			// Find the member index first, then remove outside the loop
 			memberIndex := -1
 			for j, bindingMember := range binding.Members {

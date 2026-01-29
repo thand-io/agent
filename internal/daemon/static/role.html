@@ -1,0 +1,348 @@
+{{template "header" .TemplateData}}
+    <main>
+        <div class="container" style="width: 100%;">
+            <div class="page-header">
+                <h1>{{.CompositeRole.Name}}</h1>
+                <p>
+                    {{if .CompositeRole.Description}}
+                        {{.CompositeRole.Description}}
+                    {{else}}
+                        <span class="text-muted">No description available</span>
+                    {{end}}
+                </p>
+            </div>
+
+            <!-- Composite Role Banner -->
+            <div style="margin-bottom: 1.5rem; padding: 1rem; background-color: hsl(var(--primary) / 0.1); border: 1px solid hsl(var(--primary) / 0.3); border-radius: 0.5rem;">
+                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: hsl(var(--primary));">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                        <path d="M2 17l10 5 10-5"></path>
+                        <path d="M2 12l10 5 10-5"></path>
+                    </svg>
+                    <h3 style="font-size: 1rem; font-weight: 600; margin: 0; color: hsl(var(--primary));">Composite Role</h3>
+                </div>
+                <p style="font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin: 0;">
+                    This is a <strong>composite role</strong> with all inherited permissions resolved and merged based on <strong>your principal</strong>. 
+                    The permissions shown below represent the effective permissions after evaluating all inherited roles and policies.
+                </p>
+            </div>
+
+            <!-- Role Details Grid -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+                <div style="background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 0.5rem; padding: 1rem;">
+                    <h3 style="font-size: 0.875rem; font-weight: 500; color: hsl(var(--muted-foreground)); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">Status</h3>
+                    {{if .CompositeRole.Enabled}}
+                        <span class="badge badge-success">Enabled</span>
+                    {{else}}
+                        <span class="badge badge-warning">Disabled</span>
+                    {{end}}
+                </div>
+                <div style="background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 0.5rem; padding: 1rem;">
+                    <h3 style="font-size: 0.875rem; font-weight: 500; color: hsl(var(--muted-foreground)); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">Providers</h3>
+                    {{if .CompositeRole.Providers}}
+                        {{range $i, $provider := .CompositeRole.Providers}}
+                            {{if $i}}, {{end}}<span class="badge badge-secondary">{{$provider}}</span>
+                        {{end}}
+                    {{else}}
+                        <span class="text-muted">No providers</span>
+                    {{end}}
+                </div>
+                <div style="background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 0.5rem; padding: 1rem;">
+                    <h3 style="font-size: 0.875rem; font-weight: 500; color: hsl(var(--muted-foreground)); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">Workflows</h3>
+                    {{if .CompositeRole.Workflows}}
+                        {{range $i, $workflow := .CompositeRole.Workflows}}
+                            {{if $i}}, {{end}}<span class="badge badge-secondary">{{$workflow}}</span>
+                        {{end}}
+                    {{else}}
+                        <span class="text-muted">Default</span>
+                    {{end}}
+                </div>
+                <div style="background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 0.5rem; padding: 1rem;">
+                    <h3 style="font-size: 0.875rem; font-weight: 500; color: hsl(var(--muted-foreground)); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">Authenticators</h3>
+                    {{if .CompositeRole.Authenticators}}
+                        {{range $i, $auth := .CompositeRole.Authenticators}}
+                            {{if $i}}, {{end}}<span class="badge badge-secondary">{{$auth}}</span>
+                        {{end}}
+                    {{else}}
+                        <span class="text-muted">Any</span>
+                    {{end}}
+                </div>
+            </div>
+
+            <!-- Inherits Section -->
+            {{if .CompositeRole.Inherits}}
+            <div style="margin-bottom: 1.5rem; background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 0.5rem; padding: 1rem;">
+                <h3 style="font-size: 0.875rem; font-weight: 500; color: hsl(var(--muted-foreground)); margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Inherits From</h3>
+                <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                    {{range .CompositeRole.Inherits}}
+                        <span class="badge badge-secondary">{{.}}</span>
+                    {{end}}
+                </div>
+            </div>
+            {{end}}
+
+            <!-- Role Content Container -->
+            <div x-data="{ format: 'formatted' }">
+                <!-- Format Toggle -->
+                <div style="display: flex; justify-content: flex-end; margin-bottom: 1rem;">
+                    <div class="button-group" style="gap: 0; margin-bottom: 0;">
+                        <button 
+                            @click="format = 'formatted'"
+                            class="button button-small"
+                            :class="format === 'formatted' ? 'button-primary' : 'button-secondary'"
+                            style="border-radius: 0.375rem 0 0 0.375rem;"
+                        >
+                            Formatted
+                        </button>
+                        <button 
+                            @click="format = 'yaml'"
+                            class="button button-small"
+                            :class="format === 'yaml' ? 'button-primary' : 'button-secondary'"
+                            style="border-radius: 0; border-left: none;"
+                        >
+                            YAML
+                        </button>
+                        <button 
+                            @click="format = 'json'"
+                            class="button button-small"
+                            :class="format === 'json' ? 'button-primary' : 'button-secondary'"
+                            style="border-radius: 0 0.375rem 0.375rem 0; border-left: none;"
+                        >
+                            JSON
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Formatted View -->
+                <div x-show="format === 'formatted'">
+                    <!-- Permissions Section -->
+                    <div style="margin-bottom: 1.5rem;">
+                        <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem;">Permissions</h2>
+                        
+                        <!-- Allow Statements -->
+                        <div style="margin-bottom: 1rem;">
+                            <h3 style="font-size: 1rem; font-weight: 500; color: hsl(142.1 76.2% 36.3%); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                                </svg>
+                                Allow
+                            </h3>
+                            {{if .CompositeRole.Permissions.Allow}}
+                            <div class="table-container">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Operations</th>
+                                            <th>Targets</th>
+                                            <th>Conditions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {{range .CompositeRole.Permissions.Allow}}
+                                        <tr>
+                                            <td>
+                                                {{if .Operations}}
+                                                    {{range $i, $op := .Operations}}
+                                                        {{if $i}}<br>{{end}}<code style="font-size: 0.75rem; background: hsl(var(--muted)); padding: 0.125rem 0.25rem; border-radius: 0.25rem;">{{$op}}</code>
+                                                    {{end}}
+                                                {{else}}
+                                                    <span class="text-muted">All</span>
+                                                {{end}}
+                                            </td>
+                                            <td>
+                                                {{if .Targets}}
+                                                    {{range $i, $target := .Targets}}
+                                                        {{if $i}}<br>{{end}}<code style="font-size: 0.75rem; background: hsl(var(--muted)); padding: 0.125rem 0.25rem; border-radius: 0.25rem;">{{$target}}</code>
+                                                    {{end}}
+                                                {{else}}
+                                                    <span class="text-muted">All</span>
+                                                {{end}}
+                                            </td>
+                                            <td>
+                                                {{if .Conditions}}
+                                                    <code style="font-size: 0.75rem; background: hsl(var(--muted)); padding: 0.125rem 0.25rem; border-radius: 0.25rem;">{{toJSON .Conditions}}</code>
+                                                {{else}}
+                                                    <span class="text-muted">None</span>
+                                                {{end}}
+                                            </td>
+                                        </tr>
+                                        {{end}}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {{else}}
+                            <p class="text-muted" style="padding: 1rem; background: hsl(var(--muted) / 0.3); border-radius: 0.5rem;">No allow statements defined</p>
+                            {{end}}
+                        </div>
+
+                        <!-- Deny Statements -->
+                        <div>
+                            <h3 style="font-size: 1rem; font-weight: 500; color: hsl(0 84.2% 60.2%); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <line x1="15" y1="9" x2="9" y2="15"></line>
+                                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                                </svg>
+                                Deny
+                            </h3>
+                            {{if .CompositeRole.Permissions.Deny}}
+                            <div class="table-container">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Operations</th>
+                                            <th>Targets</th>
+                                            <th>Conditions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {{range .CompositeRole.Permissions.Deny}}
+                                        <tr>
+                                            <td>
+                                                {{if .Operations}}
+                                                    {{range $i, $op := .Operations}}
+                                                        {{if $i}}<br>{{end}}<code style="font-size: 0.75rem; background: hsl(var(--muted)); padding: 0.125rem 0.25rem; border-radius: 0.25rem;">{{$op}}</code>
+                                                    {{end}}
+                                                {{else}}
+                                                    <span class="text-muted">All</span>
+                                                {{end}}
+                                            </td>
+                                            <td>
+                                                {{if .Targets}}
+                                                    {{range $i, $target := .Targets}}
+                                                        {{if $i}}<br>{{end}}<code style="font-size: 0.75rem; background: hsl(var(--muted)); padding: 0.125rem 0.25rem; border-radius: 0.25rem;">{{$target}}</code>
+                                                    {{end}}
+                                                {{else}}
+                                                    <span class="text-muted">All</span>
+                                                {{end}}
+                                            </td>
+                                            <td>
+                                                {{if .Conditions}}
+                                                    <code style="font-size: 0.75rem; background: hsl(var(--muted)); padding: 0.125rem 0.25rem; border-radius: 0.25rem;">{{toJSON .Conditions}}</code>
+                                                {{else}}
+                                                    <span class="text-muted">None</span>
+                                                {{end}}
+                                            </td>
+                                        </tr>
+                                        {{end}}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {{else}}
+                            <p class="text-muted" style="padding: 1rem; background: hsl(var(--muted) / 0.3); border-radius: 0.5rem;">No deny statements defined</p>
+                            {{end}}
+                        </div>
+                    </div>
+
+                    <!-- Scopes Section -->
+                    <div style="margin-bottom: 1.5rem;">
+                        <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem;">Scopes</h2>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                            <!-- Allow Scopes -->
+                            <div style="background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 0.5rem; padding: 1rem;">
+                                <h3 style="font-size: 1rem; font-weight: 500; color: hsl(142.1 76.2% 36.3%); margin-bottom: 0.75rem;">Allowed</h3>
+                                <div style="margin-bottom: 0.5rem;">
+                                    <strong style="font-size: 0.75rem; color: hsl(var(--muted-foreground));">Users:</strong>
+                                    {{if .CompositeRole.Scopes.Allow.Users}}
+                                        {{range $i, $user := .CompositeRole.Scopes.Allow.Users}}
+                                            {{if $i}}, {{end}}<code style="font-size: 0.75rem;">{{$user}}</code>
+                                        {{end}}
+                                    {{else}}
+                                        <span class="text-muted">None</span>
+                                    {{end}}
+                                </div>
+                                <div style="margin-bottom: 0.5rem;">
+                                    <strong style="font-size: 0.75rem; color: hsl(var(--muted-foreground));">Groups:</strong>
+                                    {{if .CompositeRole.Scopes.Allow.Groups}}
+                                        {{range $i, $group := .CompositeRole.Scopes.Allow.Groups}}
+                                            {{if $i}}, {{end}}<code style="font-size: 0.75rem;">{{$group}}</code>
+                                        {{end}}
+                                    {{else}}
+                                        <span class="text-muted">None</span>
+                                    {{end}}
+                                </div>
+                                <div>
+                                    <strong style="font-size: 0.75rem; color: hsl(var(--muted-foreground));">Domains:</strong>
+                                    {{if .CompositeRole.Scopes.Allow.Domains}}
+                                        {{range $i, $domain := .CompositeRole.Scopes.Allow.Domains}}
+                                            {{if $i}}, {{end}}<code style="font-size: 0.75rem;">{{$domain}}</code>
+                                        {{end}}
+                                    {{else}}
+                                        <span class="text-muted">None</span>
+                                    {{end}}
+                                </div>
+                            </div>
+                            <!-- Deny Scopes -->
+                            <div style="background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 0.5rem; padding: 1rem;">
+                                <h3 style="font-size: 1rem; font-weight: 500; color: hsl(0 84.2% 60.2%); margin-bottom: 0.75rem;">Denied</h3>
+                                <div style="margin-bottom: 0.5rem;">
+                                    <strong style="font-size: 0.75rem; color: hsl(var(--muted-foreground));">Users:</strong>
+                                    {{if .CompositeRole.Scopes.Deny.Users}}
+                                        {{range $i, $user := .CompositeRole.Scopes.Deny.Users}}
+                                            {{if $i}}, {{end}}<code style="font-size: 0.75rem;">{{$user}}</code>
+                                        {{end}}
+                                    {{else}}
+                                        <span class="text-muted">None</span>
+                                    {{end}}
+                                </div>
+                                <div style="margin-bottom: 0.5rem;">
+                                    <strong style="font-size: 0.75rem; color: hsl(var(--muted-foreground));">Groups:</strong>
+                                    {{if .CompositeRole.Scopes.Deny.Groups}}
+                                        {{range $i, $group := .CompositeRole.Scopes.Deny.Groups}}
+                                            {{if $i}}, {{end}}<code style="font-size: 0.75rem;">{{$group}}</code>
+                                        {{end}}
+                                    {{else}}
+                                        <span class="text-muted">None</span>
+                                    {{end}}
+                                </div>
+                                <div>
+                                    <strong style="font-size: 0.75rem; color: hsl(var(--muted-foreground));">Domains:</strong>
+                                    {{if .CompositeRole.Scopes.Deny.Domains}}
+                                        {{range $i, $domain := .CompositeRole.Scopes.Deny.Domains}}
+                                            {{if $i}}, {{end}}<code style="font-size: 0.75rem;">{{$domain}}</code>
+                                        {{end}}
+                                    {{else}}
+                                        <span class="text-muted">None</span>
+                                    {{end}}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- YAML View -->
+                <div x-show="format === 'yaml'" x-cloak style="position: relative;">
+                    <button 
+                        @click="navigator.clipboard.writeText($refs.yamlContent.textContent).then(() => { $el.textContent = 'Copied!'; setTimeout(() => $el.textContent = 'Copy', 2000); })"
+                        class="button button-primary button-small"
+                        style="position: absolute; top: 0.5rem; right: 0.5rem;"
+                    >
+                        Copy
+                    </button>
+                    <pre x-ref="yamlContent" style="background: hsl(var(--muted)); padding: 1rem; border-radius: 0.5rem; overflow-x: auto; font-size: 0.875rem; line-height: 1.5;">{{toYAML .CompositeRole}}</pre>
+                </div>
+
+                <!-- JSON View -->
+                <div x-show="format === 'json'" x-cloak style="position: relative;">
+                    <button 
+                        @click="navigator.clipboard.writeText($refs.jsonContent.textContent).then(() => { $el.textContent = 'Copied!'; setTimeout(() => $el.textContent = 'Copy', 2000); })"
+                        class="button button-primary button-small"
+                        style="position: absolute; top: 0.5rem; right: 0.5rem;"
+                    >
+                        Copy
+                    </button>
+                    <pre x-ref="jsonContent" style="background: hsl(var(--muted)); padding: 1rem; border-radius: 0.5rem; overflow-x: auto; font-size: 0.875rem; line-height: 1.5;">{{toJSON .CompositeRole}}</pre>
+                </div>
+            </div>
+
+            <div class="button-group" style="margin-top: 2rem;">
+                <a href="/roles" class="button button-secondary">← Back to Roles</a>
+                {{if .CompositeRole.Enabled}}
+                    <a href="/elevate?role={{.RoleKey}}" class="button button-primary">Request Elevation</a>
+                {{end}}
+            </div>
+        </div>
+    </main>
+{{template "footer" .TemplateData}}

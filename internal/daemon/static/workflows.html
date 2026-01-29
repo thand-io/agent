@@ -11,29 +11,19 @@
                     <thead>
                         <tr>
                             <th>Name</th>
-                            <th>Description</th>
-                            <th>Status</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {{range $name, $workflow := .Response.Workflows}}
-                        <tr>
-                            <td>
-                                <strong>{{$name}}</strong>
-                            </td>
-                            <td>
+                        <tr style="position: relative;">
+                            <td style="position: relative;">
+                                <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background-color: hsl(var(--status-active)); border-radius: 0.25rem 0 0 0.25rem;"></div>
+                                <a href="{{$.TemplateData.Config.ApiBasePath}}/workflow/{{$name}}" style="text-decoration: none; color: inherit;">
+                                    <strong>{{$name}}</strong>
+                                </a>
                                 {{if $workflow.Description}}
-                                    {{$workflow.Description}}
-                                {{else}}
-                                    <span class="text-muted">No description available</span>
-                                {{end}}
-                            </td>
-                            <td>
-                                {{if $workflow.Enabled}}
-                                    <span class="badge badge-success">Enabled</span>
-                                {{else}}
-                                    <span class="badge badge-warning">Disabled</span>
+                                    <div style="font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin-top: 0.25rem;">{{$workflow.Description}}</div>
                                 {{end}}
                             </td>
                             <td>
@@ -42,7 +32,7 @@
                         </tr>
                         {{else}}
                         <tr>
-                            <td colspan="5" class="text-muted" style="text-align: center; padding: 2rem;">
+                            <td colspan="2" class="text-muted" style="text-align: center; padding: 2rem;">
                                 No workflows configured
                             </td>
                         </tr>

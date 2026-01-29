@@ -36,6 +36,11 @@
     }
 }
 
+/* Alpine.js cloak - hide elements until Alpine initializes */
+[x-cloak] {
+    display: none !important;
+}
+
 * {
     margin: 0;
     padding: 0;
