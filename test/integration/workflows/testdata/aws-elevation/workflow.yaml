@@ -48,6 +48,5 @@ workflows:
             with:
               provider: email-test
               to: ${ $context.identities // [$context.user.email] }
-              subject: "AWS Access Request Denied"
               message: "Your access request has been denied."
             then: end
