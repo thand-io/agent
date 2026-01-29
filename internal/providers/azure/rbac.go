@@ -71,40 +71,28 @@ func (p *azureProvider) RevokeRole(
 // Allow statements become Actions, Deny statements become NotActions
 // Returns: (actions, notActions, targets for assignableScopes)
 func permissionsToAzureActions(permissions models.RolePermissions) (actions, notActions []string, targets []string) {
+	// Use a map for efficient target deduplication
+	targetSet := make(map[string]bool)
+
 	// Process Allow statements -> Actions
 	for _, stmt := range permissions.Allow {
 		actions = append(actions, stmt.Operations...)
-		// Collect unique targets for assignableScopes
 		for _, target := range stmt.Targets {
-			found := false
-			for _, existing := range targets {
-				if existing == target {
-					found = true
-					break
-				}
-			}
-			if !found {
-				targets = append(targets, target)
-			}
+			targetSet[target] = true
 		}
 	}
 
 	// Process Deny statements -> NotActions
 	for _, stmt := range permissions.Deny {
 		notActions = append(notActions, stmt.Operations...)
-		// Collect unique targets for assignableScopes
 		for _, target := range stmt.Targets {
-			found := false
-			for _, existing := range targets {
-				if existing == target {
-					found = true
-					break
-				}
-			}
-			if !found {
-				targets = append(targets, target)
-			}
+			targetSet[target] = true
 		}
+	}
+
+	// Convert target set to slice
+	for target := range targetSet {
+		targets = append(targets, target)
 	}
 
 	return actions, notActions, targets

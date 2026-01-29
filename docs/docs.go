@@ -691,7 +691,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/execution/{id}/approve": {
+        "/execution/{id}/approvals": {
             "get": {
                 "security": [
                     {
@@ -2451,7 +2451,7 @@ const docTemplate = `{
                     "description": "Load providers directly from config using mapstructure:\",remain\"",
                     "type": "object",
                     "additionalProperties": {
-                        "$ref": "#/definitions/models.ProviderConfig"
+                        "$ref": "#/definitions/github_com_thand-io_agent_internal_models.ProviderConfig"
                     }
                 },
                 "path": {
@@ -2601,25 +2601,6 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_thand-io_agent_internal_models.Groups": {
-            "type": "object",
-            "properties": {
-                "allow": {
-                    "type": "array",
-                    "maxItems": 100,
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "deny": {
-                    "type": "array",
-                    "maxItems": 100,
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
         "github_com_thand-io_agent_internal_models.Identity": {
             "type": "object",
             "properties": {
@@ -2721,22 +2702,58 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_thand-io_agent_internal_models.RolePermissions": {
+        "github_com_thand-io_agent_internal_models.ProviderConfig": {
             "type": "object",
+            "required": [
+                "name",
+                "provider"
+            ],
             "properties": {
-                "allow": {
-                    "type": "array",
-                    "maxItems": 500,
-                    "items": {
-                        "type": "string"
-                    }
+                "capabilities": {
+                    "description": "Allows the user to specify what this provider can do",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ProviderCapabilities"
+                        }
+                    ]
                 },
-                "deny": {
-                    "type": "array",
-                    "maxItems": 500,
-                    "items": {
-                        "type": "string"
-                    }
+                "config": {
+                    "description": "Provider-specific configuration",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.BasicConfig"
+                        }
+                    ]
+                },
+                "description": {
+                    "type": "string",
+                    "maxLength": 500
+                },
+                "enabled": {
+                    "description": "Whether this provider is enabled",
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "minLength": 1
+                },
+                "provider": {
+                    "description": "e.g. aws, gcp, azure",
+                    "type": "string",
+                    "maxLength": 50,
+                    "minLength": 2
+                },
+                "role": {
+                    "description": "The base role for this provider",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.Role"
+                        }
+                    ]
+                },
+                "version": {
+                    "$ref": "#/definitions/version.Version"
                 }
             }
         },
@@ -2796,25 +2813,6 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_thand-io_agent_internal_models.Resources": {
-            "type": "object",
-            "properties": {
-                "allow": {
-                    "type": "array",
-                    "maxItems": 500,
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "deny": {
-                    "type": "array",
-                    "maxItems": 500,
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
         "github_com_thand-io_agent_internal_models.Role": {
             "type": "object",
             "required": [
@@ -2837,14 +2835,6 @@ const docTemplate = `{
                     "type": "boolean",
                     "default": true
                 },
-                "groups": {
-                    "description": "groups to add the user to",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.Groups"
-                        }
-                    ]
-                },
                 "inherits": {
                     "description": "roles to inherit from or provider specific roles/policies etc",
                     "type": "array",
@@ -2859,7 +2849,7 @@ const docTemplate = `{
                     "minLength": 1
                 },
                 "permissions": {
-                    "description": "granular permissions for the role",
+                    "description": "CSP-agnostic permission statements",
                     "allOf": [
                         {
                             "$ref": "#/definitions/github_com_thand-io_agent_internal_models.RolePermissions"
@@ -2873,14 +2863,6 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
-                },
-                "resources": {
-                    "description": "resource access rules, apis, files, systems etc",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.Resources"
-                        }
-                    ]
                 },
                 "scopes": {
                     "description": "scope of who can be assigned this role",
@@ -2903,35 +2885,47 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_thand-io_agent_internal_models.RoleScopes": {
+        "github_com_thand-io_agent_internal_models.RolePermissions": {
             "type": "object",
             "properties": {
-                "domains": {
-                    "type": "array",
-                    "maxItems": 50,
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "groups": {
-                    "type": "array",
-                    "maxItems": 100,
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "users": {
+                "allow": {
                     "type": "array",
                     "maxItems": 500,
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/models.Statement"
                     }
+                },
+                "deny": {
+                    "type": "array",
+                    "maxItems": 500,
+                    "items": {
+                        "$ref": "#/definitions/models.Statement"
+                    }
+                }
+            }
+        },
+        "github_com_thand-io_agent_internal_models.RoleScopes": {
+            "type": "object",
+            "properties": {
+                "allow": {
+                    "$ref": "#/definitions/models.ScopeIdentities"
+                },
+                "deny": {
+                    "$ref": "#/definitions/models.ScopeIdentities"
                 }
             }
         },
         "github_com_thand-io_agent_internal_models.ServicesConfig": {
             "type": "object",
             "properties": {
+                "analytics": {
+                    "description": "Analytics - used for telemetry and usage data",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.AnalyticsConfig"
+                        }
+                    ]
+                },
                 "encryption": {
                     "description": "Encryption - used for encrypting sensitive data",
                     "allOf": [
@@ -3853,6 +3847,28 @@ const docTemplate = `{
                 }
             }
         },
+        "models.AnalyticsConfig": {
+            "type": "object",
+            "properties": {
+                "config": {
+                    "description": "Config - additional configuration parameters for the Analytics service",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.BasicConfig"
+                        }
+                    ]
+                },
+                "disabled": {
+                    "description": "Disable Analytics service",
+                    "type": "boolean",
+                    "default": false
+                },
+                "provider": {
+                    "description": "Provider - the Analytics service provider (e.g., \"posthog\")",
+                    "type": "string"
+                }
+            }
+        },
         "models.AuthorizerConfiguration": {
             "type": "object",
             "properties": {
@@ -4144,61 +4160,6 @@ const docTemplate = `{
                 }
             }
         },
-        "models.ProviderConfig": {
-            "type": "object",
-            "required": [
-                "name",
-                "provider"
-            ],
-            "properties": {
-                "capabilities": {
-                    "description": "Allows the user to specify what this provider can do",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.ProviderCapabilities"
-                        }
-                    ]
-                },
-                "config": {
-                    "description": "Provider-specific configuration",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.BasicConfig"
-                        }
-                    ]
-                },
-                "description": {
-                    "type": "string",
-                    "maxLength": 500
-                },
-                "enabled": {
-                    "description": "Whether this provider is enabled",
-                    "type": "boolean"
-                },
-                "name": {
-                    "type": "string",
-                    "maxLength": 100,
-                    "minLength": 1
-                },
-                "provider": {
-                    "description": "e.g. aws, gcp, azure",
-                    "type": "string",
-                    "maxLength": 50,
-                    "minLength": 2
-                },
-                "role": {
-                    "description": "The base role for this provider",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.Role"
-                        }
-                    ]
-                },
-                "version": {
-                    "$ref": "#/definitions/version.Version"
-                }
-            }
-        },
         "models.ProviderIdentitiesResponse": {
             "type": "object",
             "properties": {
@@ -4474,14 +4435,6 @@ const docTemplate = `{
                     "type": "boolean",
                     "default": true
                 },
-                "groups": {
-                    "description": "groups to add the user to",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.Groups"
-                        }
-                    ]
-                },
                 "inherits": {
                     "description": "roles to inherit from or provider specific roles/policies etc",
                     "type": "array",
@@ -4496,7 +4449,7 @@ const docTemplate = `{
                     "minLength": 1
                 },
                 "permissions": {
-                    "description": "granular permissions for the role",
+                    "description": "CSP-agnostic permission statements",
                     "allOf": [
                         {
                             "$ref": "#/definitions/github_com_thand-io_agent_internal_models.RolePermissions"
@@ -4510,14 +4463,6 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
-                },
-                "resources": {
-                    "description": "resource access rules, apis, files, systems etc",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.Resources"
-                        }
-                    ]
                 },
                 "scopes": {
                     "description": "scope of who can be assigned this role",
@@ -4568,6 +4513,32 @@ const docTemplate = `{
                 },
                 "version": {
                     "type": "string"
+                }
+            }
+        },
+        "models.ScopeIdentities": {
+            "type": "object",
+            "properties": {
+                "domains": {
+                    "type": "array",
+                    "maxItems": 50,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "groups": {
+                    "type": "array",
+                    "maxItems": 100,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "users": {
+                    "type": "array",
+                    "maxItems": 500,
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -4639,6 +4610,32 @@ const docTemplate = `{
                 "version": {
                     "description": "Version of the response format",
                     "type": "string"
+                }
+            }
+        },
+        "models.Statement": {
+            "type": "object",
+            "properties": {
+                "conditions": {
+                    "description": "Conditions contains optional provider-specific conditions.\nWARNING: Conditions are PRESERVED but NOT EVALUATED by this system.\nEnforcement is delegated to the target provider's IAM system.\nExamples: {\"IpAddress\": {\"aws:SourceIp\": \"10.0.0.0/8\"}} for AWS",
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "operations": {
+                    "description": "Operations contains provider-specific actions/permissions.\nExamples: [\"s3:GetObject\", \"s3:PutObject\"] for AWS, [\"storage.buckets.get\"] for GCP",
+                    "type": "array",
+                    "maxItems": 500,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "targets": {
+                    "description": "Targets contains provider-specific resource identifiers.\nExamples: [\"arn:aws:s3:::my-bucket/*\"] for AWS, [\"projects/my-project/buckets/my-bucket\"] for GCP",
+                    "type": "array",
+                    "maxItems": 100,
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },

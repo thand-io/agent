@@ -62,31 +62,19 @@ func (r *Role) UnmarshalJSON(data []byte) error {
 	denyTargets = append(denyTargets, aux.Groups.Deny...)
 	denyTargets = append(denyTargets, aux.Resources.Deny...)
 
-	// Append targets to existing Permission statements
+	// Migrate deprecated Groups and Resources targets to Permission statements
 	if len(allowTargets) > 0 {
-		if len(r.Permissions.Allow) > 0 {
-			// Append to first statement's targets
-			r.Permissions.Allow[0].Targets = append(r.Permissions.Allow[0].Targets, allowTargets...)
-		} else {
-			// Create a new statement with empty operations but with targets
-			r.Permissions.Allow = append(r.Permissions.Allow, Statement{
-				Operations: []string{},
-				Targets:    allowTargets,
-			})
-		}
+		r.Permissions.Allow = append(r.Permissions.Allow, Statement{
+			Operations: []string{},
+			Targets:    allowTargets,
+		})
 	}
 
 	if len(denyTargets) > 0 {
-		if len(r.Permissions.Deny) > 0 {
-			// Append to first statement's targets
-			r.Permissions.Deny[0].Targets = append(r.Permissions.Deny[0].Targets, denyTargets...)
-		} else {
-			// Create a new statement with empty operations but with targets
-			r.Permissions.Deny = append(r.Permissions.Deny, Statement{
-				Operations: []string{},
-				Targets:    denyTargets,
-			})
-		}
+		r.Permissions.Deny = append(r.Permissions.Deny, Statement{
+			Operations: []string{},
+			Targets:    denyTargets,
+		})
 	}
 
 	return nil
@@ -257,12 +245,28 @@ func (s *RoleStatements) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// Statement represents a CSP-agnostic permission statement
-// Field names are provider-agnostic, but values are provider-specific
-type Statement struct { // "allow" or "deny" (agnostic terminology)
-	Operations []string       `json:"operations" validate:"required,min=1,max=500,dive,min=1,max=500"` // Provider-specific operations: ["s3:GetObject"] for AWS, ["storage.buckets.get"] for GCP
-	Targets    []string       `json:"targets,omitempty" validate:"max=100,dive,min=1,max=1000"`        // Provider-specific resource identifiers
-	Conditions map[string]any `json:"conditions,omitempty" validate:"max=10,dive,keys,min=1,max=100"`  // Optional provider-specific conditions
+// Statement represents a CSP-agnostic permission statement.
+// Field names are provider-agnostic, but values are provider-specific.
+//
+// IMPORTANT: The Conditions field is preserved for provider-specific use but is
+// NOT evaluated during permission resolution by this system. Condition enforcement
+// is delegated to the target cloud provider (AWS IAM, GCP IAM, Azure RBAC, etc.).
+// This design allows passing through provider-native conditions without requiring
+// this system to understand every provider's condition syntax.
+type Statement struct {
+	// Operations contains provider-specific actions/permissions.
+	// Examples: ["s3:GetObject", "s3:PutObject"] for AWS, ["storage.buckets.get"] for GCP
+	Operations []string `json:"operations" validate:"max=500,dive,min=1,max=500"`
+
+	// Targets contains provider-specific resource identifiers.
+	// Examples: ["arn:aws:s3:::my-bucket/*"] for AWS, ["projects/my-project/buckets/my-bucket"] for GCP
+	Targets []string `json:"targets,omitempty" validate:"max=100,dive,min=1,max=1000"`
+
+	// Conditions contains optional provider-specific conditions.
+	// WARNING: Conditions are PRESERVED but NOT EVALUATED by this system.
+	// Enforcement is delegated to the target provider's IAM system.
+	// Examples: {"IpAddress": {"aws:SourceIp": "10.0.0.0/8"}} for AWS
+	Conditions map[string]any `json:"conditions,omitempty" validate:"max=10,dive,keys,min=1,max=100"`
 }
 
 // ScopeIdentities defines identity-based restrictions for users, groups, and domains.

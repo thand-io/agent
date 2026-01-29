@@ -291,26 +291,38 @@ func (c *Config) resolveCompositeRoleByName(identity *models.Identity, roleName 
 
 // resolveCompositeRole recursively resolves a role and its inheritance chain.
 // It uses a visited map to detect cycles and prevent infinite recursion.
-// The algorithm ensures parent roles take precedence over child roles in conflicts.
+//
+// The algorithm ensures parent roles take precedence over child roles in conflicts:
+//   - Parent Allow overrides Child Deny (for the same operation)
+//   - Parent Deny overrides Child Allow (for the same operation)
+//
+// This "parent wins" model allows administrators to define base roles with specific
+// permissions that cannot be overridden by inherited roles.
 func (c *Config) resolveCompositeRole(identity *models.Identity, baseRole *models.Role, visited map[string]bool) (*models.Role, error) {
 
 	if len(baseRole.Name) == 0 {
 		return nil, fmt.Errorf("cannot resolve role with empty name")
 	}
 
+	log := logrus.WithField("role", baseRole.Name)
+
 	if visited[baseRole.Name] {
+		log.WithField("visited_chain", mapKeys(visited)).Debugln("Cyclic inheritance detected, breaking cycle")
 		return nil, fmt.Errorf("cyclic inheritance detected in role: %s", baseRole.Name)
 	}
 
 	// Check inheritance depth limit
 	if len(visited) >= MaxInheritanceDepth {
+		log.WithFields(logrus.Fields{
+			"depth":     len(visited),
+			"max_depth": MaxInheritanceDepth,
+		}).Debugln("Maximum inheritance depth exceeded")
 		return nil, fmt.Errorf("role '%s' exceeds maximum inheritance depth: %d", baseRole.Name, MaxInheritanceDepth)
 	}
 
 	visited[baseRole.Name] = true
 	defer delete(visited, baseRole.Name)
 
-	log := logrus.WithField("role", baseRole.Name)
 	log.Debugln("Resolving composite role")
 
 	// Create composite role with provider-filtered permissions/resources/groups
@@ -411,26 +423,78 @@ func (c *Config) resolveInheritedRole(identity *models.Identity, roleName string
 }
 
 // isRoleApplicableToIdentity checks if a role's scopes allow it to be applied to the identity.
-// Returns true if:
-//   - Role has no scopes defined (open to all)
-//   - Identity matches any user scope (by identity, email, username, or ID)
-//   - Identity matches any group scope (for group identities)
-//   - User belongs to any allowed group
-//   - User's domain matches any allowed domain
+//
+// Scope evaluation order (SECURITY CRITICAL):
+//  1. If role has no scopes defined → open to all (return true)
+//  2. If identity is nil → cannot match any scope (return false)
+//  3. Check DENY scopes first → if identity matches any deny scope (return false)
+//  4. Check ALLOW scopes → if identity matches any allow scope (return true)
+//  5. No match found → deny by default (return false)
+//
+// Deny always takes precedence over Allow. This is critical for security as it ensures
+// explicit denials cannot be bypassed by also adding the identity to an allow list.
+//
+// Matching is case-insensitive for all scope types (users, groups, domains).
 func (c *Config) isRoleApplicableToIdentity(role *models.Role, identity *models.Identity) bool {
+	log := logrus.WithFields(logrus.Fields{
+		"role": role.Name,
+	})
+
 	// No scopes means open to all
 	if role.Scopes.IsEmpty() {
+		log.Debugln("Role has no scopes defined, applicable to all identities")
 		return true
 	}
 
 	// Nil identity cannot match any scopes
 	if identity == nil {
+		log.Debugln("Identity is nil, cannot match any scopes")
 		return false
 	}
 
-	hasAnyScope := len(role.Scopes.Allow.Users) > 0 || len(role.Scopes.Allow.Groups) > 0 || len(role.Scopes.Allow.Domains) > 0
-	if !hasAnyScope {
+	// Add identity context for logging
+	log = log.WithField("identity", identity.GetId())
+
+	// SECURITY: Check DENY scopes first - deny always takes precedence over allow
+	if c.identityMatchesScopeIdentities(identity, &role.Scopes.Deny) {
+		log.Debugln("Identity matched DENY scope, blocking role access")
+		return false
+	}
+
+	// Check if there are any allow scopes defined
+	hasAnyAllowScope := len(role.Scopes.Allow.Users) > 0 ||
+		len(role.Scopes.Allow.Groups) > 0 ||
+		len(role.Scopes.Allow.Domains) > 0
+
+	// If no allow scopes are defined (but deny scopes exist and didn't match), allow access
+	if !hasAnyAllowScope {
+		log.Debugln("No allow scopes defined and identity not in deny list, allowing access")
 		return true
+	}
+
+	// Check ALLOW scopes
+	if c.identityMatchesScopeIdentities(identity, &role.Scopes.Allow) {
+		log.Debugln("Identity matched ALLOW scope, granting role access")
+		return true
+	}
+
+	// Scopes defined but no match found - default deny
+	log.Debugln("Identity did not match any allow scope, denying role access")
+	return false
+}
+
+// identityMatchesScopeIdentities checks if an identity matches any of the scope identities.
+// This is a helper function used by isRoleApplicableToIdentity for both allow and deny checks.
+//
+// Matching rules:
+//   - For user identities: matches against Users list (by identity, email, username, or ID),
+//     Groups list (by user's group memberships), and Domains list (by user's domain)
+//   - For group identities: matches against Groups list (by group name or ID)
+//
+// All string comparisons are case-insensitive.
+func (c *Config) identityMatchesScopeIdentities(identity *models.Identity, scopes *models.ScopeIdentities) bool {
+	if scopes == nil || scopes.IsEmpty() {
+		return false
 	}
 
 	// Check user-related scopes
@@ -441,24 +505,24 @@ func (c *Config) isRoleApplicableToIdentity(role *models.Role, identity *models.
 		}
 
 		// Check user scopes (identity, email, username, ID)
-		if len(role.Scopes.Allow.Users) > 0 {
+		if len(scopes.Users) > 0 {
 			userIdentity := user.GetIdentity()
-			for _, allowed := range role.Scopes.Allow.Users {
-				if strings.EqualFold(allowed, userIdentity) ||
-					strings.EqualFold(allowed, user.Email) ||
-					strings.EqualFold(allowed, user.Username) ||
-					strings.EqualFold(allowed, user.ID) {
+			for _, scopeUser := range scopes.Users {
+				if strings.EqualFold(scopeUser, userIdentity) ||
+					strings.EqualFold(scopeUser, user.Email) ||
+					strings.EqualFold(scopeUser, user.Username) ||
+					strings.EqualFold(scopeUser, user.ID) {
 					return true
 				}
 			}
 		}
 
-		// Check if user belongs to allowed groups
-		if len(role.Scopes.Allow.Groups) > 0 {
+		// Check if user belongs to any scoped groups
+		if len(scopes.Groups) > 0 {
 			userGroups := user.GetGroups()
 			for _, userGroup := range userGroups {
-				for _, allowed := range role.Scopes.Allow.Groups {
-					if strings.EqualFold(allowed, userGroup) {
+				for _, scopeGroup := range scopes.Groups {
+					if strings.EqualFold(scopeGroup, userGroup) {
 						return true
 					}
 				}
@@ -466,10 +530,10 @@ func (c *Config) isRoleApplicableToIdentity(role *models.Role, identity *models.
 		}
 
 		// Check domain scopes
-		if len(role.Scopes.Allow.Domains) > 0 {
+		if len(scopes.Domains) > 0 {
 			userDomain := user.GetDomain()
-			for _, allowed := range role.Scopes.Allow.Domains {
-				if strings.EqualFold(allowed, userDomain) {
+			for _, scopeDomain := range scopes.Domains {
+				if strings.EqualFold(scopeDomain, userDomain) {
 					return true
 				}
 			}
@@ -477,20 +541,19 @@ func (c *Config) isRoleApplicableToIdentity(role *models.Role, identity *models.
 	}
 
 	// Check group scopes for group identities
-	if identity.IsGroup() && len(role.Scopes.Allow.Groups) > 0 {
+	if identity.IsGroup() && len(scopes.Groups) > 0 {
 		group := identity.GetGroup()
 		if group != nil {
 			groupName := group.GetName()
 			groupID := group.GetID()
-			for _, allowed := range role.Scopes.Allow.Groups {
-				if strings.EqualFold(allowed, groupName) || strings.EqualFold(allowed, groupID) {
+			for _, scopeGroup := range scopes.Groups {
+				if strings.EqualFold(scopeGroup, groupName) || strings.EqualFold(scopeGroup, groupID) {
 					return true
 				}
 			}
 		}
 	}
 
-	// Scopes defined but no match found
 	return false
 }
 
@@ -727,9 +790,26 @@ func (c *Config) filterStatementsListByProvider(stmts models.RoleStatements, all
 	return result
 }
 
-// resolvePermissionConflicts resolves Allow/Deny conflicts within a role.
-// Deny takes precedence: if a permission is both allowed and denied, it's removed from both.
-// This function preserves targets during conflict resolution.
+// resolvePermissionConflicts resolves Allow/Deny conflicts within a SINGLE role.
+//
+// IMPORTANT: This differs from inheritance conflict resolution (see mergePermissionsWithConflictResolution).
+//
+// Conflict Resolution Rules:
+//   - When the same operation appears in BOTH Allow AND Deny within a single role,
+//     it is removed from BOTH lists (effective neutral/no-op for that operation).
+//   - This "remove from both" behavior prevents ambiguous permission states.
+//   - Targets are NOT considered during conflict detection - only operations are compared.
+//
+// Rationale:
+//   - A role author who explicitly allows AND denies the same operation has created
+//     a logical contradiction. Removing from both is the safest resolution.
+//   - This differs from INHERITANCE where parent permissions take precedence over child.
+//
+// Example:
+//
+//	Allow: ["s3:GetObject", "s3:PutObject"]  +  Deny: ["s3:PutObject", "s3:DeleteObject"]
+//	Result: Allow: ["s3:GetObject"]  +  Deny: ["s3:DeleteObject"]
+//	(s3:PutObject removed from both due to conflict)
 func (c *Config) resolvePermissionConflicts(role *models.Role) {
 	// Normalize to operation->targets maps
 	allowNorm := normalizeStatements(role.Permissions.Allow)

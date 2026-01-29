@@ -10,6 +10,13 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// Validatable is an interface for tasks that support custom validation.
+// Tasks implementing this interface will have their Validate method called
+// during workflow validation.
+type Validatable interface {
+	Validate() error
+}
+
 type Workflow struct {
 	Version     *version.Version `json:"version,omitempty"`
 	Identifier  string           `json:"-"`
@@ -241,6 +248,72 @@ func (h *WorkflowDefinitions) Validate() error {
 		}
 		if workflow.Name == "" {
 			return fmt.Errorf("workflow '%s' is missing required field 'name'", workflowKey)
+		}
+
+		// Validate individual tasks within the workflow
+		if workflow.Workflow.Do != nil {
+			if err := validateTaskList(workflowKey, *workflow.Workflow.Do); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// validateTaskList validates all tasks in a task list
+func validateTaskList(workflowKey string, tasks model.TaskList) error {
+	for _, taskItem := range tasks {
+		if taskItem == nil || taskItem.Task == nil {
+			continue
+		}
+
+		// Check if the task implements Validatable interface
+		if validatable, ok := taskItem.Task.(Validatable); ok {
+			if err := validatable.Validate(); err != nil {
+				return fmt.Errorf("workflow '%s' task '%s': %w", workflowKey, taskItem.Key, err)
+			}
+		}
+
+		// Recursively validate nested task lists (e.g., in DoTask, TryTask, etc.)
+		if err := validateNestedTasks(workflowKey, taskItem); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateNestedTasks validates tasks nested within other tasks (e.g., do, try/catch blocks)
+func validateNestedTasks(workflowKey string, taskItem *model.TaskItem) error {
+	if taskItem == nil || taskItem.Task == nil {
+		return nil
+	}
+
+	// Check for DoTask which contains a nested Do list
+	if doTask, ok := taskItem.Task.(*model.DoTask); ok && doTask.Do != nil {
+		if err := validateTaskList(workflowKey, *doTask.Do); err != nil {
+			return err
+		}
+	}
+
+	// Check for TryTask which contains Try and Catch blocks
+	if tryTask, ok := taskItem.Task.(*model.TryTask); ok {
+		if tryTask.Try != nil {
+			if err := validateTaskList(workflowKey, *tryTask.Try); err != nil {
+				return err
+			}
+		}
+		if tryTask.Catch != nil && tryTask.Catch.Do != nil {
+			if err := validateTaskList(workflowKey, *tryTask.Catch.Do); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Check for ForkTask which contains branches
+	if forkTask, ok := taskItem.Task.(*model.ForkTask); ok && forkTask.Fork.Branches != nil {
+		if err := validateTaskList(workflowKey, *forkTask.Fork.Branches); err != nil {
+			return err
 		}
 	}
 

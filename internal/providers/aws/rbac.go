@@ -140,9 +140,9 @@ func permissionsToAwsPolicy(permissions models.RolePermissions) PolicyDocument {
 		}
 
 		// Default resource to "*" if no targets specified (backwards compatibility)
-		resource := any(stmt.Targets)
-		if len(stmt.Targets) == 0 {
-			resource = "*"
+		var resource any = "*"
+		if len(stmt.Targets) > 0 {
+			resource = stmt.Targets
 		}
 
 		awsStatements = append(awsStatements, Statement{
@@ -161,9 +161,9 @@ func permissionsToAwsPolicy(permissions models.RolePermissions) PolicyDocument {
 		}
 
 		// Default resource to "*" if no targets specified (backwards compatibility)
-		resource := any(stmt.Targets)
-		if len(stmt.Targets) == 0 {
-			resource = "*"
+		var resource any = "*"
+		if len(stmt.Targets) > 0 {
+			resource = stmt.Targets
 		}
 
 		awsStatements = append(awsStatements, Statement{
