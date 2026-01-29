@@ -243,7 +243,7 @@ func (p *gcpProvider) GetAuthorizedAccessUrl(
 }
 
 // createRole creates a custom role.
-func (p *gcpProvider) createRole(projectID, name, title, description, stage string, permissions models.Permissions) (*iam.Role, error) {
+func (p *gcpProvider) createRole(projectID, name, title, description, stage string, permissions models.RolePermissions) (*iam.Role, error) {
 
 	service := p.GetIamClient()
 
@@ -448,7 +448,7 @@ func (p *gcpProvider) unbindUserFromRoleByName(projectID string, user *models.Us
 // permissionsToGcpPermissions converts CSP-agnostic Permissions to GCP permissions list
 // Only Allow statements are used (GCP custom roles don't support deny)
 // Note: Targets are not used in GCP custom roles; resource scope is handled via IAM bindings
-func permissionsToGcpPermissions(permissions models.Permissions) []string {
+func permissionsToGcpPermissions(permissions models.RolePermissions) []string {
 	var gcpPermissions []string
 
 	// Process Allow statements

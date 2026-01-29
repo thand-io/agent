@@ -2721,7 +2721,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_thand-io_agent_internal_models.Permissions": {
+        "github_com_thand-io_agent_internal_models.RolePermissions": {
             "type": "object",
             "properties": {
                 "allow": {
@@ -2862,7 +2862,7 @@ const docTemplate = `{
                     "description": "granular permissions for the role",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.Permissions"
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.RolePermissions"
                         }
                     ]
                 },
@@ -4499,7 +4499,7 @@ const docTemplate = `{
                     "description": "granular permissions for the role",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.Permissions"
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.RolePermissions"
                         }
                     ]
                 },

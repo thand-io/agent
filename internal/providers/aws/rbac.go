@@ -129,11 +129,16 @@ type Statement struct {
 
 // permissionsToAwsPolicy converts CSP-agnostic Permissions to AWS PolicyDocument
 // The effect (Allow/Deny) comes from the parent Permissions.Allow or Permissions.Deny
-func permissionsToAwsPolicy(permissions models.Permissions) PolicyDocument {
+func permissionsToAwsPolicy(permissions models.RolePermissions) PolicyDocument {
 	awsStatements := []Statement{}
 
 	// Process Allow statements
 	for _, stmt := range permissions.Allow {
+		// Skip statements with no operations - AWS requires at least one Action
+		if len(stmt.Operations) == 0 {
+			continue
+		}
+
 		// Default resource to "*" if no targets specified (backwards compatibility)
 		resource := any(stmt.Targets)
 		if len(stmt.Targets) == 0 {
@@ -150,6 +155,11 @@ func permissionsToAwsPolicy(permissions models.Permissions) PolicyDocument {
 
 	// Process Deny statements
 	for _, stmt := range permissions.Deny {
+		// Skip statements with no operations - AWS requires at least one Action
+		if len(stmt.Operations) == 0 {
+			continue
+		}
+
 		// Default resource to "*" if no targets specified (backwards compatibility)
 		resource := any(stmt.Targets)
 		if len(stmt.Targets) == 0 {

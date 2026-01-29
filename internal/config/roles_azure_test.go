@@ -8,12 +8,21 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
-// stmts converts a []string to models.Statements for test convenience
-func stmtsAzure(ops ...string) models.Statements {
+// stmts converts a []string to models.RoleStatements for test convenience
+func stmtsAzure(ops ...string) models.RoleStatements {
 	if len(ops) == 0 {
 		return nil
 	}
-	return models.Statements{{Operations: ops}}
+	return models.RoleStatements{{Operations: ops}}
+}
+
+// collectOpsAzure collects all operations from statements into a single slice
+func collectOpsAzure(stmts models.RoleStatements) []string {
+	var result []string
+	for _, stmt := range stmts {
+		result = append(result, stmt.Operations...)
+	}
+	return result
 }
 
 // TestAzureRoles tests Azure-specific role configurations based on config/roles/azure.yaml
@@ -29,19 +38,19 @@ func TestAzureRoles(t *testing.T) {
 			Inherits: []string{
 				"custom_storage_admin",
 			},
-			Permissions: models.Permissions{
-				Allow: stmts(
-					"Microsoft.Compute/*/read",
-					"Microsoft.Compute/availabilitySets/*",
-					"Microsoft.Compute/proximityPlacementGroups/*",
-					"Microsoft.Compute/virtualMachines/*",
-					"Microsoft.Compute/disks/*",
-				),
-			},
-			Resources: models.Resources{
-				Allow: []string{
-					"azure:*",
-				},
+			Permissions: models.RolePermissions{
+				Allow: models.RoleStatements{{
+					Operations: []string{
+						"Microsoft.Compute/*/read",
+						"Microsoft.Compute/availabilitySets/*",
+						"Microsoft.Compute/proximityPlacementGroups/*",
+						"Microsoft.Compute/virtualMachines/*",
+						"Microsoft.Compute/disks/*",
+					},
+					Targets: []string{
+						"azure:*",
+					},
+				}},
 			},
 			Providers: []string{
 				"azure-prod",
@@ -51,7 +60,7 @@ func TestAzureRoles(t *testing.T) {
 		"custom_storage_admin": {
 			Name:        "Custom Storage Admin",
 			Description: "Custom role for storage administration",
-			Permissions: models.Permissions{
+			Permissions: models.RolePermissions{
 				Allow: stmts(
 					"Microsoft.Storage/storageAccounts/blobServices/containers/*",
 					"Microsoft.Storage/storageAccounts/blobServices/generateUserDelegationKey/action",
@@ -102,13 +111,17 @@ func TestAzureRoles(t *testing.T) {
 			"Microsoft.Storage/storageAccounts/blobServices/containers/*",
 			"Microsoft.Storage/storageAccounts/blobServices/generateUserDelegationKey/action",
 		}
-		assert.ElementsMatch(t, expectedPermissions, result.Permissions.Allow)
+		assert.ElementsMatch(t, expectedPermissions, collectOpsAzure(result.Permissions.Allow))
 
 		// The inherited role should be removed from Inherits list after being merged
 		assert.Empty(t, result.Inherits)
 
-		// Verify resources - azure:* becomes * since azure matches allowed providers
-		assert.ElementsMatch(t, []string{"*"}, result.Resources.Allow)
+		// Verify targets - azure:* becomes * since azure matches allowed providers
+		var allTargets []string
+		for _, stmt := range result.Permissions.Allow {
+			allTargets = append(allTargets, stmt.Targets...)
+		}
+		assert.Contains(t, allTargets, "*")
 
 		// Verify providers
 		assert.ElementsMatch(t, []string{"azure-prod"}, result.Providers)
@@ -125,27 +138,32 @@ func TestAzureRoleScenarios(t *testing.T) {
 			"azure_developer": {
 				Name:        "Azure Developer",
 				Description: "Developer access to Azure resources",
-				Permissions: models.Permissions{
-					Allow: stmts(
-						"Microsoft.Compute/virtualMachines/read",
-						"Microsoft.Compute/virtualMachines/start/action",
-						"Microsoft.Compute/virtualMachines/restart/action",
-						"Microsoft.Storage/storageAccounts/blobServices/containers/read",
-						"Microsoft.Storage/storageAccounts/blobServices/containers/write",
-						"Microsoft.Web/sites/*",
-					),
+				Permissions: models.RolePermissions{
+					Allow: models.RoleStatements{{
+						Operations: []string{
+							"Microsoft.Compute/virtualMachines/read",
+							"Microsoft.Compute/virtualMachines/start/action",
+							"Microsoft.Compute/virtualMachines/restart/action",
+							"Microsoft.Storage/storageAccounts/blobServices/containers/read",
+							"Microsoft.Storage/storageAccounts/blobServices/containers/write",
+							"Microsoft.Web/sites/*",
+						},
+						Targets: []string{
+							"/subscriptions/*/resourceGroups/dev-*",
+							"/subscriptions/*/resourceGroups/staging-*",
+						},
+					}},
+					Deny: models.RoleStatements{{
+						Operations: []string{"*"}, // All operations denied for these targets
+						Targets: []string{
+							"/subscriptions/*/resourceGroups/prod-*",
+						},
+					}},
 				},
-				Resources: models.Resources{
-					Allow: []string{
-						"/subscriptions/*/resourceGroups/dev-*",
-						"/subscriptions/*/resourceGroups/staging-*",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"developers", "engineers"},
 					},
-					Deny: []string{
-						"/subscriptions/*/resourceGroups/prod-*",
-					},
-				},
-				Scopes: &models.RoleScopes{
-					Groups: []string{"developers", "engineers"},
 				},
 				Providers: []string{"azure-dev", "azure-staging"},
 				Enabled:   true,
@@ -181,6 +199,17 @@ func TestAzureRoleScenarios(t *testing.T) {
 		require.NotNil(t, result)
 
 		assert.Equal(t, "Azure Developer", result.Name)
+
+		// Collect all operations and targets from allow statements
+		var allowOps, allowTargets, denyTargets []string
+		for _, stmt := range result.Permissions.Allow {
+			allowOps = append(allowOps, stmt.Operations...)
+			allowTargets = append(allowTargets, stmt.Targets...)
+		}
+		for _, stmt := range result.Permissions.Deny {
+			denyTargets = append(denyTargets, stmt.Targets...)
+		}
+
 		assert.ElementsMatch(t, []string{
 			"Microsoft.Compute/virtualMachines/read",
 			"Microsoft.Compute/virtualMachines/start/action",
@@ -188,16 +217,16 @@ func TestAzureRoleScenarios(t *testing.T) {
 			"Microsoft.Storage/storageAccounts/blobServices/containers/read",
 			"Microsoft.Storage/storageAccounts/blobServices/containers/write",
 			"Microsoft.Web/sites/*",
-		}, result.Permissions.Allow)
+		}, allowOps)
 
 		assert.ElementsMatch(t, []string{
 			"/subscriptions/*/resourceGroups/dev-*",
 			"/subscriptions/*/resourceGroups/staging-*",
-		}, result.Resources.Allow)
+		}, allowTargets)
 
 		assert.ElementsMatch(t, []string{
 			"/subscriptions/*/resourceGroups/prod-*",
-		}, result.Resources.Deny)
+		}, denyTargets)
 
 		assert.ElementsMatch(t, []string{"azure-dev", "azure-staging"}, result.Providers)
 	})
@@ -207,7 +236,7 @@ func TestAzureRoleScenarios(t *testing.T) {
 			"custom_reader": {
 				Name:        "Custom Reader",
 				Description: "Custom read-only role",
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmts(
 						"*/read",
 					),
@@ -217,7 +246,7 @@ func TestAzureRoleScenarios(t *testing.T) {
 			"custom_blob_reader": {
 				Name:        "Custom Blob Reader",
 				Description: "Custom storage blob reading role",
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmts(
 						"Microsoft.Storage/storageAccounts/blobServices/containers/read",
 						"Microsoft.Storage/storageAccounts/blobServices/generateUserDelegationKey/action",
@@ -233,14 +262,16 @@ func TestAzureRoleScenarios(t *testing.T) {
 					"custom_reader",
 					"custom_blob_reader",
 				},
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmts(
 						"Microsoft.DataFactory/datafactories/read",
 						"Microsoft.DataFactory/factories/read",
 					),
 				},
-				Scopes: &models.RoleScopes{
-					Groups: []string{"analysts", "data-team"},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"analysts", "data-team"},
+					},
 				},
 				Providers: []string{"azure-analytics"},
 				Enabled:   true,
@@ -284,7 +315,7 @@ func TestAzureRoleScenarios(t *testing.T) {
 			"Microsoft.Storage/storageAccounts/blobServices/generateUserDelegationKey/action",
 			"Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read",
 		}
-		assert.ElementsMatch(t, expectedAllowPerms, result.Permissions.Allow)
+		assert.ElementsMatch(t, expectedAllowPerms, collectOpsAzure(result.Permissions.Allow))
 		assert.ElementsMatch(t, []string{"azure-analytics"}, result.Providers)
 
 		// The inherited roles should be removed from Inherits list after being merged
@@ -296,25 +327,25 @@ func TestAzureRoleScenarios(t *testing.T) {
 			"subscription_admin": {
 				Name:        "Subscription Admin",
 				Description: "Admin access to specific Azure subscriptions",
-				Permissions: models.Permissions{
-					Allow: stmts(
-						"*",
-					),
+				Permissions: models.RolePermissions{
+					Allow: models.RoleStatements{{
+						Operations: []string{"*"},
+						Targets: []string{
+							"/subscriptions/12345678-1234-1234-1234-123456789abc",
+							"/subscriptions/87654321-4321-4321-4321-cba987654321",
+						},
+					}},
 					Deny: stmts(
 						"Microsoft.Authorization/*/Delete",
 						"Microsoft.Authorization/*/Write",
 						"Microsoft.Authorization/elevateAccess/Action",
 					),
 				},
-				Resources: models.Resources{
-					Allow: []string{
-						"/subscriptions/12345678-1234-1234-1234-123456789abc",
-						"/subscriptions/87654321-4321-4321-4321-cba987654321",
-					},
-				},
-				Scopes: &models.RoleScopes{
-					Users: []string{
-						"subscription-admin@example.com",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{
+							"subscription-admin@example.com",
+						},
 					},
 				},
 				Providers: []string{"azure-subscriptions"},
@@ -345,17 +376,17 @@ func TestAzureRoleScenarios(t *testing.T) {
 		require.NotNil(t, result)
 
 		assert.Equal(t, "Subscription Admin", result.Name)
-		assert.ElementsMatch(t, []string{"*"}, result.Permissions.Allow)
-		assert.ElementsMatch(t, []string{
-			"Microsoft.Authorization/*/Delete",
-			"Microsoft.Authorization/*/Write",
-			"Microsoft.Authorization/elevateAccess/Action",
-		}, result.Permissions.Deny)
+
+		// Collect all targets from allow statements
+		var allowTargets []string
+		for _, stmt := range result.Permissions.Allow {
+			allowTargets = append(allowTargets, stmt.Targets...)
+		}
 
 		assert.ElementsMatch(t, []string{
 			"/subscriptions/12345678-1234-1234-1234-123456789abc",
 			"/subscriptions/87654321-4321-4321-4321-cba987654321",
-		}, result.Resources.Allow)
+		}, allowTargets)
 
 		assert.ElementsMatch(t, []string{"azure-subscriptions"}, result.Providers)
 	})

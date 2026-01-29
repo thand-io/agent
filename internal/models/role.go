@@ -11,19 +11,85 @@ import (
 )
 
 type Role struct {
-	Version        *version.Version `json:"version,omitempty"`
-	Identifier     string           `json:"-"`
-	Name           string           `json:"name" validate:"required,min=1,max=100"`
-	Description    string           `json:"description" validate:"max=500"`
-	Authenticators []string         `json:"authenticators" validate:"dive,min=2,max=100"`            // All the auth providers that the role can use. If empty then any provider can be used
-	Workflows      []string         `json:"workflows,omitempty" validate:"max=5,dive,min=1,max=100"` // The workflows to execute
-	Inherits       []string         `json:"inherits,omitempty" validate:"max=50,dive,min=1,max=100"` // roles to inherit from or provider specific roles/policies etc
-	Groups         Groups           `json:"groups"`                                                  // groups to add the user to
-	Permissions    Permissions      `json:"permissions"`                                             // CSP-agnostic permission statements (replaces Permissions)
-	Resources      Resources        `json:"resources"`                                               // resource access rules, apis, files, systems etc
-	Scopes         *RoleScopes      `json:"scopes,omitempty"`                                        // scope of who can be assigned this role
-	Providers      []string         `json:"providers" validate:"max=5,dive,min=2,max=100"`           // providers that can assign this role
-	Enabled        bool             `json:"enabled" default:"true"`                                  // By default enable the role
+	Version     *version.Version `json:"version,omitempty"`
+	Identifier  string           `json:"-"`
+	Name        string           `json:"name" validate:"required,min=1,max=100"`
+	Description string           `json:"description" validate:"max=500"`
+
+	Authenticators []string `json:"authenticators" validate:"dive,min=2,max=100"`            // All the auth providers that the role can use. If empty then any provider can be used
+	Workflows      []string `json:"workflows,omitempty" validate:"max=5,dive,min=1,max=100"` // The workflows to execute
+	Providers      []string `json:"providers" validate:"max=5,dive,min=2,max=100"`           // providers that can assign this role
+
+	Inherits    []string        `json:"inherits,omitempty" validate:"max=50,dive,min=1,max=100"` // roles to inherit from or provider specific roles/policies etc
+	Permissions RolePermissions `json:"permissions"`                                             // CSP-agnostic permission statements
+
+	Scopes RoleScopes `json:"scopes"` // scope of who can be assigned this role
+
+	Enabled bool `json:"enabled" default:"true"` // By default enable the role
+}
+
+// UnmarshalJSON provides backwards compatibility for Role.
+// It handles deprecated Groups and Resources fields by:
+// 1. Populating the deprecated Groups and Resources fields for existing code compatibility
+// 2. Migrating them to Permissions Targets for the new approach
+func (r *Role) UnmarshalJSON(data []byte) error {
+	// Use an alias to avoid infinite recursion
+	type RoleAlias Role
+
+	// Define a struct that includes deprecated fields
+	aux := &struct {
+		*RoleAlias
+		// Deprecated fields for backwards compatibility
+		Groups    RoleGroups    `json:"groups"`
+		Resources RoleResources `json:"resources"`
+	}{
+		RoleAlias: (*RoleAlias)(r),
+	}
+
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return fmt.Errorf("failed to unmarshal role: %w", err)
+	}
+
+	// Migrate deprecated Groups and Resources to Permissions Targets
+	// Collect all targets from deprecated fields
+	var allowTargets, denyTargets []string
+
+	// Add Groups.Allow and Resources.Allow to allowTargets
+	allowTargets = append(allowTargets, aux.Groups.Allow...)
+	allowTargets = append(allowTargets, aux.Resources.Allow...)
+
+	// Add Groups.Deny and Resources.Deny to denyTargets
+	denyTargets = append(denyTargets, aux.Groups.Deny...)
+	denyTargets = append(denyTargets, aux.Resources.Deny...)
+
+	// Append targets to existing Permission statements
+	if len(allowTargets) > 0 {
+		if len(r.Permissions.Allow) > 0 {
+			// Append to first statement's targets
+			r.Permissions.Allow[0].Targets = append(r.Permissions.Allow[0].Targets, allowTargets...)
+		} else {
+			// Create a new statement with empty operations but with targets
+			r.Permissions.Allow = append(r.Permissions.Allow, Statement{
+				Operations: []string{},
+				Targets:    allowTargets,
+			})
+		}
+	}
+
+	if len(denyTargets) > 0 {
+		if len(r.Permissions.Deny) > 0 {
+			// Append to first statement's targets
+			r.Permissions.Deny[0].Targets = append(r.Permissions.Deny[0].Targets, denyTargets...)
+		} else {
+			// Create a new statement with empty operations but with targets
+			r.Permissions.Deny = append(r.Permissions.Deny, Statement{
+				Operations: []string{},
+				Targets:    denyTargets,
+			})
+		}
+	}
+
+	return nil
 }
 
 func (r *Role) HasPermission(user *User) bool {
@@ -33,50 +99,77 @@ func (r *Role) HasPermission(user *User) bool {
 		return false
 	}
 
-	if r.Scopes == nil {
+	// Check if any scopes are defined
+	if r.Scopes.IsEmpty() {
 		logrus.Debugln("Role.HasPermission: no scopes defined, allowing access")
 		return true
 	}
 
-	// Check user scopes (case-insensitive)
-	if len(r.Scopes.Users) > 0 {
-		for _, allowedUser := range r.Scopes.Users {
-			if strings.EqualFold(allowedUser, user.Username) ||
-				strings.EqualFold(allowedUser, user.ID) ||
-				strings.EqualFold(allowedUser, user.Email) {
+	userDomain := user.GetDomain()
+
+	// Check deny lists first (deny takes precedence)
+	// Check user deny list
+	for _, deniedUser := range r.Scopes.Deny.Users {
+		if strings.EqualFold(deniedUser, user.Username) ||
+			strings.EqualFold(deniedUser, user.ID) ||
+			strings.EqualFold(deniedUser, user.Email) {
+			logrus.Debugln("Role.HasPermission: user explicitly denied")
+			return false
+		}
+	}
+
+	// Check group deny list
+	for _, userGroup := range user.Groups {
+		for _, deniedGroup := range r.Scopes.Deny.Groups {
+			if strings.EqualFold(userGroup, deniedGroup) {
+				logrus.Debugln("Role.HasPermission: user's group explicitly denied")
+				return false
+			}
+		}
+	}
+
+	// Check domain deny list
+	for _, deniedDomain := range r.Scopes.Deny.Domains {
+		if strings.EqualFold(userDomain, deniedDomain) {
+			logrus.Debugln("Role.HasPermission: user's domain explicitly denied")
+			return false
+		}
+	}
+
+	// Check allow lists
+	// If no allow lists are defined, user passes (only deny lists matter)
+	if r.Scopes.Allow.IsEmpty() {
+		logrus.Debugln("Role.HasPermission: no allow scopes, user not denied, allowing access")
+		return true
+	}
+
+	// Check user allow list (case-insensitive)
+	for _, allowedUser := range r.Scopes.Allow.Users {
+		if strings.EqualFold(allowedUser, user.Username) ||
+			strings.EqualFold(allowedUser, user.ID) ||
+			strings.EqualFold(allowedUser, user.Email) {
+			return true
+		}
+	}
+
+	// Check group allow list (case-insensitive)
+	for _, userGroup := range user.Groups {
+		for _, allowedGroup := range r.Scopes.Allow.Groups {
+			if strings.EqualFold(userGroup, allowedGroup) {
 				return true
 			}
 		}
 	}
 
-	// Check group scopes (case-insensitive)
-	if len(r.Scopes.Groups) > 0 {
-		for _, userGroup := range user.Groups {
-			for _, allowedGroup := range r.Scopes.Groups {
-				if strings.EqualFold(userGroup, allowedGroup) {
-					return true
-				}
-			}
+	// Check domain allow list (case-insensitive)
+	for _, allowedDomain := range r.Scopes.Allow.Domains {
+		if strings.EqualFold(userDomain, allowedDomain) {
+			return true
 		}
 	}
 
-	// Check domain scopes (case-insensitive)
-	if len(r.Scopes.Domains) > 0 {
-		userDomain := user.GetDomain()
-		for _, allowedDomain := range r.Scopes.Domains {
-			if strings.EqualFold(userDomain, allowedDomain) {
-				return true
-			}
-		}
-	}
-
-	// If scopes are defined but no match found, role doesn't apply
-	if len(r.Scopes.Users) > 0 || len(r.Scopes.Groups) > 0 || len(r.Scopes.Domains) > 0 {
-		return false
-	}
-
-	// No scopes defined means open to all users
-	return true
+	// Allow lists exist but user didn't match any
+	return false
 }
 
 func (r *Role) AsMap() map[string]any {
@@ -115,30 +208,30 @@ func (r *Role) GetDescription() string {
 }
 
 // Groups defines group-based access controls with allow and deny lists.
-type Groups struct {
+type RoleGroups struct {
 	Allow []string `json:"allow,omitempty" validate:"max=100,dive,min=1,max=200"`
 	Deny  []string `json:"deny,omitempty" validate:"max=100,dive,min=1,max=200"`
 }
 
 // Permissions defines permission-based access controls with allow and deny lists.
-type Permissions struct {
-	Allow Statements `json:"allow,omitempty" validate:"max=500,dive,min=1,max=500"`
-	Deny  Statements `json:"deny,omitempty" validate:"max=500,dive,min=1,max=500"`
+type RolePermissions struct {
+	Allow RoleStatements `json:"allow,omitempty" validate:"max=500,dive"`
+	Deny  RoleStatements `json:"deny,omitempty" validate:"max=500,dive"`
 }
 
-type Statements []Statement
+type RoleStatements []Statement
 
-// UnmarshalJSON provides backwards compatibility for Statements.
+// UnmarshalJSON provides backwards compatibility for RoleStatements.
 // It accepts both the old format (array of strings) and new format (array of Statement objects).
 // When a string is encountered, it is converted to a Statement with the string as an Operation.
-func (s *Statements) UnmarshalJSON(data []byte) error {
+func (s *RoleStatements) UnmarshalJSON(data []byte) error {
 	// First, try to unmarshal as an array of raw messages
 	var rawItems []json.RawMessage
 	if err := json.Unmarshal(data, &rawItems); err != nil {
 		return err
 	}
 
-	result := make(Statements, 0, len(rawItems))
+	result := make(RoleStatements, 0, len(rawItems))
 	for _, raw := range rawItems {
 		// Try to unmarshal as a string first (backwards compatibility)
 		var str string
@@ -172,14 +265,67 @@ type Statement struct { // "allow" or "deny" (agnostic terminology)
 	Conditions map[string]any `json:"conditions,omitempty" validate:"max=10,dive,keys,min=1,max=100"`  // Optional provider-specific conditions
 }
 
+// ScopeIdentities defines identity-based restrictions for users, groups, and domains.
+type ScopeIdentities struct {
+	Users   []string `json:"users,omitempty" validate:"max=500,dive,min=1,max=320"`
+	Groups  []string `json:"groups,omitempty" validate:"max=100,dive,min=1,max=200"`
+	Domains []string `json:"domains,omitempty" validate:"max=50,dive,min=2,max=253,hostname"`
+}
+
+// IsEmpty returns true if all identity lists are empty
+func (s *ScopeIdentities) IsEmpty() bool {
+	return len(s.Users) == 0 && len(s.Groups) == 0 && len(s.Domains) == 0
+}
+
 // RoleScopes defines the scope of a role in terms of users, groups, and domains (identities).
 // Only the specified users, groups, or users belonging to the specified domains can be assigned this role.
 // The Domains field allows restricting role assignment to users from particular domains (e.g., email domains or organizational domains),
 // and can be used in conjunction with Groups and Users for more granular access control.
+// Deny takes precedence over Allow.
 type RoleScopes struct {
-	Groups  []string `json:"groups,omitempty" validate:"max=100,dive,min=1,max=200"`
-	Users   []string `json:"users,omitempty" validate:"max=500,dive,min=1,max=320"`
-	Domains []string `json:"domains,omitempty" validate:"max=50,dive,min=2,max=253,hostname"`
+	Allow ScopeIdentities `json:"allow"`
+	Deny  ScopeIdentities `json:"deny"`
+}
+
+// UnmarshalJSON provides backwards compatibility for RoleScopes.
+// If the old format (users/groups/domains at root) is used, they are moved to Allow.
+func (r *RoleScopes) UnmarshalJSON(data []byte) error {
+	// Define a struct that can capture both old and new formats
+	type rawScopes struct {
+		// New format
+		Allow ScopeIdentities `json:"allow"`
+		Deny  ScopeIdentities `json:"deny"`
+		// Old format (backwards compatibility)
+		Users   []string `json:"users,omitempty"`
+		Groups  []string `json:"groups,omitempty"`
+		Domains []string `json:"domains,omitempty"`
+	}
+
+	var aux rawScopes
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return fmt.Errorf("failed to unmarshal role scopes: %w", err)
+	}
+
+	r.Allow = aux.Allow
+	r.Deny = aux.Deny
+
+	// Backwards compatibility: move root-level fields to Allow
+	if len(aux.Users) > 0 {
+		r.Allow.Users = append(r.Allow.Users, aux.Users...)
+	}
+	if len(aux.Groups) > 0 {
+		r.Allow.Groups = append(r.Allow.Groups, aux.Groups...)
+	}
+	if len(aux.Domains) > 0 {
+		r.Allow.Domains = append(r.Allow.Domains, aux.Domains...)
+	}
+
+	return nil
+}
+
+// IsEmpty returns true if both Allow and Deny are empty
+func (r *RoleScopes) IsEmpty() bool {
+	return r.Allow.IsEmpty() && r.Deny.IsEmpty()
 }
 
 // RolesResponse represents the response for /roles endpoint
@@ -192,7 +338,7 @@ type RoleResponse struct {
 	Role
 }
 
-type Resources struct {
+type RoleResources struct {
 	Allow []string `json:"allow,omitempty" validate:"max=500,dive,min=1,max=1000"`
 	Deny  []string `json:"deny,omitempty" validate:"max=500,dive,min=1,max=1000"`
 }

@@ -8,12 +8,21 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
-// stmts converts a []string to models.Statements for test convenience
-func stmtsAws(ops ...string) models.Statements {
+// stmts converts a []string to models.RoleStatements for test convenience
+func stmtsAws(ops ...string) models.RoleStatements {
 	if len(ops) == 0 {
 		return nil
 	}
-	return models.Statements{{Operations: ops}}
+	return models.RoleStatements{{Operations: ops}}
+}
+
+// collectOps collects all operations from statements into a single slice
+func collectOps(stmts models.RoleStatements) []string {
+	var result []string
+	for _, stmt := range stmts {
+		result = append(result, stmt.Operations...)
+	}
+	return result
 }
 
 // TestAWSRoles tests AWS-specific role configurations based on config/roles/aws.yaml
@@ -31,27 +40,29 @@ func TestAWSRoles(t *testing.T) {
 				"slack_approval",
 			},
 			// Removed IAM policy inheritance for test simplicity
-			Permissions: models.Permissions{
-				Allow: stmts(
-					"ec2:*",
-					"s3:*",
-					"rds:*",
-					"*", // Administrative access
-				),
+			Permissions: models.RolePermissions{
+				Allow: models.RoleStatements{{
+					Operations: []string{
+						"ec2:*",
+						"s3:*",
+						"rds:*",
+						"*", // Administrative access
+					},
+					Targets: []string{
+						"aws:*",
+					},
+				}},
 			},
-			Resources: models.Resources{
-				Allow: []string{
-					"aws:*",
-				},
-			},
-			Scopes: &models.RoleScopes{
-				Groups: []string{
-					"oidc:user",
-					"oidc:eng",
-				},
-				Users: []string{
-					"admin@example.com",
-					"devops@example.com",
+			Scopes: models.RoleScopes{
+				Allow: models.ScopeIdentities{
+					Groups: []string{
+						"oidc:user",
+						"oidc:eng",
+					},
+					Users: []string{
+						"admin@example.com",
+						"devops@example.com",
+					},
 				},
 			},
 			Providers: []string{
@@ -66,7 +77,7 @@ func TestAWSRoles(t *testing.T) {
 			Description: "Basic access to user resources.",
 			Workflows:   []string{"slack_approval"},
 			// Removed IAM policy inheritance for test simplicity
-			Permissions: models.Permissions{
+			Permissions: models.RolePermissions{
 				Allow: stmts(
 					"ec2:describeInstances",
 					"s3:listBuckets",
@@ -124,11 +135,11 @@ func TestAWSRoles(t *testing.T) {
 		assert.Equal(t, "Full access to all resources and capabilities.", result.Description)
 		assert.True(t, result.Enabled)
 
-		// Verify permissions
-		assert.ElementsMatch(t, []string{"ec2:*", "s3:*", "rds:*", "*"}, result.Permissions.Allow)
-
-		// Verify resources - aws:* becomes * since aws matches allowed providers
-		assert.ElementsMatch(t, []string{"*"}, result.Resources.Allow)
+		// Verify permissions - now includes targets
+		assert.Len(t, result.Permissions.Allow, 1)
+		assert.ElementsMatch(t, []string{"ec2:*", "s3:*", "rds:*", "*"}, result.Permissions.Allow[0].Operations)
+		// Targets: aws:* becomes * since aws matches allowed providers
+		assert.ElementsMatch(t, []string{"*"}, result.Permissions.Allow[0].Targets)
 
 		// Verify providers
 		assert.ElementsMatch(t, []string{"aws-prod", "aws-dev", "aws-thand-dev"}, result.Providers)
@@ -161,7 +172,7 @@ func TestAWSRoles(t *testing.T) {
 		assert.ElementsMatch(t, []string{
 			"ec2:Describe*,describeInstances",
 			"s3:Get*,List*,listBuckets",
-		}, result.Permissions.Allow)
+		}, collectOps(result.Permissions.Allow))
 
 		// Verify providers
 		assert.ElementsMatch(t, []string{"aws-thand-dev", "aws"}, result.Providers)
@@ -180,7 +191,7 @@ func TestAWSRoles(t *testing.T) {
 				Inherits: []string{
 					"arn:aws:iam::aws:policy/AdministratorAccess",
 				},
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmtsAws("custom:action"),
 				},
 				Enabled: true,
@@ -188,7 +199,7 @@ func TestAWSRoles(t *testing.T) {
 			"arn:aws:iam::aws:policy/AdministratorAccess": {
 				Name:        "AdministratorAccess",
 				Description: "AWS managed admin policy",
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmtsAws("*"),
 				},
 				Enabled: true,
@@ -209,7 +220,7 @@ func TestAWSRoles(t *testing.T) {
 		require.NotNil(t, result)
 
 		// Should merge permissions from both roles
-		assert.ElementsMatch(t, []string{"custom:action", "*"}, result.Permissions.Allow)
+		assert.ElementsMatch(t, []string{"custom:action", "*"}, collectOps(result.Permissions.Allow))
 	})
 }
 
@@ -220,23 +231,25 @@ func TestAWSRoleScenarios(t *testing.T) {
 			"developer": {
 				Name:        "Developer",
 				Description: "Developer access to staging",
-				Permissions: models.Permissions{
-					Allow: stmts(
-						"ec2:DescribeInstances",
-						"s3:GetObject",
-						"s3:PutObject",
-						"logs:DescribeLogGroups",
-						"logs:DescribeLogStreams",
-					),
+				Permissions: models.RolePermissions{
+					Allow: models.RoleStatements{{
+						Operations: []string{
+							"ec2:DescribeInstances",
+							"s3:GetObject",
+							"s3:PutObject",
+							"logs:DescribeLogGroups",
+							"logs:DescribeLogStreams",
+						},
+						Targets: []string{
+							"arn:aws:s3:::staging-*",
+							"arn:aws:ec2:*:*:instance/i-staging*",
+						},
+					}},
 				},
-				Resources: models.Resources{
-					Allow: []string{
-						"arn:aws:s3:::staging-*",
-						"arn:aws:ec2:*:*:instance/i-staging*",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"developers"},
 					},
-				},
-				Scopes: &models.RoleScopes{
-					Groups: []string{"developers"},
 				},
 				Providers: []string{"aws-staging"},
 				Enabled:   true,
@@ -267,16 +280,17 @@ func TestAWSRoleScenarios(t *testing.T) {
 		require.NotNil(t, result)
 
 		assert.Equal(t, "Developer", result.Name)
+		assert.Len(t, result.Permissions.Allow, 1)
 		assert.ElementsMatch(t, []string{
 			"ec2:DescribeInstances",
 			"logs:DescribeLogGroups,DescribeLogStreams",
 			"s3:GetObject,PutObject",
-		}, result.Permissions.Allow)
+		}, result.Permissions.Allow[0].Operations)
 
 		assert.ElementsMatch(t, []string{
 			"arn:aws:s3:::staging-*",
 			"arn:aws:ec2:*:*:instance/i-staging*",
-		}, result.Resources.Allow)
+		}, result.Permissions.Allow[0].Targets)
 
 		assert.ElementsMatch(t, []string{"aws-staging"}, result.Providers)
 	})
@@ -286,7 +300,7 @@ func TestAWSRoleScenarios(t *testing.T) {
 			"base_user": {
 				Name:        "Base User",
 				Description: "Basic user permissions",
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmts(
 						"iam:GetUser",
 						"iam:ListMFADevices",
@@ -297,15 +311,13 @@ func TestAWSRoleScenarios(t *testing.T) {
 			"s3_admin": {
 				Name:        "S3 Admin",
 				Description: "S3 administrative access",
-				Permissions: models.Permissions{
-					Allow: stmts(
-						"s3:*",
-					),
-				},
-				Resources: models.Resources{
-					Allow: []string{
-						"arn:aws:s3:::prod-*",
-					},
+				Permissions: models.RolePermissions{
+					Allow: models.RoleStatements{{
+						Operations: []string{"s3:*"},
+						Targets: []string{
+							"arn:aws:s3:::prod-*",
+						},
+					}},
 				},
 				Enabled: true,
 			},
@@ -316,7 +328,7 @@ func TestAWSRoleScenarios(t *testing.T) {
 					"base_user",
 					"s3_admin",
 				},
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmts(
 						"ec2:*",
 						"rds:*",
@@ -326,10 +338,12 @@ func TestAWSRoleScenarios(t *testing.T) {
 						"iam:DeleteUser",
 					),
 				},
-				Scopes: &models.RoleScopes{
-					Users: []string{
-						"admin@example.com",
-						"sre@example.com",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{
+							"admin@example.com",
+							"sre@example.com",
+						},
 					},
 				},
 				Providers: []string{"aws-prod"},
@@ -365,17 +379,27 @@ func TestAWSRoleScenarios(t *testing.T) {
 			"iam:GetUser,ListMFADevices", // from base_user (condensed)
 			"s3:*",                       // from s3_admin
 		}
-		assert.ElementsMatch(t, expectedAllowPerms, result.Permissions.Allow)
+		assert.ElementsMatch(t, expectedAllowPerms, collectOps(result.Permissions.Allow))
 
 		// Should have deny permissions (condensed format)
 		assert.ElementsMatch(t, []string{
 			"iam:DeleteRole,DeleteUser",
-		}, result.Permissions.Deny)
+		}, collectOps(result.Permissions.Deny))
 
-		// Should have merged resources
+		// The s3:* permission from s3_admin should have targets merged
+		// Find the s3 statement and check its targets
+		var s3Targets []string
+		for _, stmt := range result.Permissions.Allow {
+			for _, op := range stmt.Operations {
+				if op == "s3:*" {
+					s3Targets = stmt.Targets
+					break
+				}
+			}
+		}
 		assert.ElementsMatch(t, []string{
 			"arn:aws:s3:::prod-*",
-		}, result.Resources.Allow)
+		}, s3Targets)
 
 		assert.ElementsMatch(t, []string{"aws-prod"}, result.Providers)
 	})
@@ -416,25 +440,27 @@ func TestAWSRoleScenarios(t *testing.T) {
 					"aws_user", // This should be resolved and removed from final Inherits
 					"arn:aws:iam::aws:policy/AdministratorAccess", // Provider role - should remain
 				},
-				Permissions: models.Permissions{
-					Allow: stmts(
-						"ec2:*",
-						"s3:*",
-						"rds:*",
-					),
+				Permissions: models.RolePermissions{
+					Allow: models.RoleStatements{{
+						Operations: []string{
+							"ec2:*",
+							"s3:*",
+							"rds:*",
+						},
+						Targets: []string{
+							"aws:*",
+						},
+					}},
 				},
-				Resources: models.Resources{
-					Allow: []string{
-						"aws:*",
-					},
-				},
-				Scopes: &models.RoleScopes{
-					Groups: []string{
-						"oidc:user",
-						"oidc:eng",
-					},
-					Users: []string{
-						"admin@example.com",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{
+							"oidc:user",
+							"oidc:eng",
+						},
+						Users: []string{
+							"admin@example.com",
+						},
 					},
 				},
 				Providers: []string{
@@ -448,7 +474,7 @@ func TestAWSRoleScenarios(t *testing.T) {
 				Name:        "User",
 				Description: "Basic access to user resources.",
 				Workflows:   []string{"slack_approval"},
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmts(
 						"ec2:describeInstances",
 						"s3:listBuckets",
@@ -493,7 +519,7 @@ func TestAWSRoleScenarios(t *testing.T) {
 			"s3:*",  // from aws_admin (overrides aws_user's s3:listBuckets)
 			"rds:*", // from aws_admin
 		}
-		assert.ElementsMatch(t, expectedPermissions, result.Permissions.Allow,
+		assert.ElementsMatch(t, expectedPermissions, collectOps(result.Permissions.Allow),
 			"Permissions should be merged from inherited roles")
 
 		// Verify other properties are preserved

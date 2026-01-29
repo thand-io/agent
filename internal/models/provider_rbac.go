@@ -291,12 +291,8 @@ func validateRole(provider Provider, _ *Identity, role *Role) error {
 func validateRoleNotEmpty(role *Role) error {
 	if len(role.Permissions.Allow) == 0 &&
 		len(role.Permissions.Deny) == 0 &&
-		len(role.Resources.Allow) == 0 &&
-		len(role.Resources.Deny) == 0 &&
-		len(role.Groups.Allow) == 0 &&
-		len(role.Groups.Deny) == 0 &&
 		len(role.Inherits) == 0 {
-		return fmt.Errorf("role %s has no permissions, inherits, groups or resources", role.Name)
+		return fmt.Errorf("role %s has no permissions or inherits", role.Name)
 	}
 	return nil
 }
@@ -393,9 +389,9 @@ func validateRolePermissionLists(role *Role, providerPermissions []SearchResult[
 	return nil
 }
 
-func validatePermissions(providerPermissions []SearchResult[ProviderPermission], statements Statements) (Statements, error) {
+func validatePermissions(providerPermissions []SearchResult[ProviderPermission], statements RoleStatements) (RoleStatements, error) {
 
-	validatedStatements := Statements{}
+	validatedStatements := RoleStatements{}
 
 	// Validate each statement
 	for _, stmt := range statements {

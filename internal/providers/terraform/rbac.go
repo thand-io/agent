@@ -21,13 +21,18 @@ func (p *terraformProvider) AuthorizeRole(
 	user := req.GetUser()
 	role := req.GetRole()
 
-	// Loop over all resources in role.Resources.Allow as workspace IDs
-	if len(role.Resources.Allow) == 0 {
-		return nil, fmt.Errorf("no workspace IDs found in role.Resources.Allow")
+	// Collect all targets from permission statements as workspace IDs
+	var workspaceIDs []string
+	for _, stmt := range role.Permissions.Allow {
+		workspaceIDs = append(workspaceIDs, stmt.Targets...)
+	}
+
+	if len(workspaceIDs) == 0 {
+		return nil, fmt.Errorf("no workspace IDs found in role.Permissions.Allow[].Targets")
 	}
 
 	// Authorize user for each workspace
-	for _, workspaceID := range role.Resources.Allow {
+	for _, workspaceID := range workspaceIDs {
 		// Create team access for the user on the specified workspace
 		teamAccess := &tfe.TeamAccessAddOptions{
 			Access:    tfe.Access(tfe.AccessType(role.Name)), // Use role name as access level
@@ -54,13 +59,18 @@ func (p *terraformProvider) RevokeRole(
 	user := req.GetUser()
 	role := req.GetRole()
 
-	// Loop over all resources in role.Resources.Allow as workspace IDs
-	if len(role.Resources.Allow) == 0 {
-		return nil, fmt.Errorf("no workspace IDs found in role.Resources.Allow")
+	// Collect all targets from permission statements as workspace IDs
+	var workspaceIDs []string
+	for _, stmt := range role.Permissions.Allow {
+		workspaceIDs = append(workspaceIDs, stmt.Targets...)
+	}
+
+	if len(workspaceIDs) == 0 {
+		return nil, fmt.Errorf("no workspace IDs found in role.Permissions.Allow[].Targets")
 	}
 
 	// Revoke user access for each workspace
-	for _, workspaceID := range role.Resources.Allow {
+	for _, workspaceID := range workspaceIDs {
 		// List team accesses for the workspace to find the one to remove
 		listOptions := &tfe.TeamAccessListOptions{
 			WorkspaceID: workspaceID,

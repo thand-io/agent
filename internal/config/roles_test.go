@@ -8,12 +8,21 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
-// stmts converts a []string to models.Statements for test convenience
-func stmts(ops ...string) models.Statements {
+// stmts converts a []string to models.RoleStatements for test convenience
+func stmts(ops ...string) models.RoleStatements {
 	if len(ops) == 0 {
 		return nil
 	}
-	return models.Statements{{Operations: ops}}
+	return models.RoleStatements{{Operations: ops}}
+}
+
+// collectAllOps collects all operations from statements into a single slice
+func collectAllOps(stmts models.RoleStatements) []string {
+	var result []string
+	for _, stmt := range stmts {
+		result = append(result, stmt.Operations...)
+	}
+	return result
 }
 
 // Test GetCompositeRole functionality
@@ -34,7 +43,7 @@ func TestGetCompositeRole(t *testing.T) {
 				"basic": {
 					Name:        "basic",
 					Description: "Basic role",
-					Permissions: models.Permissions{
+					Permissions: models.RolePermissions{
 						Allow: stmts("read"),
 						Deny:  stmts("delete"),
 					},
@@ -52,7 +61,7 @@ func TestGetCompositeRole(t *testing.T) {
 			expected: &models.Role{
 				Name:        "basic",
 				Description: "Basic role",
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmts("read"),
 					Deny:  stmts("delete"),
 				},
@@ -66,11 +75,11 @@ func TestGetCompositeRole(t *testing.T) {
 				"base": {
 					Name:        "base",
 					Description: "Base role",
-					Permissions: models.Permissions{
-						Allow: stmts("read"),
-					},
-					Resources: models.Resources{
-						Allow: []string{"resource1"},
+					Permissions: models.RolePermissions{
+						Allow: models.RoleStatements{{
+							Operations: []string{"read"},
+							Targets:    []string{"resource1"},
+						}},
 					},
 					Enabled: true,
 				},
@@ -78,12 +87,12 @@ func TestGetCompositeRole(t *testing.T) {
 					Name:        "extended",
 					Description: "Extended role",
 					Inherits:    []string{"base"},
-					Permissions: models.Permissions{
-						Allow: stmts("write"),
-						Deny:  stmts("admin"),
-					},
-					Resources: models.Resources{
-						Allow: []string{"resource2"},
+					Permissions: models.RolePermissions{
+						Allow: models.RoleStatements{{
+							Operations: []string{"write"},
+							Targets:    []string{"resource2"},
+						}},
+						Deny: stmts("admin"),
 					},
 					Enabled: true,
 				},
@@ -99,12 +108,18 @@ func TestGetCompositeRole(t *testing.T) {
 				Name:        "extended",
 				Description: "Extended role",
 				Inherits:    []string{"base"},
-				Permissions: models.Permissions{
-					Allow: stmts("write", "read"),
-					Deny:  stmts("admin"),
-				},
-				Resources: models.Resources{
-					Allow: []string{"resource2", "resource1"},
+				Permissions: models.RolePermissions{
+					Allow: models.RoleStatements{
+						{
+							Operations: []string{"read"},
+							Targets:    []string{"resource1"},
+						},
+						{
+							Operations: []string{"write"},
+							Targets:    []string{"resource2"},
+						},
+					},
+					Deny: stmts("admin"),
 				},
 				Enabled: true,
 			},
@@ -116,7 +131,7 @@ func TestGetCompositeRole(t *testing.T) {
 				"read-role": {
 					Name:        "read-role",
 					Description: "Read role",
-					Permissions: models.Permissions{
+					Permissions: models.RolePermissions{
 						Allow: stmts("read"),
 					},
 					Workflows: []string{"read-workflow"},
@@ -125,7 +140,7 @@ func TestGetCompositeRole(t *testing.T) {
 				"write-role": {
 					Name:        "write-role",
 					Description: "Write role",
-					Permissions: models.Permissions{
+					Permissions: models.RolePermissions{
 						Allow: stmts("write"),
 					},
 					Workflows: []string{"write-workflow"},
@@ -135,7 +150,7 @@ func TestGetCompositeRole(t *testing.T) {
 					Name:        "admin",
 					Description: "Admin role",
 					Inherits:    []string{"read-role", "write-role"},
-					Permissions: models.Permissions{
+					Permissions: models.RolePermissions{
 						Allow: stmts("admin"),
 					},
 					Workflows: []string{"admin-workflow"},
@@ -153,7 +168,7 @@ func TestGetCompositeRole(t *testing.T) {
 				Name:        "admin",
 				Description: "Admin role",
 				Inherits:    []string{"read-role", "write-role"},
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmts("admin", "read", "write"),
 				},
 				Workflows: []string{"admin-workflow"}, // Only the role's own workflows, not inherited
@@ -167,11 +182,13 @@ func TestGetCompositeRole(t *testing.T) {
 				"scoped": {
 					Name:        "scoped",
 					Description: "Scoped role",
-					Permissions: models.Permissions{
+					Permissions: models.RolePermissions{
 						Allow: stmts("special"),
 					},
-					Scopes: &models.RoleScopes{
-						Users: []string{"test@example.com"},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Users: []string{"test@example.com"},
+						},
 					},
 					Enabled: true,
 				},
@@ -179,7 +196,7 @@ func TestGetCompositeRole(t *testing.T) {
 					Name:        "public",
 					Description: "Public role",
 					Inherits:    []string{"scoped"},
-					Permissions: models.Permissions{
+					Permissions: models.RolePermissions{
 						Allow: stmts("read"),
 					},
 					Enabled: true,
@@ -197,7 +214,7 @@ func TestGetCompositeRole(t *testing.T) {
 				Name:        "public",
 				Description: "Public role",
 				Inherits:    []string{"scoped"},
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmts("read", "special"),
 				},
 				Enabled: true,
@@ -210,11 +227,13 @@ func TestGetCompositeRole(t *testing.T) {
 				"scoped": {
 					Name:        "scoped",
 					Description: "Scoped role",
-					Permissions: models.Permissions{
+					Permissions: models.RolePermissions{
 						Allow: stmts("special"),
 					},
-					Scopes: &models.RoleScopes{
-						Users: []string{"other@example.com"},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Users: []string{"other@example.com"},
+						},
 					},
 					Enabled: true,
 				},
@@ -222,7 +241,7 @@ func TestGetCompositeRole(t *testing.T) {
 					Name:        "public",
 					Description: "Public role",
 					Inherits:    []string{"scoped"},
-					Permissions: models.Permissions{
+					Permissions: models.RolePermissions{
 						Allow: stmts("read"),
 					},
 					Enabled: true,
@@ -240,7 +259,7 @@ func TestGetCompositeRole(t *testing.T) {
 				Name:        "public",
 				Description: "Public role",
 				Inherits:    []string{"scoped"},
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmts("read"),
 				},
 				Enabled: true,
@@ -314,11 +333,13 @@ func TestGetCompositeRole(t *testing.T) {
 				"group-role": {
 					Name:        "group-role",
 					Description: "Group specific role",
-					Permissions: models.Permissions{
+					Permissions: models.RolePermissions{
 						Allow: stmts("group-action"),
 					},
-					Scopes: &models.RoleScopes{
-						Groups: []string{"developers"},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Groups: []string{"developers"},
+						},
 					},
 					Enabled: true,
 				},
@@ -326,7 +347,7 @@ func TestGetCompositeRole(t *testing.T) {
 					Name:        "user-role",
 					Description: "User role inheriting group role",
 					Inherits:    []string{"group-role"},
-					Permissions: models.Permissions{
+					Permissions: models.RolePermissions{
 						Allow: stmts("user-action"),
 					},
 					Enabled: true,
@@ -344,8 +365,8 @@ func TestGetCompositeRole(t *testing.T) {
 				Name:        "user-role",
 				Description: "User role inheriting group role",
 				Inherits:    []string{"group-role"},
-				Permissions: models.Permissions{
-					Allow: stmts("user-action", "group-action"),
+				Permissions: models.RolePermissions{
+					Allow: stmts("group-action", "user-action"), // sorted alphabetically
 				},
 				Enabled: true,
 			},
@@ -391,10 +412,6 @@ func TestGetCompositeRole(t *testing.T) {
 			assert.ElementsMatch(t, tt.expected.Permissions.Allow, result.Permissions.Allow)
 			assert.ElementsMatch(t, tt.expected.Permissions.Deny, result.Permissions.Deny)
 
-			// Compare resources (order doesn't matter)
-			assert.ElementsMatch(t, tt.expected.Resources.Allow, result.Resources.Allow)
-			assert.ElementsMatch(t, tt.expected.Resources.Deny, result.Resources.Deny)
-
 			// Compare workflows (order doesn't matter)
 			assert.ElementsMatch(t, tt.expected.Workflows, result.Workflows)
 
@@ -409,7 +426,7 @@ func TestGetCompositeRole_ProviderSpecificInheritance(t *testing.T) {
 		"admin": {
 			Name:        "admin",
 			Description: "Admin role in AWS",
-			Permissions: models.Permissions{
+			Permissions: models.RolePermissions{
 				Allow: stmts("aws:admin"),
 			},
 			Enabled: true,
@@ -418,7 +435,7 @@ func TestGetCompositeRole_ProviderSpecificInheritance(t *testing.T) {
 			Name:        "base",
 			Description: "Base role",
 			Inherits:    []string{"aws-prod:admin"},
-			Permissions: models.Permissions{
+			Permissions: models.RolePermissions{
 				Allow: stmts("base:read"),
 			},
 			Enabled: true,
@@ -455,7 +472,7 @@ func TestGetCompositeRole_ProviderSpecificInheritance(t *testing.T) {
 
 	// Should inherit from the 'admin' role since aws-prod provider exists
 	assert.Equal(t, "base", result.Name)
-	assert.ElementsMatch(t, []string{"base:read"}, result.Permissions.Allow)
+	assert.ElementsMatch(t, []string{"base:read"}, collectAllOps(result.Permissions.Allow))
 }
 
 func TestIsRoleApplicableToIdentity(t *testing.T) {
@@ -484,8 +501,10 @@ func TestIsRoleApplicableToIdentity(t *testing.T) {
 			name: "user scope - email match",
 			role: &models.Role{
 				Name: "test",
-				Scopes: &models.RoleScopes{
-					Users: []string{"test@example.com"},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"test@example.com"},
+					},
 				},
 			},
 			identity: &models.Identity{
@@ -501,8 +520,10 @@ func TestIsRoleApplicableToIdentity(t *testing.T) {
 			name: "user scope - username match",
 			role: &models.Role{
 				Name: "test",
-				Scopes: &models.RoleScopes{
-					Users: []string{"testuser"},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"testuser"},
+					},
 				},
 			},
 			identity: &models.Identity{
@@ -518,8 +539,10 @@ func TestIsRoleApplicableToIdentity(t *testing.T) {
 			name: "user scope - no match",
 			role: &models.Role{
 				Name: "test",
-				Scopes: &models.RoleScopes{
-					Users: []string{"other@example.com"},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"other@example.com"},
+					},
 				},
 			},
 			identity: &models.Identity{
@@ -535,8 +558,10 @@ func TestIsRoleApplicableToIdentity(t *testing.T) {
 			name: "group scope - user in group",
 			role: &models.Role{
 				Name: "test",
-				Scopes: &models.RoleScopes{
-					Groups: []string{"developers"},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"developers"},
+					},
 				},
 			},
 			identity: &models.Identity{
@@ -552,8 +577,10 @@ func TestIsRoleApplicableToIdentity(t *testing.T) {
 			name: "group scope - user not in group",
 			role: &models.Role{
 				Name: "test",
-				Scopes: &models.RoleScopes{
-					Groups: []string{"admins"},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"admins"},
+					},
 				},
 			},
 			identity: &models.Identity{
@@ -569,8 +596,10 @@ func TestIsRoleApplicableToIdentity(t *testing.T) {
 			name: "group identity - group match",
 			role: &models.Role{
 				Name: "test",
-				Scopes: &models.RoleScopes{
-					Groups: []string{"developers"},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"developers"},
+					},
 				},
 			},
 			identity: &models.Identity{
@@ -597,26 +626,30 @@ func TestAllowDenyConflictResolution(t *testing.T) {
 		roles := map[string]models.Role{
 			"child": {
 				Name: "Child Role",
-				Permissions: models.Permissions{
-					Allow: stmts("read", "list"),
-					Deny:  stmts("write", "delete"),
-				},
-				Resources: models.Resources{
-					Allow: []string{"bucket1"},
-					Deny:  []string{"bucket2", "bucket3"},
+				Permissions: models.RolePermissions{
+					Allow: models.RoleStatements{{
+						Operations: []string{"read", "list"},
+						Targets:    []string{"bucket1"},
+					}},
+					Deny: models.RoleStatements{{
+						Operations: []string{"write", "delete"},
+						Targets:    []string{"bucket2", "bucket3"},
+					}},
 				},
 				Enabled: true,
 			},
 			"parent": {
 				Name:     "Parent Role",
 				Inherits: []string{"child"},
-				Permissions: models.Permissions{
-					Allow: stmts("write"), // This should override child's deny for "write"
-					Deny:  stmts("read"),  // This should override child's allow for "read"
-				},
-				Resources: models.Resources{
-					Allow: []string{"bucket2"}, // This should override child's deny for "bucket2"
-					Deny:  []string{"bucket1"}, // This should override child's allow for "bucket1"
+				Permissions: models.RolePermissions{
+					Allow: models.RoleStatements{{
+						Operations: []string{"write"},   // This should override child's deny for "write"
+						Targets:    []string{"bucket2"}, // This should override child's deny for "bucket2"
+					}},
+					Deny: models.RoleStatements{{
+						Operations: []string{"read"},    // This should override child's allow for "read"
+						Targets:    []string{"bucket1"}, // This should override child's allow for "bucket1"
+					}},
 				},
 				Enabled: true,
 			},
@@ -639,26 +672,32 @@ func TestAllowDenyConflictResolution(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
-		// Expected: parent permissions override child permissions in conflicts
-		expectedAllowPerms := []string{"write", "list"}
-		expectedDenyPerms := []string{"read", "delete"}
+		// Collect all targets from result
+		var allowTargets, denyTargets []string
+		for _, stmt := range result.Permissions.Allow {
+			allowTargets = append(allowTargets, stmt.Targets...)
+		}
+		for _, stmt := range result.Permissions.Deny {
+			denyTargets = append(denyTargets, stmt.Targets...)
+		}
 
-		assert.ElementsMatch(t, expectedAllowPerms, result.Permissions.Allow)
-		assert.ElementsMatch(t, expectedDenyPerms, result.Permissions.Deny)
+		// Expected: operations are resolved, targets preserved per operation
+		// - list (from child) stays allowed on bucket1
+		// - write (from parent, overrides child deny) is allowed on bucket2
+		// - read (from parent, overrides child allow) is denied on bucket1
+		// - delete (from child, not overridden) stays denied on bucket2,bucket3
+		expectedAllowTargets := []string{"bucket1", "bucket2"}
+		expectedDenyTargets := []string{"bucket1", "bucket2", "bucket3"}
 
-		// Expected: parent resources override child resources in conflicts
-		expectedAllowResources := []string{"bucket2"}
-		expectedDenyResources := []string{"bucket1", "bucket3"}
-
-		assert.ElementsMatch(t, expectedAllowResources, result.Resources.Allow)
-		assert.ElementsMatch(t, expectedDenyResources, result.Resources.Deny)
+		assert.ElementsMatch(t, expectedAllowTargets, allowTargets)
+		assert.ElementsMatch(t, expectedDenyTargets, denyTargets)
 	})
 
 	t.Run("multi-level inheritance with conflicts", func(t *testing.T) {
 		roles := map[string]models.Role{
 			"grandchild": {
 				Name: "Grandchild Role",
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmts("read", "list"),
 					Deny:  stmts("write"),
 				},
@@ -667,7 +706,7 @@ func TestAllowDenyConflictResolution(t *testing.T) {
 			"child": {
 				Name:     "Child Role",
 				Inherits: []string{"grandchild"},
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmts("write"), // Overrides grandchild's deny
 					Deny:  stmts("list"),  // Overrides grandchild's allow
 				},
@@ -676,7 +715,7 @@ func TestAllowDenyConflictResolution(t *testing.T) {
 			"parent": {
 				Name:     "Parent Role",
 				Inherits: []string{"child"},
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmts("delete", "list"), // "list" overrides child's deny
 					Deny:  stmts("read"),           // Overrides grandchild's allow (inherited through child)
 				},
@@ -705,15 +744,15 @@ func TestAllowDenyConflictResolution(t *testing.T) {
 		expectedAllowPerms := []string{"list", "write", "delete"}
 		expectedDenyPerms := []string{"read"}
 
-		assert.ElementsMatch(t, expectedAllowPerms, result.Permissions.Allow)
-		assert.ElementsMatch(t, expectedDenyPerms, result.Permissions.Deny)
+		assert.ElementsMatch(t, expectedAllowPerms, collectAllOps(result.Permissions.Allow))
+		assert.ElementsMatch(t, expectedDenyPerms, collectAllOps(result.Permissions.Deny))
 	})
 
 	t.Run("parent deny overrides child allow", func(t *testing.T) {
 		roles := map[string]models.Role{
 			"permissive-child": {
 				Name: "Permissive Child",
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmts("read", "write", "delete"),
 				},
 				Enabled: true,
@@ -721,7 +760,7 @@ func TestAllowDenyConflictResolution(t *testing.T) {
 			"restrictive-parent": {
 				Name:     "Restrictive Parent",
 				Inherits: []string{"permissive-child"},
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Deny: stmts("delete", "write"), // Parent denies what child allows
 				},
 				Enabled: true,
@@ -749,7 +788,7 @@ func TestAllowDenyConflictResolution(t *testing.T) {
 		expectedAllowPerms := []string{"read"}
 		expectedDenyPerms := []string{"delete", "write"}
 
-		assert.ElementsMatch(t, expectedAllowPerms, result.Permissions.Allow)
-		assert.ElementsMatch(t, expectedDenyPerms, result.Permissions.Deny)
+		assert.ElementsMatch(t, expectedAllowPerms, collectAllOps(result.Permissions.Allow))
+		assert.ElementsMatch(t, expectedDenyPerms, collectAllOps(result.Permissions.Deny))
 	})
 }

@@ -283,7 +283,7 @@ func (p *kubernetesProvider) authorizeClusterRole(
 }
 
 // convertPermissionsToRules converts thand permissions to Kubernetes RBAC rules
-func (p *kubernetesProvider) convertPermissionsToRules(permissions models.Permissions) []rbacv1.PolicyRule {
+func (p *kubernetesProvider) convertPermissionsToRules(permissions models.RolePermissions) []rbacv1.PolicyRule {
 	var rules []rbacv1.PolicyRule
 
 	// Group permissions by API group and resource
@@ -421,12 +421,14 @@ func (p *kubernetesProvider) sanitizeUserIdentifier(user *models.User) string {
 }
 
 func (p *kubernetesProvider) getNamespaceFromRole(role *models.Role) string {
-	// Check if role has namespace-specific resources
-	for _, resource := range role.Resources.Allow {
-		if strings.Contains(resource, "namespace:") {
-			parts := strings.Split(resource, ":")
-			if len(parts) >= 2 {
-				return parts[1]
+	// Check if role has namespace-specific targets in permission statements
+	for _, stmt := range role.Permissions.Allow {
+		for _, target := range stmt.Targets {
+			if strings.Contains(target, "namespace:") {
+				parts := strings.Split(target, ":")
+				if len(parts) >= 2 {
+					return parts[1]
+				}
 			}
 		}
 	}

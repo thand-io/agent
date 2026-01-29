@@ -368,7 +368,7 @@ definitions:
                 password: "pass"
           Refer to serverlessworkflow/sdk-go/model.Endpoint documentation for full details.
     type: object
-  github_com_thand-io_agent_internal_models.Permissions:
+  github_com_thand-io_agent_internal_models.RolePermissions:
     properties:
       allow:
         items:
@@ -462,7 +462,7 @@ definitions:
         type: string
       permissions:
         allOf:
-        - $ref: '#/definitions/github_com_thand-io_agent_internal_models.Permissions'
+        - $ref: '#/definitions/github_com_thand-io_agent_internal_models.RolePermissions'
         description: granular permissions for the role
       providers:
         description: providers that can assign this role
@@ -1548,7 +1548,7 @@ definitions:
         type: string
       permissions:
         allOf:
-        - $ref: '#/definitions/github_com_thand-io_agent_internal_models.Permissions'
+        - $ref: '#/definitions/github_com_thand-io_agent_internal_models.RolePermissions'
         description: granular permissions for the role
       providers:
         description: providers that can assign this role

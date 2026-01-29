@@ -51,21 +51,9 @@ func validateRoleLimits(roleKey string, role *models.Role) error {
 		return fmt.Errorf("role '%s' exceeds maximum permissions limit: %d > %d", roleKey, permCount, MaxPermissions)
 	}
 
-	// Check resources limit
-	resCount := len(role.Resources.Allow) + len(role.Resources.Deny)
-	if resCount > MaxResources {
-		return fmt.Errorf("role '%s' exceeds maximum resources limit: %d > %d", roleKey, resCount, MaxResources)
-	}
-
-	// Check groups limit
-	groupCount := len(role.Groups.Allow) + len(role.Groups.Deny)
-	if groupCount > MaxGroups {
-		return fmt.Errorf("role '%s' exceeds maximum groups limit: %d > %d", roleKey, groupCount, MaxGroups)
-	}
-
 	// Check scopes limit
-	if role.Scopes != nil {
-		scopeCount := len(role.Scopes.Users) + len(role.Scopes.Groups) + len(role.Scopes.Domains)
+	if !role.Scopes.IsEmpty() {
+		scopeCount := len(role.Scopes.Allow.Users) + len(role.Scopes.Allow.Groups) + len(role.Scopes.Allow.Domains)
 		if scopeCount > MaxScopes {
 			return fmt.Errorf("role '%s' exceeds maximum scopes limit: %d > %d", roleKey, scopeCount, MaxScopes)
 		}
@@ -431,7 +419,7 @@ func (c *Config) resolveInheritedRole(identity *models.Identity, roleName string
 //   - User's domain matches any allowed domain
 func (c *Config) isRoleApplicableToIdentity(role *models.Role, identity *models.Identity) bool {
 	// No scopes means open to all
-	if role.Scopes == nil {
+	if role.Scopes.IsEmpty() {
 		return true
 	}
 
@@ -440,7 +428,7 @@ func (c *Config) isRoleApplicableToIdentity(role *models.Role, identity *models.
 		return false
 	}
 
-	hasAnyScope := len(role.Scopes.Users) > 0 || len(role.Scopes.Groups) > 0 || len(role.Scopes.Domains) > 0
+	hasAnyScope := len(role.Scopes.Allow.Users) > 0 || len(role.Scopes.Allow.Groups) > 0 || len(role.Scopes.Allow.Domains) > 0
 	if !hasAnyScope {
 		return true
 	}
@@ -453,9 +441,9 @@ func (c *Config) isRoleApplicableToIdentity(role *models.Role, identity *models.
 		}
 
 		// Check user scopes (identity, email, username, ID)
-		if len(role.Scopes.Users) > 0 {
+		if len(role.Scopes.Allow.Users) > 0 {
 			userIdentity := user.GetIdentity()
-			for _, allowed := range role.Scopes.Users {
+			for _, allowed := range role.Scopes.Allow.Users {
 				if strings.EqualFold(allowed, userIdentity) ||
 					strings.EqualFold(allowed, user.Email) ||
 					strings.EqualFold(allowed, user.Username) ||
@@ -466,10 +454,10 @@ func (c *Config) isRoleApplicableToIdentity(role *models.Role, identity *models.
 		}
 
 		// Check if user belongs to allowed groups
-		if len(role.Scopes.Groups) > 0 {
+		if len(role.Scopes.Allow.Groups) > 0 {
 			userGroups := user.GetGroups()
 			for _, userGroup := range userGroups {
-				for _, allowed := range role.Scopes.Groups {
+				for _, allowed := range role.Scopes.Allow.Groups {
 					if strings.EqualFold(allowed, userGroup) {
 						return true
 					}
@@ -478,9 +466,9 @@ func (c *Config) isRoleApplicableToIdentity(role *models.Role, identity *models.
 		}
 
 		// Check domain scopes
-		if len(role.Scopes.Domains) > 0 {
+		if len(role.Scopes.Allow.Domains) > 0 {
 			userDomain := user.GetDomain()
-			for _, allowed := range role.Scopes.Domains {
+			for _, allowed := range role.Scopes.Allow.Domains {
 				if strings.EqualFold(allowed, userDomain) {
 					return true
 				}
@@ -489,12 +477,12 @@ func (c *Config) isRoleApplicableToIdentity(role *models.Role, identity *models.
 	}
 
 	// Check group scopes for group identities
-	if identity.IsGroup() && len(role.Scopes.Groups) > 0 {
+	if identity.IsGroup() && len(role.Scopes.Allow.Groups) > 0 {
 		group := identity.GetGroup()
 		if group != nil {
 			groupName := group.GetName()
 			groupID := group.GetID()
-			for _, allowed := range role.Scopes.Groups {
+			for _, allowed := range role.Scopes.Allow.Groups {
 				if strings.EqualFold(allowed, groupName) || strings.EqualFold(allowed, groupID) {
 					return true
 				}
@@ -511,10 +499,6 @@ func (c *Config) isRoleApplicableToIdentity(role *models.Role, identity *models.
 func (c *Config) filterRoleByProviders(role *models.Role) {
 	role.Permissions.Allow = c.filterStatementsListByProvider(role.Permissions.Allow, role.Providers)
 	role.Permissions.Deny = c.filterStatementsListByProvider(role.Permissions.Deny, role.Providers)
-	role.Resources.Allow = c.filterByProvider(role.Resources.Allow, role.Providers)
-	role.Resources.Deny = c.filterByProvider(role.Resources.Deny, role.Providers)
-	role.Groups.Allow = c.filterByProvider(role.Groups.Allow, role.Providers)
-	role.Groups.Deny = c.filterByProvider(role.Groups.Deny, role.Providers)
 }
 
 // mergeRole merges an inherited role into the composite role.
@@ -525,151 +509,197 @@ func (c *Config) mergeRole(composite *models.Role, inherited *models.Role) {
 	// Filter inherited items by composite's providers
 	inheritedAllowPerms := c.filterStatementsListByProvider(inherited.Permissions.Allow, composite.Providers)
 	inheritedDenyPerms := c.filterStatementsListByProvider(inherited.Permissions.Deny, composite.Providers)
-	inheritedAllowRes := c.filterByProvider(inherited.Resources.Allow, composite.Providers)
-	inheritedDenyRes := c.filterByProvider(inherited.Resources.Deny, composite.Providers)
-	inheritedAllowGroups := c.filterByProvider(inherited.Groups.Allow, composite.Providers)
-	inheritedDenyGroups := c.filterByProvider(inherited.Groups.Deny, composite.Providers)
 
 	// Merge permissions with conflict resolution
 	c.mergePermissionsWithConflictResolution(composite, inheritedAllowPerms, inheritedDenyPerms)
+}
 
-	// Merge resources with conflict resolution
-	c.mergeAllowDenyWithConflictResolution(
-		&composite.Resources.Allow, &composite.Resources.Deny,
-		inheritedAllowRes, inheritedDenyRes,
-	)
+// normalizeStatements expands all statement operations and creates a map by operation.
+// Returns a map where key is operation and value is the set of targets associated with that operation.
+func normalizeStatements(stmts models.RoleStatements) map[string]map[string]bool {
+	result := make(map[string]map[string]bool)
 
-	// Merge groups with conflict resolution
-	c.mergeAllowDenyWithConflictResolution(
-		&composite.Groups.Allow, &composite.Groups.Deny,
-		inheritedAllowGroups, inheritedDenyGroups,
-	)
+	for _, stmt := range stmts {
+		// Expand all operations
+		for _, op := range stmt.Operations {
+			for _, expandedOp := range expandCondensedActions(op) {
+				if result[expandedOp] == nil {
+					result[expandedOp] = make(map[string]bool)
+				}
+				// Add all targets for this operation
+				if len(stmt.Targets) == 0 {
+					// No targets means "all targets" - use empty string as marker
+					result[expandedOp][""] = true
+				} else {
+					for _, target := range stmt.Targets {
+						result[expandedOp][target] = true
+					}
+				}
+			}
+		}
+	}
+
+	return result
+}
+
+// rebuildStatementsFromNormalized converts the normalized operation->targets map back to statements.
+// Groups operations by their target sets for more efficient statement representation.
+func rebuildStatementsFromNormalized(normalized map[string]map[string]bool) models.RoleStatements {
+	if len(normalized) == 0 {
+		return nil
+	}
+
+	// Group operations by their target key (sorted targets joined)
+	targetGroupToOps := make(map[string][]string)
+	targetGroupToTargets := make(map[string][]string)
+
+	for op, targets := range normalized {
+		targetList := mapKeys(targets)
+		sort.Strings(targetList)
+		targetKey := strings.Join(targetList, "|")
+
+		if _, exists := targetGroupToOps[targetKey]; !exists {
+			targetGroupToOps[targetKey] = []string{}
+			targetGroupToTargets[targetKey] = targetList
+		}
+		targetGroupToOps[targetKey] = append(targetGroupToOps[targetKey], op)
+	}
+
+	// Build statements, one per unique target set
+	result := make(models.RoleStatements, 0, len(targetGroupToOps))
+	for targetKey, ops := range targetGroupToOps {
+		condensedOps := condenseActions(ops)
+		targets := targetGroupToTargets[targetKey]
+
+		// Filter out empty string marker (means "all targets")
+		var finalTargets []string
+		for _, t := range targets {
+			if t != "" {
+				finalTargets = append(finalTargets, t)
+			}
+		}
+
+		result = append(result, models.Statement{
+			Operations: condensedOps,
+			Targets:    finalTargets,
+		})
+	}
+
+	return result
 }
 
 // mergePermissionsWithConflictResolution merges permissions with proper conflict resolution.
 // Parent Allow overrides Child Deny, Parent Deny overrides Child Allow.
-func (c *Config) mergePermissionsWithConflictResolution(composite *models.Role, childAllow, childDeny models.Statements) {
-	// Expand all permissions to individual items for proper comparison
-	parentAllowSet := expandStatementsToSet(composite.Permissions.Allow)
-	parentDenySet := expandStatementsToSet(composite.Permissions.Deny)
-	childAllowSet := expandStatementsToSet(childAllow)
-	childDenySet := expandStatementsToSet(childDeny)
+// This function preserves both operations AND targets during merging.
+func (c *Config) mergePermissionsWithConflictResolution(composite *models.Role, childAllow, childDeny models.RoleStatements) {
+	// Normalize all statements to operation->targets maps
+	parentAllowNorm := normalizeStatements(composite.Permissions.Allow)
+	parentDenyNorm := normalizeStatements(composite.Permissions.Deny)
+	childAllowNorm := normalizeStatements(childAllow)
+	childDenyNorm := normalizeStatements(childDeny)
 
-	finalAllowSet := make(map[string]bool)
-	finalDenySet := make(map[string]bool)
+	finalAllowNorm := make(map[string]map[string]bool)
+	finalDenyNorm := make(map[string]map[string]bool)
 
-	// Start with child permissions
-	for perm := range childAllowSet {
-		finalAllowSet[perm] = true
-	}
-	for perm := range childDenySet {
-		finalDenySet[perm] = true
-	}
-
-	// Parent Allow overrides Child Deny
-	for perm := range parentAllowSet {
-		delete(finalDenySet, perm) // Remove from deny if child denied it
-		finalAllowSet[perm] = true // Add to allow
-	}
-
-	// Parent Deny overrides Child Allow
-	for perm := range parentDenySet {
-		delete(finalAllowSet, perm) // Remove from allow if child allowed it
-		finalDenySet[perm] = true   // Add to deny
-	}
-
-	composite.Permissions.Allow = stringSliceToStatements(condenseActions(mapKeys(finalAllowSet)))
-	composite.Permissions.Deny = stringSliceToStatements(condenseActions(mapKeys(finalDenySet)))
-}
-
-// mergeAllowDenyWithConflictResolution merges allow/deny lists with conflict resolution.
-// Parent Allow overrides Child Deny, Parent Deny overrides Child Allow.
-func (c *Config) mergeAllowDenyWithConflictResolution(parentAllow, parentDeny *[]string, childAllow, childDeny []string) {
-	allowSet := make(map[string]bool)
-	denySet := make(map[string]bool)
-
-	// Start with child items
-	for _, item := range childAllow {
-		allowSet[item] = true
-	}
-	for _, item := range childDeny {
-		denySet[item] = true
-	}
-
-	// Parent Allow overrides Child Deny
-	for _, item := range *parentAllow {
-		delete(denySet, item) // Remove from deny if child denied it
-		allowSet[item] = true // Add to allow
-	}
-
-	// Parent Deny overrides Child Allow
-	for _, item := range *parentDeny {
-		delete(allowSet, item) // Remove from allow if child allowed it
-		denySet[item] = true   // Add to deny
-	}
-
-	*parentAllow = mapKeys(allowSet)
-	*parentDeny = mapKeys(denySet)
-}
-
-// expandPermissionsToSet expands all permissions (handling condensed actions) into a set.
-// Pre-allocates based on estimated expansion (assumes ~3 actions per permission on average).
-func expandPermissionsToSet(perms []string) map[string]bool {
-	if len(perms) == 0 {
-		return nil
-	}
-
-	// Enforce upper bound to prevent resource exhaustion
-	if len(perms) > MaxPermissions {
-		logrus.Errorf("expandPermissionsToSet: permissions slice length %d exceeds maximum %d; returning nil",
-			len(perms), MaxPermissions)
-		return nil
-	}
-
-	// Estimate capacity: assume ~3 expanded permissions per input on average
-	result := make(map[string]bool, len(perms)*3)
-	for _, perm := range perms {
-		for _, expanded := range expandCondensedActions(perm) {
-			result[expanded] = true
+	// Collect parent wildcards for subsumption checking
+	parentAllowWildcards := make(map[string]bool)
+	parentDenyWildcards := make(map[string]bool)
+	for op := range parentAllowNorm {
+		if strings.HasSuffix(op, ":*") {
+			parentAllowWildcards[strings.TrimSuffix(op, ":*")] = true
 		}
 	}
-	return result
-}
-
-// expandStatementsToSet expands all statements' operations (handling condensed actions) into a set.
-func expandStatementsToSet(stmts models.Statements) map[string]bool {
-	if len(stmts) == 0 {
-		return nil
+	for op := range parentDenyNorm {
+		if strings.HasSuffix(op, ":*") {
+			parentDenyWildcards[strings.TrimSuffix(op, ":*")] = true
+		}
 	}
 
-	result := make(map[string]bool)
-	for _, stmt := range stmts {
-		for _, op := range stmt.Operations {
-			for _, expanded := range expandCondensedActions(op) {
-				result[expanded] = true
+	// Start with child permissions, but skip operations subsumed by parent wildcards
+	for op, targets := range childAllowNorm {
+		// Skip if subsumed by parent allow wildcard
+		if isOperationSubsumedByWildcard(op, parentAllowWildcards) {
+			continue
+		}
+		if finalAllowNorm[op] == nil {
+			finalAllowNorm[op] = make(map[string]bool)
+		}
+		for target := range targets {
+			finalAllowNorm[op][target] = true
+		}
+	}
+	for op, targets := range childDenyNorm {
+		// Skip if subsumed by parent deny wildcard
+		if isOperationSubsumedByWildcard(op, parentDenyWildcards) {
+			continue
+		}
+		if finalDenyNorm[op] == nil {
+			finalDenyNorm[op] = make(map[string]bool)
+		}
+		for target := range targets {
+			finalDenyNorm[op][target] = true
+		}
+	}
+
+	// Parent Allow overrides Child Deny (for matching operations)
+	for op, targets := range parentAllowNorm {
+		delete(finalDenyNorm, op) // Remove from deny if child denied it
+		// Also remove child denies subsumed by this parent allow wildcard
+		if strings.HasSuffix(op, ":*") {
+			prefix := strings.TrimSuffix(op, ":*")
+			for childOp := range finalDenyNorm {
+				if strings.HasPrefix(childOp, prefix+":") && childOp != op {
+					delete(finalDenyNorm, childOp)
+				}
 			}
 		}
-	}
-	return result
-}
-
-// stringSliceToStatements converts a slice of strings to Statements (one statement per string)
-func stringSliceToStatements(strs []string) models.Statements {
-	if len(strs) == 0 {
-		return nil
-	}
-	stmts := make(models.Statements, len(strs))
-	for i, str := range strs {
-		stmts[i] = models.Statement{
-			Operations: []string{str},
-			Targets:    []string{},
+		if finalAllowNorm[op] == nil {
+			finalAllowNorm[op] = make(map[string]bool)
+		}
+		// Merge parent targets into allow
+		for target := range targets {
+			finalAllowNorm[op][target] = true
 		}
 	}
-	return stmts
+
+	// Parent Deny overrides Child Allow (for matching operations)
+	for op, targets := range parentDenyNorm {
+		delete(finalAllowNorm, op) // Remove from allow if child allowed it
+		// Also remove child allows subsumed by this parent deny wildcard
+		if strings.HasSuffix(op, ":*") {
+			prefix := strings.TrimSuffix(op, ":*")
+			for childOp := range finalAllowNorm {
+				if strings.HasPrefix(childOp, prefix+":") && childOp != op {
+					delete(finalAllowNorm, childOp)
+				}
+			}
+		}
+		if finalDenyNorm[op] == nil {
+			finalDenyNorm[op] = make(map[string]bool)
+		}
+		// Merge parent targets into deny
+		for target := range targets {
+			finalDenyNorm[op][target] = true
+		}
+	}
+
+	// Rebuild statements from normalized form
+	composite.Permissions.Allow = rebuildStatementsFromNormalized(finalAllowNorm)
+	composite.Permissions.Deny = rebuildStatementsFromNormalized(finalDenyNorm)
+}
+
+// isOperationSubsumedByWildcard checks if an operation is covered by a wildcard
+func isOperationSubsumedByWildcard(op string, wildcards map[string]bool) bool {
+	for prefix := range wildcards {
+		if strings.HasPrefix(op, prefix+":") && op != prefix+":*" {
+			return true
+		}
+	}
+	return false
 }
 
 // filterStatementsListByProvider filters statements based on allowed providers
-func (c *Config) filterStatementsListByProvider(stmts models.Statements, allowedProviders []string) models.Statements {
+func (c *Config) filterStatementsListByProvider(stmts models.RoleStatements, allowedProviders []string) models.RoleStatements {
 	if len(stmts) == 0 {
 		return nil
 	}
@@ -677,7 +707,7 @@ func (c *Config) filterStatementsListByProvider(stmts models.Statements, allowed
 		return stmts
 	}
 
-	result := make(models.Statements, 0, len(stmts))
+	result := make(models.RoleStatements, 0, len(stmts))
 	for _, stmt := range stmts {
 		// Filter operations by provider
 		filteredOps := c.filterByProvider(stmt.Operations, allowedProviders)
@@ -699,35 +729,23 @@ func (c *Config) filterStatementsListByProvider(stmts models.Statements, allowed
 
 // resolvePermissionConflicts resolves Allow/Deny conflicts within a role.
 // Deny takes precedence: if a permission is both allowed and denied, it's removed from both.
+// This function preserves targets during conflict resolution.
 func (c *Config) resolvePermissionConflicts(role *models.Role) {
-	allowSet := make(map[string]bool)
-	denySet := make(map[string]bool)
+	// Normalize to operation->targets maps
+	allowNorm := normalizeStatements(role.Permissions.Allow)
+	denyNorm := normalizeStatements(role.Permissions.Deny)
 
-	for _, stmt := range role.Permissions.Allow {
-		for _, op := range stmt.Operations {
-			for _, expanded := range expandCondensedActions(op) {
-				allowSet[expanded] = true
-			}
-		}
-	}
-	for _, stmt := range role.Permissions.Deny {
-		for _, op := range stmt.Operations {
-			for _, expanded := range expandCondensedActions(op) {
-				denySet[expanded] = true
-			}
+	// Remove conflicts: deny wins (remove operation from both allow and deny)
+	for op := range denyNorm {
+		if _, exists := allowNorm[op]; exists {
+			delete(allowNorm, op)
+			delete(denyNorm, op)
 		}
 	}
 
-	// Remove conflicts: deny wins
-	for perm := range denySet {
-		if allowSet[perm] {
-			delete(allowSet, perm)
-			delete(denySet, perm)
-		}
-	}
-
-	role.Permissions.Allow = stringSliceToStatements(condenseActions(mapKeys(allowSet)))
-	role.Permissions.Deny = stringSliceToStatements(condenseActions(mapKeys(denySet)))
+	// Rebuild statements
+	role.Permissions.Allow = rebuildStatementsFromNormalized(allowNorm)
+	role.Permissions.Deny = rebuildStatementsFromNormalized(denyNorm)
 }
 
 // parseProviderPrefix checks if a spec has a provider prefix (e.g., "gcp-prod:permission").
@@ -882,6 +900,12 @@ func condenseActions(permissions []string) []string {
 	}
 
 	for resource, actions := range byResource {
+		// Check if this resource has a wildcard - if so, only output the wildcard
+		if slices.Contains(actions, "*") {
+			result = append(result, resource+":*")
+			continue
+		}
+
 		// Check if this resource is subsumed by a DIFFERENT wildcard
 		// (A wildcard shouldn't subsume itself)
 		isSubsumed := false
@@ -901,9 +925,7 @@ func condenseActions(permissions []string) []string {
 			continue
 		}
 
-		if slices.Contains(actions, "*") {
-			result = append(result, resource+":*")
-		} else if len(actions) == 1 {
+		if len(actions) == 1 {
 			result = append(result, resource+":"+actions[0])
 		} else {
 			sort.Strings(actions)

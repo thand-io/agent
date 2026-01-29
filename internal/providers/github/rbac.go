@@ -28,10 +28,12 @@ func (p *githubProvider) AuthorizeRole(
 
 	username := user.Name
 
-	// Process each resource in the role
-	for _, resource := range role.Resources.Allow {
-		if err := p.authorizeResource(ctx, username, resource, role); err != nil {
-			return nil, fmt.Errorf("failed to authorize resource %s: %w", resource, err)
+	// Process each target in the role's permission statements
+	for _, stmt := range role.Permissions.Allow {
+		for _, target := range stmt.Targets {
+			if err := p.authorizeResource(ctx, username, target, role); err != nil {
+				return nil, fmt.Errorf("failed to authorize resource %s: %w", target, err)
+			}
 		}
 	}
 
@@ -53,10 +55,12 @@ func (p *githubProvider) RevokeRole(
 
 	username := user.Name
 
-	// Process each resource in the role
-	for _, resource := range role.Resources.Allow {
-		if err := p.revokeResource(ctx, username, resource); err != nil {
-			return nil, fmt.Errorf("failed to revoke resource %s: %w", resource, err)
+	// Process each target in the role's permission statements
+	for _, stmt := range role.Permissions.Allow {
+		for _, target := range stmt.Targets {
+			if err := p.revokeResource(ctx, username, target); err != nil {
+				return nil, fmt.Errorf("failed to revoke resource %s: %w", target, err)
+			}
 		}
 	}
 

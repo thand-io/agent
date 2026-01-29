@@ -10,7 +10,7 @@ import (
 )
 
 // statementsToStrings extracts all operations from Statements as a flat string slice
-func statementsToStrings(stmts models.Statements) []string {
+func statementsToStrings(stmts models.RoleStatements) []string {
 	var result []string
 	for _, stmt := range stmts {
 		result = append(result, stmt.Operations...)
@@ -19,7 +19,7 @@ func statementsToStrings(stmts models.Statements) []string {
 }
 
 // statementsContains checks if Statements contains a specific operation string
-func statementsContains(stmts models.Statements, op string) bool {
+func statementsContains(stmts models.RoleStatements, op string) bool {
 	for _, stmt := range stmts {
 		for _, o := range stmt.Operations {
 			if o == op {
@@ -37,7 +37,7 @@ func TestPermissionMerging(t *testing.T) {
 		roles := map[string]models.Role{
 			"base-reader": {
 				Name: "Base Reader",
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmts(
 						"k8s:pods:get,list",
 						"k8s:services:get,list",
@@ -50,7 +50,7 @@ func TestPermissionMerging(t *testing.T) {
 			"enhanced-dev": {
 				Name:     "Enhanced Developer",
 				Inherits: []string{"base-reader"},
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmts(
 						"k8s:pods:create,update,delete",
 						"k8s:services:create,update,delete",
@@ -101,7 +101,7 @@ func TestPermissionMerging(t *testing.T) {
 		roles := map[string]models.Role{
 			"partial-access": {
 				Name: "Partial Access",
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmts(
 						"k8s:pods:get,list,watch",
 						"k8s:services:get",
@@ -112,7 +112,7 @@ func TestPermissionMerging(t *testing.T) {
 			"extended-access": {
 				Name:     "Extended Access",
 				Inherits: []string{"partial-access"},
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmts(
 						"k8s:pods:create,update",                 // Overlaps with get,list,watch
 						"k8s:services:list,create,update,delete", // Overlaps with get
@@ -158,7 +158,7 @@ func TestPermissionMerging(t *testing.T) {
 		roles := map[string]models.Role{
 			"base-role": {
 				Name: "Base Role",
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmts(
 						"k8s:pods:get,list,create,update,delete",
 					),
@@ -201,7 +201,7 @@ func TestPermissionMerging(t *testing.T) {
 		roles := map[string]models.Role{
 			"viewer": {
 				Name: "Viewer",
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmts(
 						"k8s:pods:get,list",
 						"k8s:services:get,list",
@@ -213,7 +213,7 @@ func TestPermissionMerging(t *testing.T) {
 			"editor": {
 				Name:     "Editor",
 				Inherits: []string{"viewer"},
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmts(
 						"k8s:pods:create,update,patch",
 						"k8s:services:create,update,patch",
@@ -225,7 +225,7 @@ func TestPermissionMerging(t *testing.T) {
 			"admin": {
 				Name:     "Admin",
 				Inherits: []string{"editor"},
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmts(
 						"k8s:pods:delete",
 						"k8s:services:delete",
@@ -616,7 +616,7 @@ func TestGCPStylePermissionHandling(t *testing.T) {
 		roles := map[string]models.Role{
 			"gcp-viewer": {
 				Name: "GCP Viewer",
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmts(
 						"gcp-prod:compute.instances.list",
 						"gcp-prod:compute.instances.get",
@@ -628,7 +628,7 @@ func TestGCPStylePermissionHandling(t *testing.T) {
 			"gcp-admin": {
 				Name:     "GCP Admin",
 				Inherits: []string{"gcp-viewer"},
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmts(
 						"gcp-prod:compute.instances.start",
 						"gcp-prod:compute.instances.stop",
@@ -679,7 +679,7 @@ func TestGCPStylePermissionHandling(t *testing.T) {
 		roles := map[string]models.Role{
 			"multi-cloud": {
 				Name: "Multi-Cloud Access",
-				Permissions: models.Permissions{
+				Permissions: models.RolePermissions{
 					Allow: stmts(
 						// GCP permissions (should stay atomic - dots in action)
 						"gcp-prod:compute.instances.list",

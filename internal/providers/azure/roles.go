@@ -46,7 +46,7 @@ func (p *azureProvider) getRoleDefinition(ctx context.Context, roleName string) 
 }
 
 // createRoleDefinition creates a custom role definition
-func (p *azureProvider) createRoleDefinition(ctx context.Context, roleName, description string, permissions models.Permissions) (*armauthorization.RoleDefinition, error) {
+func (p *azureProvider) createRoleDefinition(ctx context.Context, roleName, description string, permissions models.RolePermissions) (*armauthorization.RoleDefinition, error) {
 	scope := p.getScope()
 	roleDefinitionID := uuid.New().String()
 

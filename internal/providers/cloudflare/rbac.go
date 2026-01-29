@@ -31,8 +31,16 @@ func (p *cloudflareProvider) AuthorizeRole(
 	user := req.GetUser()
 	role := req.GetRole()
 
-	if len(role.Resources.Allow) == 0 {
-		return nil, fmt.Errorf("role must specify at least one resource in 'resources.allow' to authorize Cloudflare role")
+	// Check that at least one permission statement has targets
+	hasTargets := false
+	for _, stmt := range role.Permissions.Allow {
+		if len(stmt.Targets) > 0 {
+			hasTargets = true
+			break
+		}
+	}
+	if !hasTargets {
+		return nil, fmt.Errorf("role must specify at least one target in 'permissions.allow[].targets' to authorize Cloudflare role")
 	}
 
 	logrus.WithFields(logrus.Fields{
@@ -248,7 +256,17 @@ func (p *cloudflareProvider) buildMembershipFromRole(
 		})
 	}
 
-	resourceGroups, err := p.buildResourceGroups(ctx, role.Resources.Allow)
+	// Collect all targets from permission statements
+	var allowTargets []string
+	for _, stmt := range role.Permissions.Allow {
+		allowTargets = append(allowTargets, stmt.Targets...)
+	}
+
+	if len(allowTargets) == 0 {
+		return fmt.Errorf("role must specify at least one target in 'permissions.allow[].targets' to authorize Cloudflare role")
+	}
+
+	resourceGroups, err := p.buildResourceGroups(ctx, allowTargets)
 	if err != nil {
 		return fmt.Errorf("failed to build resource groups: %w", err)
 	}

@@ -60,10 +60,8 @@ func (p *oktaProvider) AuthorizeRole(
 	role := req.GetRole()
 
 	if len(role.Inherits) == 0 &&
-		len(role.Groups.Allow) == 0 &&
-		len(role.Permissions.Allow) == 0 &&
-		len(role.Resources.Allow) == 0 {
-		return nil, fmt.Errorf("role %s has no inherits, groups, permissions, or resources defined", role.Name)
+		len(role.Permissions.Allow) == 0 {
+		return nil, fmt.Errorf("role %s has no inherits or permissions defined", role.Name)
 	}
 
 	// Get the Okta user
@@ -77,35 +75,37 @@ func (p *oktaProvider) AuthorizeRole(
 	var assignedGroups []string
 	var assignedResources []string
 
-	// Check if there are groups to assign
-	if len(role.Groups.Allow) > 0 {
+	// Check for group targets in permission statements (prefixed with "group:")
+	for _, stmt := range role.Permissions.Allow {
+		for _, target := range stmt.Targets {
+			if after, ok := strings.CutPrefix(target, "group:"); ok {
+				groupId := after
 
-		for _, groupId := range role.Groups.Allow {
+				// Get the okta groups and add the user to each
+				identity, err := p.GetIdentity(ctx, groupId)
 
-			// Get the okta groups and add the user to each
-			identity, err := p.GetIdentity(ctx, groupId)
+				if err != nil {
+					return nil, fmt.Errorf("failed to get group %s: %w", groupId, err)
+				}
 
-			if err != nil {
-				return nil, fmt.Errorf("failed to get group %s: %w", groupId, err)
+				if identity.GetGroup() == nil {
+					return nil, fmt.Errorf("group %s not found in Okta", groupId)
+				}
+
+				err = p.AddUserToGroup(ctx, identity.GetGroup().ID, oktaUser.Id)
+
+				if err != nil {
+					return nil, fmt.Errorf("failed to add user to group %s: %w", groupId, err)
+				}
+
+				logrus.WithFields(logrus.Fields{
+					"user_id":    oktaUser.Id,
+					"user_email": user.Email,
+					"group_id":   groupId,
+				}).Info("Successfully added user to group in Okta")
+
+				assignedGroups = append(assignedGroups, groupId)
 			}
-
-			if identity.GetGroup() == nil {
-				return nil, fmt.Errorf("group %s not found in Okta", groupId)
-			}
-
-			err = p.AddUserToGroup(ctx, identity.GetGroup().ID, oktaUser.Id)
-
-			if err != nil {
-				return nil, fmt.Errorf("failed to add user to group %s: %w", groupId, err)
-			}
-
-			logrus.WithFields(logrus.Fields{
-				"user_id":    oktaUser.Id,
-				"user_email": user.Email,
-				"group_id":   groupId,
-			}).Info("Successfully added user to group in Okta")
-
-			assignedGroups = append(assignedGroups, groupId)
 		}
 	}
 
@@ -201,10 +201,10 @@ func (p *oktaProvider) AuthorizeRole(
 
 	}
 
-	if len(role.Resources.Allow) > 0 {
-		// Check for resources starting with "application:" prefix
-		for _, resource := range role.Resources.Allow {
-			if after, ok := strings.CutPrefix(resource, "application:"); ok {
+	// Check for application targets in permission statements (prefixed with "application:")
+	for _, stmt := range role.Permissions.Allow {
+		for _, target := range stmt.Targets {
+			if after, ok := strings.CutPrefix(target, "application:"); ok {
 				// Extract the application ID or name by removing the prefix
 				appIdentifier := after
 
@@ -244,11 +244,6 @@ func (p *oktaProvider) AuthorizeRole(
 				}).Info("Successfully assigned user to application in Okta")
 
 				assignedResources = append(assignedResources, fmt.Sprintf("application:%s", appResource.ID))
-			} else {
-				logrus.WithFields(logrus.Fields{
-					"role_name": role.Name,
-					"resource":  resource,
-				}).Warn("Resource does not match expected 'application:' prefix and will be ignored")
 			}
 		}
 	}

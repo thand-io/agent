@@ -78,11 +78,13 @@ func TestAWSProviderFunctional(t *testing.T) {
 	testRole := &models.Role{
 		Name:        "TestRole",
 		Description: "Test IAM role for functional testing",
-		Permissions: models.Permissions{
-			Allow: []string{
-				"s3:GetObject",
-				"s3:PutObject",
-				"ec2:DescribeInstances",
+		Permissions: models.RolePermissions{
+			Allow: models.RoleStatements{{
+				Operations: []string{
+					"s3:GetObject",
+					"s3:PutObject",
+					"ec2:DescribeInstances",
+				}},
 			},
 		},
 		Providers: []string{"aws"},

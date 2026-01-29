@@ -70,7 +70,7 @@ func (p *azureProvider) RevokeRole(
 // permissionsToAzureActions converts CSP-agnostic Permissions to Azure role actions and notActions
 // Allow statements become Actions, Deny statements become NotActions
 // Returns: (actions, notActions, targets for assignableScopes)
-func permissionsToAzureActions(permissions models.Permissions) (actions, notActions []string, targets []string) {
+func permissionsToAzureActions(permissions models.RolePermissions) (actions, notActions []string, targets []string) {
 	// Process Allow statements -> Actions
 	for _, stmt := range permissions.Allow {
 		actions = append(actions, stmt.Operations...)

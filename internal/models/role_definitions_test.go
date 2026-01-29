@@ -11,6 +11,18 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// statementsContainOperation checks if any Statement in the RoleStatements contains the given operation
+func statementsContainOperation(stmts models.RoleStatements, operation string) bool {
+	for _, stmt := range stmts {
+		for _, op := range stmt.Operations {
+			if op == operation {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // TestRoleDefinitions_UnmarshalJSON tests the JSON unmarshaling with various version formats
 func TestRoleDefinitions_UnmarshalJSON(t *testing.T) {
 	tests := []struct {
@@ -51,13 +63,13 @@ func TestRoleDefinitions_UnmarshalJSON(t *testing.T) {
 				assert.True(t, exists)
 				assert.Equal(t, "Administrator", admin.Name)
 				assert.Equal(t, "Full access role", admin.Description)
-				assert.Contains(t, admin.Permissions.Allow, "*")
+				assert.True(t, statementsContainOperation(admin.Permissions.Allow, "*"), "admin should have * permission")
 
 				viewer, exists := def.Roles["viewer"]
 				assert.True(t, exists)
 				assert.Equal(t, "Viewer", viewer.Name)
-				assert.Contains(t, viewer.Permissions.Allow, "read")
-				assert.Contains(t, viewer.Permissions.Deny, "write")
+				assert.True(t, statementsContainOperation(viewer.Permissions.Allow, "read"), "viewer should have read permission")
+				assert.True(t, statementsContainOperation(viewer.Permissions.Deny, "write"), "viewer should deny write permission")
 			},
 		},
 		{
@@ -178,13 +190,17 @@ roles:
     name: "Administrator"
     description: "Full access role"
     permissions:
-      allow: ["*"]
+      allow:
+        - operations: ["*"]
   viewer:
     name: "Viewer"
     description: "Read-only access"
     permissions:
-      allow: ["read"]
-      deny: ["write", "delete"]`,
+      allow:
+        - operations: ["read"]
+      deny:
+        - operations: ["write"]
+        - operations: ["delete"]`,
 			expectError: false,
 			expectedVer: "1.0.0",
 			roleCount:   2,
@@ -322,8 +338,8 @@ func TestRoleDefinitions_RoundTrip(t *testing.T) {
 				"admin": {
 					Name:        "Admin",
 					Description: "Admin role",
-					Permissions: models.Permissions{
-						Allow: models.Statements{{Operations: []string{"*"}}},
+					Permissions: models.RolePermissions{
+						Allow: models.RoleStatements{{Operations: []string{"*"}}},
 					},
 				},
 			},

@@ -174,11 +174,27 @@ func (s *Server) handleDynamicRequest(c *gin.Context, dynamicRequest models.Elev
 	}
 
 	// Convert string permissions to Statements (backwards compatibility)
-	allowStatements := make(models.Statements, len(dynamicRequest.Permissions))
+	allowStatements := make(models.RoleStatements, len(dynamicRequest.Permissions))
 	for i, perm := range dynamicRequest.Permissions {
 		allowStatements[i] = models.Statement{
 			Operations: []string{perm},
 			Targets:    []string{},
+		}
+	}
+
+	// Merge groups and resources into permissions targets
+	var allTargets []string
+	allTargets = append(allTargets, dynamicRequest.Groups...)
+	allTargets = append(allTargets, dynamicRequest.Resources...)
+
+	// Add targets to allowStatements if there are any
+	if len(allTargets) > 0 {
+		if len(allowStatements) > 0 {
+			allowStatements[0].Targets = append(allowStatements[0].Targets, allTargets...)
+		} else {
+			allowStatements = append(allowStatements, models.Statement{
+				Targets: allTargets,
+			})
 		}
 	}
 
@@ -187,21 +203,17 @@ func (s *Server) handleDynamicRequest(c *gin.Context, dynamicRequest models.Elev
 		Name:        "dynamic-role-" + time.Now().Format("20060102-150405"),
 		Description: "Dynamically created role: " + dynamicRequest.Reason,
 		Workflows:   []string{dynamicRequest.Workflow},
-		Permissions: models.Permissions{
+		Permissions: models.RolePermissions{
 			Allow: allowStatements,
 		},
 		Inherits:  dynamicRequest.Inherits,
 		Providers: dynamicRequest.Providers,
-		Groups: models.Groups{
-			Allow: dynamicRequest.Groups,
-		},
-		Resources: models.Resources{
-			Allow: dynamicRequest.Resources,
-		},
-		Scopes: &models.RoleScopes{
-			Groups:  dynamicRequest.Scopes.Groups,
-			Users:   dynamicRequest.Scopes.Users,
-			Domains: dynamicRequest.Scopes.Domains,
+		Scopes: models.RoleScopes{
+			Allow: models.ScopeIdentities{
+				Groups:  dynamicRequest.Scopes.Groups,
+				Users:   dynamicRequest.Scopes.Users,
+				Domains: dynamicRequest.Scopes.Domains,
+			},
 		},
 		Enabled: true,
 	}

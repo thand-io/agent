@@ -125,8 +125,13 @@ func (a *authorizerNotifier) addAuthorizePermissionsSection(blocks *[]slack.Bloc
 		var permissionsText strings.Builder
 		permissionsText.WriteString("*Granted Permissions:*\n")
 
-		for _, perm := range elevateRequest.Role.Permissions.Allow {
-			permissionsText.WriteString(fmt.Sprintf("✓ %s\n", perm))
+		for _, stmt := range elevateRequest.Role.Permissions.Allow {
+			if len(stmt.Operations) > 0 {
+				permissionsText.WriteString(fmt.Sprintf("✓ Operations: `%s`\n", strings.Join(stmt.Operations, "`, `")))
+			}
+			if len(stmt.Targets) > 0 {
+				permissionsText.WriteString(fmt.Sprintf("  Targets: `%s`\n", strings.Join(stmt.Targets, "`, `")))
+			}
 		}
 
 		*blocks = append(*blocks, slack.NewSectionBlock(

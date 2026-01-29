@@ -153,13 +153,18 @@ func (p *awsProvider) findOrCreatePermissionSet(ctx context.Context, instanceArn
 }
 
 // attachPermissionsToPermissionSet creates an inline policy for the permission set
-func (p *awsProvider) attachPermissionsToPermissionSet(ctx context.Context, instanceArn, permissionSetArn string, permissions models.Permissions) error {
+func (p *awsProvider) attachPermissionsToPermissionSet(ctx context.Context, instanceArn, permissionSetArn string, permissions models.RolePermissions) error {
 	if len(permissions.Allow) == 0 && len(permissions.Deny) == 0 {
 		return nil // No permissions to attach
 	}
 
 	// Convert CSP-agnostic permissions to AWS policy document
 	policyDocument := permissionsToAwsPolicy(permissions)
+
+	// Skip if no valid statements were generated (e.g., all had empty operations)
+	if len(policyDocument.Statement) == 0 {
+		return nil
+	}
 
 	policyDocumentJSON, err := json.Marshal(policyDocument)
 	if err != nil {

@@ -119,13 +119,18 @@ func (p *awsProvider) createRole(ctx context.Context, role *models.Role, targetA
 }
 
 // attachPoliciesToRole creates and attaches an inline policy with the specified permissions
-func (p *awsProvider) attachPoliciesToRole(ctx context.Context, roleName *string, permissions models.Permissions) error {
+func (p *awsProvider) attachPoliciesToRole(ctx context.Context, roleName *string, permissions models.RolePermissions) error {
 	if len(permissions.Allow) == 0 && len(permissions.Deny) == 0 {
 		return nil // No permissions to attach
 	}
 
 	// Convert CSP-agnostic permissions to AWS policy document
 	policyDocument := permissionsToAwsPolicy(permissions)
+
+	// Skip if no valid statements were generated (e.g., all had empty operations)
+	if len(policyDocument.Statement) == 0 {
+		return nil
+	}
 
 	policyDocumentJSON, err := json.Marshal(policyDocument)
 	if err != nil {

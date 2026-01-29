@@ -2719,7 +2719,7 @@
                 }
             }
         },
-        "github_com_thand-io_agent_internal_models.Permissions": {
+        "github_com_thand-io_agent_internal_models.RolePermissions": {
             "type": "object",
             "properties": {
                 "allow": {
@@ -2860,7 +2860,7 @@
                     "description": "granular permissions for the role",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.Permissions"
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.RolePermissions"
                         }
                     ]
                 },
@@ -4497,7 +4497,7 @@
                     "description": "granular permissions for the role",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.Permissions"
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.RolePermissions"
                         }
                     ]
                 },
