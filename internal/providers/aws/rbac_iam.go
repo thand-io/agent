@@ -23,10 +23,10 @@ func (p *awsProvider) authorizeRoleTraditionalIAM(
 	role := req.GetRole()
 
 	// Check if the role exists
-	existingRole, err := p.getRole(ctx, role)
+	existingRole, err := p.getRole(ctx, user, role)
 	if err != nil {
 		// If role doesn't exist, create it
-		existingRole, err = p.createRole(ctx, role, targetAccountID)
+		existingRole, err = p.createRole(ctx, user, role, targetAccountID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create role: %w", err)
 		}
@@ -53,7 +53,7 @@ func (p *awsProvider) authorizeRoleTraditionalIAM(
 func (p *awsProvider) revokeRoleTraditionalIAM(ctx context.Context, user *models.User, role *models.Role) (*models.RevokeRoleResponse, error) {
 
 	// Check if the role exists
-	existingRole, err := p.getRole(ctx, role)
+	existingRole, err := p.getRole(ctx, user, role)
 	if err != nil {
 		// If role doesn't exist, nothing to revoke
 		return nil, fmt.Errorf("role not found: %w", err)
@@ -69,9 +69,9 @@ func (p *awsProvider) revokeRoleTraditionalIAM(ctx context.Context, user *models
 }
 
 // getRole retrieves an IAM role by name
-func (p *awsProvider) getRole(ctx context.Context, role *models.Role) (*types.Role, error) {
+func (p *awsProvider) getRole(ctx context.Context, user *models.User, role *models.Role) (*types.Role, error) {
 	input := &iam.GetRoleInput{
-		RoleName: aws.String(role.GetSnakeCaseName()),
+		RoleName: aws.String(role.GetUniqueIdentifier(user)),
 	}
 
 	result, err := p.service.GetRole(ctx, input)
@@ -83,7 +83,7 @@ func (p *awsProvider) getRole(ctx context.Context, role *models.Role) (*types.Ro
 }
 
 // createRole creates a new IAM role with the specified permissions
-func (p *awsProvider) createRole(ctx context.Context, role *models.Role, targetAccountID string) (*types.Role, error) {
+func (p *awsProvider) createRole(ctx context.Context, user *models.User, role *models.Role, targetAccountID string) (*types.Role, error) {
 	// Create a basic assume role policy document using structs
 	// Initially allow the account root to assume the role (will be updated later)
 	assumeRolePolicy := PolicyDocument{
@@ -105,7 +105,7 @@ func (p *awsProvider) createRole(ctx context.Context, role *models.Role, targetA
 	}
 
 	input := &iam.CreateRoleInput{
-		RoleName:                 aws.String(role.GetSnakeCaseName()),
+		RoleName:                 aws.String(role.GetUniqueIdentifier(user)),
 		AssumeRolePolicyDocument: aws.String(string(assumeRolePolicyJSON)),
 		Description:              aws.String(role.Description),
 	}

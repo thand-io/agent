@@ -33,7 +33,7 @@ func (p *awsProvider) authorizeRoleIdentityCenter(
 	}
 
 	// 2. Find or create a Permission Set based on the role
-	permissionSetArn, err := p.findOrCreatePermissionSet(ctx, instanceArn, role)
+	permissionSetArn, err := p.findOrCreatePermissionSet(ctx, instanceArn, user, role)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find or create permission set: %w", err)
 	}
@@ -76,8 +76,8 @@ func (p *awsProvider) getIdentityCenterInstance(ctx context.Context) (string, er
 }
 
 // findOrCreatePermissionSet finds an existing permission set or creates a new one
-func (p *awsProvider) findOrCreatePermissionSet(ctx context.Context, instanceArn string, role *models.Role) (string, error) {
-	permissionSetName := role.GetSnakeCaseName()
+func (p *awsProvider) findOrCreatePermissionSet(ctx context.Context, instanceArn string, user *models.User, role *models.Role) (string, error) {
+	permissionSetName := role.GetUniqueIdentifier(user)
 
 	// First, try to find existing permission set
 	resp, err := p.ssoAdminService.ListPermissionSets(ctx, &ssoadmin.ListPermissionSetsInput{
@@ -434,7 +434,7 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models
 	}
 
 	// 2. Find the Permission Set
-	permissionSetArn, err := p.findPermissionSetByName(ctx, instanceArn, role.GetSnakeCaseName())
+	permissionSetArn, err := p.findPermissionSetByName(ctx, instanceArn, role.GetUniqueIdentifier(user))
 	if err != nil {
 		return fmt.Errorf("failed to find permission set: %w in region: %s", err, p.GetRegion())
 	}
@@ -459,6 +459,7 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models
 		return fmt.Errorf("failed to delete account assignment: %w", err)
 	}
 
+	// 5. Lastly, poll to verify deletion
 	var deleteOutputRequestId *string
 	if deleteOutput != nil && deleteOutput.AccountAssignmentDeletionStatus != nil && deleteOutput.AccountAssignmentDeletionStatus.RequestId != nil {
 		deleteOutputRequestId = deleteOutput.AccountAssignmentDeletionStatus.RequestId

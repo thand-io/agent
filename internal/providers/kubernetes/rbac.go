@@ -81,7 +81,7 @@ func (p *kubernetesProvider) authorizeNamespacedRole(
 ) (*models.AuthorizeRoleResponse, error) {
 
 	client := p.GetClient()
-	roleName := role.GetSnakeCaseName()
+	roleName := role.GetUniqueIdentifier(user)
 
 	// Create or update Role
 	k8sRole := &rbacv1.Role{
@@ -186,7 +186,7 @@ func (p *kubernetesProvider) authorizeClusterRole(
 ) (*models.AuthorizeRoleResponse, error) {
 
 	client := p.GetClient()
-	roleName := role.GetSnakeCaseName()
+	roleName := role.GetUniqueIdentifier(user)
 
 	// Create or update ClusterRole
 	clusterRole := &rbacv1.ClusterRole{
@@ -458,7 +458,7 @@ func (p *kubernetesProvider) revokeNamespacedRole(
 ) (*models.RevokeRoleResponse, error) {
 
 	client := p.GetClient()
-	bindingName := fmt.Sprintf("%s-%s", role.GetSnakeCaseName(), p.sanitizeUserIdentifier(user))
+	bindingName := role.GetUniqueIdentifier(user)
 
 	// Check if RoleBinding exists before attempting to delete
 	_, err := client.RbacV1().
@@ -503,7 +503,7 @@ func (p *kubernetesProvider) revokeClusterRole(
 ) (*models.RevokeRoleResponse, error) {
 
 	client := p.GetClient()
-	bindingName := fmt.Sprintf("%s-%s", role.GetSnakeCaseName(), p.sanitizeUserIdentifier(user))
+	bindingName := role.GetUniqueIdentifier(user)
 
 	// Check if ClusterRoleBinding exists before attempting to delete
 	_, err := client.RbacV1().

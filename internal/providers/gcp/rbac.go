@@ -100,7 +100,7 @@ func (p *gcpProvider) AuthorizeRole(
 	// If permissions are specified, create a custom role with those permissions
 	if len(role.Permissions.Allow) > 0 {
 		// Check if the custom role already exists
-		customRoleName := role.GetSnakeCaseName()
+		customRoleName := role.GetUniqueIdentifier(user)
 		existingRole, err := p.getRole(projectId, customRoleName)
 		if err != nil {
 			// If role doesn't exist, create it
@@ -243,6 +243,25 @@ func (p *gcpProvider) RevokeRole(
 				"role":       roleName,
 				"project_id": projectId,
 			}).Info("Successfully unbound user from custom GCP role")
+
+			// Delete the custom role after unbinding
+			err = p.deleteRole(projectId, customRoleName)
+			if err != nil {
+				return nil, temporal.NewApplicationErrorWithOptions(
+					fmt.Sprintf("failed to delete custom role %s: %v", customRoleName, err),
+					"GcpCustomRoleDeletionError",
+					temporal.ApplicationErrorOptions{
+						NextRetryDelay: 3 * time.Second,
+						Cause:          err,
+					},
+				)
+			}
+
+			logrus.WithFields(logrus.Fields{
+				"role_name":  customRoleName,
+				"project_id": projectId,
+				"user_email": user.Email,
+			}).Info("Successfully deleted custom GCP role")
 		}
 	}
 
@@ -292,6 +311,17 @@ func (p *gcpProvider) getRole(projectID, roleName string) (*iam.Role, error) {
 		return nil, err
 	}
 	return role, nil
+}
+
+// deleteRole deletes a custom role
+func (p *gcpProvider) deleteRole(projectID, roleName string) error {
+	service := p.GetIamClient()
+
+	_, err := service.Projects.Roles.Delete("projects/" + projectID + "/roles/" + roleName).Do()
+	if err != nil {
+		return fmt.Errorf("failed to delete role: %w", err)
+	}
+	return nil
 }
 
 // bindUserToPredefinedRole binds a user to a predefined GCP role (e.g., roles/viewer)
