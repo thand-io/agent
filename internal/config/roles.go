@@ -3,6 +3,9 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"sort"
@@ -579,11 +582,22 @@ func (c *Config) mergeRole(composite *models.Role, inherited *models.Role) {
 
 // normalizeStatements expands all statement operations and creates a map by operation.
 // Returns a map where key is operation and value is the set of targets associated with that operation.
-func normalizeStatements(stmts models.RoleStatements) map[string]map[string]bool {
+// normalizeStatements separates statements into two groups:
+// 1. Normalized map (for statements WITHOUT conditions) - can be merged and deduplicated
+// 2. Preserved statements (for statements WITH conditions) - kept as complete units
+// This ensures conditions are not lost during merge operations.
+func normalizeStatements(stmts models.RoleStatements) (map[string]map[string]bool, models.RoleStatements) {
 	result := make(map[string]map[string]bool)
+	preservedStmts := make(models.RoleStatements, 0)
 
 	for _, stmt := range stmts {
-		// Expand all operations
+		// Statements WITH conditions are preserved as-is
+		if len(stmt.Conditions) > 0 {
+			preservedStmts = append(preservedStmts, stmt)
+			continue
+		}
+
+		// Statements WITHOUT conditions are normalized (existing logic)
 		for _, op := range stmt.Operations {
 			for _, expandedOp := range expandCondensedActions(op) {
 				if result[expandedOp] == nil {
@@ -602,51 +616,111 @@ func normalizeStatements(stmts models.RoleStatements) map[string]map[string]bool
 		}
 	}
 
-	return result
+	return result, preservedStmts
+}
+
+// deduplicatePreservedStatements removes conflicts between allow and deny statements.
+// If a statement appears in both, both are removed (deny wins = remove both).
+// Statements are compared by hashing operations, targets, and conditions.
+func deduplicatePreservedStatements(allow, deny models.RoleStatements) (models.RoleStatements, models.RoleStatements) {
+	// Create hash for each statement
+	stmtHash := func(stmt models.Statement) string {
+		h := sha256.New()
+
+		// Hash operations (sorted)
+		ops := make([]string, len(stmt.Operations))
+		copy(ops, stmt.Operations)
+		sort.Strings(ops)
+		for _, op := range ops {
+			h.Write([]byte(op))
+		}
+
+		// Hash targets (sorted)
+		targets := make([]string, len(stmt.Targets))
+		copy(targets, stmt.Targets)
+		sort.Strings(targets)
+		for _, t := range targets {
+			h.Write([]byte(t))
+		}
+
+		// Hash conditions
+		if len(stmt.Conditions) > 0 {
+			condJSON, _ := json.Marshal(stmt.Conditions)
+			h.Write(condJSON)
+		}
+
+		return hex.EncodeToString(h.Sum(nil))
+	}
+
+	// Build deny hash set
+	denyHashes := make(map[string]bool)
+	for _, stmt := range deny {
+		denyHashes[stmtHash(stmt)] = true
+	}
+
+	// Filter allow statements that conflict
+	filteredAllow := make(models.RoleStatements, 0)
+	for _, stmt := range allow {
+		if !denyHashes[stmtHash(stmt)] {
+			filteredAllow = append(filteredAllow, stmt)
+		}
+	}
+
+	// Keep all deny statements (conflicts already removed from allow)
+	return filteredAllow, deny
 }
 
 // rebuildStatementsFromNormalized converts the normalized operation->targets map back to statements.
 // Groups operations by their target sets for more efficient statement representation.
-func rebuildStatementsFromNormalized(normalized map[string]map[string]bool) models.RoleStatements {
-	if len(normalized) == 0 {
+// rebuildStatementsFromNormalized reconstructs Statement objects from normalized data
+// and appends any preserved statements (those with conditions) at the end.
+func rebuildStatementsFromNormalized(normalized map[string]map[string]bool, preserved models.RoleStatements) models.RoleStatements {
+	// Return nil if both inputs are empty
+	if len(normalized) == 0 && len(preserved) == 0 {
 		return nil
 	}
 
-	// Group operations by their target key (sorted targets joined)
-	targetGroupToOps := make(map[string][]string)
-	targetGroupToTargets := make(map[string][]string)
+	result := make(models.RoleStatements, 0)
 
-	for op, targets := range normalized {
-		targetList := mapKeys(targets)
-		sort.Strings(targetList)
-		targetKey := strings.Join(targetList, "|")
+	if len(normalized) > 0 {
+		// Group operations by their target key (sorted targets joined)
+		targetGroupToOps := make(map[string][]string)
+		targetGroupToTargets := make(map[string][]string)
 
-		if _, exists := targetGroupToOps[targetKey]; !exists {
-			targetGroupToOps[targetKey] = []string{}
-			targetGroupToTargets[targetKey] = targetList
-		}
-		targetGroupToOps[targetKey] = append(targetGroupToOps[targetKey], op)
-	}
+		for op, targets := range normalized {
+			targetList := mapKeys(targets)
+			sort.Strings(targetList)
+			targetKey := strings.Join(targetList, "|")
 
-	// Build statements, one per unique target set
-	result := make(models.RoleStatements, 0, len(targetGroupToOps))
-	for targetKey, ops := range targetGroupToOps {
-		condensedOps := condenseActions(ops)
-		targets := targetGroupToTargets[targetKey]
-
-		// Filter out empty string marker (means "all targets")
-		var finalTargets []string
-		for _, t := range targets {
-			if t != "" {
-				finalTargets = append(finalTargets, t)
+			if _, exists := targetGroupToOps[targetKey]; !exists {
+				targetGroupToOps[targetKey] = []string{}
+				targetGroupToTargets[targetKey] = targetList
 			}
+			targetGroupToOps[targetKey] = append(targetGroupToOps[targetKey], op)
 		}
 
-		result = append(result, models.Statement{
-			Operations: condensedOps,
-			Targets:    finalTargets,
-		})
+		// Build statements, one per unique target set
+		for targetKey, ops := range targetGroupToOps {
+			condensedOps := condenseActions(ops)
+			targets := targetGroupToTargets[targetKey]
+
+			// Filter out empty string marker (means "all targets")
+			var finalTargets []string
+			for _, t := range targets {
+				if t != "" {
+					finalTargets = append(finalTargets, t)
+				}
+			}
+
+			result = append(result, models.Statement{
+				Operations: condensedOps,
+				Targets:    finalTargets,
+			})
+		}
 	}
+
+	// Append preserved conditioned statements at the end
+	result = append(result, preserved...)
 
 	return result
 }
@@ -655,11 +729,11 @@ func rebuildStatementsFromNormalized(normalized map[string]map[string]bool) mode
 // Parent Allow overrides Child Deny, Parent Deny overrides Child Allow.
 // This function preserves both operations AND targets during merging.
 func (c *Config) mergePermissionsWithConflictResolution(composite *models.Role, childAllow, childDeny models.RoleStatements) {
-	// Normalize all statements to operation->targets maps
-	parentAllowNorm := normalizeStatements(composite.Permissions.Allow)
-	parentDenyNorm := normalizeStatements(composite.Permissions.Deny)
-	childAllowNorm := normalizeStatements(childAllow)
-	childDenyNorm := normalizeStatements(childDeny)
+	// Separate normalized and preserved statements
+	parentAllowNorm, parentAllowPreserved := normalizeStatements(composite.Permissions.Allow)
+	parentDenyNorm, parentDenyPreserved := normalizeStatements(composite.Permissions.Deny)
+	childAllowNorm, childAllowPreserved := normalizeStatements(childAllow)
+	childDenyNorm, childDenyPreserved := normalizeStatements(childDeny)
 
 	finalAllowNorm := make(map[string]map[string]bool)
 	finalDenyNorm := make(map[string]map[string]bool)
@@ -746,9 +820,13 @@ func (c *Config) mergePermissionsWithConflictResolution(composite *models.Role, 
 		}
 	}
 
-	// Rebuild statements from normalized form
-	composite.Permissions.Allow = rebuildStatementsFromNormalized(finalAllowNorm)
-	composite.Permissions.Deny = rebuildStatementsFromNormalized(finalDenyNorm)
+	// Merge preserved statements: parent wins (parent conditions override child)
+	finalAllowPreserved := append(childAllowPreserved, parentAllowPreserved...)
+	finalDenyPreserved := append(childDenyPreserved, parentDenyPreserved...)
+
+	// Rebuild statements from normalized form with preserved statements
+	composite.Permissions.Allow = rebuildStatementsFromNormalized(finalAllowNorm, finalAllowPreserved)
+	composite.Permissions.Deny = rebuildStatementsFromNormalized(finalDenyNorm, finalDenyPreserved)
 }
 
 // isOperationSubsumedByWildcard checks if an operation is covered by a wildcard
@@ -811,11 +889,11 @@ func (c *Config) filterStatementsListByProvider(stmts models.RoleStatements, all
 //	Result: Allow: ["s3:GetObject"]  +  Deny: ["s3:DeleteObject"]
 //	(s3:PutObject removed from both due to conflict)
 func (c *Config) resolvePermissionConflicts(role *models.Role) {
-	// Normalize to operation->targets maps
-	allowNorm := normalizeStatements(role.Permissions.Allow)
-	denyNorm := normalizeStatements(role.Permissions.Deny)
+	// Separate normalized and preserved statements
+	allowNorm, allowPreserved := normalizeStatements(role.Permissions.Allow)
+	denyNorm, denyPreserved := normalizeStatements(role.Permissions.Deny)
 
-	// Remove conflicts: deny wins (remove operation from both allow and deny)
+	// Remove conflicts in normalized statements: deny wins (remove operation from both allow and deny)
 	for op := range denyNorm {
 		if _, exists := allowNorm[op]; exists {
 			delete(allowNorm, op)
@@ -823,9 +901,13 @@ func (c *Config) resolvePermissionConflicts(role *models.Role) {
 		}
 	}
 
+	// Preserved statements don't conflict with normalized ones (conditions make them distinct)
+	// They could conflict with each other if identical - remove both
+	dedupedAllow, dedupedDeny := deduplicatePreservedStatements(allowPreserved, denyPreserved)
+
 	// Rebuild statements
-	role.Permissions.Allow = rebuildStatementsFromNormalized(allowNorm)
-	role.Permissions.Deny = rebuildStatementsFromNormalized(denyNorm)
+	role.Permissions.Allow = rebuildStatementsFromNormalized(allowNorm, dedupedAllow)
+	role.Permissions.Deny = rebuildStatementsFromNormalized(denyNorm, dedupedDeny)
 }
 
 // parseProviderPrefix checks if a spec has a provider prefix (e.g., "gcp-prod:permission").
