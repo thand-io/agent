@@ -3,10 +3,8 @@
 package config
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
+	"reflect"
 	"slices"
 	"sort"
 	"strings"
@@ -620,54 +618,86 @@ func normalizeStatements(stmts models.RoleStatements) (map[string]map[string]boo
 }
 
 // deduplicatePreservedStatements removes conflicts between allow and deny statements.
-// If a statement appears in both, both are removed (deny wins = remove both).
-// Statements are compared by hashing operations, targets, and conditions.
+// If a statement appears in both, the allow is removed and deny is kept (deny wins).
+// Statements are compared by checking equality of operations, targets, and conditions.
 func deduplicatePreservedStatements(allow, deny models.RoleStatements) (models.RoleStatements, models.RoleStatements) {
-	// Create hash for each statement
-	stmtHash := func(stmt models.Statement) string {
-		h := sha256.New()
+	// Track conflicting statement indices in allow
+	conflictingAllowIndices := make(map[int]bool)
 
-		// Hash operations (sorted)
-		ops := make([]string, len(stmt.Operations))
-		copy(ops, stmt.Operations)
-		sort.Strings(ops)
-		for _, op := range ops {
-			h.Write([]byte(op))
+	// Find conflicts: check each allow statement against all deny statements
+	for allowIdx, allowStmt := range allow {
+		for _, denyStmt := range deny {
+			if statementsEqual(allowStmt, denyStmt) {
+				conflictingAllowIndices[allowIdx] = true
+				break // No need to check further deny statements for this allow
+			}
 		}
-
-		// Hash targets (sorted)
-		targets := make([]string, len(stmt.Targets))
-		copy(targets, stmt.Targets)
-		sort.Strings(targets)
-		for _, t := range targets {
-			h.Write([]byte(t))
-		}
-
-		// Hash conditions
-		if len(stmt.Conditions) > 0 {
-			condJSON, _ := json.Marshal(stmt.Conditions)
-			h.Write(condJSON)
-		}
-
-		return hex.EncodeToString(h.Sum(nil))
 	}
 
-	// Build deny hash set
-	denyHashes := make(map[string]bool)
-	for _, stmt := range deny {
-		denyHashes[stmtHash(stmt)] = true
-	}
-
-	// Filter allow statements that conflict
-	filteredAllow := make(models.RoleStatements, 0)
-	for _, stmt := range allow {
-		if !denyHashes[stmtHash(stmt)] {
+	// Filter out conflicting statements from allow
+	filteredAllow := make(models.RoleStatements, 0, len(allow)-len(conflictingAllowIndices))
+	for i, stmt := range allow {
+		if !conflictingAllowIndices[i] {
 			filteredAllow = append(filteredAllow, stmt)
 		}
 	}
 
-	// Keep all deny statements (conflicts already removed from allow)
+	// Keep all deny statements (deny wins in conflicts)
 	return filteredAllow, deny
+}
+
+// statementsEqual checks if two statements are equal by comparing their operations, targets, and conditions.
+// String slices are compared in sorted order to ensure consistent comparison.
+func statementsEqual(a, b models.Statement) bool {
+	// Compare operations (sorted)
+	if !stringSlicesEqual(a.Operations, b.Operations) {
+		return false
+	}
+
+	// Compare targets (sorted)
+	if !stringSlicesEqual(a.Targets, b.Targets) {
+		return false
+	}
+
+	// Normalize nil vs empty for conditions comparison
+	aConditions := a.Conditions
+	bConditions := b.Conditions
+	if len(aConditions) == 0 {
+		aConditions = nil
+	}
+	if len(bConditions) == 0 {
+		bConditions = nil
+	}
+
+	return reflect.DeepEqual(aConditions, bConditions)
+}
+
+// stringSlicesEqual compares two string slices for equality after sorting.
+// Returns true if both slices contain the same elements in any order.
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	if len(a) == 0 {
+		return true
+	}
+
+	// Create sorted copies to avoid mutating original slices
+	aSorted := make([]string, len(a))
+	bSorted := make([]string, len(b))
+	copy(aSorted, a)
+	copy(bSorted, b)
+	sort.Strings(aSorted)
+	sort.Strings(bSorted)
+
+	for i := range aSorted {
+		if aSorted[i] != bSorted[i] {
+			return false
+		}
+	}
+
+	return true
 }
 
 // rebuildStatementsFromNormalized converts the normalized operation->targets map back to statements.
