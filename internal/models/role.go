@@ -56,12 +56,20 @@ func (r *Role) UnmarshalJSON(data []byte) error {
 	var allowTargets, denyTargets []string
 
 	// Add Groups.Allow and Resources.Allow to allowTargets
-	allowTargets = append(allowTargets, aux.Groups.Allow...)
-	allowTargets = append(allowTargets, aux.Resources.Allow...)
+	if aux.Groups.Allow != nil {
+		allowTargets = append(allowTargets, aux.Groups.Allow...)
+	}
+	if aux.Resources.Allow != nil {
+		allowTargets = append(allowTargets, aux.Resources.Allow...)
+	}
 
 	// Add Groups.Deny and Resources.Deny to denyTargets
-	denyTargets = append(denyTargets, aux.Groups.Deny...)
-	denyTargets = append(denyTargets, aux.Resources.Deny...)
+	if aux.Groups.Deny != nil {
+		denyTargets = append(denyTargets, aux.Groups.Deny...)
+	}
+	if aux.Resources.Deny != nil {
+		denyTargets = append(denyTargets, aux.Resources.Deny...)
+	}
 
 	// Migrate deprecated Groups and Resources targets to Permission statements
 	if len(allowTargets) > 0 {
