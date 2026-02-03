@@ -71,7 +71,7 @@ func (p *awsProvider) revokeRoleTraditionalIAM(ctx context.Context, user *models
 // getRole retrieves an IAM role by name
 func (p *awsProvider) getRole(ctx context.Context, user *models.User, role *models.Role) (*types.Role, error) {
 	input := &iam.GetRoleInput{
-		RoleName: aws.String(role.GetUniqueIdentifier(user)),
+		RoleName: aws.String(role.GetIdentifier()),
 	}
 
 	result, err := p.service.GetRole(ctx, input)
@@ -105,7 +105,7 @@ func (p *awsProvider) createRole(ctx context.Context, user *models.User, role *m
 	}
 
 	input := &iam.CreateRoleInput{
-		RoleName:                 aws.String(role.GetUniqueIdentifier(user)),
+		RoleName:                 aws.String(role.GetIdentifier()),
 		AssumeRolePolicyDocument: aws.String(string(assumeRolePolicyJSON)),
 		Description:              aws.String(role.Description),
 	}

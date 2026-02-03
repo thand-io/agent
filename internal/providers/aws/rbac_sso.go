@@ -33,7 +33,7 @@ func (p *awsProvider) authorizeRoleIdentityCenter(
 	}
 
 	// 2. Find or create a Permission Set based on the role
-	permissionSetArn, err := p.findOrCreatePermissionSet(ctx, instanceArn, user, role)
+	permissionSetArn, err := p.findOrCreatePermissionSet(ctx, instanceArn, role)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find or create permission set: %w", err)
 	}
@@ -76,8 +76,8 @@ func (p *awsProvider) getIdentityCenterInstance(ctx context.Context) (string, er
 }
 
 // findOrCreatePermissionSet finds an existing permission set or creates a new one
-func (p *awsProvider) findOrCreatePermissionSet(ctx context.Context, instanceArn string, user *models.User, role *models.Role) (string, error) {
-	permissionSetName := role.GetUniqueIdentifier(user)
+func (p *awsProvider) findOrCreatePermissionSet(ctx context.Context, instanceArn string, role *models.Role) (string, error) {
+	permissionSetName := role.GetIdentifier()
 
 	// First, try to find existing permission set
 	resp, err := p.ssoAdminService.ListPermissionSets(ctx, &ssoadmin.ListPermissionSetsInput{
@@ -434,7 +434,7 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models
 	}
 
 	// 2. Find the Permission Set
-	permissionSetArn, err := p.findPermissionSetByName(ctx, instanceArn, role.GetUniqueIdentifier(user))
+	permissionSetArn, err := p.findPermissionSetByName(ctx, instanceArn, role.GetIdentifier())
 	if err != nil {
 		return fmt.Errorf("failed to find permission set: %w in region: %s", err, p.GetRegion())
 	}

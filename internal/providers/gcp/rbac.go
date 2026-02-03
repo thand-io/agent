@@ -100,7 +100,7 @@ func (p *gcpProvider) AuthorizeRole(
 	// If permissions are specified, create a custom role with those permissions
 	if len(role.Permissions.Allow) > 0 {
 		// Check if the custom role already exists
-		customRoleName := role.GetUniqueIdentifier(user)
+		customRoleName := role.GetIdentifier()
 		existingRole, err := p.getRole(projectId, customRoleName)
 		if err != nil {
 			// If role doesn't exist, create it

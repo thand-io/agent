@@ -4,6 +4,7 @@ package config
 
 import (
 	"fmt"
+	"hash/fnv"
 	"reflect"
 	"slices"
 	"sort"
@@ -12,6 +13,7 @@ import (
 	"github.com/blevesearch/bleve/v2"
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
+	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/config/environment"
 	"github.com/thand-io/agent/internal/models"
 )
@@ -156,7 +158,7 @@ func (c *Config) ApplyRoles(foundRoles []*models.RoleDefinitions) (map[string]mo
 				r.Version = role.Version
 			}
 
-			r.Identifier = roleKey
+			r.Identifier = common.ConvertToSnakeCase(roleKey)
 
 			if len(r.Name) == 0 {
 				r.Name = roleKey
@@ -338,6 +340,9 @@ func (c *Config) resolveCompositeRole(identity *models.Identity, baseRole *model
 		return &compositeRole, nil
 	}
 
+	// Track whether this role inherits from thand roles (not just provider roles)
+	hasThandRoleInheritance := false
+
 	// Process inherited roles
 	remainingInherits := make([]string, 0, numInherits)
 	for _, inheritedRoleName := range baseRole.Inherits {
@@ -398,10 +403,53 @@ func (c *Config) resolveCompositeRole(identity *models.Identity, baseRole *model
 
 		// Merge inherited role into composite
 		c.mergeRole(&compositeRole, inheritedRole)
+		// Mark that we inherited from a thand role (not a provider role)
+		hasThandRoleInheritance = true
 	}
 
 	compositeRole.Inherits = remainingInherits
 	c.resolvePermissionConflicts(&compositeRole)
+
+	// Mark as composite and update identifier if it inherited thand roles
+	if hasThandRoleInheritance {
+		compositeRole.Composite = true
+		// Extract user from identity (handles nil identity gracefully)
+		var user *models.User
+		if identity != nil {
+			user = identity.GetUser()
+		}
+
+		// Create a unique identifier hash based on role identifier and user context
+		if user == nil {
+			// create unknown identifier for nil user
+			user = &models.User{}
+		}
+
+		userIdentity := user.GetIdentity()
+
+		// Build the composite identifier
+		versionStr := "1.0.0"
+		if baseRole.Version != nil {
+			versionStr = baseRole.Version.String()
+		}
+
+		// Combine all components to create a unique identifier
+		composite := fmt.Sprintf("%s:%s:%s:%s", baseRole.Identifier, versionStr, baseRole.Name, userIdentity)
+
+		// Create FNV-1a hash (non-cryptographic, fast, 6 hex chars)
+		h := fnv.New32a()
+		h.Write([]byte(composite))
+		newIdentifier := fmt.Sprintf("%s-%06x", baseRole.GetIdentifier(), h.Sum32()&0xFFFFFF)
+
+		// Update identifier to make it unique for this composite role instance
+		compositeRole.Identifier = newIdentifier
+
+		// Log the identifier change for debugging
+		log.WithFields(logrus.Fields{
+			"original_identifier": baseRole.Identifier,
+			"new_identifier":      compositeRole.Identifier,
+		}).Debugln("Marked role as composite and updated identifier")
+	}
 
 	// Validate composite role limits after merging
 	if err := validateRoleLimits(compositeRole.Name, &compositeRole); err != nil {

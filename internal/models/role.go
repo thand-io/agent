@@ -3,7 +3,6 @@ package models
 import (
 	"encoding/json"
 	"fmt"
-	"hash/fnv"
 	"strings"
 
 	"github.com/hashicorp/go-version"
@@ -13,7 +12,7 @@ import (
 
 type Role struct {
 	Version     *version.Version `json:"version,omitempty"`
-	Identifier  string           `json:"-"`
+	Identifier  string           `json:"identifier"`
 	Name        string           `json:"name" validate:"required,min=1,max=100"`
 	Description string           `json:"description" validate:"max=500"`
 
@@ -26,7 +25,8 @@ type Role struct {
 
 	Scopes RoleScopes `json:"scopes"` // scope of who can be assigned this role
 
-	Enabled bool `json:"enabled" default:"true"` // By default enable the role
+	Composite bool `json:"composite" default:"false"` // Whether this role is a composite role (i.e., aggregates other roles)
+	Enabled   bool `json:"enabled" default:"true"`    // By default enable the role
 }
 
 // UnmarshalJSON provides backwards compatibility for Role.
@@ -41,8 +41,8 @@ func (r *Role) UnmarshalJSON(data []byte) error {
 	aux := &struct {
 		*RoleAlias
 		// Deprecated fields for backwards compatibility
-		Groups    RoleGroups    `json:"groups"`
-		Resources RoleResources `json:"resources"`
+		Groups    *RoleGroups    `json:"groups,omitempty"`
+		Resources *RoleResources `json:"resources,omitempty"`
 	}{
 		RoleAlias: (*RoleAlias)(r),
 	}
@@ -51,23 +51,28 @@ func (r *Role) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("failed to unmarshal role: %w", err)
 	}
 
+	if aux == nil {
+		logrus.Debugln("Role.UnmarshalJSON: aux is nil")
+		return fmt.Errorf("failed to unmarshal role: aux is nil")
+	}
+
 	// Migrate deprecated Groups and Resources to Permissions Targets
 	// Collect all targets from deprecated fields
 	var allowTargets, denyTargets []string
 
 	// Add Groups.Allow and Resources.Allow to allowTargets
-	if aux.Groups.Allow != nil {
+	if aux.Groups != nil && aux.Groups.Allow != nil {
 		allowTargets = append(allowTargets, aux.Groups.Allow...)
 	}
-	if aux.Resources.Allow != nil {
+	if aux.Resources != nil && aux.Resources.Allow != nil {
 		allowTargets = append(allowTargets, aux.Resources.Allow...)
 	}
 
 	// Add Groups.Deny and Resources.Deny to denyTargets
-	if aux.Groups.Deny != nil {
+	if aux.Groups != nil && aux.Groups.Deny != nil {
 		denyTargets = append(denyTargets, aux.Groups.Deny...)
 	}
-	if aux.Resources.Deny != nil {
+	if aux.Resources != nil && aux.Resources.Deny != nil {
 		denyTargets = append(denyTargets, aux.Resources.Deny...)
 	}
 
@@ -194,34 +199,6 @@ func (r *Role) GetIdentifier() string {
 
 func (r *Role) GetName() string {
 	return r.Name
-}
-
-// GetUniqueIdentifier returns a unique identifier for the role.
-// This generates a unique identifier based on the role identifier and user context.
-// This includes the version, user identifier and role name to ensure uniqueness across different users and role versions.
-func (r *Role) GetUniqueIdentifier(user *User) string {
-
-	// Create a unique identifier hash based on role identifier and user context
-	if user == nil {
-		// create unknown identifier for nil user
-		user = &User{}
-	}
-
-	userIdentity := user.GetIdentity()
-
-	// Build the composite identifier
-	versionStr := ""
-	if r.Version != nil {
-		versionStr = r.Version.String()
-	}
-
-	// Combine all components to create a unique identifier
-	composite := fmt.Sprintf("%s:%s:%s:%s", r.Identifier, versionStr, r.Name, userIdentity)
-
-	// Create FNV-1a hash (non-cryptographic, fast, 6 hex chars)
-	h := fnv.New32a()
-	h.Write([]byte(composite))
-	return fmt.Sprintf("%s-%06x", r.GetSnakeCaseName(), h.Sum32()&0xFFFFFF)
 }
 
 func (r *Role) GetSnakeCaseName() string {

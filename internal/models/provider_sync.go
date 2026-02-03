@@ -401,6 +401,13 @@ func PatchProviderUpstream(
 		}
 	}
 
+	if len(providerReq.Identities) == 0 && len(providerReq.Roles) == 0 &&
+		len(providerReq.Permissions) == 0 && len(providerReq.Resources) == 0 &&
+		len(providerReq.Tenants) == 0 {
+		logrus.Debugln("No synchronization data to send to upstream")
+		return nil
+	}
+
 	data, err := json.Marshal(providerReq)
 
 	if err == nil && len(data) > 0 && upstream != nil {

@@ -66,7 +66,8 @@ func TestGetCompositeRole(t *testing.T) {
 					Allow: stmts("read"),
 					Deny:  stmts("delete"),
 				},
-				Enabled: true,
+				Enabled:   true,
+				Composite: false, // No inheritance, not composite
 			},
 			expectError: false,
 		},
@@ -122,7 +123,8 @@ func TestGetCompositeRole(t *testing.T) {
 					},
 					Deny: stmts("admin"),
 				},
-				Enabled: true,
+				Enabled:   true,
+				Composite: true, // Inherits from thand role, should be composite
 			},
 			expectError: false,
 		},
@@ -174,6 +176,7 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 				Workflows: []string{"admin-workflow"}, // Only the role's own workflows, not inherited
 				Enabled:   true,
+				Composite: true, // Inherits from thand roles, should be composite
 			},
 			expectError: false,
 		},
@@ -218,7 +221,8 @@ func TestGetCompositeRole(t *testing.T) {
 				Permissions: models.RolePermissions{
 					Allow: stmts("read", "special"),
 				},
-				Enabled: true,
+				Enabled:   true,
+				Composite: true, // Inherits from thand role, should be composite
 			},
 			expectError: false,
 		},
@@ -369,7 +373,8 @@ func TestGetCompositeRole(t *testing.T) {
 				Permissions: models.RolePermissions{
 					Allow: stmts("group-action", "user-action"), // sorted alphabetically
 				},
-				Enabled: true,
+				Enabled:   true,
+				Composite: true, // Inherits from thand role, should be composite
 			},
 			expectError: false,
 		},
@@ -408,6 +413,14 @@ func TestGetCompositeRole(t *testing.T) {
 			assert.Equal(t, tt.expected.Name, result.Name)
 			assert.Equal(t, tt.expected.Description, result.Description)
 			assert.Equal(t, tt.expected.Enabled, result.Enabled)
+			assert.Equal(t, tt.expected.Composite, result.Composite, "Composite field mismatch")
+
+			// If role is composite, verify identifier was updated
+			if result.Composite {
+				assert.NotEmpty(t, result.Identifier, "Composite role should have non-empty identifier")
+				// Verify identifier includes hash (has "-" separator)
+				assert.Contains(t, result.Identifier, "-", "Composite role identifier should include hash")
+			}
 
 			// Compare permissions (order doesn't matter)
 			assert.ElementsMatch(t, tt.expected.Permissions.Allow, result.Permissions.Allow)
