@@ -145,6 +145,13 @@ func preRunConfigE(cmd *cobra.Command, mode config.Mode) error {
 			logrus.WithError(err).Errorln("Failed to register with Thand server")
 		}
 
+		// Reload services after registration
+		err = cfg.ReloadServices()
+
+		if err != nil {
+			logrus.WithError(err).Errorln("Failed to reload services after Thand server registration")
+		}
+
 		// Now we can initalize our providers
 		err = cfg.InitializeProviders()
 		if err != nil {

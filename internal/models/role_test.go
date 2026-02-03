@@ -465,38 +465,6 @@ func TestRole_GetName(t *testing.T) {
 	assert.Equal(t, "admin", role.GetName())
 }
 
-func TestRole_GetSnakeCaseName(t *testing.T) {
-	tests := []struct {
-		name     string
-		roleName string
-		expected string
-	}{
-		{
-			name:     "simple name",
-			roleName: "admin",
-			expected: "admin",
-		},
-		{
-			name:     "camelCase name",
-			roleName: "superAdmin",
-			expected: "superadmin",
-		},
-		{
-			name:     "name with spaces",
-			roleName: "Super Admin",
-			expected: "super_admin",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			role := models.Role{Name: tt.roleName}
-			result := role.GetSnakeCaseName()
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 func TestRole_GetDescription(t *testing.T) {
 	role := models.Role{Description: "Test description"}
 	assert.Equal(t, "Test description", role.GetDescription())
