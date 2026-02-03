@@ -340,11 +340,17 @@ func (e *localClient) ReloadPublicKeyInfrastructure() error {
 		e.mu.Unlock()
 	}
 
+	// Fist check that we have encryption and vault services available
+	if !e.HasEncryption() || !e.HasVault() {
+		logrus.Infof("Skipping public key infrastructure initialization as encryption or vault service is not available")
+		return nil
+	}
+
 	logrus.Infof("Initializing public key infrastructure...")
 
 	pkiService := e.configurePublicKeyInfrastructure()
 	if pkiService != nil {
-		if err := pkiService.Initialize(e.encrypt, e.vault); err != nil {
+		if err := pkiService.Initialize(e.GetEncryption(), e.GetVault()); err != nil {
 			logrus.Errorf("Error initializing public key infrastructure: %v", err)
 			return err
 		} else {

@@ -13,6 +13,7 @@ import (
 	"github.com/thand-io/agent/internal/models"
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	runner "github.com/thand-io/agent/sdk/workflows/runner"
 )
 
@@ -200,7 +201,7 @@ func (t *thandTask) executeFormTask(
 		formEvent.DataAs(&formData)
 		extensions := formEvent.Extensions()
 
-		userIdentity, userExists := extensions[models.VarsContextUser].(string)
+		userIdentity, userExists := extensions[sdkConstants.VarsContextUser].(string)
 		if userExists {
 			log.WithFields(logrus.Fields{
 				"taskName": taskName,

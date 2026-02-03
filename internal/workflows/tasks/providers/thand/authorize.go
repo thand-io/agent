@@ -276,7 +276,7 @@ func (t *thandTask) executeAuthorization(
 		return nil, fmt.Errorf("failed to schedule revocation: %w", err)
 	}
 
-	workflowTask.SetContextKeyValue(models.VarsContextApproved, true)
+	workflowTask.SetContextKeyValue(sdkConstants.VarsContextApproved, true)
 	workflowTask.SetContextKeyValue("authorizations", authorizations)
 
 	if authorizeCallTask.HasNotifiers() {

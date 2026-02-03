@@ -12,6 +12,7 @@ import (
 	"github.com/thand-io/agent/internal/models"
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	runner "github.com/thand-io/agent/sdk/workflows/runner"
 )
 
@@ -189,7 +190,7 @@ func (t *thandTask) executeApprovalsTask(
 		approvalEvent.DataAs(&approvalData)
 		extensions := approvalEvent.Extensions()
 
-		approverIdentityID, userExists := extensions[models.VarsContextUser].(string)
+		approverIdentityID, userExists := extensions[sdkConstants.VarsContextUser].(string)
 
 		if !userExists {
 			logrus.Warn("Approval event missing user extension")
@@ -316,7 +317,7 @@ func (t *thandTask) executeApprovalsTask(
 					"approverUser": approverUser.String(),
 				}).Info("Approval denied by user")
 
-				workflowTask.SetContextKeyValue(models.VarsContextApproved, false)
+				workflowTask.SetContextKeyValue(sdkConstants.VarsContextApproved, false)
 			}
 		}
 	}

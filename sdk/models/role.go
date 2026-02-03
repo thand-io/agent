@@ -20,3 +20,9 @@ type RoleScopes = internal.RoleScopes
 
 // RoleResources defines resource-based access controls with allow and deny lists.
 type RoleResources = internal.RoleResources
+
+// RoleStatements defines a set of statements that make up the role's access control policies.
+type RoleStatements = internal.RoleStatements
+
+// RoleStatement defines a single statement within a role's access control policies.
+type RoleStatement = internal.Statement

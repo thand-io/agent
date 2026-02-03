@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
@@ -233,7 +234,7 @@ func (s *Server) cancelRunningWorkflow(c *gin.Context) {
 
 	// Check if the workflow is owned by the user
 
-	ownerEmail, foundUser := workflowRun.TypedSearchAttributes.GetKeyword(models.TypedSearchAttributeUser)
+	ownerEmail, foundUser := workflowRun.TypedSearchAttributes.GetKeyword(sdkConstants.TypedSearchAttributeUser)
 
 	if !foundUser {
 		s.getErrorPage(c, http.StatusForbidden, "Unable to determine owner of workflow", nil)

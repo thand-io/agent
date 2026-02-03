@@ -16,6 +16,7 @@ import (
 	"github.com/thand-io/agent/internal/daemon/elevate/llm"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/workflows/manager"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
 // getElevate handles GET /api/v1/elevate?role=admin&target=server&reason=maintenance
@@ -525,7 +526,7 @@ func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.ElevateWorkflow
 	if event != nil {
 
 		// Extensions only support basic types so we need to set the user identity as a string
-		event.SetExtension(models.VarsContextUser, foundUser.User.GetIdentity())
+		event.SetExtension(sdkConstants.VarsContextUser, foundUser.User.GetIdentity())
 
 		if len(event.FieldErrors) > 0 {
 			logrus.WithField("errors", event.FieldErrors).

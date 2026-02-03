@@ -119,12 +119,12 @@ func (s *Server) listRunningWorkflows(c *gin.Context) {
 		}
 
 		// Check if the 'user' search attribute exists (required for the query)
-		if _, exists := searchAttrsResp.GetKeys()[models.VarsContextUser]; !exists {
+		if _, exists := searchAttrsResp.GetKeys()[sdkConstants.VarsContextUser]; !exists {
 			errorMsg := fmt.Sprintf(
 				"Required search attribute '%s' is not configured in Temporal namespace '%s'. "+
 					"Please configure search attributes before listing workflows. "+
 					"See documentation: https://docs.thand.io/configuration/temporal.html",
-				models.VarsContextUser,
+				sdkConstants.VarsContextUser,
 				temporalService.GetNamespace(),
 			)
 			s.getErrorPage(c, http.StatusPreconditionFailed, errorMsg, nil)
@@ -437,14 +437,14 @@ func (s *Server) workflowExecutionInfo(
 	// Safely extract search attributes with proper type conversion
 	dataConverter := converter.GetDefaultDataConverter()
 
-	if userAttr, exists := searchAttributes[models.VarsContextUser]; exists && userAttr != nil {
+	if userAttr, exists := searchAttributes[sdkConstants.VarsContextUser]; exists && userAttr != nil {
 		var userValue string
 		if err := dataConverter.FromPayload(userAttr, &userValue); err == nil {
 			response.User = userValue
 		}
 	}
 
-	if roleAttr, exists := searchAttributes[models.VarsContextRole]; exists && roleAttr != nil {
+	if roleAttr, exists := searchAttributes[sdkConstants.VarsContextRole]; exists && roleAttr != nil {
 		var roleValue string
 		if err := dataConverter.FromPayload(roleAttr, &roleValue); err == nil {
 			response.Role = roleValue
@@ -460,14 +460,14 @@ func (s *Server) workflowExecutionInfo(
 		}
 	}
 
-	if approvedAttr, exists := searchAttributes[models.VarsContextApproved]; exists && approvedAttr != nil {
+	if approvedAttr, exists := searchAttributes[sdkConstants.VarsContextApproved]; exists && approvedAttr != nil {
 		var approvedValue bool
 		if err := dataConverter.FromPayload(approvedAttr, &approvedValue); err == nil {
 			response.Approved = &approvedValue
 		}
 	}
 
-	if workflowAttr, exists := searchAttributes[models.VarsContextWorkflow]; exists && workflowAttr != nil {
+	if workflowAttr, exists := searchAttributes[sdkConstants.VarsContextWorkflow]; exists && workflowAttr != nil {
 		var workflowValue string
 		if err := dataConverter.FromPayload(workflowAttr, &workflowValue); err == nil {
 			response.Workflow = workflowValue
@@ -604,7 +604,7 @@ func (s *Server) signalRunningWorkflow(c *gin.Context) {
 	}
 
 	// Extensions only support basic types so we need to set the user identity as a string
-	signal.SetExtension(models.VarsContextUser, foundUser.User.GetIdentity())
+	signal.SetExtension(sdkConstants.VarsContextUser, foundUser.User.GetIdentity())
 
 	if len(signal.FieldErrors) > 0 {
 		logrus.WithField("errors", signal.FieldErrors).
@@ -697,7 +697,7 @@ func (s *Server) approveRunningWorkflow(c *gin.Context) {
 	event.SetData(cloudevents.ApplicationJSON, map[string]any{"approved": approved})
 
 	// Attach user identity as extension
-	event.SetExtension(models.VarsContextUser, foundUser.User.GetIdentity())
+	event.SetExtension(sdkConstants.VarsContextUser, foundUser.User.GetIdentity())
 
 	// If Temporal is available signal directly
 	serviceClient := s.Config.GetServices()

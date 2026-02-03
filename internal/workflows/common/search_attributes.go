@@ -3,6 +3,7 @@ package common
 import (
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -23,14 +24,14 @@ func UpdateSearchAttributes(
 	ctx := workflowTask.GetTemporalContext()
 
 	updates := []temporal.SearchAttributeUpdate{
-		models.TypedSearchAttributeStatus.ValueSet(string(elevateWorkflowTask.GetStatus())),
+		sdkConstants.TypedSearchAttributeStatus.ValueSet(string(elevateWorkflowTask.GetStatus())),
 	}
 
 	isApproved := elevateWorkflowTask.IsApproved()
 
 	if isApproved != nil {
 		updates = append(updates,
-			models.TypedSearchAttributeApproved.ValueSet(*isApproved),
+			sdkConstants.TypedSearchAttributeApproved.ValueSet(*isApproved),
 		)
 	}
 
@@ -38,7 +39,7 @@ func UpdateSearchAttributes(
 
 	if currentTask != nil && len(currentTask.Key) > 0 {
 		updates = append(updates,
-			models.TypedSearchAttributeTask.ValueSet(currentTask.Key),
+			sdkConstants.TypedSearchAttributeTask.ValueSet(currentTask.Key),
 		)
 	}
 
@@ -52,31 +53,31 @@ func UpdateSearchAttributes(
 
 		if elevationRequest.User != nil && len(elevationRequest.User.Email) > 0 {
 			updates = append(updates,
-				models.TypedSearchAttributeUser.ValueSet(elevationRequest.User.Email),
+				sdkConstants.TypedSearchAttributeUser.ValueSet(elevationRequest.User.Email),
 			)
 		}
 
 		if len(elevationRequest.Role.Name) > 0 {
 			updates = append(updates,
-				models.TypedSearchAttributeRole.ValueSet(elevationRequest.Role.Name),
+				sdkConstants.TypedSearchAttributeRole.ValueSet(elevationRequest.Role.Name),
 			)
 		}
 
 		if len(elevationRequest.Workflow) > 0 {
 			updates = append(updates,
-				models.TypedSearchAttributeWorkflow.ValueSet(elevationRequest.Workflow),
+				sdkConstants.TypedSearchAttributeWorkflow.ValueSet(elevationRequest.Workflow),
 			)
 		}
 
 		if len(elevationRequest.Providers) > 0 {
 			updates = append(updates,
-				models.TypedSearchAttributeProviders.ValueSet(elevationRequest.Providers),
+				sdkConstants.TypedSearchAttributeProviders.ValueSet(elevationRequest.Providers),
 			)
 		}
 
 		if len(elevationRequest.Identities) > 0 {
 			updates = append(updates,
-				models.TypedSearchAttributeIdentities.ValueSet(elevationRequest.Identities),
+				sdkConstants.TypedSearchAttributeIdentities.ValueSet(elevationRequest.Identities),
 			)
 		}
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/thand-io/agent/internal/providers/aws"
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
@@ -825,7 +826,7 @@ func TestExecuteApprovalsTask_ProcessEvent(t *testing.T) {
 	event := cloudevents.NewEvent()
 	event.SetType(ThandApprovalEventType)
 	event.SetSource("test-source")
-	event.SetExtension(models.VarsContextUser, approverID)
+	event.SetExtension(sdkConstants.VarsContextUser, approverID)
 	event.SetData(cloudevents.ApplicationJSON, map[string]any{
 		"approved": true,
 	})
@@ -902,7 +903,7 @@ func TestExecuteApprovalsTask_SelfApprovalDenied(t *testing.T) {
 	event := cloudevents.NewEvent()
 	event.SetType(ThandApprovalEventType)
 	event.SetSource("test-source")
-	event.SetExtension(models.VarsContextUser, requesterID)
+	event.SetExtension(sdkConstants.VarsContextUser, requesterID)
 	event.SetData(cloudevents.ApplicationJSON, map[string]any{"approved": true})
 
 	taskHandler := &thandTask{config: cfg}
@@ -979,7 +980,7 @@ func TestExecuteApprovalsTask_NonExistentIdentity(t *testing.T) {
 	event := cloudevents.NewEvent()
 	event.SetType(ThandApprovalEventType)
 	event.SetSource("test-source")
-	event.SetExtension(models.VarsContextUser, approverID)
+	event.SetExtension(sdkConstants.VarsContextUser, approverID)
 	event.SetData(cloudevents.ApplicationJSON, map[string]any{
 		"approved": true,
 	})
@@ -1069,7 +1070,7 @@ func TestExecuteApprovalsTask_Denial(t *testing.T) {
 	event := cloudevents.NewEvent()
 	event.SetType(ThandApprovalEventType)
 	event.SetSource("test-source")
-	event.SetExtension(models.VarsContextUser, approverID)
+	event.SetExtension(sdkConstants.VarsContextUser, approverID)
 	event.SetData(cloudevents.ApplicationJSON, map[string]any{
 		"approved": false,
 	})
@@ -1175,7 +1176,7 @@ func TestExecuteApprovalsTask_ApprovalThenDenial(t *testing.T) {
 	event := cloudevents.NewEvent()
 	event.SetType(ThandApprovalEventType)
 	event.SetSource("test-source")
-	event.SetExtension(models.VarsContextUser, approver2ID)
+	event.SetExtension(sdkConstants.VarsContextUser, approver2ID)
 	event.SetData(cloudevents.ApplicationJSON, map[string]any{
 		"approved": false,
 	})
