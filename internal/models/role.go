@@ -201,10 +201,6 @@ func (r *Role) GetName() string {
 	return r.Name
 }
 
-func (r *Role) GetSnakeCaseName() string {
-	return common.ConvertToSnakeCase(r.Name)
-}
-
 func (r *Role) GetDescription() string {
 	return r.Description
 }

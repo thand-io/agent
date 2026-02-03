@@ -212,7 +212,7 @@ func TestAWSProviderFunctional(t *testing.T) {
 		require.True(t, ok, "Provider should implement GetIamClient method")
 		iamClient := iamClientProvider.GetIamClient()
 
-		roleName := testRole.GetUniqueIdentifier(testUser) // "test_role"
+		roleName := testRole.GetIdentifier() // "test_role"
 
 		// Verify role doesn't exist initially
 		assert.False(t, roleExists(iamClient, roleName), "Role should not exist initially")
