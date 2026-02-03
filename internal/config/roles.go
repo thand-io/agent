@@ -439,7 +439,9 @@ func (c *Config) resolveCompositeRole(identity *models.Identity, baseRole *model
 		// Create FNV-1a hash (non-cryptographic, fast, 6 hex chars)
 		h := fnv.New32a()
 		h.Write([]byte(composite))
-		newIdentifier := fmt.Sprintf("%s-%06x", baseRole.GetIdentifier(), h.Sum32()&0xFFFFFF)
+
+		// Conform to snake_case for consistency
+		newIdentifier := fmt.Sprintf("%s_%06x", baseRole.GetIdentifier(), h.Sum32()&0xFFFFFF)
 
 		// Update identifier to make it unique for this composite role instance
 		compositeRole.Identifier = newIdentifier

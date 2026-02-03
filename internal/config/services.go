@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/config/services"
 	"github.com/thand-io/agent/internal/models"
@@ -23,5 +24,22 @@ func (c *Config) GetServices() models.ServicesClientImpl {
 	})
 
 	return c.servicesClient
+
+}
+
+func (c *Config) ReloadServices() error {
+
+	if c.GetServices() != nil && c.GetServices().GetTemporal() != nil {
+
+		logrus.Infoln("Setting up temporal services...")
+		err := c.setupTemporalServices()
+
+		if err != nil {
+			return fmt.Errorf("setting up temporal services: %w", err)
+		}
+
+	}
+
+	return nil
 
 }

@@ -333,22 +333,6 @@ func setupLogging(config *Config, v *viper.Viper) error {
 	return nil
 }
 
-func (c *Config) ReloadServices() error {
-
-	if c.GetServices() != nil && c.GetServices().GetTemporal() != nil {
-
-		logrus.Infoln("Setting up temporal services...")
-		err := c.setupTemporalServices()
-
-		if err != nil {
-			return fmt.Errorf("setting up temporal services: %w", err)
-		}
-
-	}
-
-	return nil
-
-}
 
 func (c *Config) ReloadConfig() error {
 	var wg sync.WaitGroup
@@ -540,12 +524,6 @@ func (c *Config) SyncWithLoginServer() error {
 
 	if err != nil {
 		logrus.WithError(err).Errorln("Failed to sync configuration with login server")
-	}
-
-	err = c.ReloadServices()
-
-	if err != nil {
-		logrus.WithError(err).Errorln("Failed to reload services after login server sync")
 	}
 
 	// Now lets initialize our providers
@@ -758,6 +736,12 @@ func (c *Config) syncWithEndpoint(loginUrl string, authentication *model.Referen
 			c.mu.Lock()
 			c.Services.Temporal = registrationResponse.Services.Temporal
 			c.mu.Unlock()
+
+			// Check if temporal is enabled and if so shutdown any existing client
+			err := c.GetServices().ReloadTemporal()
+			if err != nil {
+				return nil, fmt.Errorf("reloading temporal service: %w", err)
+			}
 		}
 	}
 

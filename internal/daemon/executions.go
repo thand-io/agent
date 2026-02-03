@@ -108,6 +108,29 @@ func (s *Server) listRunningWorkflows(c *gin.Context) {
 	})
 
 	if err != nil {
+
+		// Validate that required search attributes are configured
+		searchAttrsResp, searchErr := temporalClient.WorkflowService().
+			GetSearchAttributes(ctx, &workflowservice.GetSearchAttributesRequest{})
+
+		if searchErr != nil {
+			s.getErrorPage(c, http.StatusInternalServerError, "Failed to retrieve search attributes from Temporal", searchErr)
+			return
+		}
+
+		// Check if the 'user' search attribute exists (required for the query)
+		if _, exists := searchAttrsResp.GetKeys()[models.VarsContextUser]; !exists {
+			errorMsg := fmt.Sprintf(
+				"Required search attribute '%s' is not configured in Temporal namespace '%s'. "+
+					"Please configure search attributes before listing workflows. "+
+					"See documentation: https://docs.thand.io/configuration/temporal.html",
+				models.VarsContextUser,
+				temporalService.GetNamespace(),
+			)
+			s.getErrorPage(c, http.StatusPreconditionFailed, errorMsg, nil)
+			return
+		}
+
 		s.getErrorPage(c, http.StatusInternalServerError, "Failed to list workflows", err)
 		return
 	}
