@@ -114,10 +114,10 @@ func (s *Server) GetTemplateData(c *gin.Context) TemplateData {
 
 	if s.Config.IsServer() {
 
-		provider, session, err := s.getUser(c)
+		provider, foundSession, err := s.getSession(c)
 
 		if err == nil {
-			foundUser = session.User
+			foundUser = foundSession.User
 			foundProvider = provider
 		}
 
@@ -419,6 +419,7 @@ func (s *Server) setupRoutes(router *gin.Engine) {
 
 		api.GET("/logs", s.getLogsPage)
 		api.GET("/sessions", s.getSessions)
+		api.GET("/whoami", s.getWhoami)
 
 		// Agent endpoints
 		if s.Config.IsAgent() || s.Config.IsClient() {

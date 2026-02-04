@@ -139,7 +139,7 @@ func (s *Server) getFormPage(c *gin.Context) {
 		return
 	}
 
-	_, _, err := s.getUser(c)
+	_, _, err := s.getSession(c)
 	if err != nil {
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: please log in to access this form", err)
 		return
@@ -188,7 +188,7 @@ func (s *Server) submitForm(c *gin.Context) {
 		return
 	}
 
-	_, foundUser, err := s.getUser(c)
+	_, foundUser, err := s.getSession(c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, FormSubmissionResponse{
 			Success: false,

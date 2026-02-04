@@ -49,7 +49,7 @@ func (s *Server) getWorkflows(c *gin.Context) {
 	// This is because roles can contain sensitive information
 	// and we want to ensure that only authenticated users can access them
 	if s.Config.IsServer() {
-		_, foundUser, err := s.getUser(c)
+		_, foundUser, err := s.getSession(c)
 		if err != nil {
 			s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of available workflows", err)
 			return
@@ -209,7 +209,7 @@ func (s *Server) cancelRunningWorkflow(c *gin.Context) {
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to cancel workflow", nil)
 	}
 
-	_, authenticatedUser, err := s.getUser(c)
+	_, foundSession, err := s.getSession(c)
 	if err != nil {
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for terminating workflow", err)
 		return
@@ -240,7 +240,7 @@ func (s *Server) cancelRunningWorkflow(c *gin.Context) {
 		return
 	}
 
-	if strings.Compare(ownerEmail, authenticatedUser.User.Email) != 0 {
+	if strings.Compare(ownerEmail, foundSession.User.Email) != 0 {
 		s.getErrorPage(c, http.StatusForbidden, "You do not have permission to terminate this workflow", nil)
 		return
 	}

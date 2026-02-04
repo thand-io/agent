@@ -322,6 +322,11 @@ func (c *Config) resolveCompositeRole(identity *models.Identity, baseRole *model
 	visited[baseRole.Name] = true
 	defer delete(visited, baseRole.Name)
 
+	// Check if the base role is applicable to the identity
+	if identity != nil && !c.isRoleApplicableToIdentity(baseRole, identity) {
+		return nil, fmt.Errorf("role '%s' not applicable to identity", baseRole.Name)
+	}
+
 	log := logrus.WithField("role", baseRole.Name)
 	log.Debugln("Resolving composite role")
 
@@ -452,14 +457,15 @@ func (c *Config) isRoleApplicableToIdentity(role *models.Role, identity *models.
 			return false
 		}
 
-		// Check user scopes (identity, email, username, ID)
+		// Check user scopes (identity, email, username, ID, name)
 		if len(role.Scopes.Users) > 0 {
 			userIdentity := user.GetIdentity()
 			for _, allowed := range role.Scopes.Users {
 				if strings.EqualFold(allowed, userIdentity) ||
 					strings.EqualFold(allowed, user.Email) ||
 					strings.EqualFold(allowed, user.Username) ||
-					strings.EqualFold(allowed, user.ID) {
+					strings.EqualFold(allowed, user.ID) ||
+					strings.EqualFold(allowed, user.Name) {
 					return true
 				}
 			}

@@ -12,7 +12,9 @@ import (
 
 // SynchronizeUsers fetches and caches user identities from Okta
 func (p *oktaProvider) SynchronizeUsers(ctx context.Context, req *models.SynchronizeUsersRequest) (*models.SynchronizeUsersResponse, error) {
+
 	startTime := time.Now()
+
 	defer func() {
 		elapsed := time.Since(startTime)
 		logrus.Debugf("Refreshed Okta user identities in %s", elapsed)
@@ -20,7 +22,9 @@ func (p *oktaProvider) SynchronizeUsers(ctx context.Context, req *models.Synchro
 
 	if req.Pagination == nil {
 		req.Pagination = &models.PaginationOptions{
-			PageSize: 100,
+			// Low pagination size as we have to get groups for each user later
+			// and if we fail we have to re-query all the users again
+			PageSize: 5,
 		}
 	}
 
@@ -38,6 +42,7 @@ func (p *oktaProvider) SynchronizeUsers(ctx context.Context, req *models.Synchro
 	}
 
 	var identities []models.Identity
+
 	for _, user := range users {
 		email := ""
 		name := ""
@@ -57,6 +62,20 @@ func (p *oktaProvider) SynchronizeUsers(ctx context.Context, req *models.Synchro
 			}
 		}
 
+		// Fetch groups for this user
+		groups := []string{}
+		userGroups, _, err := p.client.User.ListUserGroups(ctx, user.Id)
+		if err != nil {
+			logrus.WithFields(logrus.Fields{
+				"user_id":    user.Id,
+				"user_email": email,
+			}).WithError(err).Warn("Failed to fetch groups for user")
+		} else {
+			for _, group := range userGroups {
+				groups = append(groups, group.Profile.Name)
+			}
+		}
+
 		identity := models.Identity{
 			ID:    email,
 			Label: name,
@@ -65,6 +84,7 @@ func (p *oktaProvider) SynchronizeUsers(ctx context.Context, req *models.Synchro
 				Email:  email,
 				Name:   name,
 				Source: "okta",
+				Groups: groups,
 			},
 		}
 
