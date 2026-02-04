@@ -36,3 +36,12 @@ type ProviderPatchRequest = internal.ProviderPatchRequest
 // ProviderDefinitions defines a collection of provider configurations,
 // mapping provider names to their respective configurations.
 type ProviderDefinitions = internal.ProviderDefinitions
+
+// ProvidersResponse represents a response containing multiple providers.
+type ProvidersResponse = internal.ProvidersResponse
+
+// ProviderResponse represents a response containing a single provider.
+type ProviderResponse = internal.ProviderResponse
+
+// ProviderCapabilities defines the capabilities supported by a provider.
+type ProviderCapabilities = internal.ProviderCapabilities
