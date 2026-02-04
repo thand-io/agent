@@ -163,8 +163,8 @@ func (m *WorkflowManager) createTemporalWorkflow(workflowTask sdkWorkflowsModel.
 		ID:        workflowTask.GetWorkflowID(),
 		TaskQueue: temporalService.GetTaskQueue(),
 		TypedSearchAttributes: temporal.NewSearchAttributes(
-			models.TypedSearchAttributeStatus.ValueSet(strings.ToUpper(string(swctx.PendingStatus))),
-			models.TypedSearchAttributeWorkflow.ValueSet(workflowTask.GetName()),
+			sdkConstants.TypedSearchAttributeStatus.ValueSet(strings.ToUpper(string(swctx.PendingStatus))),
+			sdkConstants.TypedSearchAttributeWorkflow.ValueSet(workflowTask.GetName()),
 		),
 	}
 

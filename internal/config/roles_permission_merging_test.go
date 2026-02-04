@@ -9,6 +9,27 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
+// statementsToStrings extracts all operations from Statements as a flat string slice
+func statementsToStrings(stmts models.RoleStatements) []string {
+	var result []string
+	for _, stmt := range stmts {
+		result = append(result, stmt.Operations...)
+	}
+	return result
+}
+
+// statementsContains checks if Statements contains a specific operation string
+func statementsContains(stmts models.RoleStatements, op string) bool {
+	for _, stmt := range stmts {
+		for _, o := range stmt.Operations {
+			if o == op {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // TestPermissionMerging tests how permissions are merged during role inheritance,
 // with specific attention to condensed actions like k8s:pods:get,list,watch
 func TestPermissionMerging(t *testing.T) {
@@ -16,26 +37,26 @@ func TestPermissionMerging(t *testing.T) {
 		roles := map[string]models.Role{
 			"base-reader": {
 				Name: "Base Reader",
-				Permissions: models.Permissions{
-					Allow: []string{
+				Permissions: models.RolePermissions{
+					Allow: stmts(
 						"k8s:pods:get,list",
 						"k8s:services:get,list",
 						"k8s:configmaps:get,list",
 						"k8s:apps/deployments:get,list",
-					},
+					),
 				},
 				Enabled: true,
 			},
 			"enhanced-dev": {
 				Name:     "Enhanced Developer",
 				Inherits: []string{"base-reader"},
-				Permissions: models.Permissions{
-					Allow: []string{
+				Permissions: models.RolePermissions{
+					Allow: stmts(
 						"k8s:pods:create,update,delete",
 						"k8s:services:create,update,delete",
 						"k8s:configmaps:create,update,delete",
 						"k8s:apps/deployments:create,update,patch,delete",
-					},
+					),
 				},
 				Enabled: true,
 			},
@@ -68,10 +89,11 @@ func TestPermissionMerging(t *testing.T) {
 		}
 
 		// Sort both slices for comparison since map iteration order is not guaranteed
-		sort.Strings(result.Permissions.Allow)
+		actualAllow := statementsToStrings(result.Permissions.Allow)
+		sort.Strings(actualAllow)
 		sort.Strings(expectedCondensedBehavior)
 
-		assert.ElementsMatch(t, expectedCondensedBehavior, result.Permissions.Allow,
+		assert.ElementsMatch(t, expectedCondensedBehavior, actualAllow,
 			"Current behavior: permissions are merged and intelligently condensed")
 	})
 
@@ -79,22 +101,22 @@ func TestPermissionMerging(t *testing.T) {
 		roles := map[string]models.Role{
 			"partial-access": {
 				Name: "Partial Access",
-				Permissions: models.Permissions{
-					Allow: []string{
+				Permissions: models.RolePermissions{
+					Allow: stmts(
 						"k8s:pods:get,list,watch",
 						"k8s:services:get",
-					},
+					),
 				},
 				Enabled: true,
 			},
 			"extended-access": {
 				Name:     "Extended Access",
 				Inherits: []string{"partial-access"},
-				Permissions: models.Permissions{
-					Allow: []string{
+				Permissions: models.RolePermissions{
+					Allow: stmts(
 						"k8s:pods:create,update",                 // Overlaps with get,list,watch
 						"k8s:services:list,create,update,delete", // Overlaps with get
-					},
+					),
 				},
 				Enabled: true,
 			},
@@ -124,10 +146,11 @@ func TestPermissionMerging(t *testing.T) {
 			"k8s:services:create,delete,get,list,update", // merged and condensed
 		}
 
-		sort.Strings(result.Permissions.Allow)
+		actualAllow := statementsToStrings(result.Permissions.Allow)
+		sort.Strings(actualAllow)
 		sort.Strings(expectedImprovedBehavior)
 
-		assert.ElementsMatch(t, expectedImprovedBehavior, result.Permissions.Allow,
+		assert.ElementsMatch(t, expectedImprovedBehavior, actualAllow,
 			"New behavior shows intelligent merging of overlapping permissions")
 	})
 
@@ -135,13 +158,13 @@ func TestPermissionMerging(t *testing.T) {
 		roles := map[string]models.Role{
 			"base-role": {
 				Name: "Base Role",
-				Permissions: models.Permissions{
-					Allow: []string{
+				Permissions: models.RolePermissions{
+					Allow: stmts(
 						"k8s:pods:get,list,create,update,delete",
-					},
-					Deny: []string{
+					),
+					Deny: stmts(
 						"k8s:pods:delete", // Should be removed from the condensed allow
-					},
+					),
 				},
 				Enabled: true,
 			},
@@ -167,7 +190,7 @@ func TestPermissionMerging(t *testing.T) {
 
 		// Updated behavior: deny properly removes actions from condensed allow permissions
 		// The "delete" action should be removed from the allow list due to the deny
-		assert.Contains(t, result.Permissions.Allow, "k8s:pods:create,get,list,update")
+		assert.True(t, statementsContains(result.Permissions.Allow, "k8s:pods:create,get,list,update"))
 		assert.Empty(t, result.Permissions.Deny, "Deny permissions should be empty after conflict resolution")
 
 		// This shows the improved behavior: deny intelligently removes
@@ -178,39 +201,39 @@ func TestPermissionMerging(t *testing.T) {
 		roles := map[string]models.Role{
 			"viewer": {
 				Name: "Viewer",
-				Permissions: models.Permissions{
-					Allow: []string{
+				Permissions: models.RolePermissions{
+					Allow: stmts(
 						"k8s:pods:get,list",
 						"k8s:services:get,list",
 						"k8s:events:get,list,watch",
-					},
+					),
 				},
 				Enabled: true,
 			},
 			"editor": {
 				Name:     "Editor",
 				Inherits: []string{"viewer"},
-				Permissions: models.Permissions{
-					Allow: []string{
+				Permissions: models.RolePermissions{
+					Allow: stmts(
 						"k8s:pods:create,update,patch",
 						"k8s:services:create,update,patch",
 						"k8s:configmaps:get,list,create,update,delete",
-					},
+					),
 				},
 				Enabled: true,
 			},
 			"admin": {
 				Name:     "Admin",
 				Inherits: []string{"editor"},
-				Permissions: models.Permissions{
-					Allow: []string{
+				Permissions: models.RolePermissions{
+					Allow: stmts(
 						"k8s:pods:delete",
 						"k8s:services:delete",
 						"k8s:secrets:get,list,create,update,delete",
-					},
-					Deny: []string{
+					),
+					Deny: stmts(
 						"k8s:secrets:delete", // Admin can't delete secrets
-					},
+					),
 				},
 				Enabled: true,
 			},
@@ -243,13 +266,15 @@ func TestPermissionMerging(t *testing.T) {
 			"k8s:secrets:create,get,list,update",               // delete removed by deny
 		}
 
-		sort.Strings(result.Permissions.Allow)
+		actualAllow := statementsToStrings(result.Permissions.Allow)
+		sort.Strings(actualAllow)
 		sort.Strings(expectedImprovedBehavior)
 
-		assert.ElementsMatch(t, expectedImprovedBehavior, result.Permissions.Allow)
+		assert.ElementsMatch(t, expectedImprovedBehavior, actualAllow)
 
 		// Verify deny permissions remain to enforce security policy
-		assert.ElementsMatch(t, []string{"k8s:secrets:delete"}, result.Permissions.Deny, "Explicit deny should remain to enforce security policy")
+		actualDeny := statementsToStrings(result.Permissions.Deny)
+		assert.ElementsMatch(t, []string{"k8s:secrets:delete"}, actualDeny, "Explicit deny should remain to enforce security policy")
 	})
 }
 
@@ -591,24 +616,24 @@ func TestGCPStylePermissionHandling(t *testing.T) {
 		roles := map[string]models.Role{
 			"gcp-viewer": {
 				Name: "GCP Viewer",
-				Permissions: models.Permissions{
-					Allow: []string{
+				Permissions: models.RolePermissions{
+					Allow: stmts(
 						"gcp-prod:compute.instances.list",
 						"gcp-prod:compute.instances.get",
 						"gcp-prod:storage.buckets.list",
-					},
+					),
 				},
 				Enabled: true,
 			},
 			"gcp-admin": {
 				Name:     "GCP Admin",
 				Inherits: []string{"gcp-viewer"},
-				Permissions: models.Permissions{
-					Allow: []string{
+				Permissions: models.RolePermissions{
+					Allow: stmts(
 						"gcp-prod:compute.instances.start",
 						"gcp-prod:compute.instances.stop",
 						"gcp-prod:storage.buckets.create",
-					},
+					),
 				},
 				Enabled: true,
 			},
@@ -642,10 +667,11 @@ func TestGCPStylePermissionHandling(t *testing.T) {
 			"gcp-prod:storage.buckets.list",
 		}
 
-		sort.Strings(result.Permissions.Allow)
+		actualAllow := statementsToStrings(result.Permissions.Allow)
+		sort.Strings(actualAllow)
 		sort.Strings(expectedPermissions)
 
-		assert.ElementsMatch(t, expectedPermissions, result.Permissions.Allow,
+		assert.ElementsMatch(t, expectedPermissions, actualAllow,
 			"GCP permissions should remain atomic and not be condensed")
 	})
 
@@ -653,8 +679,8 @@ func TestGCPStylePermissionHandling(t *testing.T) {
 		roles := map[string]models.Role{
 			"multi-cloud": {
 				Name: "Multi-Cloud Access",
-				Permissions: models.Permissions{
-					Allow: []string{
+				Permissions: models.RolePermissions{
+					Allow: stmts(
 						// GCP permissions (should stay atomic - dots in action)
 						"gcp-prod:compute.instances.list",
 						"gcp-prod:compute.instances.get",
@@ -666,7 +692,7 @@ func TestGCPStylePermissionHandling(t *testing.T) {
 						"ec2:DescribeInstances",
 						"ec2:StartInstances",
 						"s3:GetObject",
-					},
+					),
 				},
 				Enabled: true,
 			},
@@ -691,30 +717,18 @@ func TestGCPStylePermissionHandling(t *testing.T) {
 		require.NotNil(t, result)
 
 		// Verify GCP permissions are atomic
-		assert.Contains(t, result.Permissions.Allow, "gcp-prod:compute.instances.list")
-		assert.Contains(t, result.Permissions.Allow, "gcp-prod:compute.instances.get")
+		assert.True(t, statementsContains(result.Permissions.Allow, "gcp-prod:compute.instances.list"))
+		assert.True(t, statementsContains(result.Permissions.Allow, "gcp-prod:compute.instances.get"))
 
 		// Verify K8s permissions are condensed
-		hasCondensedK8s := false
-		for _, perm := range result.Permissions.Allow {
-			if perm == "k8s:pods:get,list,watch" {
-				hasCondensedK8s = true
-				break
-			}
-		}
+		hasCondensedK8s := statementsContains(result.Permissions.Allow, "k8s:pods:get,list,watch")
 		assert.True(t, hasCondensedK8s, "K8s permissions should be condensed: got %v", result.Permissions.Allow)
 
 		// Verify AWS permissions are present (condensed or not based on implementation)
-		hasEC2 := false
-		hasS3 := false
-		for _, perm := range result.Permissions.Allow {
-			if perm == "ec2:DescribeInstances,StartInstances" || perm == "ec2:DescribeInstances" || perm == "ec2:StartInstances" {
-				hasEC2 = true
-			}
-			if perm == "s3:GetObject" {
-				hasS3 = true
-			}
-		}
+		hasEC2 := statementsContains(result.Permissions.Allow, "ec2:DescribeInstances,StartInstances") ||
+			statementsContains(result.Permissions.Allow, "ec2:DescribeInstances") ||
+			statementsContains(result.Permissions.Allow, "ec2:StartInstances")
+		hasS3 := statementsContains(result.Permissions.Allow, "s3:GetObject")
 		assert.True(t, hasEC2, "EC2 permissions should be present: got %v", result.Permissions.Allow)
 		assert.True(t, hasS3, "S3 permissions should be present: got %v", result.Permissions.Allow)
 	})

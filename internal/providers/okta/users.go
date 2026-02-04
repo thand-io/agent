@@ -22,9 +22,9 @@ func (p *oktaProvider) SynchronizeUsers(ctx context.Context, req *models.Synchro
 
 	if req.Pagination == nil {
 		req.Pagination = &models.PaginationOptions{
-			// Low pagination size as we have to get groups for each user later
+			// Moderately low pagination size as we have to get groups for each user later
 			// and if we fail we have to re-query all the users again
-			PageSize: 5,
+			PageSize: 25,
 		}
 	}
 

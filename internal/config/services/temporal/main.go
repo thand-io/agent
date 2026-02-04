@@ -239,16 +239,16 @@ func (c *TemporalClient) validateTemporalNamespace() error {
 
 	// Define required typed search attributes
 	requiredSearchAttributes := []any{
-		models.TypedSearchAttributeStatus,
-		models.TypedSearchAttributeTask,
-		models.TypedSearchAttributeUser,
-		models.TypedSearchAttributeRole,
-		models.TypedSearchAttributeWorkflow,
-		models.TypedSearchAttributeProviders,
-		models.TypedSearchAttributeReason,
-		models.TypedSearchAttributeDuration,
-		models.TypedSearchAttributeIdentities,
-		models.TypedSearchAttributeApproved,
+		sdkConstants.TypedSearchAttributeStatus,
+		sdkConstants.TypedSearchAttributeTask,
+		sdkConstants.TypedSearchAttributeUser,
+		sdkConstants.TypedSearchAttributeRole,
+		sdkConstants.TypedSearchAttributeWorkflow,
+		sdkConstants.TypedSearchAttributeProviders,
+		sdkConstants.TypedSearchAttributeReason,
+		sdkConstants.TypedSearchAttributeDuration,
+		sdkConstants.TypedSearchAttributeIdentities,
+		sdkConstants.TypedSearchAttributeApproved,
 	}
 
 	// Check if all required search attributes are defined

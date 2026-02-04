@@ -25,6 +25,23 @@ func newThandCondition() *cloudresourcemanager.Expr {
 	}
 }
 
+// isPrimitiveRole checks if a role is a GCP primitive/basic role.
+// Primitive roles (owner, editor, viewer) do not support IAM conditions.
+// See: https://cloud.google.com/iam/docs/conditions-overview#limitations
+func isPrimitiveRole(roleName string) bool {
+	primitiveRoles := []string{
+		"roles/owner",
+		"roles/editor",
+		"roles/viewer",
+	}
+	for _, primitive := range primitiveRoles {
+		if roleName == primitive {
+			return true
+		}
+	}
+	return false
+}
+
 // Authorize grants access for a user to a role
 func (p *gcpProvider) AuthorizeRole(
 	ctx context.Context,
@@ -83,7 +100,7 @@ func (p *gcpProvider) AuthorizeRole(
 	// If permissions are specified, create a custom role with those permissions
 	if len(role.Permissions.Allow) > 0 {
 		// Check if the custom role already exists
-		customRoleName := role.GetSnakeCaseName()
+		customRoleName := role.GetIdentifier()
 		existingRole, err := p.getRole(projectId, customRoleName)
 		if err != nil {
 			// If role doesn't exist, create it
@@ -93,7 +110,7 @@ func (p *gcpProvider) AuthorizeRole(
 				role.GetName(),
 				role.GetDescription(),
 				stage,
-				role.Permissions.Allow,
+				role.Permissions,
 			)
 			if err != nil {
 				return nil, temporal.NewApplicationErrorWithOptions(
@@ -226,6 +243,25 @@ func (p *gcpProvider) RevokeRole(
 				"role":       roleName,
 				"project_id": projectId,
 			}).Info("Successfully unbound user from custom GCP role")
+
+			// Delete the custom role after unbinding
+			err = p.deleteRole(projectId, customRoleName)
+			if err != nil {
+				return nil, temporal.NewApplicationErrorWithOptions(
+					fmt.Sprintf("failed to delete custom role %s: %v", customRoleName, err),
+					"GcpCustomRoleDeletionError",
+					temporal.ApplicationErrorOptions{
+						NextRetryDelay: 3 * time.Second,
+						Cause:          err,
+					},
+				)
+			}
+
+			logrus.WithFields(logrus.Fields{
+				"role_name":  customRoleName,
+				"project_id": projectId,
+				"user_email": user.Email,
+			}).Info("Successfully deleted custom GCP role")
 		}
 	}
 
@@ -243,16 +279,18 @@ func (p *gcpProvider) GetAuthorizedAccessUrl(
 }
 
 // createRole creates a custom role.
-func (p *gcpProvider) createRole(projectID, name, title, description, stage string, permissions []string) (*iam.Role, error) {
+func (p *gcpProvider) createRole(projectID, name, title, description, stage string, permissions models.RolePermissions) (*iam.Role, error) {
 
 	service := p.GetIamClient()
 
+	// Convert permissions to GCP format
+	gcpPermissions := permissionsToGcpPermissions(permissions)
+
 	request := &iam.CreateRoleRequest{
 		Role: &iam.Role{
-			Name:                name,
 			Title:               title,
 			Description:         description,
-			IncludedPermissions: permissions,
+			IncludedPermissions: gcpPermissions,
 			Stage:               stage,
 		},
 		RoleId: name,
@@ -273,6 +311,17 @@ func (p *gcpProvider) getRole(projectID, roleName string) (*iam.Role, error) {
 		return nil, err
 	}
 	return role, nil
+}
+
+// deleteRole deletes a custom role
+func (p *gcpProvider) deleteRole(projectID, roleName string) error {
+	service := p.GetIamClient()
+
+	_, err := service.Projects.Roles.Delete("projects/" + projectID + "/roles/" + roleName).Do()
+	if err != nil {
+		return fmt.Errorf("failed to delete role: %w", err)
+	}
+	return nil
 }
 
 // bindUserToPredefinedRole binds a user to a predefined GCP role (e.g., roles/viewer)
@@ -307,24 +356,43 @@ func validateAndFormatMember(user *models.User) (string, error) {
 // addMemberToPolicy adds a member to a role binding in the policy, creating a new binding if necessary
 // Returns true if the policy was modified
 func addMemberToPolicy(policy *cloudresourcemanager.Policy, roleName, member string) bool {
-	// Check if binding already exists with our thand condition
+	isPrimitive := isPrimitiveRole(roleName)
+
+	// Warn if using a primitive role since conditions cannot be applied
+	if isPrimitive {
+		logrus.WithFields(logrus.Fields{
+			"role":   roleName,
+			"member": member,
+		}).Warn("Binding to primitive role without IAM condition - GCP does not support conditions on primitive roles. Consider using predefined roles instead for better tracking.")
+	}
+
+	// Check if binding already exists
 	for _, binding := range policy.Bindings {
-		if binding.Role == roleName && isThandManagedBinding(binding) {
-			if slices.Contains(binding.Members, member) {
-				return false // Already bound, no modification needed
+		if binding.Role == roleName {
+			// For primitive roles, match any binding without condition
+			// For other roles, match our thand-managed binding
+			if (isPrimitive && binding.Condition == nil) || (!isPrimitive && isThandManagedBinding(binding)) {
+				if slices.Contains(binding.Members, member) {
+					return false // Already bound, no modification needed
+				}
+				// Add member to existing binding
+				binding.Members = append(binding.Members, member)
+				return true
 			}
-			// Add member to existing thand-managed binding
-			binding.Members = append(binding.Members, member)
-			return true
 		}
 	}
 
-	// No binding exists for this role with our condition, create a new one
+	// No binding exists for this role, create a new one
 	newBinding := &cloudresourcemanager.Binding{
-		Role:      roleName,
-		Members:   []string{member},
-		Condition: newThandCondition(),
+		Role:    roleName,
+		Members: []string{member},
 	}
+
+	// Only add condition for non-primitive roles
+	if !isPrimitive {
+		newBinding.Condition = newThandCondition()
+	}
+
 	policy.Bindings = append(policy.Bindings, newBinding)
 	return true
 }
@@ -332,8 +400,16 @@ func addMemberToPolicy(policy *cloudresourcemanager.Policy, roleName, member str
 // removeMemberFromPolicy removes a member from a role binding in the policy
 // Returns true if the member was found and removed, false otherwise
 func removeMemberFromPolicy(policy *cloudresourcemanager.Policy, roleName, member string) bool {
+	isPrimitive := isPrimitiveRole(roleName)
+
 	for i, binding := range policy.Bindings {
-		if binding.Role == roleName && isThandManagedBinding(binding) {
+		if binding.Role != roleName {
+			continue
+		}
+
+		// For primitive roles, match any binding without condition
+		// For other roles, match our thand-managed binding
+		if (isPrimitive && binding.Condition == nil) || (!isPrimitive && isThandManagedBinding(binding)) {
 			// Find the member index first, then remove outside the loop
 			memberIndex := -1
 			for j, bindingMember := range binding.Members {
@@ -440,4 +516,33 @@ func (p *gcpProvider) unbindUserFromRoleByName(projectID string, user *models.Us
 	}
 
 	return nil
+}
+
+// permissionsToGcpPermissions converts CSP-agnostic Permissions to GCP permissions list
+// Only Allow statements are used (GCP custom roles don't support deny)
+// Note: Targets are not used in GCP custom roles; resource scope is handled via IAM bindings
+func permissionsToGcpPermissions(permissions models.RolePermissions) []string {
+	var gcpPermissions []string
+
+	// Process Allow statements
+	for _, stmt := range permissions.Allow {
+		gcpPermissions = append(gcpPermissions, stmt.Operations...)
+	}
+
+	// Log warning for Deny statements (GCP doesn't support deny in custom roles)
+	if len(permissions.Deny) > 0 {
+		logrus.Warnf("GCP custom roles don't support deny permissions, skipping %d deny statements", len(permissions.Deny))
+	}
+
+	// Deduplicate permissions
+	uniquePerms := make(map[string]bool)
+	result := make([]string, 0, len(gcpPermissions))
+	for _, perm := range gcpPermissions {
+		if !uniquePerms[perm] {
+			uniquePerms[perm] = true
+			result = append(result, perm)
+		}
+	}
+
+	return result
 }

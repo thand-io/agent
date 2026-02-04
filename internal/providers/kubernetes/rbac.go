@@ -81,7 +81,7 @@ func (p *kubernetesProvider) authorizeNamespacedRole(
 ) (*models.AuthorizeRoleResponse, error) {
 
 	client := p.GetClient()
-	roleName := role.GetSnakeCaseName()
+	roleName := role.GetIdentifier()
 
 	// Create or update Role
 	k8sRole := &rbacv1.Role{
@@ -93,7 +93,7 @@ func (p *kubernetesProvider) authorizeNamespacedRole(
 				"thand.io/role":    roleName,
 			},
 		},
-		Rules: p.convertPermissionsToRules(role.Permissions.Allow),
+		Rules: p.convertPermissionsToRules(role.Permissions),
 	}
 
 	_, err := client.RbacV1().Roles(namespace).Create(ctx, k8sRole, metav1.CreateOptions{})
@@ -186,7 +186,7 @@ func (p *kubernetesProvider) authorizeClusterRole(
 ) (*models.AuthorizeRoleResponse, error) {
 
 	client := p.GetClient()
-	roleName := role.GetSnakeCaseName()
+	roleName := role.GetIdentifier()
 
 	// Create or update ClusterRole
 	clusterRole := &rbacv1.ClusterRole{
@@ -197,7 +197,7 @@ func (p *kubernetesProvider) authorizeClusterRole(
 				"thand.io/role":    roleName,
 			},
 		},
-		Rules: p.convertPermissionsToRules(role.Permissions.Allow),
+		Rules: p.convertPermissionsToRules(role.Permissions),
 	}
 
 	_, err := client.RbacV1().
@@ -283,24 +283,32 @@ func (p *kubernetesProvider) authorizeClusterRole(
 }
 
 // convertPermissionsToRules converts thand permissions to Kubernetes RBAC rules
-func (p *kubernetesProvider) convertPermissionsToRules(permissions []string) []rbacv1.PolicyRule {
+func (p *kubernetesProvider) convertPermissionsToRules(permissions models.RolePermissions) []rbacv1.PolicyRule {
 	var rules []rbacv1.PolicyRule
 
 	// Group permissions by API group and resource
 	ruleMap := make(map[string]*rbacv1.PolicyRule)
 
-	for _, permission := range permissions {
-		rule := p.parsePermission(permission)
-		if rule != nil {
-			key := fmt.Sprintf("%s:%s", strings.Join(rule.APIGroups, ","), strings.Join(rule.Resources, ","))
-			if existingRule, exists := ruleMap[key]; exists {
-				// Merge verbs
-				existingRule.Verbs = append(existingRule.Verbs, rule.Verbs...)
-				existingRule.Verbs = p.deduplicateSlice(existingRule.Verbs)
-			} else {
-				ruleMap[key] = rule
+	// Process Allow statements (Kubernetes RBAC is allow-only)
+	for _, stmt := range permissions.Allow {
+		for _, operation := range stmt.Operations {
+			rule := p.parsePermission(operation)
+			if rule != nil {
+				key := fmt.Sprintf("%s:%s", strings.Join(rule.APIGroups, ","), strings.Join(rule.Resources, ","))
+				if existingRule, exists := ruleMap[key]; exists {
+					// Merge verbs
+					existingRule.Verbs = append(existingRule.Verbs, rule.Verbs...)
+					existingRule.Verbs = p.deduplicateSlice(existingRule.Verbs)
+				} else {
+					ruleMap[key] = rule
+				}
 			}
 		}
+	}
+
+	// Log warning for Deny statements (Kubernetes RBAC doesn't support deny)
+	if len(permissions.Deny) > 0 {
+		logrus.Warnf("Kubernetes RBAC doesn't support deny permissions, skipping %d deny statements", len(permissions.Deny))
 	}
 
 	// Convert map back to slice
@@ -413,12 +421,14 @@ func (p *kubernetesProvider) sanitizeUserIdentifier(user *models.User) string {
 }
 
 func (p *kubernetesProvider) getNamespaceFromRole(role *models.Role) string {
-	// Check if role has namespace-specific resources
-	for _, resource := range role.Resources.Allow {
-		if strings.Contains(resource, "namespace:") {
-			parts := strings.Split(resource, ":")
-			if len(parts) >= 2 {
-				return parts[1]
+	// Check if role has namespace-specific targets in permission statements
+	for _, stmt := range role.Permissions.Allow {
+		for _, target := range stmt.Targets {
+			if strings.Contains(target, "namespace:") {
+				parts := strings.Split(target, ":")
+				if len(parts) >= 2 {
+					return parts[1]
+				}
 			}
 		}
 	}
@@ -448,7 +458,7 @@ func (p *kubernetesProvider) revokeNamespacedRole(
 ) (*models.RevokeRoleResponse, error) {
 
 	client := p.GetClient()
-	bindingName := fmt.Sprintf("%s-%s", role.GetSnakeCaseName(), p.sanitizeUserIdentifier(user))
+	bindingName := role.GetIdentifier()
 
 	// Check if RoleBinding exists before attempting to delete
 	_, err := client.RbacV1().
@@ -493,7 +503,7 @@ func (p *kubernetesProvider) revokeClusterRole(
 ) (*models.RevokeRoleResponse, error) {
 
 	client := p.GetClient()
-	bindingName := fmt.Sprintf("%s-%s", role.GetSnakeCaseName(), p.sanitizeUserIdentifier(user))
+	bindingName := role.GetIdentifier()
 
 	// Check if ClusterRoleBinding exists before attempting to delete
 	_, err := client.RbacV1().

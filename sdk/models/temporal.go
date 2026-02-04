@@ -11,3 +11,22 @@ import (
 // Used for access request workflows, just-in-time provisioning, time-based access expiration,
 // approval chains, and provider synchronization. Configure in config.yaml under services.temporal.
 type TemporalService = internal.TemporalImpl
+
+// TemporalConfig holds configuration settings for connecting to a Temporal server.
+type TemporalConfig = internal.TemporalConfig
+
+// TemporalAuthAPIKey holds API key authentication settings for connecting to Temporal using
+// API keys.
+type TemporalAuthAPIKey = internal.TemporalAuthAPIKey
+
+// TemporalAuthMTLSFile holds mTLS authentication settings for connecting to Temporal using
+// certificate files.
+type TemporalAuthMTLSFile = internal.TemporalAuthMTLSFile
+
+// TemporalAuthMTLSInline holds mTLS authentication settings for connecting to Temporal using
+// inline certificate data.
+type TemporalAuthMTLSInline = internal.TemporalAuthMTLSInline
+
+// TemporalAuthMTLSVault holds mTLS authentication settings for connecting to Temporal using
+// certificates stored in a vault.
+type TemporalAuthMTLSVault = internal.TemporalAuthMTLSVault

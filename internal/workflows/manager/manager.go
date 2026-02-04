@@ -299,7 +299,7 @@ func (m *ThandWorkflowManager) ResumeWorkflow(
 	}
 
 	ctx := workflowTask.GetContext()
-	
+
 	// Check if workfow has already been registered on temporal
 	serviceClient := m.config.GetServices()
 
@@ -407,14 +407,14 @@ func (m *ThandWorkflowManager) createTemporalWorkflow(workflowTask *models.Eleva
 		ID:        workflowTask.WorkflowID,
 		TaskQueue: temporalService.GetTaskQueue(),
 		TypedSearchAttributes: temporal.NewSearchAttributes(
-			models.TypedSearchAttributeUser.ValueSet(userEmail),
-			models.TypedSearchAttributeRole.ValueSet(roleName),
-			models.TypedSearchAttributeProviders.ValueSet(elevationRequest.Providers),
-			models.TypedSearchAttributeWorkflow.ValueSet(elevationRequest.Workflow),
-			models.TypedSearchAttributeStatus.ValueSet(strings.ToUpper(string(swctx.PendingStatus))),
-			models.TypedSearchAttributeDuration.ValueSet(int64(duration.Seconds())),
-			models.TypedSearchAttributeReason.ValueSet(elevationRequest.Reason),
-			models.TypedSearchAttributeIdentities.ValueSet(elevationRequest.Identities),
+			sdkConstants.TypedSearchAttributeUser.ValueSet(userEmail),
+			sdkConstants.TypedSearchAttributeRole.ValueSet(roleName),
+			sdkConstants.TypedSearchAttributeProviders.ValueSet(elevationRequest.Providers),
+			sdkConstants.TypedSearchAttributeWorkflow.ValueSet(elevationRequest.Workflow),
+			sdkConstants.TypedSearchAttributeStatus.ValueSet(strings.ToUpper(string(swctx.PendingStatus))),
+			sdkConstants.TypedSearchAttributeDuration.ValueSet(int64(duration.Seconds())),
+			sdkConstants.TypedSearchAttributeReason.ValueSet(elevationRequest.Reason),
+			sdkConstants.TypedSearchAttributeIdentities.ValueSet(elevationRequest.Identities),
 		),
 	}
 

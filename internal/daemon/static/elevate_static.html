@@ -146,45 +146,88 @@
                                         <h4 style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-muted, #666);">
                                             <span style="margin-right: 0.5rem;">🔑</span>Permissions
                                         </h4>
-                                        <ul style="margin: 0; padding-left: 1.5rem; list-style-type: disc;">
-                                            <template x-for="perm in (evaluatedRole?.permissions?.allow || roles[selectedRole]?.permissions?.allow || [])" :key="perm">
-                                                <li style="font-size: 0.875rem; margin-bottom: 0.25rem;">
-                                                    <code x-text="perm" style="background: var(--code-bg, #f5f5f5); padding: 0.125rem 0.375rem; border-radius: 3px; font-size: 0.8rem;"></code>
-                                                </li>
-                                            </template>
-                                        </ul>
+                                        <template x-for="(stmt, idx) in (evaluatedRole?.permissions?.allow || roles[selectedRole]?.permissions?.allow || [])" :key="idx">
+                                            <div style="margin-bottom: 0.75rem; padding: 0.5rem; background: var(--code-bg, #f5f5f5); border-radius: 4px;">
+                                                <!-- Operations -->
+                                                <template x-if="stmt.operations?.length > 0">
+                                                    <div style="margin-bottom: 0.5rem;">
+                                                        <span style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted, #666);">Operations:</span>
+                                                        <ul style="margin: 0.25rem 0 0 0; padding-left: 1.25rem; list-style-type: disc;">
+                                                            <template x-for="op in stmt.operations" :key="op">
+                                                                <li style="font-size: 0.8rem; margin-bottom: 0.125rem;">
+                                                                    <code x-text="op" style="background: var(--code-bg-dark, #e8e8e8); padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.75rem;"></code>
+                                                                </li>
+                                                            </template>
+                                                        </ul>
+                                                    </div>
+                                                </template>
+                                                <!-- Targets -->
+                                                <template x-if="stmt.targets?.length > 0">
+                                                    <div>
+                                                        <span style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted, #666);">Targets:</span>
+                                                        <ul style="margin: 0.25rem 0 0 0; padding-left: 1.25rem; list-style-type: disc;">
+                                                            <template x-for="target in stmt.targets" :key="target">
+                                                                <li style="font-size: 0.8rem; margin-bottom: 0.125rem;">
+                                                                    <code x-text="target" style="background: var(--code-bg-dark, #e8e8e8); padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.75rem;"></code>
+                                                                </li>
+                                                            </template>
+                                                        </ul>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </template>
                                     </div>
                                 </template>
 
-                                <!-- Resources -->
-                                <template x-if="(evaluatedRole?.resources?.allow?.length > 0) || (!evaluatedRole && roles[selectedRole]?.resources?.allow?.length > 0)">
-                                    <div class="summary-section" style="margin-bottom: 1rem;">
-                                        <h4 style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-muted, #666);">
-                                            <span style="margin-right: 0.5rem;">📦</span>Resources
-                                        </h4>
-                                        <ul style="margin: 0; padding-left: 1.5rem; list-style-type: disc;">
-                                            <template x-for="res in (evaluatedRole?.resources?.allow || roles[selectedRole]?.resources?.allow || [])" :key="res">
-                                                <li style="font-size: 0.875rem; margin-bottom: 0.25rem;">
-                                                    <code x-text="res" style="background: var(--code-bg, #f5f5f5); padding: 0.125rem 0.375rem; border-radius: 3px; font-size: 0.8rem;"></code>
-                                                </li>
-                                            </template>
-                                        </ul>
-                                    </div>
-                                </template>
 
-                                <!-- Groups -->
-                                <template x-if="(evaluatedRole?.groups?.allow?.length > 0) || (!evaluatedRole && roles[selectedRole]?.groups?.allow?.length > 0)">
+
+                                <!-- Scopes -->
+                                <template x-if="hasScopeDetails()">
                                     <div class="summary-section" style="margin-bottom: 1rem;">
                                         <h4 style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-muted, #666);">
-                                            <span style="margin-right: 0.5rem;">👥</span>Groups
+                                            <span style="margin-right: 0.5rem;">🎯</span>Scopes (Who Can Be Assigned)
                                         </h4>
-                                        <ul style="margin: 0; padding-left: 1.5rem; list-style-type: disc;">
-                                            <template x-for="grp in (evaluatedRole?.groups?.allow || roles[selectedRole]?.groups?.allow || [])" :key="grp">
-                                                <li style="font-size: 0.875rem; margin-bottom: 0.25rem;">
-                                                    <code x-text="grp" style="background: var(--code-bg, #f5f5f5); padding: 0.125rem 0.375rem; border-radius: 3px; font-size: 0.8rem;"></code>
-                                                </li>
+                                        <div style="padding: 0.5rem; background: var(--code-bg, #f5f5f5); border-radius: 4px;">
+                                            <!-- Allowed Users -->
+                                            <template x-if="(evaluatedRole?.scopes?.allow?.users?.length > 0) || (!evaluatedRole && roles[selectedRole]?.scopes?.allow?.users?.length > 0)">
+                                                <div style="margin-bottom: 0.5rem;">
+                                                    <span style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted, #666);">👤 Allowed Users:</span>
+                                                    <ul style="margin: 0.25rem 0 0 0; padding-left: 1.25rem; list-style-type: disc;">
+                                                        <template x-for="user in (evaluatedRole?.scopes?.allow?.users || roles[selectedRole]?.scopes?.allow?.users || [])" :key="user">
+                                                            <li style="font-size: 0.8rem; margin-bottom: 0.125rem;">
+                                                                <code x-text="user" style="background: var(--code-bg-dark, #e8e8e8); padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.75rem;"></code>
+                                                            </li>
+                                                        </template>
+                                                    </ul>
+                                                </div>
                                             </template>
-                                        </ul>
+                                            <!-- Allowed Groups -->
+                                            <template x-if="(evaluatedRole?.scopes?.allow?.groups?.length > 0) || (!evaluatedRole && roles[selectedRole]?.scopes?.allow?.groups?.length > 0)">
+                                                <div style="margin-bottom: 0.5rem;">
+                                                    <span style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted, #666);">👥 Allowed Groups:</span>
+                                                    <ul style="margin: 0.25rem 0 0 0; padding-left: 1.25rem; list-style-type: disc;">
+                                                        <template x-for="group in (evaluatedRole?.scopes?.allow?.groups || roles[selectedRole]?.scopes?.allow?.groups || [])" :key="group">
+                                                            <li style="font-size: 0.8rem; margin-bottom: 0.125rem;">
+                                                                <code x-text="group" style="background: var(--code-bg-dark, #e8e8e8); padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.75rem;"></code>
+                                                            </li>
+                                                        </template>
+                                                    </ul>
+                                                </div>
+                                            </template>
+                                            <!-- Allowed Domains -->
+                                            <template x-if="(evaluatedRole?.scopes?.allow?.domains?.length > 0) || (!evaluatedRole && roles[selectedRole]?.scopes?.allow?.domains?.length > 0)">
+                                                <div>
+                                                    <span style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted, #666);">🌐 Allowed Domains:</span>
+                                                    <ul style="margin: 0.25rem 0 0 0; padding-left: 1.25rem; list-style-type: disc;">
+                                                        <template x-for="domain in (evaluatedRole?.scopes?.allow?.domains || roles[selectedRole]?.scopes?.allow?.domains || [])" :key="domain">
+                                                            <li style="font-size: 0.8rem; margin-bottom: 0.125rem;">
+                                                                <code x-text="domain" style="background: var(--code-bg-dark, #e8e8e8); padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.75rem;"></code>
+                                                            </li>
+                                                        </template>
+                                                    </ul>
+                                                </div>
+                                            </template>
+                                        </div>
                                     </div>
                                 </template>
 
@@ -546,8 +589,20 @@
                     
                     return (role.inherits?.length > 0) ||
                            (role.permissions?.allow?.length > 0) ||
-                           (role.resources?.allow?.length > 0) ||
-                           (role.groups?.allow?.length > 0);
+                           this.hasScopeDetails();
+                },
+
+                /**
+                 * Check if the current role has any scope details to display
+                 */
+                hasScopeDetails() {
+                    const role = this.evaluatedRole || this.roles[this.selectedRole];
+                    if (!role) return false;
+                    
+                    const scopes = role.scopes?.allow;
+                    return (scopes?.users?.length > 0) ||
+                           (scopes?.groups?.length > 0) ||
+                           (scopes?.domains?.length > 0);
                 },
 
                 /**

@@ -132,4 +132,12 @@ type ServicesClientImpl interface {
 
 	GetTemporal() TemporalImpl
 	HasTemporal() bool
+
+	ReloadAnalytics() error
+	ReloadEncryption() error
+	ReloadVault() error
+	ReloadScheduler() error
+	ReloadLargeLanguageModel() error
+	ReloadPublicKeyInfrastructure() error
+	ReloadTemporal() error
 }

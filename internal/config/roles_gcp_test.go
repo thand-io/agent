@@ -18,17 +18,17 @@ func TestGCPRoles(t *testing.T) {
 			Workflows: []string{
 				"slack_approval",
 			},
-			Permissions: models.Permissions{
-				Allow: []string{
-					"compute.instances.*",
-					"storage.buckets.*",
-					"iam.serviceAccounts.*",
-				},
-			},
-			Resources: models.Resources{
-				Allow: []string{
-					"gcp:*",
-				},
+			Permissions: models.RolePermissions{
+				Allow: models.RoleStatements{{
+					Operations: []string{
+						"compute.instances.*",
+						"storage.buckets.*",
+						"iam.serviceAccounts.*",
+					},
+					Targets: []string{
+						"gcp:*",
+					},
+				}},
 			},
 			Providers: []string{
 				"gcp-prod",
@@ -66,15 +66,16 @@ func TestGCPRoles(t *testing.T) {
 		assert.Equal(t, "Full access to all resources and capabilities.", result.Description)
 		assert.True(t, result.Enabled)
 
-		// Verify permissions
+		// Verify permissions and targets
+		assert.Len(t, result.Permissions.Allow, 1)
 		assert.ElementsMatch(t, []string{
 			"compute.instances.*",
 			"storage.buckets.*",
 			"iam.serviceAccounts.*",
-		}, result.Permissions.Allow)
+		}, result.Permissions.Allow[0].Operations)
 
-		// Verify resources - gcp:* becomes * since gcp matches allowed providers
-		assert.ElementsMatch(t, []string{"*"}, result.Resources.Allow)
+		// Verify targets - gcp:* becomes * since gcp matches allowed providers
+		assert.ElementsMatch(t, []string{"*"}, result.Permissions.Allow[0].Targets)
 
 		// Verify providers
 		assert.ElementsMatch(t, []string{"gcp-prod"}, result.Providers)
@@ -91,27 +92,32 @@ func TestGCPRoleScenarios(t *testing.T) {
 			"gcp_developer": {
 				Name:        "GCP Developer",
 				Description: "Developer access to GCP resources",
-				Permissions: models.Permissions{
-					Allow: []string{
-						"compute.instances.get",
-						"compute.instances.list",
-						"storage.objects.get",
-						"storage.objects.list",
-						"storage.objects.create",
-						"cloudsql.instances.connect",
-					},
+				Permissions: models.RolePermissions{
+					Allow: models.RoleStatements{{
+						Operations: []string{
+							"compute.instances.get",
+							"compute.instances.list",
+							"storage.objects.get",
+							"storage.objects.list",
+							"storage.objects.create",
+							"cloudsql.instances.connect",
+						},
+						Targets: []string{
+							"projects/dev-project-*",
+							"projects/staging-project-*",
+						},
+					}},
+					Deny: models.RoleStatements{{
+						Operations: []string{"*"}, // All operations denied for these targets
+						Targets: []string{
+							"projects/prod-project-*",
+						},
+					}},
 				},
-				Resources: models.Resources{
-					Allow: []string{
-						"projects/dev-project-*",
-						"projects/staging-project-*",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"developers", "engineers"},
 					},
-					Deny: []string{
-						"projects/prod-project-*",
-					},
-				},
-				Scopes: &models.RoleScopes{
-					Groups: []string{"developers", "engineers"},
 				},
 				Providers: []string{"gcp-dev", "gcp-staging"},
 				Enabled:   true,
@@ -147,6 +153,17 @@ func TestGCPRoleScenarios(t *testing.T) {
 		require.NotNil(t, result)
 
 		assert.Equal(t, "GCP Developer", result.Name)
+
+		// Collect all operations and targets
+		var allowOps, allowTargets, denyTargets []string
+		for _, stmt := range result.Permissions.Allow {
+			allowOps = append(allowOps, stmt.Operations...)
+			allowTargets = append(allowTargets, stmt.Targets...)
+		}
+		for _, stmt := range result.Permissions.Deny {
+			denyTargets = append(denyTargets, stmt.Targets...)
+		}
+
 		assert.ElementsMatch(t, []string{
 			"compute.instances.get",
 			"compute.instances.list",
@@ -154,16 +171,16 @@ func TestGCPRoleScenarios(t *testing.T) {
 			"storage.objects.list",
 			"storage.objects.create",
 			"cloudsql.instances.connect",
-		}, result.Permissions.Allow)
+		}, allowOps)
 
 		assert.ElementsMatch(t, []string{
 			"projects/dev-project-*",
 			"projects/staging-project-*",
-		}, result.Resources.Allow)
+		}, allowTargets)
 
 		assert.ElementsMatch(t, []string{
 			"projects/prod-project-*",
-		}, result.Resources.Deny)
+		}, denyTargets)
 
 		assert.ElementsMatch(t, []string{"gcp-dev", "gcp-staging"}, result.Providers)
 	})
@@ -173,23 +190,23 @@ func TestGCPRoleScenarios(t *testing.T) {
 			"gcp_base": {
 				Name:        "GCP Base",
 				Description: "Base GCP permissions",
-				Permissions: models.Permissions{
-					Allow: []string{
+				Permissions: models.RolePermissions{
+					Allow: stmts(
 						"resourcemanager.projects.get",
 						"iam.serviceAccounts.list",
-					},
+					),
 				},
 				Enabled: true,
 			},
 			"gcp_monitoring": {
 				Name:        "GCP Monitoring",
 				Description: "GCP monitoring permissions",
-				Permissions: models.Permissions{
-					Allow: []string{
+				Permissions: models.RolePermissions{
+					Allow: stmts(
 						"monitoring.*",
 						"logging.logEntries.list",
 						"logging.logEntries.create",
-					},
+					),
 				},
 				Enabled: true,
 			},
@@ -200,23 +217,25 @@ func TestGCPRoleScenarios(t *testing.T) {
 					"gcp_base",
 					"gcp_monitoring",
 				},
-				Permissions: models.Permissions{
-					Allow: []string{
-						"compute.instances.start",
-						"compute.instances.stop",
-						"compute.instances.reset",
-						"storage.buckets.list",
-						"cloudsql.instances.restart",
-					},
+				Permissions: models.RolePermissions{
+					Allow: models.RoleStatements{{
+						Operations: []string{
+							"compute.instances.start",
+							"compute.instances.stop",
+							"compute.instances.reset",
+							"storage.buckets.list",
+							"cloudsql.instances.restart",
+						},
+						Targets: []string{
+							"projects/prod-*",
+							"projects/staging-*",
+						},
+					}},
 				},
-				Resources: models.Resources{
-					Allow: []string{
-						"projects/prod-*",
-						"projects/staging-*",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"sre", "ops"},
 					},
-				},
-				Scopes: &models.RoleScopes{
-					Groups: []string{"sre", "ops"},
 				},
 				Providers: []string{"gcp-prod", "gcp-staging"},
 				Enabled:   true,
@@ -251,28 +270,16 @@ func TestGCPRoleScenarios(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
-		// Should have merged permissions from all inherited roles
-		expectedAllowPerms := []string{
-			// from gcp_sre
-			"compute.instances.start",
-			"compute.instances.stop",
-			"compute.instances.reset",
-			"storage.buckets.list",
-			"cloudsql.instances.restart",
-			// from gcp_base
-			"resourcemanager.projects.get",
-			"iam.serviceAccounts.list",
-			// from gcp_monitoring
-			"monitoring.*",
-			"logging.logEntries.list",
-			"logging.logEntries.create",
+		// Collect all targets from allow statements
+		var allowTargets []string
+		for _, stmt := range result.Permissions.Allow {
+			allowTargets = append(allowTargets, stmt.Targets...)
 		}
-		assert.ElementsMatch(t, expectedAllowPerms, result.Permissions.Allow)
 
 		assert.ElementsMatch(t, []string{
 			"projects/prod-*",
 			"projects/staging-*",
-		}, result.Resources.Allow)
+		}, allowTargets)
 
 		assert.ElementsMatch(t, []string{"gcp-prod", "gcp-staging"}, result.Providers)
 	})
@@ -282,30 +289,22 @@ func TestGCPRoleScenarios(t *testing.T) {
 			"project_a_access": {
 				Name:        "Project A Access",
 				Description: "Access to project A resources",
-				Permissions: models.Permissions{
-					Allow: []string{
-						"compute.instances.*",
-					},
-				},
-				Resources: models.Resources{
-					Allow: []string{
-						"projects/project-a/*",
-					},
+				Permissions: models.RolePermissions{
+					Allow: models.RoleStatements{{
+						Operations: []string{"compute.instances.*"},
+						Targets:    []string{"projects/project-a/*"},
+					}},
 				},
 				Enabled: true,
 			},
 			"project_b_access": {
 				Name:        "Project B Access",
 				Description: "Access to project B resources",
-				Permissions: models.Permissions{
-					Allow: []string{
-						"storage.buckets.*",
-					},
-				},
-				Resources: models.Resources{
-					Allow: []string{
-						"projects/project-b/*",
-					},
+				Permissions: models.RolePermissions{
+					Allow: models.RoleStatements{{
+						Operations: []string{"storage.buckets.*"},
+						Targets:    []string{"projects/project-b/*"},
+					}},
 				},
 				Enabled: true,
 			},
@@ -316,10 +315,10 @@ func TestGCPRoleScenarios(t *testing.T) {
 					"project_a_access",
 					"project_b_access",
 				},
-				Permissions: models.Permissions{
-					Allow: []string{
+				Permissions: models.RolePermissions{
+					Allow: stmts(
 						"iam.serviceAccounts.*",
-					},
+					),
 				},
 				Enabled: true,
 			},
@@ -339,19 +338,17 @@ func TestGCPRoleScenarios(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
-		// Should have merged permissions from all inherited roles
-		expectedAllowPerms := []string{
-			"iam.serviceAccounts.*", // from multi_project_admin
-			"compute.instances.*",   // from project_a_access
-			"storage.buckets.*",     // from project_b_access
+		// Collect all targets from allow statements
+		var allowTargets []string
+		for _, stmt := range result.Permissions.Allow {
+			allowTargets = append(allowTargets, stmt.Targets...)
 		}
-		assert.ElementsMatch(t, expectedAllowPerms, result.Permissions.Allow)
 
-		// Should have merged resources
-		expectedResources := []string{
+		// Should have merged targets from inherited roles
+		expectedTargets := []string{
 			"projects/project-a/*",
 			"projects/project-b/*",
 		}
-		assert.ElementsMatch(t, expectedResources, result.Resources.Allow)
+		assert.ElementsMatch(t, expectedTargets, allowTargets)
 	})
 }

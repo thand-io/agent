@@ -77,7 +77,7 @@ func (p *awsProvider) getIdentityCenterInstance(ctx context.Context) (string, er
 
 // findOrCreatePermissionSet finds an existing permission set or creates a new one
 func (p *awsProvider) findOrCreatePermissionSet(ctx context.Context, instanceArn string, role *models.Role) (string, error) {
-	permissionSetName := role.GetSnakeCaseName()
+	permissionSetName := role.GetIdentifier()
 
 	// First, try to find existing permission set
 	resp, err := p.ssoAdminService.ListPermissionSets(ctx, &ssoadmin.ListPermissionSetsInput{
@@ -101,8 +101,8 @@ func (p *awsProvider) findOrCreatePermissionSet(ctx context.Context, instanceArn
 			// Permission set exists, ensure it has the required policies attached
 
 			// Attach inline permissions if any
-			if len(role.Permissions.Allow) > 0 {
-				err = p.attachPermissionsToPermissionSet(ctx, instanceArn, permissionSetArn, role.Permissions.Allow)
+			if len(role.Permissions.Allow) > 0 || len(role.Permissions.Deny) > 0 {
+				err = p.attachPermissionsToPermissionSet(ctx, instanceArn, permissionSetArn, role.Permissions)
 				if err != nil {
 					return "", fmt.Errorf("failed to attach permissions to existing permission set: %w", err)
 				}
@@ -133,9 +133,9 @@ func (p *awsProvider) findOrCreatePermissionSet(ctx context.Context, instanceArn
 
 	permissionSetArn := *createResp.PermissionSet.PermissionSetArn
 
-	// Create inline policy for the permission set
-	if len(role.Permissions.Allow) > 0 {
-		err = p.attachPermissionsToPermissionSet(ctx, instanceArn, permissionSetArn, role.Permissions.Allow)
+	// Create inline policy for the permission set using permissions
+	if len(role.Permissions.Allow) > 0 || len(role.Permissions.Deny) > 0 {
+		err = p.attachPermissionsToPermissionSet(ctx, instanceArn, permissionSetArn, role.Permissions)
 		if err != nil {
 			return "", fmt.Errorf("failed to attach permissions to permission set: %w", err)
 		}
@@ -153,17 +153,17 @@ func (p *awsProvider) findOrCreatePermissionSet(ctx context.Context, instanceArn
 }
 
 // attachPermissionsToPermissionSet creates an inline policy for the permission set
-func (p *awsProvider) attachPermissionsToPermissionSet(ctx context.Context, instanceArn, permissionSetArn string, permissions []string) error {
-	// Create a policy document
-	policyDocument := PolicyDocument{
-		Version: "2012-10-17",
-		Statement: []Statement{
-			{
-				Effect:   "Allow",
-				Action:   permissions,
-				Resource: "*",
-			},
-		},
+func (p *awsProvider) attachPermissionsToPermissionSet(ctx context.Context, instanceArn, permissionSetArn string, permissions models.RolePermissions) error {
+	if len(permissions.Allow) == 0 && len(permissions.Deny) == 0 {
+		return nil // No permissions to attach
+	}
+
+	// Convert CSP-agnostic permissions to AWS policy document
+	policyDocument := permissionsToAwsPolicy(permissions)
+
+	// Skip if no valid statements were generated (e.g., all had empty operations)
+	if len(policyDocument.Statement) == 0 {
+		return nil
 	}
 
 	policyDocumentJSON, err := json.Marshal(policyDocument)
@@ -434,7 +434,7 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models
 	}
 
 	// 2. Find the Permission Set
-	permissionSetArn, err := p.findPermissionSetByName(ctx, instanceArn, role.GetSnakeCaseName())
+	permissionSetArn, err := p.findPermissionSetByName(ctx, instanceArn, role.GetIdentifier())
 	if err != nil {
 		return fmt.Errorf("failed to find permission set: %w in region: %s", err, p.GetRegion())
 	}
@@ -459,6 +459,7 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models
 		return fmt.Errorf("failed to delete account assignment: %w", err)
 	}
 
+	// 5. Lastly, poll to verify deletion
 	var deleteOutputRequestId *string
 	if deleteOutput != nil && deleteOutput.AccountAssignmentDeletionStatus != nil && deleteOutput.AccountAssignmentDeletionStatus.RequestId != nil {
 		deleteOutputRequestId = deleteOutput.AccountAssignmentDeletionStatus.RequestId

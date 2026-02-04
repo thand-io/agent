@@ -23,19 +23,21 @@ func (p *awsProvider) authorizeRoleTraditionalIAM(
 	role := req.GetRole()
 
 	// Check if the role exists
-	existingRole, err := p.getRole(ctx, role)
+	existingRole, err := p.getRole(ctx, user, role)
 	if err != nil {
 		// If role doesn't exist, create it
-		existingRole, err = p.createRole(ctx, role, targetAccountID)
+		existingRole, err = p.createRole(ctx, user, role, targetAccountID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create role: %w", err)
 		}
 	}
 
-	// Attach policies to the role if they don't exist
-	err = p.attachPoliciesToRole(ctx, existingRole.RoleName, role.Permissions.Allow)
-	if err != nil {
-		return nil, fmt.Errorf("failed to attach policies to role: %w", err)
+	// Attach policies to the role using permissions (handles backward compatibility)
+	if len(role.Permissions.Allow) > 0 || len(role.Permissions.Deny) > 0 {
+		err = p.attachPoliciesToRole(ctx, existingRole.RoleName, role.Permissions)
+		if err != nil {
+			return nil, fmt.Errorf("failed to attach policies to role: %w", err)
+		}
 	}
 
 	// Bind the user to the role (assuming user will assume this role)
@@ -51,7 +53,7 @@ func (p *awsProvider) authorizeRoleTraditionalIAM(
 func (p *awsProvider) revokeRoleTraditionalIAM(ctx context.Context, user *models.User, role *models.Role) (*models.RevokeRoleResponse, error) {
 
 	// Check if the role exists
-	existingRole, err := p.getRole(ctx, role)
+	existingRole, err := p.getRole(ctx, user, role)
 	if err != nil {
 		// If role doesn't exist, nothing to revoke
 		return nil, fmt.Errorf("role not found: %w", err)
@@ -67,9 +69,9 @@ func (p *awsProvider) revokeRoleTraditionalIAM(ctx context.Context, user *models
 }
 
 // getRole retrieves an IAM role by name
-func (p *awsProvider) getRole(ctx context.Context, role *models.Role) (*types.Role, error) {
+func (p *awsProvider) getRole(ctx context.Context, user *models.User, role *models.Role) (*types.Role, error) {
 	input := &iam.GetRoleInput{
-		RoleName: aws.String(role.GetSnakeCaseName()),
+		RoleName: aws.String(role.GetIdentifier()),
 	}
 
 	result, err := p.service.GetRole(ctx, input)
@@ -81,7 +83,7 @@ func (p *awsProvider) getRole(ctx context.Context, role *models.Role) (*types.Ro
 }
 
 // createRole creates a new IAM role with the specified permissions
-func (p *awsProvider) createRole(ctx context.Context, role *models.Role, targetAccountID string) (*types.Role, error) {
+func (p *awsProvider) createRole(ctx context.Context, user *models.User, role *models.Role, targetAccountID string) (*types.Role, error) {
 	// Create a basic assume role policy document using structs
 	// Initially allow the account root to assume the role (will be updated later)
 	assumeRolePolicy := PolicyDocument{
@@ -103,7 +105,7 @@ func (p *awsProvider) createRole(ctx context.Context, role *models.Role, targetA
 	}
 
 	input := &iam.CreateRoleInput{
-		RoleName:                 aws.String(role.GetSnakeCaseName()),
+		RoleName:                 aws.String(role.GetIdentifier()),
 		AssumeRolePolicyDocument: aws.String(string(assumeRolePolicyJSON)),
 		Description:              aws.String(role.Description),
 	}
@@ -117,21 +119,17 @@ func (p *awsProvider) createRole(ctx context.Context, role *models.Role, targetA
 }
 
 // attachPoliciesToRole creates and attaches an inline policy with the specified permissions
-func (p *awsProvider) attachPoliciesToRole(ctx context.Context, roleName *string, permissions []string) error {
-	if len(permissions) == 0 {
+func (p *awsProvider) attachPoliciesToRole(ctx context.Context, roleName *string, permissions models.RolePermissions) error {
+	if len(permissions.Allow) == 0 && len(permissions.Deny) == 0 {
 		return nil // No permissions to attach
 	}
 
-	// Create a policy document using proper structs
-	policyDocument := PolicyDocument{
-		Version: "2012-10-17",
-		Statement: []Statement{
-			{
-				Effect:   "Allow",
-				Action:   permissions,
-				Resource: "*",
-			},
-		},
+	// Convert CSP-agnostic permissions to AWS policy document
+	policyDocument := permissionsToAwsPolicy(permissions)
+
+	// Skip if no valid statements were generated (e.g., all had empty operations)
+	if len(policyDocument.Statement) == 0 {
+		return nil
 	}
 
 	policyDocumentJSON, err := json.Marshal(policyDocument)

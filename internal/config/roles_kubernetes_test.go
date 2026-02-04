@@ -8,6 +8,15 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
+// collectOpsK8s collects all operations from statements into a single slice
+func collectOpsK8s(stmts models.RoleStatements) []string {
+	var result []string
+	for _, stmt := range stmts {
+		result = append(result, stmt.Operations...)
+	}
+	return result
+}
+
 // TestKubernetesRoles tests Kubernetes-specific role configurations based on config/roles/kubernetes.yaml
 func TestKubernetesRoles(t *testing.T) {
 	// Kubernetes role definitions based on config/roles/kubernetes.yaml
@@ -25,17 +34,17 @@ func TestKubernetesRoles(t *testing.T) {
 				"kubernetes-dev",
 				"kubernetes-prod",
 			},
-			Resources: models.Resources{
-				Allow: []string{
-					"namespace:development",
-				},
-			},
-			Permissions: models.Permissions{
-				Allow: []string{
-					"k8s:pods:get,list,watch",
-					"k8s:services:get,list",
-					"k8s:events:get,list",
-				},
+			Permissions: models.RolePermissions{
+				Allow: models.RoleStatements{{
+					Operations: []string{
+						"k8s:pods:get,list,watch",
+						"k8s:services:get,list",
+						"k8s:events:get,list",
+					},
+					Targets: []string{
+						"namespace:development",
+					},
+				}},
 			},
 			Enabled: true,
 		},
@@ -52,21 +61,21 @@ func TestKubernetesRoles(t *testing.T) {
 				"kubernetes-dev",
 				"kubernetes-prod",
 			},
-			Resources: models.Resources{
-				Allow: []string{
-					"namespace:development",
-				},
-			},
-			Permissions: models.Permissions{
-				Allow: []string{
-					"k8s:pods:get,list,watch",
-					"k8s:services:get,list,create,update,patch,delete",
-					"k8s:configmaps:get,list,create,update,delete",
-					"k8s:secrets:get,list,create,update,delete",
-					"k8s:apps/deployments:get,list,create,update,patch,delete,watch",
-					"k8s:apps/replicasets:get,list",
-					"k8s:events:get,list,create",
-				},
+			Permissions: models.RolePermissions{
+				Allow: models.RoleStatements{{
+					Operations: []string{
+						"k8s:pods:get,list,watch",
+						"k8s:services:get,list,create,update,patch,delete",
+						"k8s:configmaps:get,list,create,update,delete",
+						"k8s:secrets:get,list,create,update,delete",
+						"k8s:apps/deployments:get,list,create,update,patch,delete,watch",
+						"k8s:apps/replicasets:get,list",
+						"k8s:events:get,list,create",
+					},
+					Targets: []string{
+						"namespace:development",
+					},
+				}},
 			},
 			Enabled: true,
 		},
@@ -83,15 +92,15 @@ func TestKubernetesRoles(t *testing.T) {
 				"kubernetes-dev",
 				"kubernetes-prod",
 			},
-			Resources: models.Resources{
-				Allow: []string{
-					"namespace:staging",
-				},
-			},
-			Permissions: models.Permissions{
-				Allow: []string{
-					"k8s:*:*",
-				},
+			Permissions: models.RolePermissions{
+				Allow: models.RoleStatements{{
+					Operations: []string{
+						"k8s:*:*",
+					},
+					Targets: []string{
+						"namespace:staging",
+					},
+				}},
 			},
 			Enabled: true,
 		},
@@ -108,13 +117,13 @@ func TestKubernetesRoles(t *testing.T) {
 				"kubernetes-dev",
 				"kubernetes-prod",
 			},
-			Permissions: models.Permissions{
-				Allow: []string{
+			Permissions: models.RolePermissions{
+				Allow: stmts(
 					"k8s:pods:get,list,watch",
 					"k8s:services:get,list,watch",
 					"k8s:nodes:get,list,watch",
 					"k8s:events:get,list,watch",
-				},
+				),
 			},
 			Enabled: true,
 		},
@@ -153,15 +162,16 @@ func TestKubernetesRoles(t *testing.T) {
 		assert.Equal(t, "Read pods in development namespace", result.Description)
 		assert.True(t, result.Enabled)
 
-		// Verify permissions
+		// Verify permissions and targets
+		assert.Len(t, result.Permissions.Allow, 1)
 		assert.ElementsMatch(t, []string{
 			"k8s:pods:get,list,watch",
 			"k8s:services:get,list",
 			"k8s:events:get,list",
-		}, result.Permissions.Allow)
+		}, result.Permissions.Allow[0].Operations)
 
-		// Verify resources
-		assert.ElementsMatch(t, []string{"namespace:development"}, result.Resources.Allow)
+		// Verify targets
+		assert.ElementsMatch(t, []string{"namespace:development"}, result.Permissions.Allow[0].Targets)
 
 		// Verify providers
 		assert.ElementsMatch(t, []string{"kubernetes-dev", "kubernetes-prod"}, result.Providers)
@@ -189,6 +199,13 @@ func TestKubernetesRoles(t *testing.T) {
 		require.NotNil(t, result)
 
 		assert.Equal(t, "Deploy applications in development namespace", result.Description)
+		// Collect all operations and targets
+		var allOps, allTargets []string
+		for _, stmt := range result.Permissions.Allow {
+			allOps = append(allOps, stmt.Operations...)
+			allTargets = append(allTargets, stmt.Targets...)
+		}
+
 		assert.ElementsMatch(t, []string{
 			"k8s:pods:get,list,watch",
 			"k8s:services:create,delete,get,list,patch,update",
@@ -197,9 +214,9 @@ func TestKubernetesRoles(t *testing.T) {
 			"k8s:apps/deployments:create,delete,get,list,patch,update,watch",
 			"k8s:apps/replicasets:get,list",
 			"k8s:events:create,get,list",
-		}, result.Permissions.Allow)
+		}, allOps)
 
-		assert.ElementsMatch(t, []string{"namespace:development"}, result.Resources.Allow)
+		assert.ElementsMatch(t, []string{"namespace:development"}, allTargets)
 	})
 
 	t.Run("staging-admin role composition", func(t *testing.T) {
@@ -218,8 +235,12 @@ func TestKubernetesRoles(t *testing.T) {
 		require.NotNil(t, result)
 
 		assert.Equal(t, "Full admin access to staging namespace", result.Description)
-		assert.ElementsMatch(t, []string{"k8s:*:*"}, result.Permissions.Allow)
-		assert.ElementsMatch(t, []string{"namespace:staging"}, result.Resources.Allow)
+		// Collect all targets
+		var allTargets []string
+		for _, stmt := range result.Permissions.Allow {
+			allTargets = append(allTargets, stmt.Targets...)
+		}
+		assert.ElementsMatch(t, []string{"namespace:staging"}, allTargets)
 	})
 }
 
@@ -230,12 +251,12 @@ func TestKubernetesRoleScenarios(t *testing.T) {
 			"k8s-base": {
 				Name:        "Kubernetes Base",
 				Description: "Base Kubernetes permissions",
-				Permissions: models.Permissions{
-					Allow: []string{
+				Permissions: models.RolePermissions{
+					Allow: stmts(
 						"k8s:pods:get,list",
 						"k8s:services:get,list",
 						"k8s:events:get,list",
-					},
+					),
 				},
 				Enabled: true,
 			},
@@ -243,21 +264,23 @@ func TestKubernetesRoleScenarios(t *testing.T) {
 				Name:        "Kubernetes Developer",
 				Description: "Developer access to Kubernetes",
 				Inherits:    []string{"k8s-base"},
-				Permissions: models.Permissions{
-					Allow: []string{
-						"k8s:pods:watch",
-						"k8s:configmaps:get,list,create,update",
-						"k8s:apps/deployments:get,list,create,update,patch",
-					},
+				Permissions: models.RolePermissions{
+					Allow: models.RoleStatements{{
+						Operations: []string{
+							"k8s:pods:watch",
+							"k8s:configmaps:get,list,create,update",
+							"k8s:apps/deployments:get,list,create,update,patch",
+						},
+						Targets: []string{
+							"namespace:dev-*",
+							"namespace:feature-*",
+						},
+					}},
 				},
-				Resources: models.Resources{
-					Allow: []string{
-						"namespace:dev-*",
-						"namespace:feature-*",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"developers", "engineers"},
 					},
-				},
-				Scopes: &models.RoleScopes{
-					Groups: []string{"developers", "engineers"},
 				},
 				Enabled: true,
 			},
@@ -265,23 +288,26 @@ func TestKubernetesRoleScenarios(t *testing.T) {
 				Name:        "Kubernetes SRE",
 				Description: "SRE access to Kubernetes",
 				Inherits:    []string{"k8s-developer"},
-				Permissions: models.Permissions{
-					Allow: []string{
-						"k8s:pods:delete",
-						"k8s:services:create,update,patch,delete",
-						"k8s:apps/deployments:delete,watch",
-						"k8s:nodes:get,list,watch",
-						"k8s:persistentvolumes:get,list,watch",
-					},
+				Permissions: models.RolePermissions{
+					Allow: models.RoleStatements{{
+						Operations: []string{
+							"k8s:pods:delete",
+							"k8s:services:create,update,patch,delete",
+							"k8s:apps/deployments:delete,watch",
+							"k8s:nodes:get,list,watch",
+							"k8s:persistentvolumes:get,list,watch",
+						},
+						Targets: []string{
+							"namespace:staging",
+							"namespace:production",
+						},
+					}},
 				},
-				Resources: models.Resources{
-					Allow: []string{
-						"namespace:staging",
-						"namespace:production",
+				Scopes: models.RoleScopes{
+
+					Allow: models.ScopeIdentities{
+						Groups: []string{"sre", "ops"},
 					},
-				},
-				Scopes: &models.RoleScopes{
-					Groups: []string{"sre", "ops"},
 				},
 				Enabled: true,
 			},
@@ -321,14 +347,18 @@ func TestKubernetesRoleScenarios(t *testing.T) {
 			"k8s:nodes:get,list,watch",
 			"k8s:persistentvolumes:get,list,watch",
 		}
-		assert.ElementsMatch(t, expectedAllowPerms, result.Permissions.Allow)
+		assert.ElementsMatch(t, expectedAllowPerms, collectOpsK8s(result.Permissions.Allow))
 
-		// Should have merged resources from k8s-sre only (k8s-developer not in scope)
-		expectedResources := []string{
+		// Should have merged targets from k8s-sre only (k8s-developer not in scope)
+		var allTargets []string
+		for _, stmt := range result.Permissions.Allow {
+			allTargets = append(allTargets, stmt.Targets...)
+		}
+		expectedTargets := []string{
 			"namespace:staging",
 			"namespace:production",
 		}
-		assert.ElementsMatch(t, expectedResources, result.Resources.Allow)
+		assert.ElementsMatch(t, expectedTargets, allTargets)
 	})
 
 	t.Run("namespace-specific rbac with scoping", func(t *testing.T) {
@@ -336,47 +366,55 @@ func TestKubernetesRoleScenarios(t *testing.T) {
 			"team-a-dev": {
 				Name:        "Team A Developer",
 				Description: "Developer access for Team A namespaces",
-				Permissions: models.Permissions{
-					Allow: []string{
-						"k8s:pods:*",
-						"k8s:services:*",
-						"k8s:configmaps:*",
-						"k8s:secrets:get,list",
-						"k8s:apps/deployments:*",
-					},
+				Permissions: models.RolePermissions{
+					Allow: models.RoleStatements{{
+						Operations: []string{
+							"k8s:pods:*",
+							"k8s:services:*",
+							"k8s:configmaps:*",
+							"k8s:secrets:get,list",
+							"k8s:apps/deployments:*",
+						},
+						Targets: []string{
+							"namespace:team-a-dev",
+							"namespace:team-a-staging",
+						},
+					}},
+					Deny: models.RoleStatements{{
+						Operations: []string{"*"}, // All operations denied for these targets
+						Targets: []string{
+							"namespace:team-a-prod",
+						},
+					}},
 				},
-				Resources: models.Resources{
-					Allow: []string{
-						"namespace:team-a-dev",
-						"namespace:team-a-staging",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"team-a"},
 					},
-					Deny: []string{
-						"namespace:team-a-prod",
-					},
-				},
-				Scopes: &models.RoleScopes{
-					Groups: []string{"team-a"},
 				},
 				Enabled: true,
 			},
 			"team-b-dev": {
 				Name:        "Team B Developer",
 				Description: "Developer access for Team B namespaces",
-				Permissions: models.Permissions{
-					Allow: []string{
-						"k8s:pods:get,list,create,update,delete",
-						"k8s:services:get,list,create,update,delete",
-						"k8s:configmaps:get,list,create,update,delete",
-						"k8s:apps/deployments:get,list,create,update,patch,delete",
-					},
+				Permissions: models.RolePermissions{
+					Allow: models.RoleStatements{{
+						Operations: []string{
+							"k8s:pods:get,list,create,update,delete",
+							"k8s:services:get,list,create,update,delete",
+							"k8s:configmaps:get,list,create,update,delete",
+							"k8s:apps/deployments:get,list,create,update,patch,delete",
+						},
+						Targets: []string{
+							"namespace:team-b-*",
+						},
+					}},
 				},
-				Resources: models.Resources{
-					Allow: []string{
-						"namespace:team-b-*",
+				Scopes: models.RoleScopes{
+
+					Allow: models.ScopeIdentities{
+						Groups: []string{"team-b"},
 					},
-				},
-				Scopes: &models.RoleScopes{
-					Groups: []string{"team-b"},
 				},
 				Enabled: true,
 			},
@@ -384,17 +422,19 @@ func TestKubernetesRoleScenarios(t *testing.T) {
 				Name:        "Cross Team Viewer",
 				Description: "Read access across teams",
 				Inherits:    []string{"team-a-dev", "team-b-dev"},
-				Permissions: models.Permissions{
-					Allow: []string{
+				Permissions: models.RolePermissions{
+					Allow: stmts(
 						"k8s:events:get,list,watch",
 						"k8s:nodes:get,list",
-					},
-					Deny: []string{
+					),
+					Deny: stmts(
 						"k8s:*:create,update,patch,delete",
-					},
+					),
 				},
-				Scopes: &models.RoleScopes{
-					Groups: []string{"managers", "leads"},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"managers", "leads"},
+					},
 				},
 				Enabled: true,
 			},
@@ -421,13 +461,21 @@ func TestKubernetesRoleScenarios(t *testing.T) {
 		require.NotNil(t, result)
 
 		assert.Equal(t, "Team A Developer", result.Name)
+		// Collect targets
+		var allowTargets, denyTargets []string
+		for _, stmt := range result.Permissions.Allow {
+			allowTargets = append(allowTargets, stmt.Targets...)
+		}
+		for _, stmt := range result.Permissions.Deny {
+			denyTargets = append(denyTargets, stmt.Targets...)
+		}
 		assert.ElementsMatch(t, []string{
 			"namespace:team-a-dev",
 			"namespace:team-a-staging",
-		}, result.Resources.Allow)
+		}, allowTargets)
 		assert.ElementsMatch(t, []string{
 			"namespace:team-a-prod",
-		}, result.Resources.Deny)
+		}, denyTargets)
 
 		// Test cross-team viewer (manager accessing both teams)
 		managerIdentity := &models.Identity{
@@ -448,21 +496,16 @@ func TestKubernetesRoleScenarios(t *testing.T) {
 		// BUT inherited roles team-a-dev and team-b-dev are scoped to "team-a" and "team-b"
 		// respectively, so they should NOT be merged since manager is not in those groups
 
-		// Should only have permissions from cross-team-viewer role itself
-		expectedPerms := []string{
-			"k8s:events:get,list,watch",
-			"k8s:nodes:get,list",
+		// Should NOT have targets from inherited roles since they don't apply to manager
+		var managerAllowTargets, managerDenyTargets []string
+		for _, stmt := range managerResult.Permissions.Allow {
+			managerAllowTargets = append(managerAllowTargets, stmt.Targets...)
 		}
-		assert.ElementsMatch(t, expectedPerms, managerResult.Permissions.Allow)
-
-		// Should have deny permissions from cross-team-viewer
-		assert.ElementsMatch(t, []string{
-			"k8s:*:create,delete,patch,update", // sorted alphabetically
-		}, managerResult.Permissions.Deny)
-
-		// Should NOT have resources from inherited roles since they don't apply to manager
-		assert.Empty(t, managerResult.Resources.Allow)
-		assert.Empty(t, managerResult.Resources.Deny)
+		for _, stmt := range managerResult.Permissions.Deny {
+			managerDenyTargets = append(managerDenyTargets, stmt.Targets...)
+		}
+		assert.Empty(t, managerAllowTargets)
+		assert.Empty(t, managerDenyTargets)
 	})
 
 	t.Run("cluster admin with restricted permissions", func(t *testing.T) {
@@ -470,19 +513,21 @@ func TestKubernetesRoleScenarios(t *testing.T) {
 			"cluster-admin": {
 				Name:        "Cluster Admin",
 				Description: "Cluster-wide admin with some restrictions",
-				Permissions: models.Permissions{
-					Allow: []string{
+				Permissions: models.RolePermissions{
+					Allow: stmts(
 						"k8s:*:*",
-					},
-					Deny: []string{
+					),
+					Deny: stmts(
 						"k8s:secrets:*", // Cannot access secrets
 						"k8s:certificatesigningrequests:*",
-					},
+					),
 				},
-				Scopes: &models.RoleScopes{
-					Users: []string{
-						"cluster-admin@example.com",
-						"platform-admin@example.com",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{
+							"cluster-admin@example.com",
+							"platform-admin@example.com",
+						},
 					},
 				},
 				Providers: []string{"kubernetes-prod"},
@@ -513,11 +558,11 @@ func TestKubernetesRoleScenarios(t *testing.T) {
 		require.NotNil(t, result)
 
 		assert.Equal(t, "Cluster Admin", result.Name)
-		assert.ElementsMatch(t, []string{"k8s:*:*"}, result.Permissions.Allow)
+		assert.ElementsMatch(t, []string{"k8s:*:*"}, collectOpsK8s(result.Permissions.Allow))
 		assert.ElementsMatch(t, []string{
 			"k8s:secrets:*",
 			"k8s:certificatesigningrequests:*",
-		}, result.Permissions.Deny)
+		}, collectOpsK8s(result.Permissions.Deny))
 		assert.ElementsMatch(t, []string{"kubernetes-prod"}, result.Providers)
 	})
 }

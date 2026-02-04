@@ -14,10 +14,10 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/slack-go/slack"
 	"github.com/thand-io/agent/internal/common"
-	"github.com/thand-io/agent/internal/models"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
 
 	thandProvider "github.com/thand-io/agent/internal/workflows/tasks/providers/thand"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 	"go.temporal.io/api/enums/v1"
 )
@@ -240,7 +240,7 @@ func (s *Server) submitForm(c *gin.Context) {
 
 	// Set user extension
 	if foundUser != nil && foundUser.User != nil {
-		event.SetExtension(models.VarsContextUser, foundUser.User.GetIdentity())
+		event.SetExtension(sdkConstants.VarsContextUser, foundUser.User.GetIdentity())
 	}
 
 	// Set form data
@@ -309,13 +309,13 @@ func (s *Server) getFormDataFromWorkflow(c *gin.Context, workflowID string) (*Fo
 	}
 
 	// Get workflow name from search attributes
-	workflowName, found := workflowRun.TypedSearchAttributes.GetKeyword(models.TypedSearchAttributeWorkflow)
+	workflowName, found := workflowRun.TypedSearchAttributes.GetKeyword(sdkConstants.TypedSearchAttributeWorkflow)
 	if !found || len(workflowName) == 0 {
 		return nil, fmt.Errorf("workflow name not found in search attributes")
 	}
 
 	// Get current task from search attributes
-	currentTask, found := workflowRun.TypedSearchAttributes.GetKeyword(models.TypedSearchAttributeTask)
+	currentTask, found := workflowRun.TypedSearchAttributes.GetKeyword(sdkConstants.TypedSearchAttributeTask)
 	if !found || len(currentTask) == 0 {
 		return nil, fmt.Errorf("no active task in workflow")
 	}

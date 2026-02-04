@@ -7,3 +7,6 @@ import internal "github.com/thand-io/agent/internal/models"
 // abstraction for access control subjects.
 // See internal/models.Identity for full documentation.
 type Identity = internal.Identity
+
+// IdentitiesResponse represents a response containing multiple identities.
+type IdentitiesResponse = internal.IdentitiesResponse

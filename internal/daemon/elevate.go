@@ -16,6 +16,7 @@ import (
 	"github.com/thand-io/agent/internal/daemon/elevate/llm"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/workflows/manager"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
 // getElevate handles GET /api/v1/elevate?role=admin&target=server&reason=maintenance
@@ -173,26 +174,47 @@ func (s *Server) handleDynamicRequest(c *gin.Context, dynamicRequest models.Elev
 		return
 	}
 
+	// Convert string permissions to Statements (backwards compatibility)
+	allowStatements := make(models.RoleStatements, len(dynamicRequest.Permissions))
+	for i, perm := range dynamicRequest.Permissions {
+		allowStatements[i] = models.Statement{
+			Operations: []string{perm},
+			Targets:    []string{},
+		}
+	}
+
+	// Merge groups and resources into permissions targets
+	var allTargets []string
+	allTargets = append(allTargets, dynamicRequest.Groups...)
+	allTargets = append(allTargets, dynamicRequest.Resources...)
+
+	// Add targets to allowStatements if there are any
+	if len(allTargets) > 0 {
+		if len(allowStatements) > 0 {
+			allowStatements[0].Targets = append(allowStatements[0].Targets, allTargets...)
+		} else {
+			allowStatements = append(allowStatements, models.Statement{
+				Targets: allTargets,
+			})
+		}
+	}
+
 	// Create a dynamic role based on the request
 	dynamicRole := &models.Role{
 		Name:        "dynamic-role-" + time.Now().Format("20060102-150405"),
 		Description: "Dynamically created role: " + dynamicRequest.Reason,
 		Workflows:   []string{dynamicRequest.Workflow},
-		Permissions: models.Permissions{
-			Allow: dynamicRequest.Permissions,
+		Permissions: models.RolePermissions{
+			Allow: allowStatements,
 		},
 		Inherits:  dynamicRequest.Inherits,
 		Providers: dynamicRequest.Providers,
-		Groups: models.Groups{
-			Allow: dynamicRequest.Groups,
-		},
-		Resources: models.Resources{
-			Allow: dynamicRequest.Resources,
-		},
-		Scopes: &models.RoleScopes{
-			Groups:  dynamicRequest.Scopes.Groups,
-			Users:   dynamicRequest.Scopes.Users,
-			Domains: dynamicRequest.Scopes.Domains,
+		Scopes: models.RoleScopes{
+			Allow: models.ScopeIdentities{
+				Groups:  dynamicRequest.Scopes.Groups,
+				Users:   dynamicRequest.Scopes.Users,
+				Domains: dynamicRequest.Scopes.Domains,
+			},
 		},
 		Enabled: true,
 	}
@@ -504,7 +526,7 @@ func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.ElevateWorkflow
 	if event != nil {
 
 		// Extensions only support basic types so we need to set the user identity as a string
-		event.SetExtension(models.VarsContextUser, foundSession.User.GetIdentity())
+		event.SetExtension(sdkConstants.VarsContextUser, foundSession.User.GetIdentity())
 
 		if len(event.FieldErrors) > 0 {
 			logrus.WithField("errors", event.FieldErrors).

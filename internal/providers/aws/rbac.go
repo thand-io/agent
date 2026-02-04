@@ -120,8 +120,62 @@ type PolicyDocument struct {
 
 // Statement represents a policy statement
 type Statement struct {
-	Effect    string `json:"Effect"`
-	Action    any    `json:"Action,omitempty"`    // Can be string or []string
-	Resource  any    `json:"Resource,omitempty"`  // Can be string or []string
-	Principal any    `json:"Principal,omitempty"` // For assume role policies
+	Effect    string         `json:"Effect"`
+	Action    any            `json:"Action,omitempty"`    // Can be string or []string
+	Resource  any            `json:"Resource,omitempty"`  // Can be string or []string
+	Principal any            `json:"Principal,omitempty"` // For assume role policies
+	Condition map[string]any `json:"Condition,omitempty"` // IAM policy conditions
+}
+
+// permissionsToAwsPolicy converts CSP-agnostic Permissions to AWS PolicyDocument
+// The effect (Allow/Deny) comes from the parent Permissions.Allow or Permissions.Deny
+func permissionsToAwsPolicy(permissions models.RolePermissions) PolicyDocument {
+	awsStatements := []Statement{}
+
+	// Process Allow statements
+	for _, stmt := range permissions.Allow {
+		// Skip statements with no operations - AWS requires at least one Action
+		if len(stmt.Operations) == 0 {
+			continue
+		}
+
+		// Default resource to "*" if no targets specified (backwards compatibility)
+		var resource any = "*"
+		if len(stmt.Targets) > 0 {
+			resource = stmt.Targets
+		}
+
+		awsStatements = append(awsStatements, Statement{
+			Effect:    "Allow",
+			Action:    stmt.Operations,
+			Resource:  resource,
+			Condition: stmt.Conditions,
+		})
+	}
+
+	// Process Deny statements
+	for _, stmt := range permissions.Deny {
+		// Skip statements with no operations - AWS requires at least one Action
+		if len(stmt.Operations) == 0 {
+			continue
+		}
+
+		// Default resource to "*" if no targets specified (backwards compatibility)
+		var resource any = "*"
+		if len(stmt.Targets) > 0 {
+			resource = stmt.Targets
+		}
+
+		awsStatements = append(awsStatements, Statement{
+			Effect:    "Deny",
+			Action:    stmt.Operations,
+			Resource:  resource,
+			Condition: stmt.Conditions,
+		})
+	}
+
+	return PolicyDocument{
+		Version:   "2012-10-17",
+		Statement: awsStatements,
+	}
 }

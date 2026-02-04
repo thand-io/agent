@@ -85,7 +85,7 @@
     <p><strong>Allowed:</strong></p>
     <ul style="list-style: none; padding: 0; margin: 0 0 0.75rem 0;">
     {{range .Permissions.Allow}}
-        <li style="padding: 0.5rem; background-color: #f1f5f9; margin-bottom: 0.25rem; border-radius: 0.25rem;">- {{.}}</li>
+        <li style="padding: 0.5rem; background-color: #f1f5f9; margin-bottom: 0.25rem; border-radius: 0.25rem;">- Operations: {{range $i, $op := .Operations}}{{if $i}}, {{end}}{{$op}}{{end}}{{if .Targets}}<br/>&nbsp;&nbsp;Targets: {{range $i, $t := .Targets}}{{if $i}}, {{end}}{{$t}}{{end}}{{end}}</li>
     {{end}}
     </ul>
     {{end}}
@@ -93,7 +93,7 @@
     <p><strong>Denied:</strong></p>
     <ul style="list-style: none; padding: 0; margin: 0;">
     {{range .Permissions.Deny}}
-        <li style="padding: 0.5rem; background-color: #f1f5f9; margin-bottom: 0.25rem; border-radius: 0.25rem;">- {{.}}</li>
+        <li style="padding: 0.5rem; background-color: #f1f5f9; margin-bottom: 0.25rem; border-radius: 0.25rem;">- Operations: {{range $i, $op := .Operations}}{{if $i}}, {{end}}{{$op}}{{end}}{{if .Targets}}<br/>&nbsp;&nbsp;Targets: {{range $i, $t := .Targets}}{{if $i}}, {{end}}{{$t}}{{end}}{{end}}</li>
     {{end}}
     </ul>
     {{end}}

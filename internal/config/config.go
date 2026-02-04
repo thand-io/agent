@@ -333,6 +333,7 @@ func setupLogging(config *Config, v *viper.Viper) error {
 	return nil
 }
 
+
 func (c *Config) ReloadConfig() error {
 	var wg sync.WaitGroup
 	var foundErrors []error
@@ -397,17 +398,6 @@ func (c *Config) ReloadConfig() error {
 	// Return first error if any occurred
 	if len(foundErrors) > 0 {
 		return errors.Join(foundErrors...)
-	}
-
-	if c.GetServices() != nil && c.GetServices().GetTemporal() != nil {
-
-		logrus.Infoln("Setting up temporal services...")
-		err := c.setupTemporalServices()
-
-		if err != nil {
-			return fmt.Errorf("setting up temporal services: %w", err)
-		}
-
 	}
 
 	return nil
@@ -734,6 +724,23 @@ func (c *Config) syncWithEndpoint(loginUrl string, authentication *model.Referen
 			)
 			if err != nil {
 				logrus.WithError(err).Warn("Failed to setup remote logging, continuing without it")
+			}
+		}
+	}
+
+	if registrationResponse.Services != nil {
+
+		// Setup temporal services if provided
+		if registrationResponse.Services.Temporal != nil {
+			logrus.Infoln("Configuring temporal services from login server configuration")
+			c.mu.Lock()
+			c.Services.Temporal = registrationResponse.Services.Temporal
+			c.mu.Unlock()
+
+			// Check if temporal is enabled and if so shutdown any existing client
+			err := c.GetServices().ReloadTemporal()
+			if err != nil {
+				return nil, fmt.Errorf("reloading temporal service: %w", err)
 			}
 		}
 	}

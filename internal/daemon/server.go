@@ -32,6 +32,7 @@ import (
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"github.com/goccy/go-yaml"
 	"github.com/sirupsen/logrus"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -64,6 +65,13 @@ func NewServer(cfg *config.Config) *Server {
 				return fmt.Sprintf("Error: %v", err)
 			}
 			return string(jsonBytes)
+		},
+		"toYAML": func(v any) string {
+			yamlBytes, err := yaml.Marshal(v)
+			if err != nil {
+				return fmt.Sprintf("Error: %v", err)
+			}
+			return string(yamlBytes)
 		},
 	}
 
@@ -359,6 +367,7 @@ func (s *Server) setupRoutes(router *gin.Engine) {
 		router.POST("/execution/:id/form", s.submitForm)
 
 		router.GET("/workflow/:name", s.getWorkflowByName)
+		router.GET("/role/:role", s.getRolePage)
 
 	} else if s.Config.IsAgent() || s.Config.IsClient() {
 

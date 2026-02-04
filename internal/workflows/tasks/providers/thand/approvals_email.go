@@ -100,50 +100,28 @@ func (a *approvalsNotifier) createApprovalEmailBody() (string, string) {
 		}
 	}
 
-	if elevateRequest.Role != nil && (len(elevateRequest.Role.Groups.Allow) > 0 || len(elevateRequest.Role.Groups.Deny) > 0) {
-		plainText.WriteString("\nGroups:\n")
-		if len(elevateRequest.Role.Groups.Allow) > 0 {
-			plainText.WriteString("Allowed:\n")
-			for _, group := range elevateRequest.Role.Groups.Allow {
-				plainText.WriteString(fmt.Sprintf("- %s\n", group))
-			}
-		}
-		if len(elevateRequest.Role.Groups.Deny) > 0 {
-			plainText.WriteString("Denied:\n")
-			for _, group := range elevateRequest.Role.Groups.Deny {
-				plainText.WriteString(fmt.Sprintf("- %s\n", group))
-			}
-		}
-	}
-
 	if elevateRequest.Role != nil && (len(elevateRequest.Role.Permissions.Allow) > 0 || len(elevateRequest.Role.Permissions.Deny) > 0) {
 		plainText.WriteString("\nPermissions:\n")
 		if len(elevateRequest.Role.Permissions.Allow) > 0 {
 			plainText.WriteString("Allowed:\n")
-			for _, perm := range elevateRequest.Role.Permissions.Allow {
-				plainText.WriteString(fmt.Sprintf("- %s\n", perm))
+			for _, stmt := range elevateRequest.Role.Permissions.Allow {
+				if len(stmt.Operations) > 0 {
+					plainText.WriteString(fmt.Sprintf("- Operations: %s\n", strings.Join(stmt.Operations, ", ")))
+				}
+				if len(stmt.Targets) > 0 {
+					plainText.WriteString(fmt.Sprintf("  Targets: %s\n", strings.Join(stmt.Targets, ", ")))
+				}
 			}
 		}
 		if len(elevateRequest.Role.Permissions.Deny) > 0 {
 			plainText.WriteString("Denied:\n")
-			for _, perm := range elevateRequest.Role.Permissions.Deny {
-				plainText.WriteString(fmt.Sprintf("- %s\n", perm))
-			}
-		}
-	}
-
-	if elevateRequest.Role != nil && (len(elevateRequest.Role.Resources.Allow) > 0 || len(elevateRequest.Role.Resources.Deny) > 0) {
-		plainText.WriteString("\nResources:\n")
-		if len(elevateRequest.Role.Resources.Allow) > 0 {
-			plainText.WriteString("Allowed:\n")
-			for _, resource := range elevateRequest.Role.Resources.Allow {
-				plainText.WriteString(fmt.Sprintf("- %s\n", resource))
-			}
-		}
-		if len(elevateRequest.Role.Resources.Deny) > 0 {
-			plainText.WriteString("Denied:\n")
-			for _, resource := range elevateRequest.Role.Resources.Deny {
-				plainText.WriteString(fmt.Sprintf("- %s\n", resource))
+			for _, stmt := range elevateRequest.Role.Permissions.Deny {
+				if len(stmt.Operations) > 0 {
+					plainText.WriteString(fmt.Sprintf("- Operations: %s\n", strings.Join(stmt.Operations, ", ")))
+				}
+				if len(stmt.Targets) > 0 {
+					plainText.WriteString(fmt.Sprintf("  Targets: %s\n", strings.Join(stmt.Targets, ", ")))
+				}
 			}
 		}
 	}
@@ -177,27 +155,11 @@ func (a *approvalsNotifier) createApprovalEmailBody() (string, string) {
 			"Description": elevateRequest.Role.Description,
 		}
 
-		// Add groups if available
-		if len(elevateRequest.Role.Groups.Allow) > 0 || len(elevateRequest.Role.Groups.Deny) > 0 {
-			data["Groups"] = map[string]any{
-				"Allow": elevateRequest.Role.Groups.Allow,
-				"Deny":  elevateRequest.Role.Groups.Deny,
-			}
-		}
-
-		// Add permissions if available
+		// Add permissions if available (includes targets formerly in groups/resources)
 		if len(elevateRequest.Role.Permissions.Allow) > 0 || len(elevateRequest.Role.Permissions.Deny) > 0 {
 			data["Permissions"] = map[string]any{
 				"Allow": elevateRequest.Role.Permissions.Allow,
 				"Deny":  elevateRequest.Role.Permissions.Deny,
-			}
-		}
-
-		// Add resources if available
-		if len(elevateRequest.Role.Resources.Allow) > 0 || len(elevateRequest.Role.Resources.Deny) > 0 {
-			data["Resources"] = map[string]any{
-				"Allow": elevateRequest.Role.Resources.Allow,
-				"Deny":  elevateRequest.Role.Resources.Deny,
 			}
 		}
 	}

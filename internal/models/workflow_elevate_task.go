@@ -24,15 +24,6 @@ import (
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
-const (
-	VarsContextUser      = "user"
-	VarsContextRequest   = "request"
-	VarsContextProviders = "providers"
-	VarsContextWorkflow  = "workflow"
-	VarsContextRole      = "role"
-	VarsContextApproved  = "approved"
-)
-
 // ElevateWorkflowTask represents a task within a workflow and implements TaskSupport
 type ElevateWorkflowTask struct {
 	*sdkWorkflowsModel.WorkflowTask
@@ -64,11 +55,11 @@ func (r *ElevateWorkflowTask) GetEncodedTask(encryptor EncryptionImpl) string {
 }
 
 func (r *ElevateWorkflowTask) SetUser(user *User) {
-	r.SetContextKeyValue(VarsContextUser, user.AsMap())
+	r.SetContextKeyValue(sdkConstants.VarsContextUser, user.AsMap())
 }
 
 func (r *ElevateWorkflowTask) SetRole(role *Role) {
-	r.SetContextKeyValue(VarsContextRole, role.AsMap())
+	r.SetContextKeyValue(sdkConstants.VarsContextRole, role.AsMap())
 }
 
 // Helper methods for TaskSupport
@@ -165,7 +156,7 @@ func (r *ElevateWorkflowTask) GetRole() *Role {
 func (ctx *ElevateWorkflowTask) IsApproved() *bool {
 
 	if context := ctx.GetContextAsMap(); len(context) > 0 {
-		if approved, ok := context[VarsContextApproved].(bool); ok {
+		if approved, ok := context[sdkConstants.VarsContextApproved].(bool); ok {
 			return &approved
 		}
 	}

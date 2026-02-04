@@ -37,14 +37,8 @@ func (a *approvalsNotifier) createApprovalSlackBlocks() []slack.Block {
 	// Add inherited roles section
 	a.addInheritedRolesSection(&blocks, elevateRequest)
 
-	// Add groups section
-	a.addGroupsSection(&blocks, elevateRequest)
-
-	// Add permissions section
+	// Add permissions section (includes targets formerly in groups/resources)
 	a.addPermissionsSection(&blocks, elevateRequest)
-
-	// Add resources section
-	a.addResourcesSection(&blocks, elevateRequest)
 
 	// Add user information section
 	a.addUserInfoSection(&blocks, elevateRequest)
@@ -165,40 +159,7 @@ func (a *approvalsNotifier) addInheritedRolesSection(blocks *[]slack.Block, elev
 	}
 }
 
-// addGroupsSection adds groups section if available
-func (a *approvalsNotifier) addGroupsSection(blocks *[]slack.Block, elevateRequest *models.ElevateRequestInternal) {
-	if elevateRequest.Role != nil && (len(elevateRequest.Role.Groups.Allow) > 0 || len(elevateRequest.Role.Groups.Deny) > 0) {
-		var groupsText strings.Builder
-		groupsText.WriteString("*Groups:*\n")
-
-		if len(elevateRequest.Role.Groups.Allow) > 0 {
-			groupsText.WriteString("*Allowed:*\n")
-			for _, group := range elevateRequest.Role.Groups.Allow {
-				groupsText.WriteString(fmt.Sprintf("- %s\n", group))
-			}
-		}
-
-		if len(elevateRequest.Role.Groups.Deny) > 0 {
-			groupsText.WriteString("*Denied:*\n")
-			for _, group := range elevateRequest.Role.Groups.Deny {
-				groupsText.WriteString(fmt.Sprintf("- %s\n", group))
-			}
-		}
-
-		*blocks = append(*blocks, slack.NewSectionBlock(
-			slack.NewTextBlockObject(
-				slack.MarkdownType,
-				groupsText.String(),
-				false,
-				false,
-			),
-			nil,
-			nil,
-		))
-	}
-}
-
-// addPermissionsSection adds permissions section if available
+// addPermissionsSection adds permissions section if available (includes targets formerly in groups/resources)
 func (a *approvalsNotifier) addPermissionsSection(blocks *[]slack.Block, elevateRequest *models.ElevateRequestInternal) {
 	if elevateRequest.Role != nil && (len(elevateRequest.Role.Permissions.Allow) > 0 || len(elevateRequest.Role.Permissions.Deny) > 0) {
 		var permissionsText strings.Builder
@@ -206,15 +167,25 @@ func (a *approvalsNotifier) addPermissionsSection(blocks *[]slack.Block, elevate
 
 		if len(elevateRequest.Role.Permissions.Allow) > 0 {
 			permissionsText.WriteString("*Allowed:*\n")
-			for _, perm := range elevateRequest.Role.Permissions.Allow {
-				permissionsText.WriteString(fmt.Sprintf("- %s\n", perm))
+			for _, stmt := range elevateRequest.Role.Permissions.Allow {
+				if len(stmt.Operations) > 0 {
+					permissionsText.WriteString(fmt.Sprintf("- Operations: `%s`\n", strings.Join(stmt.Operations, "`, `")))
+				}
+				if len(stmt.Targets) > 0 {
+					permissionsText.WriteString(fmt.Sprintf("  Targets: `%s`\n", strings.Join(stmt.Targets, "`, `")))
+				}
 			}
 		}
 
 		if len(elevateRequest.Role.Permissions.Deny) > 0 {
 			permissionsText.WriteString("*Denied:*\n")
-			for _, perm := range elevateRequest.Role.Permissions.Deny {
-				permissionsText.WriteString(fmt.Sprintf("- %s\n", perm))
+			for _, stmt := range elevateRequest.Role.Permissions.Deny {
+				if len(stmt.Operations) > 0 {
+					permissionsText.WriteString(fmt.Sprintf("- Operations: `%s`\n", strings.Join(stmt.Operations, "`, `")))
+				}
+				if len(stmt.Targets) > 0 {
+					permissionsText.WriteString(fmt.Sprintf("  Targets: `%s`\n", strings.Join(stmt.Targets, "`, `")))
+				}
 			}
 		}
 
@@ -222,39 +193,6 @@ func (a *approvalsNotifier) addPermissionsSection(blocks *[]slack.Block, elevate
 			slack.NewTextBlockObject(
 				slack.MarkdownType,
 				permissionsText.String(),
-				false,
-				false,
-			),
-			nil,
-			nil,
-		))
-	}
-}
-
-// addResourcesSection adds resources section if available
-func (a *approvalsNotifier) addResourcesSection(blocks *[]slack.Block, elevateRequest *models.ElevateRequestInternal) {
-	if elevateRequest.Role != nil && (len(elevateRequest.Role.Resources.Allow) > 0 || len(elevateRequest.Role.Resources.Deny) > 0) {
-		var resourcesText strings.Builder
-		resourcesText.WriteString("*Resources:*\n")
-
-		if len(elevateRequest.Role.Resources.Allow) > 0 {
-			resourcesText.WriteString("*Allowed:*\n")
-			for _, resource := range elevateRequest.Role.Resources.Allow {
-				resourcesText.WriteString(fmt.Sprintf("- %s\n", resource))
-			}
-		}
-
-		if len(elevateRequest.Role.Resources.Deny) > 0 {
-			resourcesText.WriteString("*Denied:*\n")
-			for _, resource := range elevateRequest.Role.Resources.Deny {
-				resourcesText.WriteString(fmt.Sprintf("- %s\n", resource))
-			}
-		}
-
-		*blocks = append(*blocks, slack.NewSectionBlock(
-			slack.NewTextBlockObject(
-				slack.MarkdownType,
-				resourcesText.String(),
 				false,
 				false,
 			),

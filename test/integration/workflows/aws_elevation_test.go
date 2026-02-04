@@ -313,6 +313,11 @@ func TestAWSElevationWithTemporal(t *testing.T) {
 	workflow := *workflowPtr
 	role := testCase.Roles["aws_test_admin"]
 
+	// Calculate the expected role name that will be created by the AWS provider
+	// The provider uses GetIdentifier which appends a hash to ensure uniqueness
+	expectedRoleName := role.GetIdentifier()
+	t.Logf("Expected IAM role name: %s", expectedRoleName)
+
 	t.Run("Full elevation lifecycle with Temporal", func(t *testing.T) {
 		// Create workflow task (elevation request)
 		sdkWorkflowTask, err := models.NewElevationWorkflowContext(&workflow)
@@ -428,7 +433,7 @@ func TestAWSElevationWithTemporal(t *testing.T) {
 
 		// Step 3: Verify the IAM role was created and user can assume it
 		t.Log("Step 3: Verifying IAM role was created with proper authorization...")
-		verifyIAMRoleCreated(t, ctx, iamClient, "test_admin", testUsername)
+		verifyIAMRoleCreated(t, ctx, iamClient, expectedRoleName, testUsername)
 
 		// Step 4: Verify the workflow has a timer (created after authorization)
 		t.Log("Step 4: Verifying workflow has an active revocation timer...")
@@ -446,7 +451,7 @@ func TestAWSElevationWithTemporal(t *testing.T) {
 
 		// Step 7: Verify the role has been revoked (Deny policy in place)
 		t.Log("Step 7: Verifying IAM role has been revoked after cleanup...")
-		verifyIAMRoleRevoked(t, ctx, iamClient, "test_admin")
+		verifyIAMRoleRevoked(t, ctx, iamClient, expectedRoleName)
 
 		// The test validates that:
 		// 1. Email was sent with approval links
