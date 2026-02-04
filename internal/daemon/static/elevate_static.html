@@ -109,13 +109,20 @@
                             <span x-show="loadingEvaluatedRole" style="font-size: 0.8rem; color: var(--text-muted, #666); font-weight: normal;"> (loading...)</span>
                         </h3>
                         
+                        <!-- Error message -->
+                        <div x-show="evaluationError" style="background-color: #fee; border: 1px solid #fcc; border-radius: 4px; padding: 1rem; margin-bottom: 1rem;">
+                            <p style="margin: 0; font-size: 0.875rem; color: #c00;">
+                                <strong>⚠️ Error:</strong> <span x-text="evaluationError"></span>
+                            </p>
+                        </div>
+                        
                         <!-- Info about evaluation -->
-                        <p x-show="!evaluatedRole && selectedRole" style="font-size: 0.8rem; color: var(--text-muted, #666); margin-bottom: 1rem; font-style: italic;">
+                        <p x-show="!evaluatedRole && !evaluationError && selectedRole" style="font-size: 0.8rem; color: var(--text-muted, #666); margin-bottom: 1rem; font-style: italic;">
                             Select exactly one identity to see the fully evaluated role with resolved inheritance.
                         </p>
 
                         <!-- Use evaluatedRole if available, otherwise fall back to base role -->
-                        <template x-if="(evaluatedRole || roles[selectedRole])">
+                        <template x-if="!evaluationError && (evaluatedRole || roles[selectedRole])">
                             <div>
                                 <!-- Inherits -->
                                 <template x-if="(evaluatedRole?.inherits?.length > 0) || (!evaluatedRole && roles[selectedRole]?.inherits?.length > 0)">
@@ -444,6 +451,7 @@
                 selectedTenant: '',
                 selectedRole: '',
                 evaluatedRole: null,
+                evaluationError: null,
                 loadingEvaluatedRole: false,
                 duration: 'PT1M',
                 reason: '',
@@ -513,6 +521,7 @@
                 async evaluateRole() {
                     if (!this.selectedRole || !identityChoicesInstance) {
                         this.evaluatedRole = null;
+                        this.evaluationError = null;
                         return;
                     }
 
@@ -521,11 +530,13 @@
                     // Only evaluate if exactly one identity is selected
                     if (selectedIdentities.length !== 1) {
                         this.evaluatedRole = null;
+                        this.evaluationError = null;
                         return;
                     }
 
                     const identityId = selectedIdentities[0].value;
                     this.loadingEvaluatedRole = true;
+                    this.evaluationError = null;
 
                     try {
                         const response = await fetch(`${this.apiBasePath}/roles/evaluate`, {
@@ -540,7 +551,22 @@
                         });
 
                         if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
+                            let errorMessage = `Failed to evaluate role (${response.status})`;
+                            
+                            try {
+                                const errorData = await response.json();
+                                if (errorData.title) {
+                                    errorMessage = errorData.title;
+                                }
+                                if (errorData.message) {
+                                    errorMessage += `: ${errorData.message}`;
+                                }
+                            } catch (parseError) {
+                                // If response isn't JSON, use status text
+                                errorMessage += `: ${response.statusText}`;
+                            }
+                            
+                            throw new Error(errorMessage);
                         }
 
                         const data = await response.json();
@@ -548,6 +574,7 @@
                     } catch (error) {
                         console.error('Error evaluating role:', error);
                         this.evaluatedRole = null;
+                        this.evaluationError = error.message;
                     } finally {
                         this.loadingEvaluatedRole = false;
                     }

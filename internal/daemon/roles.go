@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 )
 
@@ -42,12 +41,12 @@ func (s *Server) getRoles(c *gin.Context) {
 	// This is because roles can contain sensitive information
 	// and we want to ensure that only authenticated users can access them
 	if s.Config.IsServer() {
-		_, foundUser, err := s.getUser(c)
+		_, foundSession, err := s.getSession(c)
 		if err != nil {
 			s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of available roles", err)
 			return
 		}
-		authenticatedUser = foundUser
+		authenticatedUser = foundSession
 	}
 
 	// Allow to filter by providers can be comma separated
@@ -179,7 +178,7 @@ func (s *Server) getRolePage(c *gin.Context) {
 	}
 
 	// Get the authenticated user's session
-	_, session, err := s.getUser(c)
+	_, foundSession, err := s.getSession(c)
 	if err != nil {
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user", err)
 		return
@@ -194,9 +193,9 @@ func (s *Server) getRolePage(c *gin.Context) {
 
 	// Create identity from the authenticated user
 	identity := &models.Identity{
-		ID:    session.User.GetIdentity(),
-		Label: session.User.GetName(),
-		User:  session.User,
+		ID:    foundSession.User.GetIdentity(),
+		Label: foundSession.User.GetName(),
+		User:  foundSession.User,
 	}
 
 	// Evaluate the composite role with all inherited permissions resolved
@@ -243,7 +242,7 @@ func (s *Server) postEvaluateRole(c *gin.Context) {
 	}
 
 	// Get the authenticated user
-	_, session, err := s.getUser(c)
+	_, _, err := s.getSession(c)
 	if err != nil {
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized", err)
 		return
@@ -257,14 +256,14 @@ func (s *Server) postEvaluateRole(c *gin.Context) {
 	}
 
 	// Look up the identity from available identities
-	identityResult, err := s.findIdentityByID(session.User, request.Identity)
+	identityResult, err := s.Config.GetIdentity(request.Identity)
 	if err != nil {
 		s.getErrorPage(c, http.StatusNotFound, "Identity not found", err)
 		return
 	}
 
 	// Evaluate the composite role
-	compositeRole, err := s.Config.GetCompositeRole(&identityResult.Result, baseRole)
+	compositeRole, err := s.Config.GetCompositeRole(identityResult, baseRole)
 	if err != nil {
 		s.getErrorPage(c, http.StatusInternalServerError, "Failed to evaluate composite role", err)
 		return
@@ -273,28 +272,4 @@ func (s *Server) postEvaluateRole(c *gin.Context) {
 	c.JSON(http.StatusOK, EvaluateRoleResponse{
 		Role: compositeRole,
 	})
-}
-
-// findIdentityByID looks up an identity by its ID from available identity sources
-func (s *Server) findIdentityByID(user *models.User, identityID string) (*models.SearchResult[models.Identity], error) {
-	// Get identities from all providers for this user
-	identities, err := s.Config.GetIdentitiesWithFilter(user, config.IdentityTypeAll, &models.SearchRequest{})
-	if err != nil {
-		return nil, err
-	}
-
-	for _, identity := range identities {
-		if identity.ID == identityID {
-			return &identity, nil
-		}
-	}
-
-	// If no exact match found, create a basic identity with just the ID
-	// This allows evaluation for identities that may not be in the system yet
-	return &models.SearchResult[models.Identity]{
-		Result: models.Identity{
-			ID:    identityID,
-			Label: identityID,
-		},
-	}, nil
 }

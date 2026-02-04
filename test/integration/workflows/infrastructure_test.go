@@ -17,7 +17,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/localstack"
 	"github.com/testcontainers/testcontainers-go/wait"
 	"github.com/thand-io/agent/internal/common"
-	"github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -455,16 +455,16 @@ func (infra *TestInfrastructure) registerNamespaceWithSearchAttributes(ctx conte
 		GetName() string
 		GetValueType() enums.IndexedValueType
 	}{
-		models.TypedSearchAttributeStatus,
-		models.TypedSearchAttributeTask,
-		models.TypedSearchAttributeUser,
-		models.TypedSearchAttributeRole,
-		models.TypedSearchAttributeWorkflow,
-		models.TypedSearchAttributeProviders,
-		models.TypedSearchAttributeReason,
-		models.TypedSearchAttributeDuration,
-		models.TypedSearchAttributeIdentities,
-		models.TypedSearchAttributeApproved,
+		sdkConstants.TypedSearchAttributeStatus,
+		sdkConstants.TypedSearchAttributeTask,
+		sdkConstants.TypedSearchAttributeUser,
+		sdkConstants.TypedSearchAttributeRole,
+		sdkConstants.TypedSearchAttributeWorkflow,
+		sdkConstants.TypedSearchAttributeProviders,
+		sdkConstants.TypedSearchAttributeReason,
+		sdkConstants.TypedSearchAttributeDuration,
+		sdkConstants.TypedSearchAttributeIdentities,
+		sdkConstants.TypedSearchAttributeApproved,
 	}
 
 	searchAttributes := make(map[string]enums.IndexedValueType, len(searchAttributeTypes))

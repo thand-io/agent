@@ -414,7 +414,7 @@ func (s *Server) getProviders(c *gin.Context) {
 	// This is because roles can contain sensitive information
 	// and we want to ensure that only authenticated users can access them
 	if s.Config.IsServer() {
-		_, foundUser, err := s.getUser(c)
+		_, foundUser, err := s.getSession(c)
 		if err != nil {
 			s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of available providers", err)
 			return
@@ -489,7 +489,7 @@ func (s *Server) providerFunctionHandler(c *gin.Context) {
 
 	// TODO(hugh): Try and use the session for the specified provider
 	// if it supports it
-	_, foundUser, err := s.getUser(c)
+	_, foundUser, err := s.getSession(c)
 	if err != nil {
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of available providers", err)
 		return

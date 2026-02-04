@@ -552,11 +552,47 @@ func (s *Server) getUserFromElevationRequest(c *gin.Context, request models.Elev
 
 	}
 
-	return s.getUser(c, findAuthProviders...)
+	return s.getSession(c, findAuthProviders...)
 
 }
 
-func (s *Server) getUser(c *gin.Context, authProviders ...string) (string, *models.Session, error) {
+func (s *Server) getSession(c *gin.Context, authProviders ...string) (string, *models.Session, error) {
+
+	providerName, foundSession, err := s.resolveSession(c, authProviders...)
+
+	if err != nil {
+		logrus.WithError(err).Warnln("Failed to resolve user session from context")
+		return providerName, foundSession, fmt.Errorf("unauthorized: unable to get user session")
+	}
+
+	// Lets resolve the user information from the session
+	if foundSession != nil {
+
+		foundUser := foundSession.User
+
+		if foundUser != nil {
+
+			// We have a user now lets resolve a user based on all the identities we have
+			compositeIdentity, err := s.Config.GetIdentity(foundUser.GetIdentity())
+
+			if err != nil {
+				logrus.WithError(err).
+					WithField("user_id", foundUser.ID).
+					Warnln("Failed to resolve identity for user in session")
+			} else if compositeIdentity.User != nil {
+				foundSession.User = compositeIdentity.User
+			} else {
+				logrus.WithField("user_id", foundUser.ID).
+					Warnln("No user information found in resolved identity for session user")
+			}
+		}
+	}
+
+	return providerName, foundSession, nil
+
+}
+
+func (s *Server) resolveSession(c *gin.Context, authProviders ...string) (string, *models.Session, error) {
 
 	remoteSessions, err := s.getUserSessions(c)
 

@@ -823,8 +823,7 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 		assert.Contains(t, collectOpsProvider(result2.Permissions.Allow), "base:permission")
 
 		// User from secure domain but NOT in admins group - role doesn't apply
-		// Note: Since the role has scopes and user doesn't match, GetCompositeRoleByName
-		// still returns the role but inherited scoped roles won't apply
+		// The base role has scopes requiring admins group, so user cannot access this role at all
 		wrongGroupUser := &models.Identity{
 			ID: "dev1",
 			User: &models.User{
@@ -835,10 +834,9 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 		}
 
 		result3, err := config.GetCompositeRoleByName(wrongGroupUser, "restricted-admin")
-		require.NoError(t, err)
-		require.NotNil(t, result3)
-		// Should have provider role because user is from secure domain (provider scope passes)
-		assert.Contains(t, result3.Inherits, "AdministratorAccess")
+		require.Error(t, err)
+		assert.Nil(t, result3)
+		assert.Contains(t, err.Error(), "not applicable to identity")
 	})
 
 	t.Run("multiple providers with different scopes", func(t *testing.T) {

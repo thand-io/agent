@@ -68,7 +68,8 @@ func (t *thandTask) resolveIdentity(identity string) *models.Identity {
 
 	return &models.Identity{
 		User: &models.User{
-			Email: identity,
+			Email:  identity,
+			Source: "thand",
 		},
 	}
 }

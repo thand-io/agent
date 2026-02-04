@@ -502,7 +502,7 @@ func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.ElevateWorkflow
 
 	// Get user context
 	// TODO: Validate the provider that we're using?
-	_, foundUser, err := s.getUser(c)
+	_, foundSession, err := s.getSession(c)
 
 	if err != nil {
 		logrus.WithError(err).Error("failed to get user")
@@ -510,12 +510,12 @@ func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.ElevateWorkflow
 		return
 	}
 
-	if foundUser == nil {
+	if foundSession == nil {
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: user not found for elevation")
 		return
 	}
 
-	if foundUser.User == nil {
+	if foundSession.User == nil {
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: user information is missing for elevation")
 		return
 	}
@@ -526,7 +526,7 @@ func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.ElevateWorkflow
 	if event != nil {
 
 		// Extensions only support basic types so we need to set the user identity as a string
-		event.SetExtension(sdkConstants.VarsContextUser, foundUser.User.GetIdentity())
+		event.SetExtension(sdkConstants.VarsContextUser, foundSession.User.GetIdentity())
 
 		if len(event.FieldErrors) > 0 {
 			logrus.WithField("errors", event.FieldErrors).
@@ -662,7 +662,7 @@ func (s *Server) handleLargeLanguageModelRequest(c *gin.Context, elevateRequest 
 		return
 	}
 
-	_, foundUser, err := s.getUser(c)
+	_, foundUser, err := s.getSession(c)
 
 	if err != nil {
 		logrus.WithError(err).Error("failed to get user")
@@ -750,7 +750,7 @@ func (s *Server) getElevationPagePrefill(c *gin.Context) ElevateStaticPageData {
 
 	if len(validIdentities) == 0 {
 		// Set the current user as the default identity if none are valid
-		_, session, err := s.getUser(c)
+		_, session, err := s.getSession(c)
 		if err == nil && session != nil {
 			user := session.User
 			if user != nil {

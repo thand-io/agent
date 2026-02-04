@@ -16,6 +16,9 @@ import (
 const CloudflareAllow = "allow"
 const CloudflareDeny = "deny"
 
+// Resource type constants for parsing resource specifications
+const resourceTypeAccountRBAC = "account"
+
 // AuthorizeRole grants access for a user to a role in Cloudflare
 // Supports both account-wide roles and resource-scoped policies
 func (p *cloudflareProvider) AuthorizeRole(
@@ -379,7 +382,7 @@ func (p *cloudflareProvider) parseResourceSpec(ctx context.Context, resource str
 	identifier := parts[1]
 
 	switch resourceType {
-	case resourceTypeAccount:
+	case resourceTypeAccountRBAC:
 		return p.buildAccountResourceGroups(ctx, identifier)
 	case resourceTypeZone:
 		return p.buildZoneResourceGroups(ctx, identifier)
@@ -445,18 +448,17 @@ func (p *cloudflareProvider) buildZoneResourceGroups(ctx context.Context, identi
 	return []cloudflare.ResourceGroup{cloudflare.NewResourceGroupForZone(zone)}, nil
 }
 
-// getAccountByID retrieves an account by ID from cache or API
+// getAccountByID retrieves an account by ID from tenants cache or API
 func (p *cloudflareProvider) getAccountByID(ctx context.Context, accountID string) (*cloudflare.Account, error) {
-	// Check cache first
-	resourceList, err := p.ListResources(ctx, &models.SearchRequest{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list cached resources for account: %w", err)
-	}
-	for _, resResult := range resourceList {
-		res := resResult.Result
-		if res.Type == resourceTypeAccount && res.ID == accountID {
-			if account, ok := res.Resource.(cloudflare.Account); ok {
-				return &account, nil
+	// Check tenants cache first (accounts are now stored as tenants)
+	tenantList, err := p.ListTenants(ctx, &models.SearchRequest{})
+	if err == nil {
+		for _, tenantResult := range tenantList {
+			tenant := tenantResult.Result
+			if tenant.Type == tenantTypeAccount && tenant.ID == accountID {
+				if account, ok := tenant.Tenant.(cloudflare.Account); ok {
+					return &account, nil
+				}
 			}
 		}
 	}

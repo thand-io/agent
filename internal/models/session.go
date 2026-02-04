@@ -91,6 +91,19 @@ type SessionsResponse struct {
 	DefaultProvider string                  `json:"defaultProvider"` // Current default provider from cookie
 }
 
+// WhoamiResponse contains information about the currently authenticated user
+type WhoamiResponse struct {
+	User     *User       `json:"user"`     // The authenticated user
+	Provider string      `json:"provider"` // The authentication provider
+	Session  SessionInfo `json:"session"`  // Session metadata
+}
+
+// SessionInfo contains metadata about the current session
+type SessionInfo struct {
+	UUID   uuid.UUID `json:"uuid"`   // Session UUID
+	Expiry time.Time `json:"expiry"` // Session expiry time
+}
+
 // Session stored on the users local system
 type LocalSession struct {
 	Version  int             `json:"version,omitempty" yaml:"version"`      // Version of the session config

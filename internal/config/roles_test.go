@@ -378,6 +378,374 @@ func TestGetCompositeRole(t *testing.T) {
 			},
 			expectError: false,
 		},
+		{
+			name: "domain-scoped role inheritance - user matches domain",
+			roles: map[string]models.Role{
+				"base-role": {
+					Name:        "base-role",
+					Description: "Base role with domain scope",
+					Permissions: models.RolePermissions{
+						Allow: stmts("base-action"),
+					},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Domains: []string{"example.com"},
+						},
+					},
+					Enabled: true,
+				},
+				"child-role": {
+					Name:        "child-role",
+					Description: "Child role inheriting domain-scoped base",
+					Inherits:    []string{"base-role"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("child-action"),
+					},
+					Enabled: true,
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"users"},
+				},
+			},
+			roleName: "child-role",
+			expected: &models.Role{
+				Name:        "child-role",
+				Description: "Child role inheriting domain-scoped base",
+				Inherits:    []string{"base-role"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("child-action", "base-action"),
+				},
+				Enabled: true,
+			},
+			expectError: false,
+		},
+		{
+			name: "domain-scoped role inheritance - user does not match domain",
+			roles: map[string]models.Role{
+				"base-role": {
+					Name:        "base-role",
+					Description: "Base role with domain scope",
+					Permissions: models.RolePermissions{
+						Allow: stmts("base-action"),
+					},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Domains: []string{"company.com"},
+						},
+					},
+					Enabled: true,
+				},
+				"child-role": {
+					Name:        "child-role",
+					Description: "Child role inheriting domain-scoped base",
+					Inherits:    []string{"base-role"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("child-action"),
+					},
+					Enabled: true,
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"users"},
+				},
+			},
+			roleName: "child-role",
+			expected: &models.Role{
+				Name:        "child-role",
+				Description: "Child role inheriting domain-scoped base",
+				Inherits:    []string{"base-role"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("child-action"), // base-action not inherited
+				},
+				Enabled: true,
+			},
+			expectError: false,
+		},
+		{
+			name: "mixed scopes in inheritance - user matches via domain",
+			roles: map[string]models.Role{
+				"scoped-base": {
+					Name:        "scoped-base",
+					Description: "Base with mixed scopes",
+					Permissions: models.RolePermissions{
+						Allow: stmts("scoped-action"),
+					},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Users:   []string{"other@company.com"},
+							Groups:  []string{"admins"},
+							Domains: []string{"example.com"},
+						},
+					},
+					Enabled: true,
+				},
+				"parent-role": {
+					Name:        "parent-role",
+					Description: "Parent inheriting mixed-scope role",
+					Inherits:    []string{"scoped-base"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("parent-action"),
+					},
+					Enabled: true,
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers"},
+				},
+			},
+			roleName: "parent-role",
+			expected: &models.Role{
+				Name:        "parent-role",
+				Description: "Parent inheriting mixed-scope role",
+				Inherits:    []string{"scoped-base"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("parent-action", "scoped-action"),
+				},
+				Enabled: true,
+			},
+			expectError: false,
+		},
+		{
+			name: "deep inheritance with domain scopes - middle role scoped",
+			roles: map[string]models.Role{
+				"grandparent": {
+					Name:        "grandparent",
+					Description: "Grandparent role",
+					Permissions: models.RolePermissions{
+						Allow: stmts("grandparent-action"),
+					},
+					Enabled: true,
+				},
+				"parent": {
+					Name:        "parent",
+					Description: "Parent with domain scope",
+					Inherits:    []string{"grandparent"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("parent-action"),
+					},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Domains: []string{"example.com"},
+						},
+					},
+					Enabled: true,
+				},
+				"child": {
+					Name:        "child",
+					Description: "Child role",
+					Inherits:    []string{"parent"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("child-action"),
+					},
+					Enabled: true,
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"users"},
+				},
+			},
+			roleName: "child",
+			expected: &models.Role{
+				Name:        "child",
+				Description: "Child role",
+				Inherits:    []string{"parent"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("child-action", "parent-action", "grandparent-action"),
+				},
+				Enabled: true,
+			},
+			expectError: false,
+		},
+		{
+			name: "base role with group scope - user has no groups",
+			roles: map[string]models.Role{
+				"admin-role": {
+					Name:        "admin-role",
+					Description: "Admin role requiring group membership",
+					Permissions: models.RolePermissions{
+						Allow: stmts("admin:write", "admin:delete"),
+					},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Groups: []string{"admins"},
+						},
+					},
+					Enabled: true,
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{}, // No groups
+				},
+			},
+			roleName:      "admin-role",
+			expectError:   true,
+			errorContains: "not applicable to identity",
+		},
+		{
+			name: "base role with group scope - user has matching group",
+			roles: map[string]models.Role{
+				"developer-role": {
+					Name:        "developer-role",
+					Description: "Developer role requiring group membership",
+					Permissions: models.RolePermissions{
+						Allow: stmts("dev:read", "dev:write"),
+					},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Groups: []string{"developers"},
+						},
+					},
+					Enabled: true,
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers", "users"},
+				},
+			},
+			roleName: "developer-role",
+			expected: &models.Role{
+				Name:        "developer-role",
+				Description: "Developer role requiring group membership",
+				Permissions: models.RolePermissions{
+					Allow: stmts("dev:read", "dev:write"),
+				},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"developers"},
+					},
+				},
+				Enabled: true,
+			},
+			expectError: false,
+		},
+		{
+			name: "base role with domain scope - user domain does not match",
+			roles: map[string]models.Role{
+				"company-role": {
+					Name:        "company-role",
+					Description: "Role for company employees",
+					Permissions: models.RolePermissions{
+						Allow: stmts("company:read"),
+					},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Domains: []string{"company.com"},
+						},
+					},
+					Enabled: true,
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"users"},
+				},
+			},
+			roleName:      "company-role",
+			expectError:   true,
+			errorContains: "not applicable to identity",
+		},
+		{
+			name: "base role with user scope - user does not match",
+			roles: map[string]models.Role{
+				"specific-user-role": {
+					Name:        "specific-user-role",
+					Description: "Role for specific users only",
+					Permissions: models.RolePermissions{
+						Allow: stmts("special:action"),
+					},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Users: []string{"admin@company.com", "manager@company.com"},
+						},
+					},
+					Enabled: true,
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"users"},
+				},
+			},
+			roleName:      "specific-user-role",
+			expectError:   true,
+			errorContains: "not applicable to identity",
+		},
+		{
+			name: "base role with mixed scopes - user matches via domain",
+			roles: map[string]models.Role{
+				"mixed-scope-role": {
+					Name:        "mixed-scope-role",
+					Description: "Role with multiple scope types",
+					Permissions: models.RolePermissions{
+						Allow: stmts("mixed:action"),
+					},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Users:   []string{"other@company.com"},
+							Groups:  []string{"admins"},
+							Domains: []string{"example.com"},
+						},
+					},
+					Enabled: true,
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"users"},
+				},
+			},
+			roleName: "mixed-scope-role",
+			expected: &models.Role{
+				Name:        "mixed-scope-role",
+				Description: "Role with multiple scope types",
+				Permissions: models.RolePermissions{
+					Allow: stmts("mixed:action"),
+				},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users:   []string{"other@company.com"},
+						Groups:  []string{"admins"},
+						Domains: []string{"example.com"},
+					},
+				},
+				Enabled: true,
+			},
+			expectError: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -569,6 +937,148 @@ func TestIsRoleApplicableToIdentity(t *testing.T) {
 			expected: false,
 		},
 		{
+			name: "user scope - email in scope matches user with both email and username",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"john@example.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "johndoe",
+					Email:    "john@example.com",
+					Name:     "John Doe",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "user scope - username in scope matches user with both email and username",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"johndoe"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "johndoe",
+					Email:    "john@example.com",
+					Name:     "John Doe",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "user scope - name in scope matches user with only name (no email/username/ID)",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"john_doe"}, // Name is converted to snake_case by GetIdentity()
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Name: "John Doe",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "user scope - full name matches user with multiple fields",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"Jane Smith"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					ID:       "user-789",
+					Username: "jsmith",
+					Email:    "jane@example.com",
+					Name:     "Jane Smith",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "user scope - multiple identifiers in scope, user matches one via username",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"alice@company.com", "bobsmith", "charlie@example.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					ID:       "user-456",
+					Username: "bobsmith",
+					Email:    "bob@example.com",
+					Name:     "Bob Smith",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "user scope - multiple identifiers in scope, user matches one via email",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"alice", "bob@example.com", "charlie"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					ID:       "user-456",
+					Username: "robertsmith",
+					Email:    "bob@example.com",
+					Name:     "Bob Smith",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "user scope - checks all user fields, none match",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"wronguser", "wrong@example.com", "Wrong Name", "wrong-id"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					ID:       "user-456",
+					Username: "johndoe",
+					Email:    "john@example.com",
+					Name:     "John Doe",
+				},
+			},
+			expected: false,
+		},
+		{
 			name: "group scope - user in group",
 			role: &models.Role{
 				Name: "test",
@@ -620,6 +1130,520 @@ func TestIsRoleApplicableToIdentity(t *testing.T) {
 				ID: "group1",
 				Group: &models.Group{
 					Name: "developers",
+				},
+			},
+			expected: true,
+		},
+		// Domain scope tests
+		{
+			name: "domain scope - user email domain matches",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Domains: []string{"example.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "domain scope - user email domain does not match",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Domains: []string{"company.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"users"},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "domain scope - user has no email",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Domains: []string{"example.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "",
+					Groups:   []string{"users"},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "domain scope - user email has no @ symbol",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Domains: []string{"example.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "malformed-email",
+					Groups:   []string{"users"},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "domain scope - multiple domains, user matches one",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Domains: []string{"example.com", "company.org", "other.net"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@company.org",
+					Groups:   []string{"users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "domain scope - case insensitive matching",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Domains: []string{"Example.COM"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "domain scope - subdomain does not match parent domain",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Domains: []string{"example.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@mail.example.com",
+					Groups:   []string{"users"},
+				},
+			},
+			expected: false,
+		},
+		// Combined scope tests (OR logic - matching any scope type should grant access)
+		{
+			name: "users + groups scopes - user matches via groups",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users:  []string{"other@example.com"},
+						Groups: []string{"developers"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers", "users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "users + groups scopes - user matches via users",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users:  []string{"testuser@example.com"},
+						Groups: []string{"admins"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers", "users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "users + groups scopes - user matches neither",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users:  []string{"other@example.com"},
+						Groups: []string{"admins"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers", "users"},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "users + domains scopes - user matches via domain",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users:   []string{"other@company.com"},
+						Domains: []string{"example.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "users + domains scopes - user matches via users",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users:   []string{"testuser@example.com"},
+						Domains: []string{"company.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "groups + domains scopes - user matches via groups",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups:  []string{"developers"},
+						Domains: []string{"company.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers", "users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "groups + domains scopes - user matches via domain",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups:  []string{"admins"},
+						Domains: []string{"example.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers", "users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "groups + domains scopes - user matches neither",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups:  []string{"admins"},
+						Domains: []string{"company.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers", "users"},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "users + groups + domains - user matches only via domain",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users:   []string{"other@company.com"},
+						Groups:  []string{"admins"},
+						Domains: []string{"example.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers", "users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "users + groups + domains - user matches only via groups",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users:   []string{"other@company.com"},
+						Groups:  []string{"developers"},
+						Domains: []string{"company.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers", "users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "users + groups + domains - user matches only via users",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users:   []string{"testuser"},
+						Groups:  []string{"admins"},
+						Domains: []string{"company.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers", "users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "users + groups + domains - user matches none",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users:   []string{"other@company.com"},
+						Groups:  []string{"admins"},
+						Domains: []string{"company.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers", "users"},
+				},
+			},
+			expected: false,
+		},
+		// Edge case tests
+		{
+			name: "group scope - user with nil groups",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"developers"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   nil,
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "group scope - user with empty groups array",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"developers"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "group scope - case insensitive group matching",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"Developers"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers", "users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "group scope - user with multiple groups, only one matches",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"admins", "managers"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers", "managers", "users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "user scope - ID match",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"user-id-123"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					ID:       "user-id-123",
+					Username: "testuser",
+					Email:    "testuser@example.com",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "empty scopes object - always applicable",
+			role: &models.Role{
+				Name:   "test",
+				Scopes: models.RoleScopes{},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
 				},
 			},
 			expected: true,

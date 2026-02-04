@@ -326,7 +326,12 @@ func (c *Config) resolveCompositeRole(identity *models.Identity, baseRole *model
 	visited[baseRole.Name] = true
 	defer delete(visited, baseRole.Name)
 
-	log.Debugln("Resolving composite role")
+	// Check if the base role is applicable to the identity
+	if identity != nil && !c.isRoleApplicableToIdentity(baseRole, identity) {
+		return nil, fmt.Errorf("role '%s' not applicable to identity", baseRole.Name)
+	}
+
+	logrus.WithField("role", baseRole.Name).Debugln("Resolving composite role")
 
 	// Create composite role with provider-filtered permissions/resources/groups
 	compositeRole := *baseRole
@@ -555,14 +560,15 @@ func (c *Config) identityMatchesScopeIdentities(identity *models.Identity, scope
 			return false
 		}
 
-		// Check user scopes (identity, email, username, ID)
+		// Check user scopes (identity, email, username, ID, name)
 		if len(scopes.Users) > 0 {
 			userIdentity := user.GetIdentity()
-			for _, scopeUser := range scopes.Users {
-				if strings.EqualFold(scopeUser, userIdentity) ||
-					strings.EqualFold(scopeUser, user.Email) ||
-					strings.EqualFold(scopeUser, user.Username) ||
-					strings.EqualFold(scopeUser, user.ID) {
+			for _, allowed := range scopes.Users {
+				if strings.EqualFold(allowed, userIdentity) ||
+					strings.EqualFold(allowed, user.Email) ||
+					strings.EqualFold(allowed, user.Username) ||
+					strings.EqualFold(allowed, user.ID) ||
+					strings.EqualFold(allowed, user.Name) {
 					return true
 				}
 			}

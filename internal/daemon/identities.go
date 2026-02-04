@@ -30,7 +30,7 @@ func (s *Server) getIdentities(c *gin.Context) {
 		return
 	}
 
-	_, foundUser, err := s.getUser(c)
+	_, foundUser, err := s.getSession(c)
 	if err != nil {
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of available roles", err)
 		return
@@ -59,8 +59,8 @@ func (s *Server) getIdentities(c *gin.Context) {
 	}
 
 	identityProvidersCount := s.Config.GetProvidersByCapabilityWithUser(
-		foundUser.User, 
-		models.IdentityCapabilities...
+		foundUser.User,
+		models.IdentityCapabilities...,
 	)
 	identities, err := s.Config.GetIdentitiesWithFilter(
 		foundUser.User, config.IdentityType(identityType), searchRequest)
