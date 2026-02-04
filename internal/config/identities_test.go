@@ -1481,26 +1481,29 @@ func TestGetIdentity_MergesFromMultipleProviders(t *testing.T) {
 
 // TestGetIdentity_SortsByIdentifier tests that GetIdentity returns alphabetically first identity
 func TestGetIdentity_SortsByIdentifier(t *testing.T) {
-	// Provider 1 has user with email "zebra@example.com"
+	// Both providers have the same user but with different mappable identifiers.
+	// Provider 1 returns user with email "zebra@example.com"
 	provider1 := NewMockIdentityProvider("provider1", []models.Identity{
 		{
-			ID:    "zebra@example.com",
-			Label: "Zebra User",
+			ID:    "test-user",
+			Label: "Zebra User from Provider 1",
 			User: &models.User{
-				Email: "zebra@example.com",
-				Name:  "Zebra",
+				Email:    "zebra@example.com",
+				Username: "test-user",
+				Name:     "Zebra",
 			},
 		},
 	})
 
-	// Provider 2 has user with email "apple@example.com"
+	// Provider 2 returns the same user but with email "apple@example.com"
 	provider2 := NewMockIdentityProvider("provider2", []models.Identity{
 		{
-			ID:    "apple@example.com",
-			Label: "Apple User",
+			ID:    "test-user",
+			Label: "Apple User from Provider 2",
 			User: &models.User{
-				Email: "apple@example.com",
-				Name:  "Apple",
+				Email:    "apple@example.com",
+				Username: "test-user",
+				Name:     "Apple",
 			},
 		},
 	})
@@ -1509,16 +1512,21 @@ func TestGetIdentity_SortsByIdentifier(t *testing.T) {
 	cfg.AddProvider("provider1", provider1)
 	cfg.AddProvider("provider2", provider2)
 
-	// Search for a username that both could match
-	result, err := cfg.GetIdentity("test")
-	if err != nil {
-		// This might fail since neither exactly matches "test"
-		// Let's test with a broader search
-		t.Skip("Skipping - test needs adjustment for exact matching")
-	}
+	// Search for the user that exists in both providers
+	result, err := cfg.GetIdentity("test-user")
+	require.NoError(t, err)
+	require.NotNil(t, result)
 
-	// Should return the alphabetically first one
-	assert.NotNil(t, result)
+	// Should return the identity with the alphabetically first mappable identifier.
+	// GetMappableIdentifier uses email as the primary identifier, so "apple@example.com"
+	// comes before "zebra@example.com", and we should get the Apple user.
+	assert.Equal(t, "apple@example.com", result.User.Email)
+	assert.Equal(t, "Apple User from Provider 2", result.Label)
+
+	// Should have both providers tracked in the merged result
+	assert.Len(t, result.Providers, 2)
+	assert.Contains(t, result.Providers, "provider1")
+	assert.Contains(t, result.Providers, "provider2")
 }
 
 // TestGetIdentity_DeterministicOutput tests that GetIdentity returns the same output every time
@@ -1697,6 +1705,147 @@ func TestGetIdentity_DeterministicWithMultipleIdentities(t *testing.T) {
 
 	// Should have all three providers tracked since they all returned the same identity key
 	assert.Len(t, finalResult.GetProviders(), 3)
+}
+
+// TestGetIdentity_NoMutationOfCachedIdentities verifies that GetIdentity
+// does not mutate provider-owned cached identity objects when merging.
+// This test ensures the fix for data race issues where concurrent requests
+// could cause mutations to shared cached objects.
+func TestGetIdentity_NoMutationOfCachedIdentities(t *testing.T) {
+	// Create a shared identity that will be cached by a provider
+	cachedIdentity := models.Identity{
+		ID:    "user@example.com",
+		Label: "Cached User",
+		User: &models.User{
+			ID:       "123",
+			Email:    "user@example.com",
+			Username: "cacheduser",
+			Name:     "Cached User",
+		},
+		Providers: map[string]string{
+			"provider1": "mock",
+		},
+	}
+
+	// Create two providers that return the same cached identity
+	provider1 := NewMockIdentityProvider("provider1", []models.Identity{cachedIdentity})
+	provider2 := NewMockIdentityProvider("provider2", []models.Identity{
+		{
+			ID:    "user@example.com",
+			Label: "User from Provider 2",
+			User: &models.User{
+				ID:       "456",
+				Email:    "user@example.com",
+				Username: "user2",
+				Name:     "User From Provider 2",
+				Source:   "provider2",
+			},
+		},
+	})
+
+	// Create config with providers
+	cfg := &config.Config{}
+	cfg.AddProvider("provider1", provider1)
+	cfg.AddProvider("provider2", provider2)
+
+	// Get the identity first time
+	result1, err := cfg.GetIdentity("user@example.com")
+	require.NoError(t, err)
+	require.NotNil(t, result1)
+
+	// The result should have merged data from both providers
+	assert.Contains(t, result1.Providers, "provider1")
+	assert.Contains(t, result1.Providers, "provider2")
+	assert.Equal(t, "Cached User", result1.Label) // First alphabetically
+
+	// Now verify the cached identity was NOT mutated
+	// Get the original cached identity from provider1
+	cachedFromProvider, err := provider1.GetIdentity(context.Background(), "user@example.com")
+	require.NoError(t, err)
+	require.NotNil(t, cachedFromProvider)
+
+	// The cached identity should only have provider1 in its Providers map
+	assert.Len(t, cachedFromProvider.Providers, 1, "Cached identity should not have been mutated with provider2")
+	assert.Contains(t, cachedFromProvider.Providers, "provider1")
+	assert.NotContains(t, cachedFromProvider.Providers, "provider2", "Provider2 should not be in the original cached identity")
+
+	// Verify the User object wasn't mutated either
+	assert.Equal(t, "123", cachedFromProvider.User.ID)
+	assert.Equal(t, "cacheduser", cachedFromProvider.User.Username)
+	assert.Empty(t, cachedFromProvider.User.Source, "Source field should remain empty in cached identity")
+}
+
+// TestGetIdentity_ConcurrentAccess tests that concurrent calls to GetIdentity
+// don't cause data races or panics when merging identities.
+func TestGetIdentity_ConcurrentAccess(t *testing.T) {
+	// Create providers with identities
+	provider1 := NewMockIdentityProvider("provider1", []models.Identity{
+		{
+			ID:    "user@example.com",
+			Label: "User 1",
+			User: &models.User{
+				ID:       "1",
+				Email:    "user@example.com",
+				Username: "user1",
+				Name:     "User One",
+			},
+		},
+	})
+
+	provider2 := NewMockIdentityProvider("provider2", []models.Identity{
+		{
+			ID:    "user@example.com",
+			Label: "User 2",
+			User: &models.User{
+				ID:       "2",
+				Email:    "user@example.com",
+				Username: "user2",
+				Name:     "User Two",
+				Source:   "provider2",
+			},
+		},
+	})
+
+	cfg := &config.Config{}
+	cfg.AddProvider("provider1", provider1)
+	cfg.AddProvider("provider2", provider2)
+
+	// Run concurrent requests to GetIdentity
+	const numGoroutines = 50
+	var wg sync.WaitGroup
+	errors := make(chan error, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			result, err := cfg.GetIdentity("user@example.com")
+			if err != nil {
+				errors <- err
+				return
+			}
+
+			// Verify result has expected properties
+			if result == nil {
+				errors <- fmt.Errorf("result is nil")
+				return
+			}
+
+			if len(result.Providers) != 2 {
+				errors <- fmt.Errorf("expected 2 providers, got %d", len(result.Providers))
+				return
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(errors)
+
+	// Check if any errors occurred
+	for err := range errors {
+		t.Errorf("Concurrent access error: %v", err)
+	}
 }
 
 // Helper function to create bool pointers

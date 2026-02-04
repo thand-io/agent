@@ -194,7 +194,7 @@ func (s *Server) postEvaluateRole(c *gin.Context) {
 	// Evaluate the composite role
 	compositeRole, err := s.Config.GetCompositeRole(identityResult, baseRole)
 	if err != nil {
-		s.getErrorPage(c, http.StatusBadRequest, "Failed to evaluate composite role", err)
+		s.getErrorPage(c, http.StatusInternalServerError, "Failed to evaluate composite role", err)
 		return
 	}
 

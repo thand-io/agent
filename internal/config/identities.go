@@ -12,12 +12,84 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
-// MergeIdentities merges missing fields from source into target
+// DeepCopyIdentity creates a detached deep copy of an Identity.
+// This is necessary to avoid data races when merging identities from
+// provider caches that may be accessed concurrently.
+func DeepCopyIdentity(source *models.Identity) *models.Identity {
+	if source == nil {
+		return nil
+	}
+
+	result := &models.Identity{
+		ID:     source.ID,
+		Label:  source.Label,
+		Tenant: source.Tenant,
+	}
+
+	// Deep copy User
+	if source.User != nil {
+		result.User = &models.User{
+			ID:       source.User.ID,
+			Username: source.User.Username,
+			Email:    source.User.Email,
+			Name:     source.User.Name,
+			Source:   source.User.Source,
+		}
+		if source.User.Verified != nil {
+			verified := *source.User.Verified
+			result.User.Verified = &verified
+		}
+		// Deep copy Groups slice
+		if len(source.User.Groups) > 0 {
+			result.User.Groups = make([]string, len(source.User.Groups))
+			copy(result.User.Groups, source.User.Groups)
+		}
+	}
+
+	// Deep copy Group
+	if source.Group != nil {
+		result.Group = &models.Group{
+			ID:     source.Group.ID,
+			Parent: source.Group.Parent,
+			Name:   source.Group.Name,
+			Email:  source.Group.Email,
+		}
+	}
+
+	// Deep copy Providers map
+	if len(source.Providers) > 0 {
+		result.Providers = make(map[string]string, len(source.Providers))
+		for k, v := range source.Providers {
+			result.Providers[k] = v
+		}
+	}
+
+	return result
+}
+
+// MergeIdentities merges missing fields from source into target.
+// Note: This function assumes target has already been deep-copied and is safe to mutate.
+// It creates new User/Group objects instead of assigning pointers to avoid mutations.
 func MergeIdentities(target, source *models.Identity) {
 	// Merge User fields
 	if source.User != nil {
 		if target.User == nil {
-			target.User = source.User
+			// Create a new User object instead of assigning the pointer
+			target.User = &models.User{
+				ID:       source.User.ID,
+				Username: source.User.Username,
+				Email:    source.User.Email,
+				Name:     source.User.Name,
+				Source:   source.User.Source,
+			}
+			if source.User.Verified != nil {
+				verified := *source.User.Verified
+				target.User.Verified = &verified
+			}
+			if len(source.User.Groups) > 0 {
+				target.User.Groups = make([]string, len(source.User.Groups))
+				copy(target.User.Groups, source.User.Groups)
+			}
 		} else {
 			MergeStrings(&target.User.ID, source.User.ID)
 			MergeStrings(&target.User.Username, source.User.Username)
@@ -25,7 +97,8 @@ func MergeIdentities(target, source *models.Identity) {
 			MergeStrings(&target.User.Name, source.User.Name)
 			MergeStrings(&target.User.Source, source.User.Source)
 			if target.User.Verified == nil && source.User.Verified != nil {
-				target.User.Verified = source.User.Verified
+				verified := *source.User.Verified
+				target.User.Verified = &verified
 			}
 			// Append groups from source, avoiding duplicates
 			if len(source.User.Groups) > 0 {
@@ -45,7 +118,13 @@ func MergeIdentities(target, source *models.Identity) {
 	// Merge Group fields
 	if source.Group != nil {
 		if target.Group == nil {
-			target.Group = source.Group
+			// Create a new Group object instead of assigning the pointer
+			target.Group = &models.Group{
+				ID:     source.Group.ID,
+				Parent: source.Group.Parent,
+				Name:   source.Group.Name,
+				Email:  source.Group.Email,
+			}
 		} else {
 			MergeStrings(&target.Group.ID, source.Group.ID)
 			MergeStrings(&target.Group.Parent, source.Group.Parent)
@@ -60,7 +139,7 @@ func MergeIdentities(target, source *models.Identity) {
 	MergeStrings(&target.Tenant, source.Tenant)
 }
 
-// mergeStrings sets target to source if target is empty and source is not
+// MergeStrings sets target to source if target is empty and source is not
 func MergeStrings(target *string, source string) {
 	if len(*target) == 0 && len(source) > 0 {
 		*target = source
@@ -184,30 +263,43 @@ func (c *Config) GetIdentity(identity string) (*models.Identity, error) {
 		return nil, fmt.Errorf("identity not found: %s", identityKey)
 	}
 
-	// Sort results by mappable identifier first, then by provider name for deterministic ordering.
+	// Sort results by mappable identifier first, then by provider identifier (and name) for
+	// deterministic ordering.
 	// GetMappableIdentifier is expected to return a stable, comparable string that is the same
 	// for logically equivalent identities across providers (for example, a normalized email or
 	// username). We sort lexicographically on this identifier so that we can reliably pick a
-	// canonical "first" identity when multiple providers return matching records. Provider name
-	// is used only as a tie-breaker when the mappable identifiers are equal, to keep the overall
-	// ordering deterministic but not semantically significant.
+	// canonical "first" identity when multiple providers return matching records. Provider
+	// identifier (and, if needed, name) is used only as a tie-breaker when the mappable
+	// identifiers are equal, to keep the overall ordering deterministic but not semantically
+	// significant.
 	slices.SortFunc(results, func(a, b providerResult) int {
 		// First sort by identity's mappable identifier (lexicographical order).
 		idCompare := strings.Compare(a.identity.GetMappableIdentifier(), b.identity.GetMappableIdentifier())
 		if idCompare != 0 {
 			return idCompare
 		}
-		// If the mappable identifiers are the same, sort by provider name for determinism.
+		// If the mappable identifiers are the same, sort by provider identifier to ensure a
+		// strict, deterministic ordering even when provider names are not unique.
+		providerIDCompare := strings.Compare(a.provider.GetIdentifier(), b.provider.GetIdentifier())
+		if providerIDCompare != 0 {
+			return providerIDCompare
+		}
+		// As a final, non-semantic tie-breaker, fall back to provider name. This should rarely
+		// be needed if identifiers are unique, but keeps the comparator total.
 		return strings.Compare(a.provider.GetName(), b.provider.GetName())
 	})
 
 	// After sorting, the "alphabetically first" identity is the one with the smallest
 	// mappable identifier (and, if equal, the smallest provider name). This identity
 	// is treated as the canonical/base record that other identities are merged into.
-	baseIdentity := results[0].identity
+	//
+	// IMPORTANT: Create a deep copy to avoid mutating provider-owned cached objects.
+	// Provider caches may hold and return these pointers without locks, so merging
+	// directly would cause data races and permanently pollute cached identities.
+	baseIdentity := DeepCopyIdentity(results[0].identity)
 	baseIdentity.AddProvider(results[0].provider)
 
-	// Merge remaining results into the base identity
+	// Merge remaining results into the detached copy
 	for i := 1; i < len(results); i++ {
 		baseIdentity.AddProvider(results[i].provider)
 		MergeIdentities(baseIdentity, results[i].identity)

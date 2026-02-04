@@ -323,7 +323,7 @@ func (c *Config) resolveCompositeRole(identity *models.Identity, baseRole *model
 	defer delete(visited, baseRole.Name)
 
 	// Check if the base role is applicable to the identity
-	if !c.isRoleApplicableToIdentity(baseRole, identity) {
+	if identity != nil && !c.isRoleApplicableToIdentity(baseRole, identity) {
 		return nil, fmt.Errorf("role '%s' not applicable to identity", baseRole.Name)
 	}
 
