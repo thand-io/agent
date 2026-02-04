@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
 )
 
@@ -31,12 +32,21 @@ func (p *azureProvider) AuthorizeRole(
 	}
 
 	// Create role assignment for the user
-	err = p.createRoleAssignment(ctx, user, *existingRole.ID)
+	principalID, err := p.createRoleAssignment(ctx, user, *existingRole.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create role assignment: %w", err)
 	}
 
-	return nil, nil
+	// Return the response with the principal ID stored in metadata
+	// This ensures we use the same principal ID for revocation
+	return &models.AuthorizeRoleResponse{
+		UserId: user.Email,
+		Roles:  []string{role.Name},
+		Metadata: map[string]any{
+			"principal_id":       principalID,
+			"role_definition_id": *existingRole.ID,
+		},
+	}, nil
 }
 
 // Revoke removes access for a user from a role
@@ -58,8 +68,20 @@ func (p *azureProvider) RevokeRole(
 		return nil, fmt.Errorf("failed to get role definition: %w", err)
 	}
 
+	// Try to get the stored principal ID from the authorization response
+	var storedPrincipalID string
+	if req.AuthorizeRoleResponse != nil && req.AuthorizeRoleResponse.Metadata != nil {
+		if principalID, ok := req.AuthorizeRoleResponse.Metadata["principal_id"].(string); ok {
+			storedPrincipalID = principalID
+			logrus.WithFields(logrus.Fields{
+				"email":        user.Email,
+				"principal_id": principalID,
+			}).Debug("Retrieved stored principal ID from authorization response")
+		}
+	}
+
 	// Find and delete role assignments for this user and role
-	err = p.deleteRoleAssignment(ctx, user, *roleDefinition.ID)
+	err = p.deleteRoleAssignment(ctx, user, *roleDefinition.ID, storedPrincipalID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to delete role assignment: %w", err)
 	}
