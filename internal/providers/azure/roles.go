@@ -130,36 +130,45 @@ func (p *azureProvider) createRoleAssignment(ctx context.Context, user *models.U
 }
 
 // deleteRoleAssignment removes a role assignment for a user
-func (p *azureProvider) deleteRoleAssignment(ctx context.Context, user *models.User, roleDefinitionID string, storedPrincipalID string) error {
+func (p *azureProvider) deleteRoleAssignment(
+	ctx context.Context, 
+	user *models.User, 
+	roleDefinitionID string, 
+	storedPrincipalID string,
+) error {
 	scope := p.getScope()
 
 	// Try to use the stored principal ID first (from authorization response)
-	principalID := storedPrincipalID
-	if principalID == "" {
+	if len(storedPrincipalID) == 0 {
+		
 		// Fallback: look up principal ID
-		var err error
-		principalID, err = p.getUserPrincipalID(ctx, user)
+		principalID, err := p.getUserPrincipalID(ctx, user)
+		
 		if err != nil {
 			return fmt.Errorf("failed to get user principal ID: %w", err)
 		}
+
+		storedPrincipalID = principalID
 		logrus.WithField("email", user.Email).Debug("Using freshly looked-up principal ID for revocation")
+
 	} else {
+
 		logrus.WithFields(logrus.Fields{
 			"email":        user.Email,
-			"principal_id": principalID,
+			"principal_id": storedPrincipalID,
 		}).Debug("Using stored principal ID from authorization for revocation")
 	}
 
 	logrus.WithFields(logrus.Fields{
 		"email":           user.Email,
-		"principal_id":    principalID,
+		"principal_id":    storedPrincipalID,
 		"role_definition": roleDefinitionID,
 		"scope":           scope,
 	}).Debug("Searching for Azure role assignments to delete")
 
 	// Find existing role assignments for this user and role
 	pager := p.authClient.NewListForScopePager(scope, &armauthorization.RoleAssignmentsClientListForScopeOptions{
-		Filter: &[]string{fmt.Sprintf("principalId eq '%s'", principalID)}[0],
+		Filter: &[]string{fmt.Sprintf("principalId eq '%s'", storedPrincipalID)}[0],
 	})
 
 	deletedCount := 0
@@ -180,7 +189,7 @@ func (p *azureProvider) deleteRoleAssignment(ctx context.Context, user *models.U
 
 				logrus.WithFields(logrus.Fields{
 					"assignment_id": *assignment.Name,
-					"principal_id":  principalID,
+					"principal_id":  storedPrincipalID,
 				}).Debug("Deleting Azure role assignment")
 
 				_, err = p.authClient.Delete(ctx, scope, *assignment.Name, nil)
@@ -200,36 +209,15 @@ func (p *azureProvider) deleteRoleAssignment(ctx context.Context, user *models.U
 
 	logrus.WithFields(logrus.Fields{
 		"email":             user.Email,
-		"principal_id":      principalID,
+		"principal_id":      storedPrincipalID,
 		"total_assignments": totalAssignments,
 		"deleted_count":     deletedCount,
 	}).Debug("Completed Azure role assignment deletion search")
 
 	// CRITICAL: Verify that at least one assignment was deleted
 	if deletedCount == 0 {
-		// Clear cache and retry with fresh lookup
-		p.principalIDCache.Delete(user.Email)
-
-		logrus.WithField("email", user.Email).Warn("No assignments found with initial principal ID, retrying with fresh lookup")
-
-		freshPrincipalID, err := p.getUserPrincipalID(ctx, user)
-		if err != nil {
-			return fmt.Errorf("failed to get fresh principal ID: %w", err)
-		}
-
-		if freshPrincipalID != principalID {
-			logrus.WithFields(logrus.Fields{
-				"email":      user.Email,
-				"initial_id": principalID,
-				"fresh_id":   freshPrincipalID,
-			}).Warn("Principal ID mismatch detected, retrying with fresh ID")
-
-			// Retry with fresh principal ID
-			return p.deleteRoleAssignment(ctx, user, roleDefinitionID, freshPrincipalID)
-		}
-
 		return fmt.Errorf("no role assignments found to delete for user '%s' (principal ID: %s) with role %s - this may indicate the role was already revoked or a principal ID mismatch",
-			user.Email, principalID, roleDefinitionID)
+			user.Email, storedPrincipalID, roleDefinitionID)
 	}
 
 	return nil
@@ -237,23 +225,9 @@ func (p *azureProvider) deleteRoleAssignment(ctx context.Context, user *models.U
 
 // getUserPrincipalID gets the Azure AD object ID for a user
 func (p *azureProvider) getUserPrincipalID(ctx context.Context, user *models.User) (string, error) {
+
 	if len(user.Email) == 0 {
 		return "", fmt.Errorf("user email is required for Azure role assignments")
-	}
-
-	// Check cache first
-	if cached, ok := p.principalIDCache.Load(user.Email); ok {
-		if entry, ok := cached.(principalIDCacheEntry); ok {
-			if time.Now().Before(entry.ExpiresAt) {
-				logrus.WithFields(logrus.Fields{
-					"email":     user.Email,
-					"object_id": entry.ObjectID,
-				}).Debug("Using cached Azure object ID")
-				return entry.ObjectID, nil
-			}
-			// Expired, remove from cache
-			p.principalIDCache.Delete(user.Email)
-		}
 	}
 
 	// Only trust user.ID if it came from Azure AD synchronization
@@ -304,12 +278,6 @@ func (p *azureProvider) getUserPrincipalID(ctx context.Context, user *models.Use
 		"email":     user.Email,
 		"object_id": objectID,
 	}).Debug("Successfully retrieved Azure AD object ID")
-
-	// Cache the result for 1 hour
-	p.principalIDCache.Store(user.Email, principalIDCacheEntry{
-		ObjectID:  objectID,
-		ExpiresAt: time.Now().Add(1 * time.Hour),
-	})
 
 	return objectID, nil
 }

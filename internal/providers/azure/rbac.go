@@ -8,6 +8,9 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
+const PrincipalIdentifierMetadataKey = "principal_id"
+const RoleDefinitionIdentifierMetadataKey = "role_definition_id"
+
 // Authorize grants access for a user to a role
 func (p *azureProvider) AuthorizeRole(
 	ctx context.Context,
@@ -43,8 +46,8 @@ func (p *azureProvider) AuthorizeRole(
 		UserId: user.Email,
 		Roles:  []string{role.Name},
 		Metadata: map[string]any{
-			"principal_id":       principalID,
-			"role_definition_id": *existingRole.ID,
+			PrincipalIdentifierMetadataKey: principalID,
+			RoleDefinitionIdentifierMetadataKey: *existingRole.ID,
 		},
 	}, nil
 }
@@ -68,22 +71,28 @@ func (p *azureProvider) RevokeRole(
 		return nil, fmt.Errorf("failed to get role definition: %w", err)
 	}
 
-	// Try to get the stored principal ID from the authorization response
-	var storedPrincipalID string
-	if req.AuthorizeRoleResponse != nil && req.AuthorizeRoleResponse.Metadata != nil {
-		if principalID, ok := req.AuthorizeRoleResponse.Metadata["principal_id"].(string); ok {
-			storedPrincipalID = principalID
-			logrus.WithFields(logrus.Fields{
-				"email":        user.Email,
-				"principal_id": principalID,
-			}).Debug("Retrieved stored principal ID from authorization response")
-		}
+	if req.AuthorizeRoleResponse == nil || req.AuthorizeRoleResponse.Metadata == nil {
+		return nil, fmt.Errorf("missing authorization response metadata for revocation")
 	}
 
-	// Find and delete role assignments for this user and role
-	err = p.deleteRoleAssignment(ctx, user, *roleDefinition.ID, storedPrincipalID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to delete role assignment: %w", err)
+	if principalID, ok := req.AuthorizeRoleResponse.Metadata[PrincipalIdentifierMetadataKey].(string); ok {
+		
+		logrus.WithFields(logrus.Fields{
+			"email":        user.Email,
+			"principal_id": principalID,
+		}).Debug("Retrieved stored principal ID from authorization response")
+
+		// Find and delete role assignments for this user and role
+		err = p.deleteRoleAssignment(ctx, user, *roleDefinition.ID, principalID)
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to delete role assignment: %w", err)
+		}
+
+	} else {
+
+		return nil, fmt.Errorf("invalid principal ID in authorization response metadata")
+
 	}
 
 	return nil, nil

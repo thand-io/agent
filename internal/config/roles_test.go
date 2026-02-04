@@ -418,9 +418,10 @@ func TestGetCompositeRole(t *testing.T) {
 				Description: "Child role inheriting domain-scoped base",
 				Inherits:    []string{"base-role"},
 				Permissions: models.RolePermissions{
-					Allow: stmts("child-action", "base-action"),
+					Allow: stmts("base-action", "child-action"),
 				},
-				Enabled: true,
+				Composite: true,
+				Enabled:   true,
 			},
 			expectError: false,
 		},
@@ -514,7 +515,8 @@ func TestGetCompositeRole(t *testing.T) {
 				Permissions: models.RolePermissions{
 					Allow: stmts("parent-action", "scoped-action"),
 				},
-				Enabled: true,
+				Composite: true,
+				Enabled:   true,
 			},
 			expectError: false,
 		},
@@ -567,9 +569,10 @@ func TestGetCompositeRole(t *testing.T) {
 				Description: "Child role",
 				Inherits:    []string{"parent"},
 				Permissions: models.RolePermissions{
-					Allow: stmts("child-action", "parent-action", "grandparent-action"),
+					Allow: stmts("child-action", "grandparent-action", "parent-action"),
 				},
-				Enabled: true,
+				Composite: true,
+				Enabled:   true,
 			},
 			expectError: false,
 		},
@@ -632,7 +635,7 @@ func TestGetCompositeRole(t *testing.T) {
 				Name:        "developer-role",
 				Description: "Developer role requiring group membership",
 				Permissions: models.RolePermissions{
-					Allow: stmts("dev:read", "dev:write"),
+					Allow: models.RoleStatements{{Operations: []string{"dev:read,write"}}},
 				},
 				Scopes: models.RoleScopes{
 					Allow: models.ScopeIdentities{
@@ -786,8 +789,8 @@ func TestGetCompositeRole(t *testing.T) {
 			// If role is composite, verify identifier was updated
 			if result.Composite {
 				assert.NotEmpty(t, result.Identifier, "Composite role should have non-empty identifier")
-				// Verify identifier includes hash (has "-" separator)
-				assert.Contains(t, result.Identifier, "-", "Composite role identifier should include hash")
+				// Verify identifier includes hash (has "_" separator for snake_case)
+				assert.Contains(t, result.Identifier, "_", "Composite role identifier should include hash")
 			}
 
 			// Compare permissions (order doesn't matter)
