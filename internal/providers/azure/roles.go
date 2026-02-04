@@ -9,6 +9,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization"
 	"github.com/google/uuid"
 	msgraphsdk "github.com/microsoftgraph/msgraph-sdk-go"
+	"github.com/microsoftgraph/msgraph-sdk-go/users"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/data"
 	"github.com/thand-io/agent/internal/models"
@@ -95,14 +96,14 @@ func (p *azureProvider) createRoleDefinition(ctx context.Context, roleName, desc
 	return &result.RoleDefinition, nil
 }
 
-// createRoleAssignment assigns a role to a user
-func (p *azureProvider) createRoleAssignment(ctx context.Context, user *models.User, roleDefinitionID string) error {
+// createRoleAssignment assigns a role to a user and returns the principal ID used
+func (p *azureProvider) createRoleAssignment(ctx context.Context, user *models.User, roleDefinitionID string) (string, error) {
 	scope := p.getScope()
 
 	// Get the principal ID for the user
 	principalID, err := p.getUserPrincipalID(ctx, user)
 	if err != nil {
-		return fmt.Errorf("failed to get user principal ID: %w", err)
+		return "", fmt.Errorf("failed to get user principal ID: %w", err)
 	}
 
 	roleAssignmentID := uuid.New().String()
@@ -113,28 +114,56 @@ func (p *azureProvider) createRoleAssignment(ctx context.Context, user *models.U
 		},
 	}
 
-	_, err = p.authClient.Create(ctx, scope, roleAssignmentID, roleAssignment, nil)
+	assignment, err := p.authClient.Create(ctx, scope, roleAssignmentID, roleAssignment, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create role assignment: %w", err)
+		return "", fmt.Errorf("failed to create role assignment: %w", err)
 	}
 
-	return nil
+	logrus.WithFields(logrus.Fields{
+		"email":         user.Email,
+		"scope":         scope,
+		"assignment_id": *assignment.Name,
+		"principal_id":  principalID,
+	}).Info("Successfully created Azure role assignment")
+
+	return principalID, nil
 }
 
 // deleteRoleAssignment removes a role assignment for a user
-func (p *azureProvider) deleteRoleAssignment(ctx context.Context, user *models.User, roleDefinitionID string) error {
+func (p *azureProvider) deleteRoleAssignment(ctx context.Context, user *models.User, roleDefinitionID string, storedPrincipalID string) error {
 	scope := p.getScope()
 
-	// Get the principal ID for the user
-	principalID, err := p.getUserPrincipalID(ctx, user)
-	if err != nil {
-		return fmt.Errorf("failed to get user principal ID: %w", err)
+	// Try to use the stored principal ID first (from authorization response)
+	principalID := storedPrincipalID
+	if principalID == "" {
+		// Fallback: look up principal ID
+		var err error
+		principalID, err = p.getUserPrincipalID(ctx, user)
+		if err != nil {
+			return fmt.Errorf("failed to get user principal ID: %w", err)
+		}
+		logrus.WithField("email", user.Email).Debug("Using freshly looked-up principal ID for revocation")
+	} else {
+		logrus.WithFields(logrus.Fields{
+			"email":        user.Email,
+			"principal_id": principalID,
+		}).Debug("Using stored principal ID from authorization for revocation")
 	}
+
+	logrus.WithFields(logrus.Fields{
+		"email":           user.Email,
+		"principal_id":    principalID,
+		"role_definition": roleDefinitionID,
+		"scope":           scope,
+	}).Debug("Searching for Azure role assignments to delete")
 
 	// Find existing role assignments for this user and role
 	pager := p.authClient.NewListForScopePager(scope, &armauthorization.RoleAssignmentsClientListForScopeOptions{
 		Filter: &[]string{fmt.Sprintf("principalId eq '%s'", principalID)}[0],
 	})
+
+	deletedCount := 0
+	totalAssignments := 0
 
 	for pager.More() {
 		page, err := pager.NextPage(ctx)
@@ -143,16 +172,64 @@ func (p *azureProvider) deleteRoleAssignment(ctx context.Context, user *models.U
 		}
 
 		for _, assignment := range page.Value {
+			totalAssignments++
+
 			if assignment.Properties != nil &&
 				assignment.Properties.RoleDefinitionID != nil &&
 				*assignment.Properties.RoleDefinitionID == roleDefinitionID {
 
+				logrus.WithFields(logrus.Fields{
+					"assignment_id": *assignment.Name,
+					"principal_id":  principalID,
+				}).Debug("Deleting Azure role assignment")
+
 				_, err = p.authClient.Delete(ctx, scope, *assignment.Name, nil)
 				if err != nil {
-					return fmt.Errorf("failed to delete role assignment: %w", err)
+					return fmt.Errorf("failed to delete role assignment %s: %w", *assignment.Name, err)
 				}
+
+				deletedCount++
+
+				logrus.WithFields(logrus.Fields{
+					"assignment_id": *assignment.Name,
+					"email":         user.Email,
+				}).Info("Successfully deleted Azure role assignment")
 			}
 		}
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"email":             user.Email,
+		"principal_id":      principalID,
+		"total_assignments": totalAssignments,
+		"deleted_count":     deletedCount,
+	}).Debug("Completed Azure role assignment deletion search")
+
+	// CRITICAL: Verify that at least one assignment was deleted
+	if deletedCount == 0 {
+		// Clear cache and retry with fresh lookup
+		p.principalIDCache.Delete(user.Email)
+
+		logrus.WithField("email", user.Email).Warn("No assignments found with initial principal ID, retrying with fresh lookup")
+
+		freshPrincipalID, err := p.getUserPrincipalID(ctx, user)
+		if err != nil {
+			return fmt.Errorf("failed to get fresh principal ID: %w", err)
+		}
+
+		if freshPrincipalID != principalID {
+			logrus.WithFields(logrus.Fields{
+				"email":      user.Email,
+				"initial_id": principalID,
+				"fresh_id":   freshPrincipalID,
+			}).Warn("Principal ID mismatch detected, retrying with fresh ID")
+
+			// Retry with fresh principal ID
+			return p.deleteRoleAssignment(ctx, user, roleDefinitionID, freshPrincipalID)
+		}
+
+		return fmt.Errorf("no role assignments found to delete for user '%s' (principal ID: %s) with role %s - this may indicate the role was already revoked or a principal ID mismatch",
+			user.Email, principalID, roleDefinitionID)
 	}
 
 	return nil
@@ -164,33 +241,61 @@ func (p *azureProvider) getUserPrincipalID(ctx context.Context, user *models.Use
 		return "", fmt.Errorf("user email is required for Azure role assignments")
 	}
 
-	// If the user's ID field already contains an Azure object ID (GUID format), use it
-	if len(user.ID) > 0 && len(user.ID) >= 32 {
-		// Validate it looks like a GUID
+	// Check cache first
+	if cached, ok := p.principalIDCache.Load(user.Email); ok {
+		if entry, ok := cached.(principalIDCacheEntry); ok {
+			if time.Now().Before(entry.ExpiresAt) {
+				logrus.WithFields(logrus.Fields{
+					"email":     user.Email,
+					"object_id": entry.ObjectID,
+				}).Debug("Using cached Azure object ID")
+				return entry.ObjectID, nil
+			}
+			// Expired, remove from cache
+			p.principalIDCache.Delete(user.Email)
+		}
+	}
+
+	// Only trust user.ID if it came from Azure AD synchronization
+	if len(user.ID) > 0 && len(user.ID) >= 32 && user.Source == "azure-ad" {
 		if _, err := uuid.Parse(user.ID); err == nil {
 			logrus.WithField("user_id", user.ID).Debug("Using existing Azure object ID from user.ID field")
 			return user.ID, nil
 		}
 	}
 
-	// Use Microsoft Graph API to lookup the user by email and get their object ID
+	// Use Microsoft Graph API to search for user by email
+	// This searches both 'mail' and 'userPrincipalName' fields
 	logrus.WithField("email", user.Email).Debug("Looking up Azure AD object ID via Microsoft Graph API")
 
-	// Create a Microsoft Graph client using the existing Azure credentials
-	client, err := msgraphsdk.NewGraphServiceClientWithCredentials(p.cred.Token, []string{"https://graph.microsoft.com/.default"})
+	client, err := msgraphsdk.NewGraphServiceClientWithCredentials(
+		p.cred.Token,
+		[]string{"https://graph.microsoft.com/.default"},
+	)
 	if err != nil {
 		return "", fmt.Errorf("failed to create Microsoft Graph client: %w", err)
 	}
 
-	// Query the user by their email address (UPN)
-	// GET https://graph.microsoft.com/v1.0/users/{email}
-	graphUser, err := client.Users().ByUserId(user.Email).Get(ctx, nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to lookup user '%s' in Azure AD via Microsoft Graph API: %w", user.Email, err)
+	// Use filter query to match on mail OR userPrincipalName
+	filter := fmt.Sprintf("mail eq '%s' or userPrincipalName eq '%s'", user.Email, user.Email)
+	requestConfig := &users.UsersRequestBuilderGetRequestConfiguration{
+		QueryParameters: &users.UsersRequestBuilderGetQueryParameters{
+			Filter: &filter,
+		},
 	}
 
-	// Extract the object ID from the response
-	if graphUser == nil || graphUser.GetId() == nil {
+	userList, err := client.Users().Get(ctx, requestConfig)
+	if err != nil {
+		return "", fmt.Errorf("failed to search for user '%s' in Azure AD: %w", user.Email, err)
+	}
+
+	if userList == nil || len(userList.GetValue()) == 0 {
+		return "", fmt.Errorf("user '%s' not found in Azure AD", user.Email)
+	}
+
+	// Use the first matching user
+	graphUser := userList.GetValue()[0]
+	if graphUser.GetId() == nil {
 		return "", fmt.Errorf("user '%s' found in Azure AD but object ID is missing", user.Email)
 	}
 
@@ -199,6 +304,12 @@ func (p *azureProvider) getUserPrincipalID(ctx context.Context, user *models.Use
 		"email":     user.Email,
 		"object_id": objectID,
 	}).Debug("Successfully retrieved Azure AD object ID")
+
+	// Cache the result for 1 hour
+	p.principalIDCache.Store(user.Email, principalIDCacheEntry{
+		ObjectID:  objectID,
+		ExpiresAt: time.Now().Add(1 * time.Hour),
+	})
 
 	return objectID, nil
 }

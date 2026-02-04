@@ -3,6 +3,8 @@ package azure
 import (
 	_ "embed"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
@@ -19,6 +21,12 @@ const AzureProviderName = "azure"
 var UseLatestVersion = ""
 
 // azureProvider implements the ProviderImpl interface for Azure
+// principalIDCacheEntry stores a cached principal ID with expiration
+type principalIDCacheEntry struct {
+	ObjectID  string
+	ExpiresAt time.Time
+}
+
 type azureProvider struct {
 	*models.BaseProvider
 
@@ -28,6 +36,9 @@ type azureProvider struct {
 	subscriptionsClient *armsubscriptions.Client
 	subscriptionID      string
 	resourceGroupName   string
+
+	// Cache for email -> Azure object ID mappings
+	principalIDCache sync.Map // map[string]principalIDCacheEntry
 }
 
 func (p *azureProvider) Initialize(identifier string, provider models.ProviderConfig) error {
