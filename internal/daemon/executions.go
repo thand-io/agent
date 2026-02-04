@@ -86,14 +86,14 @@ func (s *Server) listRunningWorkflows(c *gin.Context) {
 		return
 	}
 
-	_, foundUser, err := s.getUser(c)
+	_, foundSession, err := s.getSession(c)
 
 	if err != nil {
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of running workflows", err)
 		return
 	}
 
-	if foundUser == nil || foundUser.User == nil || len(foundUser.User.Email) == 0 {
+	if foundSession == nil || foundSession.User == nil || len(foundSession.User.Email) == 0 {
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: user information is incomplete", nil)
 		return
 	}
@@ -103,7 +103,7 @@ func (s *Server) listRunningWorkflows(c *gin.Context) {
 	resp, err := temporalClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: temporalService.GetNamespace(),
 		PageSize:  100,
-		Query:     fmt.Sprintf("TaskQueue='%s' AND user='%s'", temporalService.GetTaskQueue(), foundUser.User.Email),
+		Query:     fmt.Sprintf("TaskQueue='%s' AND user='%s'", temporalService.GetTaskQueue(), foundSession.User.Email),
 		//NextPageToken: nextPageToken,
 	})
 
@@ -193,7 +193,7 @@ func (s *Server) getRunningWorkflow(c *gin.Context) {
 		return
 	}
 
-	_, _, err := s.getUser(c)
+	_, _, err := s.getSession(c)
 
 	if err != nil {
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user to get workflow information", err)
@@ -546,7 +546,7 @@ func (s *Server) signalRunningWorkflow(c *gin.Context) {
 		return
 	}
 
-	_, foundUser, err := s.getUser(c)
+	_, foundSession, err := s.getSession(c)
 
 	if err != nil {
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for signaling workflow", err)
@@ -581,7 +581,7 @@ func (s *Server) signalRunningWorkflow(c *gin.Context) {
 	}
 
 	// Extensions only support basic types so we need to set the user identity as a string
-	signal.SetExtension(models.VarsContextUser, foundUser.User.GetIdentity())
+	signal.SetExtension(models.VarsContextUser, foundSession.User.GetIdentity())
 
 	if len(signal.FieldErrors) > 0 {
 		logrus.WithField("errors", signal.FieldErrors).
@@ -658,7 +658,7 @@ func (s *Server) approveRunningWorkflow(c *gin.Context) {
 	approved := strings.EqualFold(approvedStr, "true") || approvedStr == "1" || strings.EqualFold(approvedStr, "yes")
 
 	// require authenticated user when running in server mode
-	_, foundUser, err := s.getUser(c)
+	_, foundUser, err := s.getSession(c)
 	if err != nil {
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for approval", err)
 		return

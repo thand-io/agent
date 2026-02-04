@@ -12,6 +12,61 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
+// MergeIdentities merges missing fields from source into target
+func MergeIdentities(target, source *models.Identity) {
+	// Merge User fields
+	if source.User != nil {
+		if target.User == nil {
+			target.User = source.User
+		} else {
+			MergeStrings(&target.User.ID, source.User.ID)
+			MergeStrings(&target.User.Username, source.User.Username)
+			MergeStrings(&target.User.Email, source.User.Email)
+			MergeStrings(&target.User.Name, source.User.Name)
+			MergeStrings(&target.User.Source, source.User.Source)
+			if target.User.Verified == nil && source.User.Verified != nil {
+				target.User.Verified = source.User.Verified
+			}
+			// Append groups from source, avoiding duplicates
+			if len(source.User.Groups) > 0 {
+				existingGroups := make(map[string]bool)
+				for _, group := range target.User.Groups {
+					existingGroups[group] = true
+				}
+				for _, group := range source.User.Groups {
+					if !existingGroups[group] {
+						target.User.Groups = append(target.User.Groups, group)
+					}
+				}
+			}
+		}
+	}
+
+	// Merge Group fields
+	if source.Group != nil {
+		if target.Group == nil {
+			target.Group = source.Group
+		} else {
+			MergeStrings(&target.Group.ID, source.Group.ID)
+			MergeStrings(&target.Group.Parent, source.Group.Parent)
+			MergeStrings(&target.Group.Name, source.Group.Name)
+			MergeStrings(&target.Group.Email, source.Group.Email)
+		}
+	}
+
+	// Merge Identity-level fields
+	MergeStrings(&target.ID, source.ID)
+	MergeStrings(&target.Label, source.Label)
+	MergeStrings(&target.Tenant, source.Tenant)
+}
+
+// mergeStrings sets target to source if target is empty and source is not
+func MergeStrings(target *string, source string) {
+	if len(*target) == 0 && len(source) > 0 {
+		*target = source
+	}
+}
+
 const (
 	IdentityTypeUser  IdentityType = "user"
 	IdentityTypeGroup IdentityType = "group"
@@ -27,7 +82,7 @@ func (c *Config) GetIdentitiesCount() int64 {
 
 	for _, provider := range c.GetProvidersByCapability(models.IdentityCapabilities...) {
 		count, err := provider.ListIdentities(ctx, &models.SearchRequest{})
-		
+
 		if err != nil {
 			logrus.WithError(err).
 				WithField("provider", provider.GetName()).
@@ -44,7 +99,9 @@ func (c *Config) GetIdentitiesCount() int64 {
 // GetIdentity looks up an identity by its identifier.
 // The identity string can optionally include a provider prefix (e.g., "aws-prod:username").
 // If a prefix is provided, it queries only that specific provider.
-// Otherwise, it queries all identity providers and returns the first match.
+// Otherwise, it queries all identity providers, merges results from multiple providers
+// (filling in missing User/Group information), and returns the alphabetically first identity
+// by mappable identifier.
 func (c *Config) GetIdentity(identity string) (*models.Identity, error) {
 	ctx := context.Background()
 
@@ -83,11 +140,16 @@ func (c *Config) GetIdentity(identity string) (*models.Identity, error) {
 		return nil, fmt.Errorf("identity not found: %s (no identity providers configured)", identity)
 	}
 
-	// Query all providers in parallel and return the first match
+	// Query all providers in parallel and collect results
 	var wg sync.WaitGroup
-	var closeOnce sync.Once
-	resultChan := make(chan *models.Identity, len(providerMap))
-	doneChan := make(chan struct{})
+	var mu sync.Mutex
+
+	// Collect all results from all providers
+	type providerResult struct {
+		provider models.Provider
+		identity *models.Identity
+	}
+	results := make([]providerResult, 0)
 
 	for _, provider := range providerMap {
 		wg.Add(1)
@@ -104,32 +166,54 @@ func (c *Config) GetIdentity(identity string) (*models.Identity, error) {
 			}
 
 			if result != nil {
-				select {
-				case resultChan <- result:
-				case <-doneChan:
-					// Another goroutine already found a result
-				}
+				mu.Lock()
+				results = append(results, providerResult{
+					provider: p,
+					identity: result,
+				})
+				mu.Unlock()
 			}
 		}(provider)
 	}
 
-	// Wait for all goroutines to complete and then close the result channel
-	go func() {
-		wg.Wait()
-		close(resultChan)
-	}()
+	// Wait for all goroutines to complete
+	wg.Wait()
 
-	// Try to get a result from the channel
-	// If channel is closed and empty, result will be nil and ok will be false
-	for result := range resultChan {
-		if result != nil {
-			closeOnce.Do(func() { close(doneChan) })
-			return result, nil
-		}
+	// If no results found, return error
+	if len(results) == 0 {
+		return nil, fmt.Errorf("identity not found: %s", identityKey)
 	}
 
-	// All goroutines finished without finding a result
-	return nil, fmt.Errorf("identity not found: %s", identityKey)
+	// Sort results by mappable identifier first, then by provider name for deterministic ordering.
+	// GetMappableIdentifier is expected to return a stable, comparable string that is the same
+	// for logically equivalent identities across providers (for example, a normalized email or
+	// username). We sort lexicographically on this identifier so that we can reliably pick a
+	// canonical "first" identity when multiple providers return matching records. Provider name
+	// is used only as a tie-breaker when the mappable identifiers are equal, to keep the overall
+	// ordering deterministic but not semantically significant.
+	slices.SortFunc(results, func(a, b providerResult) int {
+		// First sort by identity's mappable identifier (lexicographical order).
+		idCompare := strings.Compare(a.identity.GetMappableIdentifier(), b.identity.GetMappableIdentifier())
+		if idCompare != 0 {
+			return idCompare
+		}
+		// If the mappable identifiers are the same, sort by provider name for determinism.
+		return strings.Compare(a.provider.GetName(), b.provider.GetName())
+	})
+
+	// After sorting, the "alphabetically first" identity is the one with the smallest
+	// mappable identifier (and, if equal, the smallest provider name). This identity
+	// is treated as the canonical/base record that other identities are merged into.
+	baseIdentity := results[0].identity
+	baseIdentity.AddProvider(results[0].provider)
+
+	// Merge remaining results into the base identity
+	for i := 1; i < len(results); i++ {
+		baseIdentity.AddProvider(results[i].provider)
+		MergeIdentities(baseIdentity, results[i].identity)
+	}
+
+	return baseIdentity, nil
 }
 
 // GetIdentitiesWithFilter retrieves identities from all identity providers that support identity listing.
