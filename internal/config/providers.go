@@ -265,6 +265,7 @@ func (c *Config) InitializeProviders() error {
 	c.mu.Unlock()
 
 	logrus.Debugln("All providers initialized successfully")
+
 	return nil
 }
 

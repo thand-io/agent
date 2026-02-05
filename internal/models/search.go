@@ -71,6 +71,7 @@ func BleveListSearch[T any](
 		for _, term := range searchReq.Terms {
 			termQueries = append(termQueries, bleve.NewMatchQuery(term))
 		}
+		// All terms must be present (conjunction)
 		queries = append(queries, bleve.NewConjunctionQuery(termQueries...))
 	}
 

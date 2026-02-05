@@ -16,6 +16,8 @@ func GenerateElevateRequestFromReason(
 	llm models.LargeLanguageModelImpl,
 	providers map[string]models.Provider,
 	workflows map[string]models.Workflow,
+	authorisedProvider string,
+	user *models.Session,
 	reason string,
 ) (*models.ElevateRequest, error) {
 
@@ -46,7 +48,7 @@ func GenerateElevateRequestFromReason(
 	}
 
 	role, err := GenerateRole(
-		ctx, llm, provider, workflow, providers, evaluationResponse, queryableInfo)
+		ctx, llm, provider, workflow, providers, authorisedProvider, user, evaluationResponse, queryableInfo)
 	if err != nil {
 		logrus.WithError(err).Error("failed to generate role")
 		return nil, err
@@ -76,7 +78,7 @@ func validateInputs(llm models.LargeLanguageModelImpl, providers map[string]mode
 func validateEvaluationResponse(evaluationResponse *ElevationRequestResponse, reason string) error {
 	if !evaluationResponse.Success {
 		logrus.WithFields(logrus.Fields{
-			"reason":   reason,
+			"reason":    reason,
 			"rationale": evaluationResponse.Rationale,
 		}).Warn("failed to elevate")
 		return fmt.Errorf("failed to elevate: %s", evaluationResponse.Rationale)

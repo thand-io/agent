@@ -150,6 +150,13 @@ func preRunConfigE(cmd *cobra.Command, mode config.Mode) error {
 			return fmt.Errorf("failed to initialize providers: %w", err)
 		}
 
+		go func() {
+			err = cfg.ReloadRoleIndexes()
+			if err != nil {
+				logrus.WithError(err).Errorln("Failed to reload role indexes")
+			}
+		}()
+
 	}
 	return nil
 }

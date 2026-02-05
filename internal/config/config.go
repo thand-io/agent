@@ -333,7 +333,6 @@ func setupLogging(config *Config, v *viper.Viper) error {
 	return nil
 }
 
-
 func (c *Config) ReloadConfig() error {
 	var wg sync.WaitGroup
 	var foundErrors []error

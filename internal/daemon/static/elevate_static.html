@@ -1,6 +1,21 @@
 {{template "header" .}}
 <!-- Choices.js JS (CSS loaded in head.html) -->
 <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/scripts/choices.min.js"></script>
+<style>
+    /* Ensure single-select Choices.js dropdowns have normal height */
+    .choice-wrapper-single {
+        margin-bottom: 0px;
+    }
+    .choice-wrapper-single .choices__inner {
+        min-height: auto;
+        padding: 0.5rem;
+        background: hsl(var(--background));
+        color: hsl(var(--foreground));
+    }
+    .choice-wrapper-single .choices__list--single {
+        padding: 0px 5px 0px 0px;
+    }
+</style>
 
 <main>
     <div class="container">
@@ -56,22 +71,24 @@
                         </template>
                     </select>
 
-                    <!-- Role Select -->
-                    <select name="role" 
-                            x-model="selectedRole" 
-                            @change="evaluateRole()"
-                            required 
-                            class="form-select" 
-                            :disabled="!selectedProvider || loadingRoles" 
-                            :style="{ opacity: (!selectedProvider || loadingRoles) ? '0.5' : '1' }">
-                        <option value="" x-show="!selectedProvider">Select a Provider First</option>
-                        <option value="" x-show="selectedProvider && loadingRoles">Loading roles...</option>
-                        <option value="" x-show="selectedProvider && !loadingRoles && Object.keys(roles).length === 0">No roles available</option>
-                        <option value="" x-show="selectedProvider && !loadingRoles && Object.keys(roles).length > 0">Select a Role</option>
-                        <template x-for="(role, key) in roles" :key="key">
-                            <option :value="key" x-text="role.name || key"></option>
-                        </template>
-                    </select>
+                    <!-- Role Select with Choices.js -->
+                    <div class="choice-wrapper choice-wrapper-single">
+                        <select name="role" 
+                                id="elevate-roles"
+                                data-placeholder="Select a Role"
+                                required>
+                            <!-- Options populated dynamically via Choices.js -->
+                        </select>
+                        <div class="choice-help" x-show="!selectedProvider">
+                            Select a provider first to load available roles.
+                        </div>
+                        <div class="choice-help" x-show="selectedProvider && loadingRoles">
+                            Loading roles...
+                        </div>
+                        <div class="choice-help" x-show="selectedProvider && !loadingRoles && Object.keys(roles).length === 0">
+                            No roles available for this provider.
+                        </div>
+                    </div>
 
                     <!-- Duration Select -->
                     <select name="duration" x-model="duration" required class="form-select">
@@ -297,11 +314,12 @@
         PREFILLED_DURATION = '{{.Duration}}' || '';
         PREFILLED_REASON = '{{.Reason}}' || '';
         
-        // Choices.js instance (kept outside Alpine to avoid reactivity issues)
+        // Choices.js instances (kept outside Alpine to avoid reactivity issues)
         let identityChoicesInstance = null;
+        let roleChoicesInstance = null;
 
         /**
-         * Initialize the identity selector using Choices.js
+         * Initialize the identity and role selectors using Choices.js
          * This runs on DOMContentLoaded to ensure it executes before Alpine.js
          */
         document.addEventListener('DOMContentLoaded', function() {
@@ -319,6 +337,20 @@
                 duplicateItemsAllowed: false,
             });
 
+            // Initialize Choices.js for roles select
+            roleChoicesInstance = new Choices('#elevate-roles', {
+                searchEnabled: true,
+                placeholder: true,
+                placeholderValue: 'Search roles...',
+                noResultsText: 'No roles found',
+                shouldSort: false,
+                searchResultLimit: 50,
+                searchFields: ['label', 'value'],
+            });
+
+            // Disable roles selector initially (no provider selected)
+            roleChoicesInstance.setChoices([{ value: '', label: 'Select a provider first' }]);
+
             // Initialize Choices.js with backend identities
             const identityChoices = buildIdentityChoices(PREFILLED_IDENTITIES, true);
             identityChoicesInstance.setChoices(identityChoices, 'value', 'label', true);
@@ -326,17 +358,56 @@
             // Initial fetch of identities to populate the selector
             fetchIdentities();
 
-            // Set up search event listener using Choices.js event
+            // Set up search event listener for identities
             const identityElement = document.getElementById('elevate-identities');
-            let searchTimeout;
+            let identitySearchTimeout;
             
             if (identityElement) {
                 identityElement.addEventListener('search', function(e) {
-                    clearTimeout(searchTimeout);
+                    clearTimeout(identitySearchTimeout);
                     const query = e.detail.value.trim();
-                    searchTimeout = setTimeout(() => {
+                    identitySearchTimeout = setTimeout(() => {
                         fetchIdentities(query);
                     }, 300);
+                });
+            }
+
+            // Set up search event listener for roles
+            const roleElement = document.getElementById('elevate-roles');
+            let roleSearchTimeout;
+            
+            if (roleElement) {
+                roleElement.addEventListener('search', function(e) {
+                    clearTimeout(roleSearchTimeout);
+                    const query = e.detail.value.trim();
+                    console.log('Role search triggered with query:', query);
+                    roleSearchTimeout = setTimeout(() => {
+                        // Trigger role search via Alpine component
+                        const elevateFormElement = document.querySelector('[x-data*="elevateForm"]');
+                        if (elevateFormElement && Alpine) {
+                            const alpineComponent = Alpine.$data(elevateFormElement);
+                            if (alpineComponent && alpineComponent.selectedProvider) {
+                                console.log('Calling loadRoles with query:', query);
+                                alpineComponent.loadRoles(query);
+                            } else {
+                                console.log('No provider selected or Alpine component not ready');
+                            }
+                        }
+                    }, 300);
+                });
+
+                // Listen for role selection changes
+                roleElement.addEventListener('change', function(e) {
+                    const elevateFormElement = document.querySelector('[x-data*="elevateForm"]');
+                    if (elevateFormElement && Alpine) {
+                        const alpineComponent = Alpine.$data(elevateFormElement);
+                        if (alpineComponent && typeof alpineComponent.evaluateRole === 'function') {
+                            alpineComponent.selectedRole = e.target.value;
+                            alpineComponent.evaluateRole();
+                        } else {
+                            console.warn('Alpine component not ready or evaluateRole not found');
+                        }
+                    }
                 });
             }
 
@@ -680,15 +751,28 @@
 
                 /**
                  * Load roles for the selected provider
+                 * @param {string} query - Optional search query
                  */
-                async loadRoles() {
-                    if (!this.selectedProvider) return;
+                async loadRoles(query = '') {
+                    if (!this.selectedProvider) {
+                        // Clear roles in Choices.js when no provider selected
+                        if (roleChoicesInstance) {
+                            roleChoicesInstance.clearChoices();
+                            roleChoicesInstance.setChoices([{ value: '', label: 'Select a provider first' }]);
+                        }
+                        return;
+                    }
                     
                     this.loadingRoles = true;
-                    
+                                        
                     try {
-                        // Get all composite roles for a given provider
-                        const response = await fetch(`${this.apiBasePath}/roles?provider=${encodeURIComponent(this.selectedProvider)}`);
+                        // Build URL with query parameter if provided
+                        let url = `${this.apiBasePath}/roles?provider=${encodeURIComponent(this.selectedProvider)}`;
+                        if (query) {
+                            url += `&q=${encodeURIComponent(query)}&limit=1000`;
+                        }
+
+                        const response = await fetch(url);
                         
                         if (!response.ok) {
                             throw new Error(`HTTP error! status: ${response.status}`);
@@ -697,9 +781,45 @@
                         const data = await response.json();
                         this.roles = data.roles || {};
 
+                        // Convert roles object to Choices.js format
+                        const roleChoices = Object.keys(this.roles).map(key => {
+                            const role = this.roles[key].role || this.roles[key];
+                            return {
+                                value: key,
+                                label: role.name || key,
+                                customProperties: {
+                                    description: role.description || ''
+                                }
+                            };
+                        });
+
+                        // Update Choices.js instance
+                        if (roleChoicesInstance) {
+                            // Clear and set new choices
+                            roleChoicesInstance.clearChoices();
+                            if (roleChoices.length > 0) {
+                                roleChoicesInstance.setChoices([
+                                    { value: '', label: 'Select a role', placeholder: true },
+                                    ...roleChoices
+                                ], 'value', 'label', true);
+                                roleChoicesInstance.enable();
+                            } else {
+                                roleChoicesInstance.setChoices([
+                                    { value: '', label: 'No roles available' }
+                                ]);
+                            }
+                        }
+
                         this.preselectRole();
                     } catch (error) {
                         console.error('Error fetching roles:', error);
+                        // Show error in Choices.js
+                        if (roleChoicesInstance) {
+                            roleChoicesInstance.clearChoices();
+                            roleChoicesInstance.setChoices([
+                                { value: '', label: 'Error loading roles' }
+                            ]);
+                        }
                     } finally {
                         this.loadingRoles = false;
                     }
@@ -786,22 +906,25 @@
                     if (!this.prefilledRoles || this.prefilledRoles.length === 0) return;
                     
                     const roleToSelect = this.prefilledRoles[0];
+                    let roleKeyToSelect = null;
                     
                     // Try exact key match first
                     if (this.roles[roleToSelect]) {
-                        this.selectedRole = roleToSelect;
-                        this.evaluateRole();
-                        return;
+                        roleKeyToSelect = roleToSelect;
+                    } else {
+                        // Try case-insensitive name match
+                        roleKeyToSelect = Object.keys(this.roles).find(key => {
+                            const role = this.roles[key];
+                            return role.name && role.name.toLowerCase() === roleToSelect.toLowerCase();
+                        });
                     }
                     
-                    // Try case-insensitive name match
-                    const roleKey = Object.keys(this.roles).find(key => {
-                        const role = this.roles[key];
-                        return role.name && role.name.toLowerCase() === roleToSelect.toLowerCase();
-                    });
-                    
-                    if (roleKey) {
-                        this.selectedRole = roleKey;
+                    if (roleKeyToSelect) {
+                        this.selectedRole = roleKeyToSelect;
+                        // Sync with Choices.js component
+                        if (roleChoicesInstance) {
+                            roleChoicesInstance.setChoiceByValue(roleKeyToSelect);
+                        }
                         this.evaluateRole();
                     }
                 },

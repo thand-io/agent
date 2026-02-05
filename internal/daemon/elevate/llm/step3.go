@@ -105,6 +105,8 @@ func GenerateRole(
 	provider models.Provider,
 	workflow models.Workflow,
 	providers map[string]models.Provider,
+	authorizedProvider string,
+	foundSession *models.Session,
 	evaluationResponse *ElevationRequestResponse,
 	queryResponse *ElevationQueryResponse,
 ) (*models.Role, error) {
@@ -126,7 +128,7 @@ func GenerateRole(
 		return nil, err
 	}
 
-	return extractRoleFromResponse(provider, response)
+	return extractRoleFromResponse(provider, foundSession, response)
 }
 
 func validateGenerateRoleInputs(llm models.LargeLanguageModelImpl, evaluationResponse *ElevationRequestResponse, queryResponse *ElevationQueryResponse) error {
@@ -263,13 +265,13 @@ func generateLLMContent(
 	return response, nil
 }
 
-func extractRoleFromResponse(provider models.Provider, response *genai.GenerateContentResponse) (*models.Role, error) {
+func extractRoleFromResponse(provider models.Provider, foundSession *models.Session, response *genai.GenerateContentResponse) (*models.Role, error) {
 	candidates := []*models.Role{}
 
 	for _, candidate := range response.Candidates {
 		for _, part := range candidate.Content.Parts {
 			if part.FunctionCall != nil && part.FunctionCall.Name == GenerateRoleToolName {
-				role, err := createRoleFromParams(provider, part.FunctionCall.Args)
+				role, err := createRoleFromParams(provider, foundSession, part.FunctionCall.Args)
 				if err != nil {
 					return nil, err
 				}
@@ -285,7 +287,7 @@ func extractRoleFromResponse(provider models.Provider, response *genai.GenerateC
 	return nil, fmt.Errorf("no valid role found")
 }
 
-func createRoleFromParams(provider models.Provider, params map[string]any) (*models.Role, error) {
+func createRoleFromParams(provider models.Provider, foundSession *models.Session, params map[string]any) (*models.Role, error) {
 	var role models.Role
 	err := common.ConvertMapToInterface(params, &role)
 
@@ -297,6 +299,7 @@ func createRoleFromParams(provider models.Provider, params map[string]any) (*mod
 		ElevateRequest: models.ElevateRequest{
 			Role: &role,
 		},
+		User: foundSession.User,
 	})
 
 	if err != nil {

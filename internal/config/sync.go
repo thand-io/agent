@@ -38,7 +38,7 @@ func (c *Config) MergeConfiguration(config *RegistrationResponse) error {
 	providers := c.GetProviders()
 
 	existing := ConfigPatchRequest{
-		RoleConfig:     &roles,
+		RoleConfig:     roles,
 		WorkflowConfig: &workflows,
 		ProviderConfig: &providers,
 	}

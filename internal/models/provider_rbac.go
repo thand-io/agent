@@ -236,8 +236,11 @@ func ValidateRole(
 	elevateRequest ElevateRequestInternal,
 ) (map[string]any, error) {
 
-	// Check the user has access to the required scopes etc
+	if elevateRequest.User == nil {
+		return nil, fmt.Errorf("user information is required for role validation")
+	}
 
+	// Check the user has access to the required scopes etc
 	identity := Identity{
 		ID:    elevateRequest.User.GetIdentity(),
 		Label: elevateRequest.User.GetName(),

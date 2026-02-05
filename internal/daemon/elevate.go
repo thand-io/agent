@@ -663,7 +663,7 @@ func (s *Server) handleLargeLanguageModelRequest(c *gin.Context, elevateRequest 
 		return
 	}
 
-	_, foundUser, err := s.getSession(c)
+	authorisedProvider, foundSession, err := s.getSession(c)
 
 	if err != nil {
 		logrus.WithError(err).Error("failed to get user")
@@ -671,12 +671,12 @@ func (s *Server) handleLargeLanguageModelRequest(c *gin.Context, elevateRequest 
 		return
 	}
 
-	if foundUser == nil {
+	if foundSession == nil {
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: user not found for elevation")
 		return
 	}
 
-	providers := s.Config.GetProvidersByCapabilityWithUser(foundUser.User, models.ProviderCapabilityProvisioning)
+	providers := s.Config.GetProvidersByCapabilityWithUser(foundSession.User, models.ProviderCapabilityProvisioning)
 
 	if len(providers) == 0 {
 		s.getErrorPage(c, http.StatusBadRequest, "No providers with RBAC capability are configured")
@@ -695,6 +695,8 @@ func (s *Server) handleLargeLanguageModelRequest(c *gin.Context, elevateRequest 
 		s.Config.GetLargeLanguageModel(),
 		providers,
 		workflows,
+		authorisedProvider,
+		foundSession,
 		elevateRequest.Reason,
 	)
 
