@@ -37,7 +37,21 @@ type EvaluateRoleResponse struct {
 //	@Security		BearerAuth
 func (s *Server) getRoles(c *gin.Context) {
 	// Get authenticated user if in server mode
-	authenticatedUser, authenticatorProvider := s.getAuthenticatedUserForRoles(c)
+
+	var foundAuthenticator string
+	var foundSession *models.Session
+	var err error
+
+	if s.Config.IsServer() {
+
+		foundAuthenticator, foundSession, err = s.getSession(c)
+
+		if err != nil {
+			s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user session", err)
+			return
+		}
+
+	}
 
 	// Parse query parameters
 	providers := parseProviderList(c.Query("provider"))
@@ -46,16 +60,15 @@ func (s *Server) getRoles(c *gin.Context) {
 
 	// Get and filter roles
 	var filteredRoles map[string]models.RoleResponse
-	var err error
 
 	if len(query) > 0 {
-		filteredRoles, err = s.searchAndFilterRoles(c, query, limit, providers, authenticatorProvider, authenticatedUser)
+		filteredRoles, err = s.searchAndFilterRoles(c, query, limit, providers, foundAuthenticator, foundSession)
 		if err != nil {
 			s.getErrorPage(c, http.StatusInternalServerError, "Failed to search roles", err)
 			return
 		}
 	} else {
-		filteredRoles = s.filterAllRoles(providers, authenticatorProvider, authenticatedUser)
+		filteredRoles = s.filterAllRoles(providers, foundAuthenticator, foundSession)
 	}
 
 	// Build and render response
@@ -64,22 +77,6 @@ func (s *Server) getRoles(c *gin.Context) {
 		Roles:   filteredRoles,
 	}
 	s.renderRolesResponse(c, response)
-}
-
-// getAuthenticatedUserForRoles retrieves the authenticated user and provider if in server mode
-func (s *Server) getAuthenticatedUserForRoles(c *gin.Context) (*models.Session, string) {
-	if !s.Config.IsServer() {
-		return nil, ""
-	}
-
-	foundAuthenticator, foundSession, err := s.getSession(c)
-	if err != nil {
-		s.getErrorPage(c, http.StatusUnauthorized,
-			"Unauthorized: unable to get user for list of available roles", err)
-		return nil, ""
-	}
-
-	return foundSession, foundAuthenticator
 }
 
 // parseProviderList parses comma-separated provider list from query parameter

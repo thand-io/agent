@@ -383,7 +383,7 @@
                 // Listen for search events from Choices.js
                 roleElement.addEventListener('search', function(e) {
                     clearTimeout(roleSearchTimeout);
-                    const query = e.detail.value || '';
+                    const query = e.detail.value.trim() || '';
                     
                     roleSearchTimeout = setTimeout(() => {
                         const elevateFormElement = document.querySelector('[x-data*="elevateForm"]');

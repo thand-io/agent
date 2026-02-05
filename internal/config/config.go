@@ -532,6 +532,13 @@ func (c *Config) SyncWithLoginServer() error {
 		logrus.WithError(err).Errorln("Failed to initialize providers after login server sync")
 	}
 
+	go func() {
+		err = c.ReloadRoleIndexes()
+		if err != nil {
+			logrus.WithError(err).Errorln("Failed to reload role indexes")
+		}
+	}()
+
 	return nil
 
 }
