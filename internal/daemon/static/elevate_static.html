@@ -341,15 +341,18 @@
             roleChoicesInstance = new Choices('#elevate-roles', {
                 searchEnabled: true,
                 placeholder: true,
-                placeholderValue: 'Search roles...',
+                placeholderValue: 'Select a Role',
                 noResultsText: 'No roles found',
                 shouldSort: false,
-                searchResultLimit: 50,
+                searchResultLimit: 1000,
                 searchFields: ['label', 'value'],
+                // Disable client-side search - we'll handle it via backend
+                searchFloor: 0,
+                searchChoices: false,
             });
 
             // Disable roles selector initially (no provider selected)
-            roleChoicesInstance.setChoices([{ value: '', label: 'Select a provider first' }]);
+            roleChoicesInstance.setChoices([{ value: '', label: 'Select a provider first', disabled: true }]);
 
             // Initialize Choices.js with backend identities
             const identityChoices = buildIdentityChoices(PREFILLED_IDENTITIES, true);
@@ -372,31 +375,28 @@
                 });
             }
 
-            // Set up search event listener for roles
+            // Set up role search and selection listeners
             const roleElement = document.getElementById('elevate-roles');
             let roleSearchTimeout;
             
             if (roleElement) {
+                // Listen for search events from Choices.js
                 roleElement.addEventListener('search', function(e) {
                     clearTimeout(roleSearchTimeout);
-                    const query = e.detail.value.trim();
-                    console.log('Role search triggered with query:', query);
+                    const query = e.detail.value || '';
+                    
                     roleSearchTimeout = setTimeout(() => {
-                        // Trigger role search via Alpine component
                         const elevateFormElement = document.querySelector('[x-data*="elevateForm"]');
                         if (elevateFormElement && Alpine) {
                             const alpineComponent = Alpine.$data(elevateFormElement);
                             if (alpineComponent && alpineComponent.selectedProvider) {
-                                console.log('Calling loadRoles with query:', query);
                                 alpineComponent.loadRoles(query);
-                            } else {
-                                console.log('No provider selected or Alpine component not ready');
                             }
                         }
                     }, 300);
                 });
-
-                // Listen for role selection changes
+                
+                // Listen for selection changes
                 roleElement.addEventListener('change', function(e) {
                     const elevateFormElement = document.querySelector('[x-data*="elevateForm"]');
                     if (elevateFormElement && Alpine) {
@@ -404,8 +404,6 @@
                         if (alpineComponent && typeof alpineComponent.evaluateRole === 'function') {
                             alpineComponent.selectedRole = e.target.value;
                             alpineComponent.evaluateRole();
-                        } else {
-                            console.warn('Alpine component not ready or evaluateRole not found');
                         }
                     }
                 });
@@ -751,14 +749,14 @@
 
                 /**
                  * Load roles for the selected provider
-                 * @param {string} query - Optional search query
+                 * @param {string} query - Optional search query for backend filtering
                  */
                 async loadRoles(query = '') {
                     if (!this.selectedProvider) {
                         // Clear roles in Choices.js when no provider selected
                         if (roleChoicesInstance) {
                             roleChoicesInstance.clearChoices();
-                            roleChoicesInstance.setChoices([{ value: '', label: 'Select a provider first' }]);
+                            roleChoicesInstance.setChoices([{ value: '', label: 'Select a provider first', disabled: true }]);
                         }
                         return;
                     }
@@ -766,10 +764,10 @@
                     this.loadingRoles = true;
                                         
                     try {
-                        // Build URL with query parameter if provided
+                        // Build URL with query parameter for backend filtering if provided
                         let url = `${this.apiBasePath}/roles?provider=${encodeURIComponent(this.selectedProvider)}`;
                         if (query) {
-                            url += `&q=${encodeURIComponent(query)}&limit=1000`;
+                            url += `&q=${encodeURIComponent(query)}`;
                         }
 
                         const response = await fetch(url);
@@ -799,13 +797,13 @@
                             roleChoicesInstance.clearChoices();
                             if (roleChoices.length > 0) {
                                 roleChoicesInstance.setChoices([
-                                    { value: '', label: 'Select a role', placeholder: true },
+                                    { value: '', label: 'Select a Role', placeholder: true },
                                     ...roleChoices
                                 ], 'value', 'label', true);
                                 roleChoicesInstance.enable();
                             } else {
                                 roleChoicesInstance.setChoices([
-                                    { value: '', label: 'No roles available' }
+                                    { value: '', label: 'No roles available', disabled: true }
                                 ]);
                             }
                         }
