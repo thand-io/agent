@@ -30,6 +30,7 @@
                         this.defaultProvider = sessionsData.defaultProvider || '';
                         this.sessions = Object.entries(sessionsData.sessions || {}).map(([name, session]) => ({
                             name,
+                            version: session.version,
                             expiry: session.expiry,
                             expired: new Date(session.expiry) < new Date()
                         }));

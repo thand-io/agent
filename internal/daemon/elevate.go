@@ -258,7 +258,8 @@ func (s *Server) elevate(c *gin.Context, request models.ElevateRequest) {
 	authProvider, foundUser, err := s.getUserFromElevationRequest(c, request)
 
 	if err != nil {
-		// Check that the user requesting is allowed to make an elevation request for the provided role
+		// You will get this error if the user requesting is NOT allowed to make an elevation request for the provided role
+		// for the role authorisors to determine if a user is allowed to request elevation, they can check the user's identity against the role's allowed identities and scopes.
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of available roles", err)
 		return
 	}
