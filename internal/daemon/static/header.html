@@ -3,118 +3,42 @@
 <body>
     {{if .User}}
     <script>
+        // Initialize global auth store with server-side data
         document.addEventListener('alpine:init', () => {
-            Alpine.data('userDropdown', () => ({
-                open: false,
-                sessions: [],
-                defaultProvider: '',
-                
-                async fetchSessions() {
-                    try {
-                        const response = await fetch('{{.Config.ApiBasePath}}/sessions', {
-                            credentials: 'include'
-                        });
-                        if (response.ok) {
-                            const data = await response.json();
-                            this.defaultProvider = data.defaultProvider || '';
-                            this.sessions = Object.entries(data.sessions || {}).map(([name, session]) => ({
-                                name,
-                                expiry: session.expiry,
-                                expired: new Date(session.expiry) < new Date()
-                            }));
-                        }
-                    } catch (error) {
-                        console.error('Failed to fetch sessions:', error);
-                    }
-                },
-                
-                async setDefaultSession(sessionName) {
-                    try {
-                        const response = await fetch('{{.Config.ApiBasePath}}/sessions', {
-                            method: 'PUT',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({ provider: sessionName }),
-                            credentials: 'include'
-                        });
-                        
-                        if (response.ok) {
-                            window.location.reload();
-                        } else {
-                            console.error('Failed to update default session');
-                        }
-                    } catch (error) {
-                        console.error('Error updating default session:', error);
-                    }
-                },
-                
-                get hasActiveSessions() {
-                    return this.sessions.filter(session => !session.expired).length > 0;
-                },
-                
-                get hasMultipleSessions() {
-                    return this.sessions.length >= 2;
-                },
-                
-                get statusClass() {
-                    return this.hasActiveSessions ? 'status-active' : 'status-inactive';
-                },
-                
-                get statusTitle() {
-                    return this.hasActiveSessions 
-                        ? `${this.sessions.length} active session${this.sessions.length > 1 ? 's' : ''}`
-                        : 'No active sessions';
-                },
-                
-                formatExpiry(expiry, expired) {
-                    return expired ? 'Expired' : 'Expires ' + new Date(expiry).toLocaleString();
-                },
-                
-                getSessionStatusClass(expired) {
-                    return expired ? 'error' : 'healthy';
-                },
-                
-                isDefaultSession(sessionName) {
-                    return this.defaultProvider === sessionName;
-                },
-                
-                handleButtonClick() {
-                    if (this.hasMultipleSessions) {
-                        this.open = !this.open;
-                    } else {
-                        window.location.href = '/user';
-                    }
-                },
-                
-                async selectSession(sessionName) {
-                    console.log('Selected session:', sessionName);
-                    await this.setDefaultSession(sessionName);
-                    this.open = false;
-                },
-                
-                async logout() {
-                    try {
-                        const response = await fetch('{{.Config.ApiBasePath}}/sessions', {
-                            method: 'DELETE',
-                            credentials: 'include'
-                        });
-                        
-                        if (response.ok) {
-                            window.location.reload();
-                        } else {
-                            console.error('Failed to logout');
-                        }
-                    } catch (error) {
-                        console.error('Error during logout:', error);
-                    }
-                },
-                
-                init() {
-                    this.fetchSessions();
-                    setInterval(() => this.fetchSessions(), 60000);
-                }
-            }));
+            // Fetch sessions data on initial load
+            fetch('{{.Config.ApiBasePath}}/sessions', {
+                credentials: 'include'
+            })
+            .then(response => response.json())
+            .then(data => {
+                Alpine.store('auth').init(
+                    {
+                        name: '{{.User.GetName}}',
+                        email: '{{.User.Email}}'
+                    },
+                    data,
+                    '{{.Config.ApiBasePath}}'
+                );
+            })
+            .catch(error => {
+                console.error('Failed to fetch sessions:', error);
+                // Initialize with user data only
+                Alpine.store('auth').init(
+                    {
+                        name: '{{.User.GetName}}',
+                        email: '{{.User.Email}}'
+                    },
+                    null,
+                    '{{.Config.ApiBasePath}}'
+                );
+            });
+        });
+    </script>
+    {{else}}
+    <script>
+        // Initialize store without user data for logged-out state
+        document.addEventListener('alpine:init', () => {
+            Alpine.store('auth').init(null, null, '{{.Config.ApiBasePath}}');
         });
     </script>
     {{end}}
@@ -139,35 +63,35 @@
             </div>
             <div class="nav-right">
                 {{if .User}}
-                    <div class="user-dropdown" x-data="userDropdown" @click.away="open = false">
+                    <div class="user-dropdown" x-data="{ open: false }" @click.away="open = false">
                         <button class="nav-button user-button" 
-                                :class="statusClass"
-                                @click.prevent="handleButtonClick()">
+                                :class="$store.auth.statusClass"
+                                @click.prevent="$store.auth.hasMultipleSessions ? open = !open : window.location.href = '/user'">
                             <span class="status-indicator" 
-                                  :class="statusClass"
-                                  :title="statusTitle"></span>
-                            <span>{{.User.GetName}}</span>
+                                  :class="$store.auth.statusClass"
+                                  :title="$store.auth.statusTitle"></span>
+                            <span x-text="$store.auth.user?.name || '{{.User.GetName}}'"></span>
                             <span class="dropdown-arrow" 
-                                  x-show="hasMultipleSessions">▼</span>
+                                  x-show="$store.auth.hasMultipleSessions">▼</span>
                         </button>
                         <div class="dropdown-menu" 
                              :class="{ 'show': open }">
                             <a href="/auth" class="dropdown-item">Authenticate</a>
                             <a href="/user" class="dropdown-item">Profile</a>
-                            <button class="dropdown-item" @click="logout()">Logout all</button>
+                            <button class="dropdown-item" @click="$store.auth.logout()">Logout all</button>
                             <div class="dropdown-divider"></div>
-                            <template x-for="session in sessions" :key="session.name">
+                            <template x-for="session in $store.auth.sessions" :key="session.name">
                                 <button class="dropdown-item session-item"
-                                        :class="{ 'expired': session.expired, 'default-session': isDefaultSession(session.name) }"
-                                        @click="selectSession(session.name)">
+                                        :class="{ 'expired': session.expired, 'default-session': $store.auth.isDefaultSession(session.name) }"
+                                        @click="$store.auth.setDefaultSession(session.name); open = false">
                                     <div class="session-info">
-                                        <div class="status-dot" :class="getSessionStatusClass(session.expired)"></div>
+                                        <div class="status-dot" :class="$store.auth.getSessionStatusClass(session.expired)"></div>
                                         <div class="session-details">
                                             <div class="session-name">
                                                 <span x-text="session.name"></span>
-                                                <span x-show="isDefaultSession(session.name)" class="default-badge">Default</span>
+                                                <span x-show="$store.auth.isDefaultSession(session.name)" class="default-badge">Default</span>
                                             </div>
-                                            <div class="session-expiry" x-text="formatExpiry(session.expiry, session.expired)"></div>
+                                            <div class="session-expiry" x-text="$store.auth.formatExpiry(session.expiry, session.expired)"></div>
                                         </div>
                                     </div>
                                 </button>

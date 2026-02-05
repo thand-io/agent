@@ -289,15 +289,32 @@
                 // Reactive state
                 loading: false,
                 error: null,
-                sessions: [],
-                defaultProvider: '',
 
                 // Initialize the app
                 init() {
-                    this.loadSessions();
+                    // Use global store if sessions already loaded, otherwise fetch
+                    const authStore = Alpine.store('auth');
+                    if (authStore.sessions.length === 0 && authStore.isLoggedIn) {
+                        this.loadSessions();
+                    }
                 },
 
-                // Fetch sessions from API
+                // Get sessions from store
+                get sessions() {
+                    const authStore = Alpine.store('auth');
+                    return authStore.sessions.map(session => ({
+                        provider: session.name,
+                        version: session.version || 'N/A',
+                        expiry: session.expiry,
+                        status: session.expired ? 'expired' : 'active'
+                    }));
+                },
+
+                get defaultProvider() {
+                    return Alpine.store('auth').defaultProvider;
+                },
+
+                // Fetch sessions from API (refresh)
                 async loadSessions() {
                     this.loading = true;
                     this.error = null;
@@ -314,61 +331,28 @@
 
                         const sessionData = await response.json();
                         
-                        // Store default provider
-                        this.defaultProvider = sessionData.defaultProvider || '';
-                        
-                        // Convert sessions object to array with provider names
-                        if (sessionData && sessionData.sessions) {
-                            const currentTime = new Date();
-                            this.sessions = Object.entries(sessionData.sessions).map(([provider, session]) => {
-                                const expiryDate = new Date(session.expiry);
-                                const isExpired = expiryDate < currentTime;
-                                
-                                return {
-                                    provider: provider,
-                                    version: session.version,
-                                    expiry: session.expiry,
-                                    status: isExpired ? 'expired' : 'active'
-                                };
-                            });
-                        } else {
-                            this.sessions = [];
-                        }
+                        // Update the global store
+                        const authStore = Alpine.store('auth');
+                        authStore.init(
+                            authStore.user,
+                            sessionData,
+                            '{{.Config.ApiBasePath}}'
+                        );
                     } catch (err) {
                         this.error = err.message;
-                        this.sessions = [];
                     } finally {
                         this.loading = false;
                     }
                 },
 
-                // Set default session
+                // Set default session using store method
                 async setDefaultSession(provider) {
-                    try {
-                        const response = await fetch('{{.Config.ApiBasePath}}/sessions', {
-                            method: 'PUT',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            credentials: 'include',
-                            body: JSON.stringify({ provider: provider })
-                        });
-                        
-                        if (response.ok) {
-                            window.location.reload();
-                        } else {
-                            const error = await response.json();
-                            throw new Error(error.message || 'Failed to set default session');
-                        }
-                    } catch (error) {
-                        console.error('Error setting default session:', error);
-                        alert('Error setting default session. Please try again.');
-                    }
+                    await Alpine.store('auth').setDefaultSession(provider);
                 },
 
-                // Check if session is default
+                // Check if session is default using store method
                 isDefaultSession(provider) {
-                    return this.defaultProvider === provider;
+                    return Alpine.store('auth').isDefaultSession(provider);
                 },
 
                 // Session actions
@@ -406,20 +390,7 @@
 
                 async logout() {
                     if (confirm('Are you sure you want to logout?')) {
-                        try {
-                            const response = await fetch('{{.Config.ApiBasePath}}/auth/logout', {
-                                method: 'GET',
-                            });
-                            
-                            if (response.ok) {
-                                window.location.href = '/auth';
-                            } else {
-                                alert('Error logging out. Please try again.');
-                            }
-                        } catch (error) {
-                            console.error('Logout error:', error);
-                            alert('Error logging out. Please try again.');
-                        }
+                        await Alpine.store('auth').logout();
                     }
                 },
 

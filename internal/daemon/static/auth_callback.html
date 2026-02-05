@@ -47,6 +47,25 @@
                         });
 
                         if (response.ok) {
+                            // Fetch updated sessions and update global store
+                            try {
+                                const sessionsResponse = await fetch(`${this.callback}/${apiBasePath}/sessions`, {
+                                    credentials: 'include'
+                                });
+                                if (sessionsResponse.ok) {
+                                    const sessionData = await sessionsResponse.json();
+                                    // Update global auth store with new session data
+                                    if (window.Alpine && Alpine.store('auth')) {
+                                        Alpine.store('auth').init(
+                                            Alpine.store('auth').user,
+                                            sessionData,
+                                            `/${apiBasePath}`
+                                        );
+                                    }
+                                }
+                            } catch (storeError) {
+                                console.warn('Failed to update store after registration:', storeError);
+                            }
                             this.state = 'success';
                         } else {
                             throw new Error(`Registration failed: ${response.status} ${response.statusText}`);

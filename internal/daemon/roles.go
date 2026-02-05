@@ -35,18 +35,21 @@ type EvaluateRoleResponse struct {
 func (s *Server) getRoles(c *gin.Context) {
 
 	var authenticatedUser *models.Session
+	var authenticatorProvider string
 
 	// If we're in server mode then we need to ensure the user is authenticated
 	// before we return any roles
 	// This is because roles can contain sensitive information
 	// and we want to ensure that only authenticated users can access them
 	if s.Config.IsServer() {
-		_, foundSession, err := s.getSession(c)
+		foundAuthenticator, foundSession, err := s.getSession(c)
 		if err != nil {
-			s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of available roles", err)
+			s.getErrorPage(c, http.StatusUnauthorized,
+				"Unauthorized: unable to get user for list of available roles", err)
 			return
 		}
 		authenticatedUser = foundSession
+		authenticatorProvider = foundAuthenticator
 	}
 
 	// Allow to filter by providers can be comma separated
@@ -66,9 +69,16 @@ func (s *Server) getRoles(c *gin.Context) {
 		if len(providers) > 0 && !hasAnyProvider(role.Providers, providers) {
 			continue
 		}
+		// If the role has specific authenticators defined, check that the authenticated user's provider is allowed to use this role
+		// If no user is authenticated, we skip this check and return all roles (filtered by provider if specified)
+		if len(authenticatorProvider) > 0 && len(role.Authenticators) > 0 && !slices.Contains(role.Authenticators, authenticatorProvider) {
+			continue
+		}
+		// Check what roles can be used by the authenticated user. If no user is authenticated then we return all roles.
 		if authenticatedUser != nil && !role.HasPermission(authenticatedUser.User) {
 			continue
 		}
+		// If the role has providers defined, check that the authenticated user's provider is allowed to use this role
 		filteredRoles[roleName] = models.RoleResponse{
 			Role: role,
 		}

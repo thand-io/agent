@@ -9,6 +9,8 @@
             <p>Create a custom role by selecting providers, permissions, and scopes. Either role inheritance or specific permissions must be selected to proceed to scopes, but both are not required to create a role.</p>
         </div>
             
+        {{template "session_warning" .}}
+            
         <form action="{{.Config.ApiBasePath}}/elevate" method="POST" enctype="application/x-www-form-urlencoded" class="mt-2 text-left" id="customRoleForm">
                 
             <div  style="display: flex; flex-direction: column; gap: 1rem; max-width: 600px;"></div>
@@ -346,7 +348,8 @@
                 .then(response => response.json())
                 .then(identitiesData => {
                     const identities = [];
-                    const currentUserEmail = '{{if .User}}{{.User.Email}}{{end}}';
+                    // Use global store for current user email if available
+                    const currentUserEmail = (window.Alpine && typeof window.Alpine.store === 'function' && window.Alpine.store('auth').user?.email) || '{{if .User}}{{.User.Email}}{{end}}';
                                         
                     // Add other available identities from the API
                     if (identitiesData && identitiesData.identities) {

@@ -250,6 +250,27 @@ func (c *Config) GetRoleByName(name string) (*models.Role, error) {
 	return c.Roles.GetRoleByName(name)
 }
 
+func (c *Config) GetCompositeRoleByName(
+	identity *models.Identity,
+	roleName string,
+) (*models.Role, error) {
+	if len(roleName) == 0 {
+		return nil, fmt.Errorf("cannot resolve composite role: role name is empty")
+	}
+	baseRole, err := c.GetRoleByName(roleName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get role '%s': %w", roleName, err)
+	}
+	return c.GetCompositeRole(identity, baseRole)
+}
+
+func (c *Config) GetCompositeRole(
+	identity *models.Identity,
+	baseRole *models.Role,
+) (*models.Role, error) {
+	return c.resolveCompositeRole(identity, baseRole, make(map[string]bool, 8))
+}
+
 // GetCompositeRole evaluates a role and resolves all inherited roles into a single composite role.
 // Provider-prefixed items (inherits, permissions, resources, groups) are filtered to only include
 // those matching the role's configured providers.
@@ -265,26 +286,110 @@ func (c *Config) GetRoleByName(name string) (*models.Role, error) {
 //   - baseRole is nil
 //   - Cyclic inheritance is detected
 //   - An inherited role cannot be resolved
-func (c *Config) GetCompositeRole(identity *models.Identity, baseRole *models.Role) (*models.Role, error) {
+func (c *Config) GetCompositeRoleForWorkflow(
+	identity *models.Identity,
+	workflow *models.ElevateWorkflowTask,
+) (*models.Role, error) {
+
+	if workflow == nil {
+		return nil, fmt.Errorf("cannot resolve composite role: workflow is nil")
+	}
+
+	// Get identifier for workflow
+	baseRole := workflow.GetRole()
+
+	// Set an ephemeral identifier for this composite role (not persisted, just for caching/indexing)
+	// Extract user from identity (handles nil identity gracefully)
+	userIdentity := "unknown"
+	if identity != nil {
+		userIdentity = identity.GetMappableIdentifier()
+	}
+
+	// Build the composite identifier
+	versionStr := "1.0.0"
+	if baseRole.Version != nil {
+		versionStr = baseRole.Version.String()
+	}
+
+	// Combine all components to create a unique identifier
+	roleIdentifier := fmt.Sprintf("%s:%s:%s:%s:%s",
+		workflow.GetWorkflowID(),
+		baseRole.Identifier,
+		versionStr,
+		baseRole.Name,
+		userIdentity,
+	)
+
+	return c.getCompositeRoleForIdentity(roleIdentifier, identity, baseRole)
+}
+
+func (c *Config) GetCompositeRoleForIdentity(
+	identity *models.Identity,
+	baseRole *models.Role,
+) (*models.Role, error) {
+
 	if baseRole == nil {
 		return nil, fmt.Errorf("cannot resolve composite role: base role is nil")
 	}
+
+	// Set an ephemeral identifier for this composite role (not persisted, just for caching/indexing)
+	// Extract user from identity (handles nil identity gracefully)
+	userIdentity := "unknown"
+	if identity != nil {
+		userIdentity = identity.GetMappableIdentifier()
+	}
+
+	// Build the composite identifier
+	versionStr := "1.0.0"
+	if baseRole.Version != nil {
+		versionStr = baseRole.Version.String()
+	}
+
+	// Combine all components to create a unique identifier
+	roleIdentifier := fmt.Sprintf("%s:%s:%s:%s", baseRole.Identifier, versionStr, baseRole.Name, userIdentity)
+
+	return c.getCompositeRoleForIdentity(roleIdentifier, identity, baseRole)
+}
+
+func (c *Config) getCompositeRoleForIdentity(
+	roleIdentifier string,
+	identity *models.Identity,
+	baseRole *models.Role,
+) (*models.Role, error) {
+
 	// Pre-allocate visited map with reasonable capacity to reduce allocations
-	return c.resolveCompositeRole(identity, baseRole, make(map[string]bool, 8))
-}
+	resolvedRole, err := c.GetCompositeRole(identity, baseRole)
 
-func (c *Config) GetCompositeRoleByName(identity *models.Identity, roleName string) (*models.Role, error) {
-	if len(roleName) == 0 {
-		return nil, fmt.Errorf("cannot resolve composite role: role name is empty")
-	}
-	baseRole, err := c.GetRoleByName(roleName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get role '%s': %w", roleName, err)
+		return nil, fmt.Errorf("failed to resolve composite role for '%s': %w", baseRole.Name, err)
 	}
-	return c.resolveCompositeRole(identity, baseRole, make(map[string]bool, 8))
+
+	// Create FNV-1a hash (non-cryptographic, fast, 6 hex chars)
+	h := fnv.New32a()
+	h.Write([]byte(roleIdentifier))
+
+	// Conform to snake_case for consistency
+	newIdentifier := fmt.Sprintf("%s_%06x", baseRole.GetIdentifier(), h.Sum32()&0xFFFFFF)
+
+	// Update identifier to make it unique for this composite role instance
+	resolvedRole.Identifier = newIdentifier
+
+	// Log the identifier change for debugging
+	logrus.WithFields(logrus.Fields{
+		"role":                baseRole.Name,
+		"original_identifier": baseRole.Identifier,
+		"new_identifier":      resolvedRole.Identifier,
+	}).Debugln("Marked role as composite and updated identifier")
+
+	return resolvedRole, nil
+
 }
 
-func (c *Config) resolveCompositeRoleByName(identity *models.Identity, roleName string, visited map[string]bool) (*models.Role, error) {
+func (c *Config) resolveCompositeRoleByName(
+	identity *models.Identity,
+	roleName string,
+	visited map[string]bool,
+) (*models.Role, error) {
 	baseRole, err := c.GetRoleByName(roleName)
 	if err != nil {
 		return nil, err
@@ -301,7 +406,11 @@ func (c *Config) resolveCompositeRoleByName(identity *models.Identity, roleName 
 //
 // This "parent wins" model allows administrators to define base roles with specific
 // permissions that cannot be overridden by inherited roles.
-func (c *Config) resolveCompositeRole(identity *models.Identity, baseRole *models.Role, visited map[string]bool) (*models.Role, error) {
+func (c *Config) resolveCompositeRole(
+	identity *models.Identity,
+	baseRole *models.Role,
+	visited map[string]bool,
+) (*models.Role, error) {
 
 	if len(baseRole.Name) == 0 {
 		return nil, fmt.Errorf("cannot resolve role with empty name")
@@ -418,44 +527,6 @@ func (c *Config) resolveCompositeRole(identity *models.Identity, baseRole *model
 	// Mark as composite and update identifier if it inherited thand roles
 	if hasThandRoleInheritance {
 		compositeRole.Composite = true
-		// Extract user from identity (handles nil identity gracefully)
-		var user *models.User
-		if identity != nil {
-			user = identity.GetUser()
-		}
-
-		// Create a unique identifier hash based on role identifier and user context
-		if user == nil {
-			// create unknown identifier for nil user
-			user = &models.User{}
-		}
-
-		userIdentity := user.GetIdentity()
-
-		// Build the composite identifier
-		versionStr := "1.0.0"
-		if baseRole.Version != nil {
-			versionStr = baseRole.Version.String()
-		}
-
-		// Combine all components to create a unique identifier
-		composite := fmt.Sprintf("%s:%s:%s:%s", baseRole.Identifier, versionStr, baseRole.Name, userIdentity)
-
-		// Create FNV-1a hash (non-cryptographic, fast, 6 hex chars)
-		h := fnv.New32a()
-		h.Write([]byte(composite))
-
-		// Conform to snake_case for consistency
-		newIdentifier := fmt.Sprintf("%s_%06x", baseRole.GetIdentifier(), h.Sum32()&0xFFFFFF)
-
-		// Update identifier to make it unique for this composite role instance
-		compositeRole.Identifier = newIdentifier
-
-		// Log the identifier change for debugging
-		log.WithFields(logrus.Fields{
-			"original_identifier": baseRole.Identifier,
-			"new_identifier":      compositeRole.Identifier,
-		}).Debugln("Marked role as composite and updated identifier")
 	}
 
 	// Validate composite role limits after merging
