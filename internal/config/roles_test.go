@@ -2,11 +2,13 @@ package config
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/thand-io/agent/internal/models"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 // stmts converts a []string to models.RoleStatements for test convenience
@@ -785,13 +787,6 @@ func TestGetCompositeRole(t *testing.T) {
 			assert.Equal(t, tt.expected.Description, result.Description)
 			assert.Equal(t, tt.expected.Enabled, result.Enabled)
 			assert.Equal(t, tt.expected.Composite, result.Composite, "Composite field mismatch")
-
-			// If role is composite, verify identifier was updated
-			if result.Composite {
-				assert.NotEmpty(t, result.Identifier, "Composite role should have non-empty identifier")
-				// Verify identifier includes hash (has "_" separator for snake_case)
-				assert.Contains(t, result.Identifier, "_", "Composite role identifier should include hash")
-			}
 
 			// Compare permissions (order doesn't matter)
 			assert.ElementsMatch(t, tt.expected.Permissions.Allow, result.Permissions.Allow)
@@ -2978,4 +2973,312 @@ func TestTargetMerging(t *testing.T) {
 		allowOps := collectAllOps(result.Permissions.Allow)
 		assert.Contains(t, allowOps, "s3:GetObject")
 	})
+}
+
+// TestGetCompositeRoleForIdentity tests that the GetCompositeRoleForIdentity function
+// creates a unique identifier that differs from the original role identifier
+func TestGetCompositeRoleForIdentity(t *testing.T) {
+	tests := []struct {
+		name         string
+		role         models.Role
+		identity     *models.Identity
+		expectChange bool // Whether we expect the identifier to change
+	}{
+		{
+			name: "simple role without inheritance - no identifier change",
+			role: models.Role{
+				Name:        "basic",
+				Identifier:  "basic",
+				Description: "Basic role",
+				Permissions: models.RolePermissions{
+					Allow: stmts("read"),
+				},
+				Enabled: true,
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "test@example.com",
+				},
+			},
+			expectChange: false, // No inheritance, so Composite will be false
+		},
+		{
+			name: "role with inheritance - identifier should change",
+			role: models.Role{
+				Name:        "extended",
+				Identifier:  "extended",
+				Description: "Extended role",
+				Inherits:    []string{"base"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("write"),
+				},
+				Enabled: true,
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "test@example.com",
+				},
+			},
+			expectChange: true,
+		},
+		{
+			name: "role with inheritance - different identity creates different identifier",
+			role: models.Role{
+				Name:        "extended",
+				Identifier:  "extended",
+				Description: "Extended role",
+				Inherits:    []string{"base"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("write"),
+				},
+				Enabled: true,
+			},
+			identity: &models.Identity{
+				ID: "user2",
+				User: &models.User{
+					Username: "anotheruser",
+					Email:    "another@example.com",
+				},
+			},
+			expectChange: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			roles := map[string]models.Role{
+				"base": {
+					Name:        "base",
+					Identifier:  "base",
+					Description: "Base role",
+					Permissions: models.RolePermissions{
+						Allow: stmts("read"),
+					},
+					Enabled: true,
+				},
+			}
+			roles[tt.role.Name] = tt.role
+
+			config := &Config{
+				Roles: RoleConfig{
+					Definitions: roles,
+				},
+			}
+
+			originalIdentifier := tt.role.Identifier
+
+			result, err := config.GetCompositeRoleForIdentity(tt.identity, &tt.role)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+
+			if tt.expectChange {
+				// Should have a different identifier with hash suffix
+				assert.NotEqual(t, originalIdentifier, result.Identifier, "Identifier should change for composite roles")
+				assert.Contains(t, result.Identifier, "_", "Composite role identifier should contain underscore separator")
+				assert.True(t, strings.HasPrefix(result.Identifier, originalIdentifier+"_"), "Identifier should start with original identifier plus underscore")
+				assert.True(t, result.Composite, "Role should be marked as composite")
+			} else {
+				// For non-composite roles, identifier is always updated with hash
+				assert.NotEqual(t, originalIdentifier, result.Identifier, "Identifier is always updated")
+				assert.Contains(t, result.Identifier, "_", "Identifier should contain underscore separator")
+			}
+		})
+	}
+}
+
+// TestGetCompositeRoleForWorkflow tests that the GetCompositeRoleForWorkflow function
+// creates a unique identifier that includes the workflow ID and differs from the original
+func TestGetCompositeRoleForWorkflow(t *testing.T) {
+	// Helper to create a workflow task with a role
+	createWorkflowTask := func(workflowID string, role *models.Role) *models.ElevateWorkflowTask {
+		req := &models.ElevateRequestInternal{
+			ElevateRequest: models.ElevateRequest{
+				Role: role,
+			},
+		}
+		return &models.ElevateWorkflowTask{
+			WorkflowTask: &sdkWorkflowsModel.WorkflowTask{
+				WorkflowID: workflowID,
+				Context:    req,
+			},
+		}
+	}
+
+	tests := []struct {
+		name       string
+		role       models.Role
+		workflowID string
+		identity   *models.Identity
+		shouldFail bool
+	}{
+		{
+			name: "workflow with role without inheritance",
+			role: models.Role{
+				Name:        "workflow-role",
+				Identifier:  "workflow_role",
+				Description: "Workflow role",
+				Permissions: models.RolePermissions{
+					Allow: stmts("execute"),
+				},
+				Enabled: true,
+			},
+			workflowID: "test-workflow",
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "test@example.com",
+				},
+			},
+		},
+		{
+			name: "workflow with role with inheritance",
+			role: models.Role{
+				Name:        "workflow-extended",
+				Identifier:  "workflow_extended",
+				Description: "Workflow extended role",
+				Inherits:    []string{"base"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("execute"),
+				},
+				Enabled: true,
+			},
+			workflowID: "test-workflow-extended",
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "test@example.com",
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			roles := map[string]models.Role{
+				"base": {
+					Name:        "base",
+					Identifier:  "base",
+					Description: "Base role",
+					Permissions: models.RolePermissions{
+						Allow: stmts("read"),
+					},
+					Enabled: true,
+				},
+			}
+			if len(tt.role.Name) > 0 {
+				roles[tt.role.Name] = tt.role
+			}
+
+			config := &Config{
+				Roles: RoleConfig{
+					Definitions: roles,
+				},
+			}
+
+			workflow := createWorkflowTask(tt.workflowID, &tt.role)
+			result, err := config.GetCompositeRoleForWorkflow(tt.identity, workflow)
+
+			if tt.shouldFail {
+				require.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, result)
+
+			// Identifier should always change for workflow roles
+			originalIdentifier := workflow.GetRole().Identifier
+			assert.NotEqual(t, originalIdentifier, result.Identifier, "Identifier should change for workflow composite roles")
+			assert.Contains(t, result.Identifier, "_", "Composite role identifier should contain underscore separator")
+			assert.True(t, strings.HasPrefix(result.Identifier, originalIdentifier+"_"), "Identifier should start with original identifier plus underscore")
+
+			// Verify the identifier is unique (contains hash)
+			parts := strings.Split(result.Identifier, "_")
+			assert.GreaterOrEqual(t, len(parts), 2, "Identifier should have at least 2 parts separated by underscore")
+			hashPart := parts[len(parts)-1]
+			assert.Equal(t, 6, len(hashPart), "Hash part should be 6 characters")
+		})
+	}
+
+	// Test nil workflow
+	t.Run("nil workflow should fail", func(t *testing.T) {
+		config := &Config{
+			Roles: RoleConfig{
+				Definitions: make(map[string]models.Role),
+			},
+		}
+		result, err := config.GetCompositeRoleForWorkflow(nil, nil)
+		require.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "workflow is nil")
+	})
+}
+
+// TestGetCompositeRoleForIdentity_DifferentIdentitiesDifferentIdentifiers tests that
+// different identities produce different composite role identifiers
+func TestGetCompositeRoleForIdentity_DifferentIdentitiesDifferentIdentifiers(t *testing.T) {
+	role := models.Role{
+		Name:        "test-role",
+		Identifier:  "test_role",
+		Description: "Test role",
+		Inherits:    []string{"base"},
+		Permissions: models.RolePermissions{
+			Allow: stmts("write"),
+		},
+		Enabled: true,
+	}
+
+	roles := map[string]models.Role{
+		"base": {
+			Name:        "base",
+			Identifier:  "base",
+			Description: "Base role",
+			Permissions: models.RolePermissions{
+				Allow: stmts("read"),
+			},
+			Enabled: true,
+		},
+		"test-role": role,
+	}
+
+	config := &Config{
+		Roles: RoleConfig{
+			Definitions: roles,
+		},
+	}
+
+	identity1 := &models.Identity{
+		ID: "user1",
+		User: &models.User{
+			Username: "user1",
+			Email:    "user1@example.com",
+		},
+	}
+
+	identity2 := &models.Identity{
+		ID: "user2",
+		User: &models.User{
+			Username: "user2",
+			Email:    "user2@example.com",
+		},
+	}
+
+	result1, err1 := config.GetCompositeRoleForIdentity(identity1, &role)
+	require.NoError(t, err1)
+	require.NotNil(t, result1)
+
+	result2, err2 := config.GetCompositeRoleForIdentity(identity2, &role)
+	require.NoError(t, err2)
+	require.NotNil(t, result2)
+
+	// Different identities should produce different identifiers
+	assert.NotEqual(t, result1.Identifier, result2.Identifier, "Different identities should produce different composite role identifiers")
+	assert.True(t, result1.Composite, "Result1 should be composite")
+	assert.True(t, result2.Composite, "Result2 should be composite")
 }

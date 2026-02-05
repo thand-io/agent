@@ -9,8 +9,10 @@
             <p>Request temporary elevated privileges for a specific role and reason. Only providers with RBAC support are available for elevation.</p>
         </div>
 
+        {{template "session_warning" .}}
+
         <form action="{{.Config.ApiBasePath}}/elevate" method="GET" class="mt-2 text-left" id="elevate-form">
-            <div class="form-section" style="max-width: 600px; margin: 0 auto;">
+            <div class="form-section">
                 
                 <!-- Identity Selection (managed by Choices.js, outside Alpine scope) -->
                 <h3>Select Identities to Assign Role</h3>

@@ -258,6 +258,8 @@ func (s *Server) elevate(c *gin.Context, request models.ElevateRequest) {
 	authProvider, foundUser, err := s.getUserFromElevationRequest(c, request)
 
 	if err != nil {
+		// You will get this error if the user requesting is NOT allowed to make an elevation request for the provided role
+		// for the role authorisors to determine if a user is allowed to request elevation, they can check the user's identity against the role's allowed identities and scopes.
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of available roles", err)
 		return
 	}
@@ -460,12 +462,11 @@ func (s *Server) getElevateAuthOAuth2(c *gin.Context) {
 	workflowTask.SetUser(session.User)
 
 	// Now that we have a user we need to evaluate our composite role
-
-	newRole, err := s.Config.GetCompositeRole(&models.Identity{
+	newRole, err := s.Config.GetCompositeRoleForWorkflow(&models.Identity{
 		ID:    session.User.GetIdentity(),
 		Label: session.User.GetName(),
 		User:  session.User,
-	}, workflowTask.GetRole())
+	}, workflowTask)
 
 	if err != nil {
 		s.getErrorPage(c, http.StatusInternalServerError,

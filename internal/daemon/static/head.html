@@ -12,6 +12,107 @@
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.8/dist/purify.min.js"></script>
     <!-- Alpine.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script>
+        // Global auth store for sessions and user context
+        document.addEventListener('alpine:init', () => {
+            Alpine.store('auth', {
+                user: null,
+                sessions: [],
+                defaultProvider: '',
+                apiBasePath: '',
+                loaded: false,
+                
+                // Initialize store with server-side data
+                init(userData, sessionsData, apiBasePath) {
+                    this.user = userData;
+                    this.apiBasePath = apiBasePath;
+                    if (sessionsData) {
+                        this.defaultProvider = sessionsData.defaultProvider || '';
+                        this.sessions = Object.entries(sessionsData.sessions || {}).map(([name, session]) => ({
+                            name,
+                            version: session.version,
+                            expiry: session.expiry,
+                            expired: new Date(session.expiry) < new Date()
+                        }));
+                    }
+                    this.loaded = true;
+                },
+                
+                async setDefaultSession(sessionName) {
+                    try {
+                        const response = await fetch(`${this.apiBasePath}/sessions`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ provider: sessionName }),
+                            credentials: 'include'
+                        });
+                        
+                        if (response.ok) {
+                            window.location.reload();
+                        } else {
+                            console.error('Failed to update default session');
+                        }
+                    } catch (error) {
+                        console.error('Error updating default session:', error);
+                    }
+                },
+                
+                async logout() {
+                    try {
+                        const response = await fetch(`${this.apiBasePath}/sessions`, {
+                            method: 'DELETE',
+                            credentials: 'include'
+                        });
+                        
+                        if (response.ok) {
+                            window.location.reload();
+                        } else {
+                            console.error('Failed to logout');
+                        }
+                    } catch (error) {
+                        console.error('Error during logout:', error);
+                    }
+                },
+                
+                // Computed properties
+                get isLoggedIn() {
+                    return this.user !== null;
+                },
+                
+                get hasActiveSessions() {
+                    return this.sessions.filter(session => !session.expired).length > 0;
+                },
+                
+                get hasMultipleSessions() {
+                    return this.sessions.length >= 2;
+                },
+                
+                get statusClass() {
+                    return this.hasActiveSessions ? 'status-active' : 'status-inactive';
+                },
+                
+                get statusTitle() {
+                    return this.hasActiveSessions 
+                        ? `${this.sessions.length} active session${this.sessions.length > 1 ? 's' : ''}` 
+                        : 'No active sessions';
+                },
+                
+                formatExpiry(expiry, expired) {
+                    return expired ? 'Expired' : 'Expires ' + new Date(expiry).toLocaleString();
+                },
+                
+                getSessionStatusClass(expired) {
+                    return expired ? 'error' : 'healthy';
+                },
+                
+                isDefaultSession(sessionName) {
+                    return this.defaultProvider === sessionName;
+                }
+            });
+        });
+    </script>
    
 </head>
 {{end}}
