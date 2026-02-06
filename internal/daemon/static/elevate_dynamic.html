@@ -226,10 +226,21 @@
                 if (identityElement) {
                     identityElement.addEventListener('search', function(e) {
                         clearTimeout(identitySearchTimeout);
-                        const query = e.detail.value.trim();
+                        const query = e.detail.value.trim() || '';
                         identitySearchTimeout = setTimeout(() => {
                             loadIdentities(query);
                         }, 300);
+                    });
+                    
+                    // Listen for input events to catch when search is cleared
+                    identityElement.parentElement.addEventListener('input', function(e) {
+                        if (e.target.classList.contains('choices__input')) {
+                            clearTimeout(identitySearchTimeout);
+                            const query = e.target.value.trim();
+                            identitySearchTimeout = setTimeout(() => {
+                                loadIdentities(query);
+                            }, 300);
+                        }
                     });
                 }
 
@@ -239,10 +250,21 @@
                 if (inheritanceElement) {
                     inheritanceElement.addEventListener('search', function(e) {
                         clearTimeout(inheritanceSearchTimeout);
-                        const query = e.detail.value.trim();
+                        const query = e.detail.value.trim() || '';
                         inheritanceSearchTimeout = setTimeout(() => {
                             loadInheritanceOptions(query);
                         }, 300);
+                    });
+                    
+                    // Listen for input events to catch when search is cleared
+                    inheritanceElement.parentElement.addEventListener('input', function(e) {
+                        if (e.target.classList.contains('choices__input')) {
+                            clearTimeout(inheritanceSearchTimeout);
+                            const query = e.target.value.trim();
+                            inheritanceSearchTimeout = setTimeout(() => {
+                                loadInheritanceOptions(query);
+                            }, 300);
+                        }
                     });
                 }
 
@@ -775,20 +797,42 @@
                 if (scopesGroupsElement) {
                     scopesGroupsElement.addEventListener('search', function(e) {
                         clearTimeout(scopesGroupsSearchTimeout);
-                        const query = e.detail.value.trim();
+                        const query = e.detail.value.trim() || '';
                         scopesGroupsSearchTimeout = setTimeout(() => {
                             loadScopeData('group', scopes.groups, query);
                         }, 300);
+                    });
+                    
+                    // Listen for input events to catch when search is cleared
+                    scopesGroupsElement.parentElement.addEventListener('input', function(e) {
+                        if (e.target.classList.contains('choices__input')) {
+                            clearTimeout(scopesGroupsSearchTimeout);
+                            const query = e.target.value.trim();
+                            scopesGroupsSearchTimeout = setTimeout(() => {
+                                loadScopeData('group', scopes.groups, query);
+                            }, 300);
+                        }
                     });
                 }
 
                 if (scopesUsersElement) {
                     scopesUsersElement.addEventListener('search', function(e) {
                         clearTimeout(scopesUsersSearchTimeout);
-                        const query = e.detail.value.trim();
+                        const query = e.detail.value.trim() || '';
                         scopesUsersSearchTimeout = setTimeout(() => {
                             loadScopeData('user', scopes.users, query);
                         }, 300);
+                    });
+                    
+                    // Listen for input events to catch when search is cleared
+                    scopesUsersElement.parentElement.addEventListener('input', function(e) {
+                        if (e.target.classList.contains('choices__input')) {
+                            clearTimeout(scopesUsersSearchTimeout);
+                            const query = e.target.value.trim();
+                            scopesUsersSearchTimeout = setTimeout(() => {
+                                loadScopeData('user', scopes.users, query);
+                            }, 300);
+                        }
                     });
                 }
             }

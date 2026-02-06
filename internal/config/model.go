@@ -97,8 +97,8 @@ func (c *Config) IsClient() bool {
 	return c.mode == ModeClient
 }
 
-func (c *Config) GetRoles() RoleConfig {
-	return c.Roles
+func (c *Config) GetRoles() *RoleConfig {
+	return &c.Roles
 }
 
 func (c *Config) GetVault() models.VaultImpl {
@@ -151,6 +151,7 @@ type RoleConfig struct {
 
 	// Search indexes
 	rolesIndex bleve.Index
+	mu         sync.RWMutex
 }
 
 type WorkflowConfig struct {

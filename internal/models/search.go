@@ -71,12 +71,16 @@ func BleveListSearch[T any](
 		for _, term := range searchReq.Terms {
 			termQueries = append(termQueries, bleve.NewMatchQuery(term))
 		}
+		// All terms must be present (conjunction)
 		queries = append(queries, bleve.NewConjunctionQuery(termQueries...))
 	}
 
 	if len(searchReq.Query) > 0 {
-		// Use the main query string
-		queries = append(queries, bleve.NewQueryStringQuery(searchReq.Query))
+		// Use a match query to search across all fields generically
+		// This avoids issues with special characters in query string parsing
+		matchQuery := bleve.NewMatchQuery(searchReq.Query)
+		// Don't set a specific field - this makes it search across all fields
+		queries = append(queries, matchQuery)
 	}
 
 	if len(queries) == 0 {

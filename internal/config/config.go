@@ -333,7 +333,6 @@ func setupLogging(config *Config, v *viper.Viper) error {
 	return nil
 }
 
-
 func (c *Config) ReloadConfig() error {
 	var wg sync.WaitGroup
 	var foundErrors []error
@@ -532,6 +531,13 @@ func (c *Config) SyncWithLoginServer() error {
 	if err != nil {
 		logrus.WithError(err).Errorln("Failed to initialize providers after login server sync")
 	}
+
+	go func() {
+		err = c.ReloadRoleIndexes()
+		if err != nil {
+			logrus.WithError(err).Errorln("Failed to reload role indexes")
+		}
+	}()
 
 	return nil
 

@@ -501,7 +501,7 @@ func (s *Server) handleAgentMode(c *gin.Context) {
 	c.Next()
 }
 
-func getDecodedSession(encryptor models.EncryptionImpl, sessionData interface{}) (*models.ExportableSession, error) {
+func getDecodedSession(encryptor models.EncryptionImpl, sessionData any) (*models.ExportableSession, error) {
 
 	var localSession *models.LocalSession
 	var err error

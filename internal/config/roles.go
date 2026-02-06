@@ -3,6 +3,7 @@
 package config
 
 import (
+	"context"
 	"fmt"
 	"hash/fnv"
 	"reflect"
@@ -11,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/blevesearch/bleve/v2"
+	"github.com/blevesearch/bleve/v2/search"
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
@@ -176,6 +178,57 @@ func (c *Config) ApplyRoles(foundRoles []*models.RoleDefinitions) (map[string]mo
 	return defs, nil
 }
 
+// ListRoles searches for roles using the Bleve index. If no search request is provided,
+// returns all roles. Access control is applied by the caller.
+func (rc *RoleConfig) ListRoles(
+	ctx context.Context,
+	searchRequest *models.SearchRequest,
+) ([]models.SearchResult[models.Role], error) {
+	rc.mu.RLock()
+	rolesIndex := rc.rolesIndex
+	definitions := rc.Definitions
+	rc.mu.RUnlock()
+
+	if definitions == nil {
+		return nil, fmt.Errorf("no roles defined")
+	}
+
+	// Convert map to slice for searching
+	roles := make([]models.Role, 0, len(definitions))
+	for roleId, role := range definitions {
+		// Set the identifier so we can match search results
+		role.Identifier = roleId
+		roles = append(roles, role)
+	}
+
+	// If no search request, return all roles
+	if searchRequest == nil || searchRequest.IsEmpty() {
+		return models.ReturnSearchResults(roles), nil
+	}
+
+	// Check if search index is ready
+	if rolesIndex != nil {
+		// Use Bleve search
+		return models.BleveListSearch(ctx, rolesIndex, func(a *search.DocumentMatch, b models.Role) bool {
+			// Compare the document ID from Bleve with the role identifier
+			return a.ID == b.Identifier
+		}, roles, searchRequest)
+	}
+
+	// Fallback to simple substring filtering while index is being built
+	var filtered []models.Role
+	filterText := strings.ToLower(strings.Join(searchRequest.Terms, " "))
+
+	for _, role := range roles {
+		if strings.Contains(strings.ToLower(role.Name), filterText) ||
+			strings.Contains(strings.ToLower(role.Description), filterText) {
+			filtered = append(filtered, role)
+		}
+	}
+
+	return models.ReturnSearchResults(filtered), nil
+}
+
 func (c *Config) ReloadRoleIndexes() error {
 
 	// Create bleve index for roles
@@ -186,7 +239,13 @@ func (c *Config) ReloadRoleIndexes() error {
 
 	availableRoles := c.Roles.Definitions
 
+	// Create index mapping with standard analyzer
 	rolesMapping := bleve.NewIndexMapping()
+
+	// Use standard analyzer which tokenizes on whitespace and most punctuation
+	// We pre-tokenize at index time to create all necessary search terms
+	rolesMapping.DefaultAnalyzer = "standard"
+
 	rolesIndex, err := bleve.NewMemOnly(rolesMapping)
 	if err != nil {
 		logrus.WithError(err).Errorln("Failed to create roles index")
@@ -208,12 +267,69 @@ func (c *Config) ReloadRoleIndexes() error {
 
 		if err != nil {
 			logrus.WithError(err).Errorf("Failed to create composite role for %s", roleId)
-			return fmt.Errorf("failed to create composite role for %s: %v", roleId, err)
+			continue
 		}
 
-		if err := rolesIndex.Index(roleId, compositeRole); err != nil {
+		// Create a searchable document that flattens nested arrays for better indexing
+		// Bleve needs flat string fields to properly index and search nested structures
+		// Lowercase everything for case-insensitive search
+		searchDoc := map[string]any{
+			"name":           strings.ToLower(compositeRole.Name),
+			"description":    strings.ToLower(compositeRole.Description),
+			"identifier":     strings.ToLower(compositeRole.Identifier),
+			"inherits":       strings.ToLower(strings.Join(role.Inherits, " ")), // Use original role's inherits for searchability
+			"authenticators": strings.ToLower(strings.Join(compositeRole.Authenticators, " ")),
+			"workflows":      strings.ToLower(strings.Join(compositeRole.Workflows, " ")),
+			"providers":      strings.ToLower(strings.Join(compositeRole.Providers, " ")),
+		}
+
+		// Flatten operations from nested permissions structure
+		var allOperations []string
+		for _, stmt := range compositeRole.Permissions.Allow {
+			allOperations = append(allOperations, stmt.Operations...)
+		}
+		for _, stmt := range compositeRole.Permissions.Deny {
+			allOperations = append(allOperations, stmt.Operations...)
+		}
+
+		// Create searchable tokens from operations for better matching
+		// This handles cases like "ec2:*", "ec2:describeInstances", "compute.instances.list"
+		operationTokens := make([]string, 0, len(allOperations)*3)
+		for _, op := range allOperations {
+			// Add the original operation (lowercased)
+			opLower := strings.ToLower(op)
+			operationTokens = append(operationTokens, opLower)
+
+			// For operations with colons, add both prefix and suffix parts
+			// "ec2:describeInstances" -> also index "ec2" and "describeinstances"
+			// "s3:GetObject" -> also index "s3" and "getobject"
+			if colonIdx := strings.Index(opLower, ":"); colonIdx > 0 {
+				operationTokens = append(operationTokens, opLower[:colonIdx]) // prefix before colon
+				if colonIdx+1 < len(opLower) {
+					suffix := opLower[colonIdx+1:]
+					if suffix != "*" { // don't index the literal asterisk
+						operationTokens = append(operationTokens, suffix) // part after colon
+					}
+				}
+			}
+
+			// For dot-separated operations, add intermediate parts too
+			// "compute.instances.list" -> also index "compute", "compute.instances", "instances", "list"
+			if strings.Contains(opLower, ".") {
+				parts := strings.Split(opLower, ".")
+				for i, part := range parts {
+					operationTokens = append(operationTokens, part) // each part individually
+					if i > 0 {
+						// also add progressive combinations: "compute.instances"
+						operationTokens = append(operationTokens, strings.Join(parts[:i+1], "."))
+					}
+				}
+			}
+		}
+		searchDoc["operations"] = strings.Join(operationTokens, " ")
+
+		if err := rolesIndex.Index(roleId, searchDoc); err != nil {
 			logrus.WithError(err).Errorf("Failed to index role %s", roleId)
-			return fmt.Errorf("failed to index role %s: %v", roleId, err)
 		}
 	}
 

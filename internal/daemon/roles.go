@@ -3,6 +3,7 @@ package daemon
 import (
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -11,7 +12,7 @@ import (
 
 // EvaluateRoleRequest represents the request body for POST /roles/evaluate
 type EvaluateRoleRequest struct {
-	Role     string `json:"role" binding:"required"`     // Role name to evaluate
+	Role     string `json:"role" binding:"required"`     // Role key (identifier) to evaluate
 	Identity string `json:"identity" binding:"required"` // Identity ID to evaluate against
 }
 
@@ -23,81 +24,148 @@ type EvaluateRoleResponse struct {
 // getRoles handles GET /api/v1/roles
 //
 //	@Summary		List roles
-//	@Description	Get a list of all available roles with optional provider filtering
+//	@Description	Get a list of all available roles with optional provider filtering and search
 //	@Tags			roles
 //	@Accept			json
 //	@Produce		json
 //	@Param			provider	query		string					false	"Comma-separated list of providers to filter by"
+//	@Param			q			query		string					false	"Search query for roles"
+//	@Param			limit		query		int						false	"Maximum number of search results (default: 10)"
 //	@Success		200			{object}	models.RolesResponse	"List of roles"
 //	@Failure		401			{object}	map[string]any	"Unauthorized"
 //	@Router			/roles [get]
 //	@Security		BearerAuth
 func (s *Server) getRoles(c *gin.Context) {
+	// Get authenticated user if in server mode
 
-	var authenticatedUser *models.Session
-	var authenticatorProvider string
+	var foundAuthenticator string
+	var foundSession *models.Session
+	var err error
 
-	// If we're in server mode then we need to ensure the user is authenticated
-	// before we return any roles
-	// This is because roles can contain sensitive information
-	// and we want to ensure that only authenticated users can access them
 	if s.Config.IsServer() {
-		foundAuthenticator, foundSession, err := s.getSession(c)
+
+		foundAuthenticator, foundSession, err = s.getSession(c)
+
 		if err != nil {
-			s.getErrorPage(c, http.StatusUnauthorized,
-				"Unauthorized: unable to get user for list of available roles", err)
+			s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user session", err)
 			return
 		}
-		authenticatedUser = foundSession
-		authenticatorProvider = foundAuthenticator
+
 	}
 
-	// Allow to filter by providers can be comma separated
-	// to allow for filtering by multiple providers
+	// Parse query parameters
+	providers := parseProviderList(c.Query("provider"))
+	query := c.Query("q")
+	limit := parseSearchLimit(c.Query("limit"), 10)
 
-	provider := c.Query("provider")
-	providers := []string{}
+	// Get and filter roles
+	var filteredRoles map[string]models.RoleResponse
 
-	if len(provider) > 0 {
-		foundProviders := strings.Split(provider, ",")
-		providers = append(providers, foundProviders...)
+	if len(query) > 0 {
+		filteredRoles, err = s.searchAndFilterRoles(c, query, limit, providers, foundAuthenticator, foundSession)
+		if err != nil {
+			s.getErrorPage(c, http.StatusInternalServerError, "Failed to search roles", err)
+			return
+		}
+	} else {
+		filteredRoles = s.filterAllRoles(providers, foundAuthenticator, foundSession)
 	}
 
-	// Filter out roles that are not in the requested providers
-	filteredRoles := make(map[string]models.RoleResponse)
-	for roleName, role := range s.Config.GetRoles().Definitions {
-		if len(providers) > 0 && !hasAnyProvider(role.Providers, providers) {
-			continue
-		}
-		// If the role has specific authenticators defined, check that the authenticated user's provider is allowed to use this role
-		// If no user is authenticated, we skip this check and return all roles (filtered by provider if specified)
-		if len(authenticatorProvider) > 0 && len(role.Authenticators) > 0 && !slices.Contains(role.Authenticators, authenticatorProvider) {
-			continue
-		}
-		// Check what roles can be used by the authenticated user. If no user is authenticated then we return all roles.
-		if authenticatedUser != nil && !role.HasPermission(authenticatedUser.User) {
-			continue
-		}
-		// If the role has providers defined, check that the authenticated user's provider is allowed to use this role
-		filteredRoles[roleName] = models.RoleResponse{
-			Role: role,
-		}
-	}
-
-	// Now if a query param is provided. We need to filter through the roles,
-	// this gets more interesting as a user might be search for a partial inheritance
-	// match or permission match.
-
-	// Given we support wildcards the first thing we need to do is resolve and create a
-	// composite role for the user to match against.
-
+	// Build and render response
 	response := models.RolesResponse{
 		Version: "1.0",
 		Roles:   filteredRoles,
 	}
+	s.renderRolesResponse(c, response)
+}
 
+// parseProviderList parses comma-separated provider list from query parameter
+func parseProviderList(providerParam string) []string {
+	if len(providerParam) == 0 {
+		return []string{}
+	}
+	return strings.Split(providerParam, ",")
+}
+
+// parseSearchLimit parses the limit query parameter with a default fallback
+func parseSearchLimit(limitStr string, defaultLimit int) int {
+	if len(limitStr) == 0 {
+		return defaultLimit
+	}
+	if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+		return parsedLimit
+	}
+	return defaultLimit
+}
+
+// searchAndFilterRoles searches roles and applies filters
+func (s *Server) searchAndFilterRoles(c *gin.Context, query string, limit int, providers []string, authenticatorProvider string, authenticatedUser *models.Session) (map[string]models.RoleResponse, error) {
+	searchRequest := &models.SearchRequest{
+		Limit: limit,
+		Terms: []string{query},
+	}
+
+	// For queries with special characters (like ec2:, arn:), don't add wildcard
+	// For simple text queries, add wildcard for partial matching
+	hasSpecialChars := strings.ContainsAny(query, ":/*")
+	if !hasSpecialChars && !strings.HasSuffix(query, "*") {
+		searchRequest.Query = query + "*"
+	} else {
+		searchRequest.Query = query
+	}
+
+	// Search roles using the index
+	searchResults, err := s.Config.GetRoles().ListRoles(c.Request.Context(), searchRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter search results
+	filteredRoles := make(map[string]models.RoleResponse)
+	for _, result := range searchResults {
+		role := result.Result
+		if s.shouldIncludeRole(role, providers, authenticatorProvider, authenticatedUser) {
+			filteredRoles[role.Identifier] = models.RoleResponse{Role: role}
+		}
+	}
+
+	return filteredRoles, nil
+}
+
+// filterAllRoles returns all roles with filters applied
+func (s *Server) filterAllRoles(providers []string, authenticatorProvider string, authenticatedUser *models.Session) map[string]models.RoleResponse {
+	filteredRoles := make(map[string]models.RoleResponse)
+	for roleName, role := range s.Config.GetRoles().Definitions {
+		if s.shouldIncludeRole(role, providers, authenticatorProvider, authenticatedUser) {
+			filteredRoles[roleName] = models.RoleResponse{Role: role}
+		}
+	}
+	return filteredRoles
+}
+
+// shouldIncludeRole checks if a role should be included based on filters
+func (s *Server) shouldIncludeRole(role models.Role, providers []string, authenticatorProvider string, authenticatedUser *models.Session) bool {
+	// Filter by provider
+	if len(providers) > 0 && !hasAnyProvider(role.Providers, providers) {
+		return false
+	}
+
+	// Filter by authenticator
+	if len(authenticatorProvider) > 0 && len(role.Authenticators) > 0 && !slices.Contains(role.Authenticators, authenticatorProvider) {
+		return false
+	}
+
+	// Filter by user permissions
+	if authenticatedUser != nil && !role.HasPermission(authenticatedUser.User) {
+		return false
+	}
+
+	return true
+}
+
+// renderRolesResponse renders the roles response as HTML or JSON
+func (s *Server) renderRolesResponse(c *gin.Context, response models.RolesResponse) {
 	if s.canAcceptHtml(c) {
-
 		data := struct {
 			TemplateData TemplateData
 			Response     models.RolesResponse
@@ -106,9 +174,7 @@ func (s *Server) getRoles(c *gin.Context) {
 			Response:     response,
 		}
 		s.renderHtml(c, "roles.html", data)
-
 	} else {
-
 		c.JSON(http.StatusOK, response)
 	}
 }
@@ -125,12 +191,12 @@ func hasAnyProvider(roleProviders []string, requestedProviders []string) bool {
 
 // getRoleByName handles GET /api/v1/role/:role
 //
-//	@Summary		Get role by name
-//	@Description	Retrieve detailed information about a specific role
+//	@Summary		Get role by key
+//	@Description	Retrieve detailed information about a specific role by its key (identifier)
 //	@Tags			roles
 //	@Accept			json
 //	@Produce		json
-//	@Param			role	path		string					true	"Role name"
+//	@Param			role	path		string					true	"Role key (identifier)"
 //	@Success		200		{object}	models.RoleResponse		"Role details"
 //	@Failure		400		{object}	map[string]any	"Bad request"
 //	@Failure		404		{object}	map[string]any	"Role not found"
