@@ -133,7 +133,7 @@ providers:
         -----END CERTIFICATE-----
 
       # Whether to sign SAML requests (default: false)
-      # if yes you need to private the private key.
+      # If yes, you need to provide the private key.
       sign_requests: false
 ```
 
