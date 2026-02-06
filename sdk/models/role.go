@@ -26,3 +26,6 @@ type RoleStatements = internal.RoleStatements
 
 // RoleStatement defines a single statement within a role's access control policies.
 type RoleStatement = internal.Statement
+
+// RoleDefinitions is a map of role identifiers to their corresponding Role definitions.
+type RoleDefinitions = internal.RoleDefinitions

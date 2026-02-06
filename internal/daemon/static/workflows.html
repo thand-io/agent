@@ -15,7 +15,9 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {{range $name, $workflow := .Response.Workflows}}
+                        {{range $workflowSearchResult := .Response.Workflows}}
+                        {{$name := $workflowSearchResult.Result.ID}}
+                        {{$workflow := $workflowSearchResult.Result}}
                         <tr style="position: relative;">
                             <td style="position: relative;">
                                 <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background-color: hsl(var(--status-active)); border-radius: 0.25rem 0 0 0.25rem;"></div>

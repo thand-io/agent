@@ -3,9 +3,11 @@ package daemon
 import (
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hashicorp/go-version"
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/thand-io/agent/internal/models"
 	sdkConstants "github.com/thand-io/agent/sdk/constants"
@@ -58,7 +60,7 @@ func (s *Server) getWorkflows(c *gin.Context) {
 		authenticatedUser = foundUser
 	}
 
-	workflows := map[string]models.WorkflowResponse{}
+	workflowResponses := []models.WorkflowResponse{}
 
 	for name, workflow := range s.Config.Workflows.Definitions {
 
@@ -70,16 +72,22 @@ func (s *Server) getWorkflows(c *gin.Context) {
 			continue
 		}
 
-		workflows[name] = models.WorkflowResponse{
+		workflowResponses = append(workflowResponses, models.WorkflowResponse{
+			ID:          name,
 			Name:        name,
 			Description: workflow.Description,
 			Enabled:     workflow.Enabled,
-		}
+		})
 	}
 
+	// Sort alphabetically by ID
+	sort.Slice(workflowResponses, func(i, j int) bool {
+		return workflowResponses[i].ID < workflowResponses[j].ID
+	})
+
 	response := models.WorkflowsResponse{
-		Version:   "1.0",
-		Workflows: workflows,
+		Version:   version.Must(version.NewVersion("1.0.0")),
+		Workflows: models.ReturnSearchResults(workflowResponses),
 	}
 
 	if s.canAcceptHtml(c) {

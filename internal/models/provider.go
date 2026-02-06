@@ -2,7 +2,6 @@ package models
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -10,7 +9,6 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
-	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/interpolate"
 )
 
@@ -77,21 +75,6 @@ func (p *ProviderConfig) ResolveConfig(vars map[string]any) error {
 	}
 
 	return fmt.Errorf("the traversed config was not a map")
-}
-
-// ProvidersResponse represents the response for a providers query
-type ProvidersResponse struct {
-	Version   string                      `json:"version"`
-	Providers map[string]ProviderResponse `json:"providers"`
-}
-
-type ProviderResponse struct {
-	ID           string                `json:"id"`
-	Name         string                `json:"name"`
-	Description  string                `json:"description"`
-	Provider     string                `json:"provider"` // e.g. aws, gcp, azure
-	Capabilities *ProviderCapabilities `json:"capabilities"`
-	Enabled      bool                  `json:"enabled"`
 }
 
 /*
@@ -168,72 +151,4 @@ func (r *RoleRequest) GetRole() *Role {
 
 func (r *RoleRequest) GetDuration() *time.Duration {
 	return r.Duration
-}
-
-// ProviderDefinitions represents a collection of provider configurations loaded from a file or other source.
-type ProviderDefinitions struct {
-	Version   *version.Version          `yaml:"version" json:"version"`
-	Providers map[string]ProviderConfig `yaml:"providers" json:"providers"`
-}
-
-// UnmarshalJSON converts Version to string from any type
-func (h *ProviderDefinitions) UnmarshalJSON(data []byte) error {
-	aux := &struct {
-		Version   any                       `json:"version"`
-		Providers map[string]ProviderConfig `json:"providers"`
-	}{
-		Providers: make(map[string]ProviderConfig),
-	}
-
-	if err := json.Unmarshal(data, &aux); err != nil {
-		return err
-	}
-
-	parsedVersion, err := version.NewVersion(ConvertVersionToString(aux.Version))
-	if err != nil {
-		return err
-	}
-
-	h.Version = parsedVersion
-	h.Providers = aux.Providers
-
-	return nil
-}
-
-// UnmarshalYAML converts Version to string from any type
-func (h *ProviderDefinitions) UnmarshalYAML(unmarshal func(any) error) error {
-	aux := &struct {
-		Version   any                       `yaml:"version"`
-		Providers map[string]ProviderConfig `yaml:"providers"`
-	}{
-		Providers: make(map[string]ProviderConfig),
-	}
-
-	if err := unmarshal(&aux); err != nil {
-		return err
-	}
-
-	parsedVersion, err := version.NewVersion(ConvertVersionToString(aux.Version))
-	if err != nil {
-		return err
-	}
-
-	h.Version = parsedVersion
-	h.Providers = aux.Providers
-
-	return nil
-}
-
-// Validate validates all providers in the definition using struct validation tags
-func (h *ProviderDefinitions) Validate() error {
-
-	validate := common.GetValidator()
-
-	for providerKey, provider := range h.Providers {
-		if err := validate.Struct(&provider); err != nil {
-			return fmt.Errorf("provider '%s' validation failed: %w", providerKey, err)
-		}
-	}
-
-	return nil
 }

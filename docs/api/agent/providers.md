@@ -40,20 +40,28 @@ curl "http://localhost:8080/api/v1/providers?capability=authenticator,authorizer
 ```json
 {
   "version": "1.0",
-  "providers": {
-    "aws": {
-      "name": "Amazon Web Services",
-      "description": "AWS cloud provider with IAM integration",
-      "provider": "aws",
-      "enabled": true
+  "providers": [
+    {
+      "_id": "aws",
+      "_source": {
+        "id": "aws",
+        "name": "Amazon Web Services",
+        "description": "AWS cloud provider with IAM integration",
+        "provider": "aws",
+        "enabled": true
+      }
     },
-    "gcp": {
-      "name": "Google Cloud Platform",
-      "description": "GCP with IAM and identity management",
-      "provider": "gcp",
-      "enabled": true
+    {
+      "_id": "gcp",
+      "_source": {
+        "id": "gcp",
+        "name": "Google Cloud Platform",
+        "description": "GCP with IAM and identity management",
+        "provider": "gcp",
+        "enabled": true
+      }
     }
-  }
+  ]
 }
 ```
 

@@ -17,12 +17,14 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {{range $name, $roleResponse := .Response.Roles}}
+                        {{range $roleSearchResult := .Response.Roles}}
+                        {{$roleResponse := $roleSearchResult.Result}}
                         {{$role := $roleResponse.Role}}
+                        {{$identifier := $role.Identifier}}
                         <tr style="position: relative;">
                             <td style="position: relative;">
                                 <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background-color: hsl(var(--status-active)); border-radius: 0.25rem 0 0 0.25rem;"></div>
-                                <a href="/role/{{$name}}" style="text-decoration: none; color: inherit;">
+                                <a href="/role/{{$identifier}}" style="text-decoration: none; color: inherit;">
                                     <strong>{{$role.Name}}</strong>
                                 </a>
                                 {{if $role.Description}}
@@ -48,8 +50,8 @@
                                 {{end}}
                             </td>
                             <td>
-                                <a href="/role/{{$name}}" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem;">View</a>
-                                <a href="/elevate?role={{$name}}" class="button button-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Request Elevation</a>
+                                <a href="/role/{{$identifier}}" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem;">View</a>
+                                <a href="/elevate?role={{$identifier}}" class="button button-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Request Elevation</a>
                             </td>
                         </tr>
                         {{else}}

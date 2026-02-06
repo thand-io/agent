@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
 )
@@ -281,7 +283,7 @@ func (s *Server) getProviderResources(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, models.ProviderResourcesResponse{
-		Version:   "1.0",
+		Version:   version.Must(version.NewVersion("1.0.0")),
 		Provider:  providerName,
 		Resources: resources,
 	})
@@ -346,7 +348,7 @@ func (s *Server) getProviderTenants(c *gin.Context) {
 	})
 }
 
-func (s *Server) getAuthProvidersAsProviderResponse(authenticatedUser *models.Session) map[string]models.ProviderResponse {
+func (s *Server) getAuthProvidersAsProviderResponse(authenticatedUser *models.Session) []models.SearchResult[models.ProviderResponse] {
 	return s.getProvidersAsProviderResponse(
 		authenticatedUser,
 		models.ProviderCapabilityAuthorizer)
@@ -355,9 +357,9 @@ func (s *Server) getAuthProvidersAsProviderResponse(authenticatedUser *models.Se
 func (s *Server) getProvidersAsProviderResponse(
 	authenticatedUser *models.Session,
 	capabilities ...models.ProviderCapability,
-) map[string]models.ProviderResponse {
+) []models.SearchResult[models.ProviderResponse] {
 
-	providerResponse := map[string]models.ProviderResponse{}
+	providerResponses := []models.ProviderResponse{}
 
 	for providerKey, provider := range s.Config.GetProvidersByCapability() {
 
@@ -380,17 +382,22 @@ func (s *Server) getProvidersAsProviderResponse(
 			continue
 		}
 
-		providerResponse[providerKey] = models.ProviderResponse{
+		providerResponses = append(providerResponses, models.ProviderResponse{
 			ID:           providerKey,
 			Name:         providerName,
 			Description:  provider.GetDescription(),
 			Provider:     provider.GetProvider(),
 			Capabilities: provider.GetCapabilities(),
 			Enabled:      true,
-		}
+		})
 	}
 
-	return providerResponse
+	// Sort alphabetically by ID
+	sort.Slice(providerResponses, func(i, j int) bool {
+		return providerResponses[i].ID < providerResponses[j].ID
+	})
+
+	return models.ReturnSearchResults(providerResponses)
 }
 
 // getProviders handles GET /api/v1/providers
@@ -436,7 +443,7 @@ func (s *Server) getProviders(c *gin.Context) {
 	}
 
 	response := models.ProvidersResponse{
-		Version:   "1.0",
+		Version:   version.Must(version.NewVersion("1.0.0")),
 		Providers: s.getProvidersAsProviderResponse(authenticatedUser, capabilities...),
 	}
 
