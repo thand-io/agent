@@ -154,7 +154,7 @@ func (c *Config) shouldIncludeProvider(
 ) bool {
 
 	if !p.Enabled {
-		logrus.Infoln("Provider disabled (not marked as enabled):", providerKey)
+		logrus.Warningln("Provider disabled (not marked as enabled):", providerKey)
 		return false
 	}
 

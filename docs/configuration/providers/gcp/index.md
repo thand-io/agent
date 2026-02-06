@@ -63,6 +63,14 @@ permissions:
 
 > **Note**: For full tenant synchronization capabilities (listing all projects and folders in your organization), grant the `roles/browser` role at the organization level. This allows the agent to discover and track your entire GCP resource hierarchy.
 
+### Service Account Role Configuration
+
+You'll then need to configure the necessary roles for this service account. Click on the **+ Add Another Role** button and add the following roles:
+
+- **Secret Manager Secret Accessor** - Required for accessing secrets stored in Google Secret Manager
+- **Cloud KMS CryptoKey Encrypter/Decrypter** - Required for encrypting and decrypting data with Cloud KMS
+- **Project IAM Admin** - Required if you plan to manage IAM roles via Thand
+
 ## Authentication Methods
 
 The GCP provider supports multiple authentication methods:

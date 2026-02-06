@@ -426,7 +426,7 @@ func (s *Server) processIAPJWT(
 		"email":    session.User.Email,
 		"user_id":  session.User.ID,
 		"provider": iapProviderName,
-	}).Infoln("User authenticated via GCP IAP")
+	}).Debugln("User authenticated via GCP IAP")
 
 	// Store session under the provider name
 	foundSessions[iapProviderName] = session
