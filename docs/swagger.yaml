@@ -480,10 +480,21 @@ definitions:
     type: object
   github_com_thand-io_agent_internal_models.ProvidersResponse:
     properties:
+      meta:
+        $ref: '#/definitions/github_com_thand-io_agent_internal_models.ResponseMeta'
       providers:
-        additionalProperties:
-          $ref: '#/definitions/github_com_thand-io_agent_internal_models.ProviderResponse'
-        type: object
+        items:
+          properties:
+            _id:
+              type: string
+            _reason:
+              type: string
+            _score:
+              type: number
+            _source:
+              $ref: '#/definitions/github_com_thand-io_agent_internal_models.ProviderResponse'
+          type: object
+        type: array
       version:
         type: string
     type: object

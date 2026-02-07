@@ -9,3 +9,12 @@ type Workflow = internal.Workflow
 // including timing, approval status, and associated identities.
 // See internal/models.WorkflowExecutionInfo for full documentation.
 type WorkflowExecutionInfo = internal.WorkflowExecutionInfo
+
+// WorkflowsResponse is an alias for the internal WorkflowsResponse type.
+type WorkflowsResponse = internal.WorkflowsResponse
+
+// WorkflowResponse is an alias for the internal WorkflowResponse type.
+type WorkflowResponse = internal.WorkflowResponse
+
+// WorkflowDefinitions is an alias for the internal WorkflowDefinitions type.
+type WorkflowDefinitions = internal.WorkflowDefinitions

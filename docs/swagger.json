@@ -2954,10 +2954,27 @@
         "github_com_thand-io_agent_internal_models.ProvidersResponse": {
             "type": "object",
             "properties": {
+                "meta": {
+                    "$ref": "#/definitions/github_com_thand-io_agent_internal_models.ResponseMeta"
+                },
                 "providers": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "$ref": "#/definitions/github_com_thand-io_agent_internal_models.ProviderResponse"
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "_id": {
+                                "type": "string"
+                            },
+                            "_reason": {
+                                "type": "string"
+                            },
+                            "_score": {
+                                "type": "number"
+                            },
+                            "_source": {
+                                "$ref": "#/definitions/github_com_thand-io_agent_internal_models.ProviderResponse"
+                            }
+                        }
                     }
                 },
                 "version": {

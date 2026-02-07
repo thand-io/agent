@@ -16,22 +16,22 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {{range $key, $provider := .Response.Providers}}
+                        {{range $provider := .Response.Providers}}
                         <tr style="position: relative;">
                             <td style="position: relative;">
                                 <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background-color: hsl(var(--status-active)); border-radius: 0.25rem 0 0 0.25rem;"></div>
-                                <strong>{{$provider.Name}}</strong>
-                                {{if $provider.Description}}
-                                    <div style="font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin-top: 0.25rem;">{{$provider.Description}}</div>
+                                <strong>{{$provider.Result.Name}}</strong>
+                                {{if $provider.Result.Description}}
+                                    <div style="font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin-top: 0.25rem;">{{$provider.Result.Description}}</div>
                                 {{end}}
                             </td>
                             <td>
-                                <span class="badge badge-secondary">{{$provider.Provider}}</span>
+                                <span class="badge badge-secondary">{{$provider.Result.Provider}}</span>
                             </td>
                             <td>
-                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$key}}/identities" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">View Identities</a>
-                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$key}}/roles" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">View Roles</a>
-                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$key}}/permissions" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">View Permissions</a>
+                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$provider.Result.ID}}/identities" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">View Identities</a>
+                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$provider.Result.ID}}/roles" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">View Roles</a>
+                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$provider.Result.ID}}/permissions" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">View Permissions</a>
                             </td>
                         </tr>
                         {{else}}

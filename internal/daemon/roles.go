@@ -3,10 +3,12 @@ package daemon
 import (
 	"net/http"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hashicorp/go-version"
 	"github.com/thand-io/agent/internal/models"
 )
 
@@ -59,7 +61,7 @@ func (s *Server) getRoles(c *gin.Context) {
 	limit := parseSearchLimit(c.Query("limit"), 10)
 
 	// Get and filter roles
-	var filteredRoles map[string]models.RoleResponse
+	var filteredRoles []models.RoleResponse
 
 	if len(query) > 0 {
 		filteredRoles, err = s.searchAndFilterRoles(c, query, limit, providers, foundAuthenticator, foundSession)
@@ -73,8 +75,8 @@ func (s *Server) getRoles(c *gin.Context) {
 
 	// Build and render response
 	response := models.RolesResponse{
-		Version: "1.0",
-		Roles:   filteredRoles,
+		Version: version.Must(version.NewVersion("1.0.0")),
+		Roles:   models.ReturnSearchResults(filteredRoles),
 	}
 	s.renderRolesResponse(c, response)
 }
@@ -99,7 +101,7 @@ func parseSearchLimit(limitStr string, defaultLimit int) int {
 }
 
 // searchAndFilterRoles searches roles and applies filters
-func (s *Server) searchAndFilterRoles(c *gin.Context, query string, limit int, providers []string, authenticatorProvider string, authenticatedUser *models.Session) (map[string]models.RoleResponse, error) {
+func (s *Server) searchAndFilterRoles(c *gin.Context, query string, limit int, providers []string, authenticatorProvider string, authenticatedUser *models.Session) ([]models.RoleResponse, error) {
 	searchRequest := &models.SearchRequest{
 		Limit: limit,
 		Terms: []string{query},
@@ -121,25 +123,36 @@ func (s *Server) searchAndFilterRoles(c *gin.Context, query string, limit int, p
 	}
 
 	// Filter search results
-	filteredRoles := make(map[string]models.RoleResponse)
+	var filteredRoles []models.RoleResponse
 	for _, result := range searchResults {
 		role := result.Result
 		if s.shouldIncludeRole(role, providers, authenticatorProvider, authenticatedUser) {
-			filteredRoles[role.Identifier] = models.RoleResponse{Role: role}
+			filteredRoles = append(filteredRoles, role)
 		}
 	}
+
+	// Sort alphabetically by Identifier
+	sort.Slice(filteredRoles, func(i, j int) bool {
+		return filteredRoles[i].Identifier < filteredRoles[j].Identifier
+	})
 
 	return filteredRoles, nil
 }
 
 // filterAllRoles returns all roles with filters applied
-func (s *Server) filterAllRoles(providers []string, authenticatorProvider string, authenticatedUser *models.Session) map[string]models.RoleResponse {
-	filteredRoles := make(map[string]models.RoleResponse)
-	for roleName, role := range s.Config.GetRoles().Definitions {
+func (s *Server) filterAllRoles(providers []string, authenticatorProvider string, authenticatedUser *models.Session) []models.RoleResponse {
+	var filteredRoles []models.RoleResponse
+	for _, role := range s.Config.GetRoles().Definitions {
 		if s.shouldIncludeRole(role, providers, authenticatorProvider, authenticatedUser) {
-			filteredRoles[roleName] = models.RoleResponse{Role: role}
+			filteredRoles = append(filteredRoles, role)
 		}
 	}
+
+	// Sort alphabetically by Identifier
+	sort.Slice(filteredRoles, func(i, j int) bool {
+		return filteredRoles[i].Identifier < filteredRoles[j].Identifier
+	})
+
 	return filteredRoles
 }
 

@@ -711,7 +711,11 @@
                         }
                         
                         const data = await response.json();
-                        this.providers = data.providers || {};
+                        // Convert array format to object format for Alpine.js template compatibility
+                        this.providers = {};
+                        data.providers.forEach(item => {
+                            this.providers[item._source.id] = item._source;
+                        });
 
                         // Pre-select provider from URL params if valid
                         if (this.prefilledProviders && this.prefilledProviders.length > 0) {
@@ -777,7 +781,14 @@
                         }
                         
                         const data = await response.json();
-                        this.roles = data.roles || {};
+                        
+                        // Convert array format to object format for Alpine.js template compatibility
+                        this.roles = {};
+                        data.roles.forEach(item => {
+                            const roleResponse = item._source;
+                            const roleKey = roleResponse.identifier || item._id;
+                            this.roles[roleKey] = roleResponse;
+                        });
 
                         // Convert roles object to Choices.js format
                         const roleChoices = Object.keys(this.roles).map(key => {

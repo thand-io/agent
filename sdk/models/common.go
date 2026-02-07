@@ -12,3 +12,6 @@ type BasicConfig = internal.BasicConfig
 // EncodingWrapper provides a wrapper for encoding and decoding data.
 // It abstracts the underlying encoding implementation for serialization operations.
 type EncodingWrapper = internal.EncodingWrapper
+
+// ResponseMeta contains pagination metadata for API responses, including page number, page size, total items, and total pages.
+type ResponseMeta = internal.ResponseMeta

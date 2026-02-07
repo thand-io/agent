@@ -319,11 +319,11 @@
                 fetch('{{.Config.ApiBasePath}}/providers?capability=provisioning')
                     .then(response => response.json())
                     .then(data => {
-                        const providers = Object.keys(data.providers).map(key => ({
-                            value: key,
-                            label: data.providers[key].name || key,
+                        const providers = data.providers.map(item => ({
+                            value: item._source.id,
+                            label: item._source.name || item._source.id,
                             customProperties: {
-                                description: data.providers[key].description || ''
+                                description: item._source.description || ''
                             }
                         }));
                         providerChoices.setChoices(providers, 'value', 'label', true);
@@ -339,10 +339,11 @@
                         // Clear existing options except the placeholder
                         workflowSelect.innerHTML = '<option value="" disabled selected>Select a workflow...</option>';
                         
-                        if (data.workflows && typeof data.workflows === 'object') {
-                            // Handle the nested object structure where workflows is an object with workflow IDs as keys
-                            Object.keys(data.workflows).forEach(workflowId => {
-                                const workflow = data.workflows[workflowId];
+                        // Handle array of SearchResult objects
+                        if (Array.isArray(data.workflows)) {
+                            data.workflows.forEach(item => {
+                                const workflow = item._source;
+                                const workflowId = workflow.id || workflow.name;
                                 const option = document.createElement('option');
                                 option.value = workflow.name || workflowId;
                                 option.textContent = workflow.description || workflow.name || workflowId;

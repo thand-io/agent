@@ -305,12 +305,18 @@ type AuthPageData struct {
 //	@Router			/auth [get]
 func (s *Server) getAuthPage(c *gin.Context) {
 
-	foundProviders := s.getAuthProvidersAsProviderResponse(nil)
+	foundProvidersArray := s.getAuthProvidersAsProviderResponse(nil)
 
-	if len(foundProviders) == 0 {
+	if len(foundProvidersArray) == 0 {
 		s.getErrorPage(c, http.StatusBadRequest, "No providers",
 			fmt.Errorf("no authentication providers found. That provide authentication support"))
 		return
+	}
+
+	// Convert SearchResult array to map for template compatibility
+	foundProviders := make(map[string]models.ProviderResponse)
+	for _, item := range foundProvidersArray {
+		foundProviders[item.Result.ID] = item.Result
 	}
 
 	callback, foundCallback := c.GetQuery("callback")
