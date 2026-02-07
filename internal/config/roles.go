@@ -231,6 +231,13 @@ func (rc *RoleConfig) ListRoles(
 
 func (c *Config) ReloadRoleIndexes() error {
 
+	// Never compute indexs if we're not in server mode.
+	// The CLI makes requests to the server to get role information so we don't need to compute indexes in the CLI. This also saves resources and prevents potential issues with concurrent access to the index from multiple CLI instances.
+	if c.IsClient() {
+		logrus.Debugln("Not running in server mode, skipping role index reload")
+		return nil
+	}
+
 	// Create bleve index for roles
 	if c.Roles.Definitions == nil {
 		logrus.Debugln("No roles defined, skipping index creation")

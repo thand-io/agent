@@ -133,6 +133,112 @@ func TestProviderDefinitions_UnmarshalJSON(t *testing.T) {
 			}`,
 			expectError: true,
 		},
+		{
+			name: "ProvidersResponse format with SearchResult array",
+			jsonInput: `{
+				"version": "1.0",
+				"providers": [
+					{
+						"_id": "aws",
+						"_score": 1.0,
+						"_source": {
+							"id": "aws",
+							"provider": "aws",
+							"name": "AWS Provider",
+							"description": "Amazon Web Services provider",
+							"enabled": true,
+							"version": "1.0.0",
+							"capabilities": {
+								"identities": {},
+								"resources": {}
+							}
+						}
+					},
+					{
+						"_id": "gcp",
+						"_score": 0.9,
+						"_source": {
+							"id": "gcp",
+							"provider": "gcp",
+							"name": "GCP Provider",
+							"description": "Google Cloud Platform provider",
+							"enabled": true,
+							"version": "1.0.0"
+						}
+					}
+				],
+				"meta": {
+					"total": 2,
+					"page": 1,
+					"page_size": 10
+				}
+			}`,
+			expectError:   false,
+			expectedVer:   "1.0.0",
+			providerCount: 2,
+			validateFunc: func(t *testing.T, def *ProviderDefinitions) {
+				aws, exists := def.Providers["aws"]
+				assert.True(t, exists, "aws provider should exist")
+				assert.Equal(t, "aws", aws.Provider)
+				assert.Equal(t, "AWS Provider", aws.Name)
+				assert.Equal(t, "Amazon Web Services provider", aws.Description)
+				assert.True(t, aws.Enabled)
+				assert.NotNil(t, aws.Capabilities)
+
+				gcp, exists := def.Providers["gcp"]
+				assert.True(t, exists, "gcp provider should exist")
+				assert.Equal(t, "gcp", gcp.Provider)
+				assert.Equal(t, "GCP Provider", gcp.Name)
+				assert.True(t, gcp.Enabled)
+
+				// Check meta was parsed
+				assert.Equal(t, int64(2), def.Meta.Total)
+				assert.Equal(t, 1, def.Meta.Page)
+				assert.Equal(t, 10, def.Meta.PageSize)
+			},
+		},
+		{
+			name: "ProvidersResponse format with empty array",
+			jsonInput: `{
+				"version": "1.0",
+				"providers": [],
+				"meta": {
+					"total": 0
+				}
+			}`,
+			expectError:   false,
+			expectedVer:   "1.0.0",
+			providerCount: 0,
+			validateFunc: func(t *testing.T, def *ProviderDefinitions) {
+				assert.Equal(t, int64(0), def.Meta.Total)
+			},
+		},
+		{
+			name: "ProvidersResponse format with minimal SearchResult",
+			jsonInput: `{
+				"version": "2.0",
+				"providers": [
+					{
+						"_source": {
+							"id": "azure",
+							"provider": "azure",
+							"name": "Azure Provider",
+							"description": "Microsoft Azure provider",
+							"enabled": true
+						}
+					}
+				]
+			}`,
+			expectError:   false,
+			expectedVer:   "2.0.0",
+			providerCount: 1,
+			validateFunc: func(t *testing.T, def *ProviderDefinitions) {
+				azure, exists := def.Providers["azure"]
+				assert.True(t, exists)
+				assert.Equal(t, "azure", azure.Provider)
+				assert.Equal(t, "Azure Provider", azure.Name)
+			},
+		},
 	}
 
 	for _, tt := range tests {

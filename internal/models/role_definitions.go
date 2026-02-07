@@ -9,19 +9,64 @@ import (
 )
 
 // RoleDefinitions represents the structure for roles YAML/JSON
-// These are used for configuration.
+// These are used for configuration. These store the full role information.
+// However, when in client mode they will only store the identifier, name and description of a role. The full role information is only stored in the daemon for internal use.
+// so the RoleDefinitions needs to be able to parse the RoleResponse object type
 type RoleDefinitions struct {
 	Version *version.Version `yaml:"version" json:"version"`
 	Roles   map[string]Role  `yaml:"roles" json:"roles"`
+	Meta    ResponseMeta     `json:"meta"`
 }
 
 // UnmarshalJSON converts Version to string from any type and handles both
 // API response format (with roles as SearchResult array) and config file format (map)
 func (h *RoleDefinitions) UnmarshalJSON(data []byte) error {
-	// First, try to unmarshal to detect the structure
+	// First, try to detect if this is a RolesResponse (array) or RoleDefinitions (map)
+	var detector struct {
+		Roles json.RawMessage `json:"roles"`
+	}
+
+	if err := json.Unmarshal(data, &detector); err != nil {
+		return err
+	}
+
+	// Check if roles starts with '[' (array) or '{' (object/map)
+	if len(detector.Roles) > 0 && detector.Roles[0] == '[' {
+		// This is a RolesResponse format with roles as an array of SearchResult
+		aux := &struct {
+			Version any                          `json:"version"`
+			Roles   []SearchResult[RoleResponse] `json:"roles"`
+			Meta    ResponseMeta                 `json:"meta"`
+		}{}
+
+		if err := json.Unmarshal(data, &aux); err != nil {
+			return err
+		}
+
+		parsedVersion, err := version.NewVersion(ConvertVersionToString(aux.Version))
+		if err != nil {
+			return err
+		}
+		h.Version = parsedVersion
+		h.Meta = aux.Meta
+
+		// Convert SearchResult array to map
+		h.Roles = make(map[string]Role)
+		for _, searchResult := range aux.Roles {
+			role := searchResult.Result
+			if role.Identifier != "" {
+				h.Roles[role.Identifier] = role
+			}
+		}
+
+		return nil
+	}
+
+	// This is a RoleDefinitions format with roles as a map
 	aux := &struct {
 		Version any             `json:"version"`
 		Roles   map[string]Role `json:"roles"`
+		Meta    ResponseMeta    `json:"meta"`
 	}{
 		Roles: make(map[string]Role),
 	}
@@ -36,6 +81,7 @@ func (h *RoleDefinitions) UnmarshalJSON(data []byte) error {
 	}
 	h.Version = parsedVersion
 	h.Roles = aux.Roles
+	h.Meta = aux.Meta
 
 	return nil
 }

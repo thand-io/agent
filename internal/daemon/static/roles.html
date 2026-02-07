@@ -18,8 +18,7 @@
                     </thead>
                     <tbody>
                         {{range $roleSearchResult := .Response.Roles}}
-                        {{$roleResponse := $roleSearchResult.Result}}
-                        {{$role := $roleResponse.Role}}
+                        {{$role := $roleSearchResult.Result}}
                         {{$identifier := $role.Identifier}}
                         <tr style="position: relative;">
                             <td style="position: relative;">
