@@ -29,3 +29,6 @@ type RoleStatement = internal.Statement
 
 // RoleDefinitions is a map of role identifiers to their corresponding Role definitions.
 type RoleDefinitions = internal.RoleDefinitions
+
+// RolesResponse is the response object for API endpoints that return role information.
+type RolesResponse = internal.RolesResponse
