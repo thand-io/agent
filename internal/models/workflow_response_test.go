@@ -39,7 +39,7 @@ func TestWorkflowsResponse_UnmarshalJSON_OldFormat(t *testing.T) {
 	// Verify the workflows were correctly converted to SearchResult array
 	workflowMap := make(map[string]WorkflowResponse)
 	for _, sr := range response.Workflows {
-		workflowMap[sr.Result.ID] = sr.Result
+		workflowMap[sr.Result.Identifier] = sr.Result
 	}
 
 	// Check approval-workflow
@@ -105,16 +105,16 @@ func TestWorkflowsResponse_UnmarshalJSON_NewFormat(t *testing.T) {
 	}
 
 	// Check first workflow
-	if response.Workflows[0].Result.ID != "approval-workflow" {
-		t.Errorf("Expected first workflow ID 'approval-workflow', got '%s'", response.Workflows[0].Result.ID)
+	if response.Workflows[0].Result.Identifier != "approval-workflow" {
+		t.Errorf("Expected first workflow ID 'approval-workflow', got '%s'", response.Workflows[0].Result.Identifier)
 	}
 	if response.Workflows[0].Result.Name != "Approval Workflow" {
 		t.Errorf("Expected name 'Approval Workflow', got '%s'", response.Workflows[0].Result.Name)
 	}
 
 	// Check second workflow
-	if response.Workflows[1].Result.ID != "auto-approve" {
-		t.Errorf("Expected second workflow ID 'auto-approve', got '%s'", response.Workflows[1].Result.ID)
+	if response.Workflows[1].Result.Identifier != "auto-approve" {
+		t.Errorf("Expected second workflow ID 'auto-approve', got '%s'", response.Workflows[1].Result.Identifier)
 	}
 }
 
@@ -151,7 +151,7 @@ func TestWorkflowResponse_UnmarshalJSON_OldFormat(t *testing.T) {
 
 	var approval *WorkflowResponse
 	for _, sr := range defs.Workflows {
-		if sr.Result.ID == "approval-workflow" {
+		if sr.Result.Identifier == "approval-workflow" {
 			approval = &sr.Result
 			break
 		}
@@ -201,7 +201,7 @@ func TestWorkflowDefinitions_UnmarshalJSON_NewFormat(t *testing.T) {
 
 	var approval *WorkflowResponse
 	for _, sr := range defs.Workflows {
-		if sr.Result.ID == "approval-workflow" {
+		if sr.Result.Identifier == "approval-workflow" {
 			approval = &sr.Result
 			break
 		}
@@ -277,8 +277,8 @@ func TestWorkflowsResponse_UnmarshalJSON_RealAPIResponse(t *testing.T) {
 	}
 
 	workflow1 := response.Workflows[0].Result
-	if workflow1.ID != "account_management" {
-		t.Errorf("Expected ID 'account_management', got '%s'", workflow1.ID)
+	if workflow1.Identifier != "account_management" {
+		t.Errorf("Expected ID 'account_management', got '%s'", workflow1.Identifier)
 	}
 	if workflow1.Name != "account_management" {
 		t.Errorf("Expected name 'account_management', got '%s'", workflow1.Name)

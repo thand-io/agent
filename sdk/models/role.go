@@ -32,3 +32,6 @@ type RoleDefinitions = internal.RoleDefinitions
 
 // RolesResponse is the response object for API endpoints that return role information.
 type RolesResponse = internal.RolesResponse
+
+// RoleResponse is the response object for API endpoints that return a single role's information.
+type RoleResponse = internal.RoleResponse

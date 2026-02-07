@@ -60,6 +60,17 @@
             "showLog": true
         },
         {
+            "name": "Run login (platform)",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}",
+            "cwd": "${workspaceFolder}",
+            "args": ["login", "--login-server", "http://hugh.app.localhost:6060"],
+            "env": {},
+            "showLog": true
+        },
+        {
             "name": "Run sessions (local)",
             "type": "go",
             "request": "launch",

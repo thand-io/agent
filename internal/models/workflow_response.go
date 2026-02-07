@@ -61,9 +61,9 @@ func (w *WorkflowsResponse) UnmarshalJSON(data []byte) error {
 	// Convert map to array of SearchResults
 	w.Workflows = make([]SearchResult[WorkflowResponse], 0, len(workflowMap))
 	for id, workflow := range workflowMap {
-		// Ensure the ID is set in case it's missing
-		if workflow.ID == "" {
-			workflow.ID = id
+		// Ensure the Identifier is set in case it's missing
+		if workflow.Identifier == "" {
+			workflow.Identifier = id
 		}
 		w.Workflows = append(w.Workflows, SearchResult[WorkflowResponse]{
 			ID:     id,
@@ -77,7 +77,7 @@ func (w *WorkflowsResponse) UnmarshalJSON(data []byte) error {
 
 type WorkflowResponse struct {
 	Version     *version.Version `json:"version,omitempty"`
-	ID          string           `json:"id"`
+	Identifier  string           `json:"identifier"`
 	Name        string           `json:"name"`
 	Description string           `json:"description"`
 	Enabled     bool             `json:"enabled"`
