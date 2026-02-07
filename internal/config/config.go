@@ -538,7 +538,7 @@ func (c *Config) SyncWithLoginServer() error {
 		// So that we can correctly serve search requests for roles.
 
 		go func() {
-			err = c.ReloadRoleIndexes()
+			err := c.ReloadRoleIndexes()
 			if err != nil {
 				logrus.WithError(err).Errorln("Failed to reload role indexes")
 			}

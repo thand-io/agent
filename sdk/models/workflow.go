@@ -10,7 +10,7 @@ type Workflow = internal.Workflow
 // See internal/models.WorkflowExecutionInfo for full documentation.
 type WorkflowExecutionInfo = internal.WorkflowExecutionInfo
 
-// WorkflowExecutionResponse is an alias for the internal WorkflowExecutionResponse type.
+// WorkflowsResponse is an alias for the internal WorkflowsResponse type.
 type WorkflowsResponse = internal.WorkflowsResponse
 
 // WorkflowResponse is an alias for the internal WorkflowResponse type.

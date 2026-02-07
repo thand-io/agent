@@ -39,7 +39,7 @@ curl "http://localhost:8080/api/v1/roles?provider=aws,gcp"
 
 ```json
 {
-  "version": "1.0",
+  "version": "1.0.0",
   "roles": {
     "admin": {
       "role": {

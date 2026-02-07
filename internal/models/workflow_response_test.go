@@ -118,7 +118,7 @@ func TestWorkflowsResponse_UnmarshalJSON_NewFormat(t *testing.T) {
 	}
 }
 
-func TestWorkflowDefinitions_UnmarshalJSON_OldFormat(t *testing.T) {
+func TestWorkflowResponse_UnmarshalJSON_OldFormat(t *testing.T) {
 	// Old map-based format (config file format)
 	oldFormatJSON := `{
 		"version": "1.0.0",

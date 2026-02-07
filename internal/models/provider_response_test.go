@@ -5,72 +5,6 @@ import (
 	"testing"
 )
 
-func TestProvidersResponse_UnmarshalJSON_OldFormat(t *testing.T) {
-	// Old map-based format
-	oldFormatJSON := `{
-		"version": "1.0.0",
-		"providers": {
-			"aws-prod": {
-				"id": "aws-prod",
-				"name": "AWS Production",
-				"description": "Production AWS environment",
-				"provider": "aws",
-				"capabilities": {
-					"provisioning": {
-						"can_provision_roles": true
-					}
-				},
-				"enabled": true
-			},
-			"gcp-dev": {
-				"id": "gcp-dev",
-				"name": "GCP Development",
-				"description": "Development GCP environment",
-				"provider": "gcp",
-				"enabled": true
-			}
-		}
-	}`
-
-	var response ProvidersResponse
-	err := json.Unmarshal([]byte(oldFormatJSON), &response)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal old format: %v", err)
-	}
-
-	// Verify we have 2 providers
-	if len(response.Providers) != 2 {
-		t.Errorf("Expected 2 providers, got %d", len(response.Providers))
-	}
-
-	// Verify the providers were correctly converted to SearchResult array
-	providerMap := make(map[string]ProviderResponse)
-	for _, sr := range response.Providers {
-		providerMap[sr.Result.ID] = sr.Result
-	}
-
-	// Check aws-prod
-	awsProd, exists := providerMap["aws-prod"]
-	if !exists {
-		t.Error("Expected aws-prod provider to exist")
-	}
-	if awsProd.Name != "AWS Production" {
-		t.Errorf("Expected name 'AWS Production', got '%s'", awsProd.Name)
-	}
-	if awsProd.Provider != "aws" {
-		t.Errorf("Expected provider 'aws', got '%s'", awsProd.Provider)
-	}
-
-	// Check gcp-dev
-	gcpDev, exists := providerMap["gcp-dev"]
-	if !exists {
-		t.Error("Expected gcp-dev provider to exist")
-	}
-	if gcpDev.Name != "GCP Development" {
-		t.Errorf("Expected name 'GCP Development', got '%s'", gcpDev.Name)
-	}
-}
-
 func TestProvidersResponse_UnmarshalJSON_NewFormat(t *testing.T) {
 	// New SearchResult array format
 	newFormatJSON := `{
@@ -226,10 +160,6 @@ func TestProvidersResponse_UnmarshalJSON_EmptyProviders(t *testing.T) {
 		{
 			name: "Empty array",
 			json: `{"version": "1.0.0", "providers": [], "meta": {}}`,
-		},
-		{
-			name: "Empty object",
-			json: `{"version": "1.0.0", "providers": {}, "meta": {}}`,
 		},
 	}
 

@@ -12,6 +12,6 @@ type RolesResponse struct {
 	Meta    ResponseMeta                 `json:"meta"`
 }
 
-// RoleResponse is a simplified response object that only includes
-// the identifier, name and description of a role
+// RoleResponse represents the role object returned in API responses.
+// It is currently defined as an alias of Role.
 type RoleResponse = Role

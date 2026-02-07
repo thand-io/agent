@@ -39,7 +39,7 @@ curl "http://localhost:8080/api/v1/providers?capability=authenticator,authorizer
 
 ```json
 {
-  "version": "1.0",
+  "version": "1.0.0",
   "providers": [
     {
       "_id": "aws",
@@ -102,7 +102,7 @@ List roles available through a provider.
 
 ```json
 {
-  "version": "1.0",
+  "version": "1.0.0",
   "provider": "aws",
   "roles": [
     {
@@ -137,7 +137,7 @@ List permissions available through a provider.
 
 ```json
 {
-  "version": "1.0",
+  "version": "1.0.0",
   "provider": "aws",
   "permissions": [
     {
@@ -170,7 +170,7 @@ List identities available through a provider.
 
 ```json
 {
-  "version": "1.0",
+  "version": "1.0.0",
   "provider": "aws",
   "identities": [
     {
