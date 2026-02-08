@@ -73,16 +73,16 @@ func (s *Server) getWorkflows(c *gin.Context) {
 		}
 
 		workflowResponses = append(workflowResponses, models.WorkflowResponse{
-			ID:          name,
-			Name:        name,
+			Identifier:  name,
+			Name:        workflow.Name,
 			Description: workflow.Description,
 			Enabled:     workflow.Enabled,
 		})
 	}
 
-	// Sort alphabetically by ID
+	// Sort alphabetically by Identifier
 	sort.Slice(workflowResponses, func(i, j int) bool {
-		return workflowResponses[i].ID < workflowResponses[j].ID
+		return workflowResponses[i].Identifier < workflowResponses[j].Identifier
 	})
 
 	response := models.WorkflowsResponse{

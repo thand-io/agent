@@ -714,7 +714,7 @@
                         // Convert array format to object format for Alpine.js template compatibility
                         this.providers = {};
                         data.providers.forEach(item => {
-                            this.providers[item._source.id] = item._source;
+                            this.providers[item._source.identifier] = item._source;
                         });
 
                         // Pre-select provider from URL params if valid

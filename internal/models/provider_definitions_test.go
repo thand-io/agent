@@ -142,7 +142,7 @@ func TestProviderDefinitions_UnmarshalJSON(t *testing.T) {
 						"_id": "aws",
 						"_score": 1.0,
 						"_source": {
-							"id": "aws",
+							"identifier": "aws",
 							"provider": "aws",
 							"name": "AWS Provider",
 							"description": "Amazon Web Services provider",
@@ -158,7 +158,7 @@ func TestProviderDefinitions_UnmarshalJSON(t *testing.T) {
 						"_id": "gcp",
 						"_score": 0.9,
 						"_source": {
-							"id": "gcp",
+							"identifier": "gcp",
 							"provider": "gcp",
 							"name": "GCP Provider",
 							"description": "Google Cloud Platform provider",
@@ -220,7 +220,7 @@ func TestProviderDefinitions_UnmarshalJSON(t *testing.T) {
 				"providers": [
 					{
 						"_source": {
-							"id": "azure",
+							"identifier": "azure",
 							"provider": "azure",
 							"name": "Azure Provider",
 							"description": "Microsoft Azure provider",

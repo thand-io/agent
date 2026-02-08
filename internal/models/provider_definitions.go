@@ -52,7 +52,7 @@ func (h *ProviderDefinitions) UnmarshalJSON(data []byte) error {
 		h.Providers = make(map[string]ProviderConfig)
 		for _, searchResult := range aux.Providers {
 			providerResp := searchResult.Result
-			if providerResp.ID != "" {
+			if providerResp.Identifier != "" {
 				// Create a ProviderConfig from ProviderResponse
 				provider := ProviderConfig{
 					Version:      providerResp.Version,
@@ -63,7 +63,7 @@ func (h *ProviderDefinitions) UnmarshalJSON(data []byte) error {
 					Enabled:      providerResp.Enabled,
 					// Note: Config and Role fields are not populated from response
 				}
-				h.Providers[providerResp.ID] = provider
+				h.Providers[providerResp.Identifier] = provider
 			}
 		}
 

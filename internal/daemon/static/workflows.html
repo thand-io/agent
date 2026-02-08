@@ -16,7 +16,7 @@
                     </thead>
                     <tbody>
                         {{range $workflowSearchResult := .Response.Workflows}}
-                        {{$name := $workflowSearchResult.Result.ID}}
+                        {{$name := $workflowSearchResult.Result.Identifier}}
                         {{$workflow := $workflowSearchResult.Result}}
                         <tr style="position: relative;">
                             <td style="position: relative;">

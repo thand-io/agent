@@ -11,7 +11,7 @@ type ProvidersResponse struct {
 
 type ProviderResponse struct {
 	Version      *version.Version      `json:"version,omitempty"`
-	ID           string                `json:"id"`
+	Identifier   string                `json:"identifier"`
 	Name         string                `json:"name"`
 	Description  string                `json:"description"`
 	Provider     string                `json:"provider"` // e.g. aws, gcp, azure

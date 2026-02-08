@@ -152,7 +152,7 @@ func (s *Server) getProviderByName(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, models.ProviderResponse{
-		ID:           providerName,
+		Identifier:   providerName,
 		Name:         provider.GetName(),
 		Description:  provider.GetDescription(),
 		Provider:     provider.GetProvider(),
@@ -383,7 +383,7 @@ func (s *Server) getProvidersAsProviderResponse(
 		}
 
 		providerResponses = append(providerResponses, models.ProviderResponse{
-			ID:           providerKey,
+			Identifier:   providerKey,
 			Name:         providerName,
 			Description:  provider.GetDescription(),
 			Provider:     provider.GetProvider(),
@@ -392,9 +392,9 @@ func (s *Server) getProvidersAsProviderResponse(
 		})
 	}
 
-	// Sort alphabetically by ID
+	// Sort alphabetically by Identifier
 	sort.Slice(providerResponses, func(i, j int) bool {
-		return providerResponses[i].ID < providerResponses[j].ID
+		return providerResponses[i].Identifier < providerResponses[j].Identifier
 	})
 
 	return models.ReturnSearchResults(providerResponses)

@@ -52,17 +52,17 @@ func (h *WorkflowDefinitions) UnmarshalJSON(data []byte) error {
 		h.Workflows = make(map[string]Workflow)
 		for _, searchResult := range aux.Workflows {
 			workflowResp := searchResult.Result
-			if workflowResp.ID != "" {
+			if workflowResp.Identifier != "" {
 				// Create a Workflow from WorkflowResponse
 				workflow := Workflow{
 					Version:     workflowResp.Version,
-					Identifier:  workflowResp.ID,
+					Identifier:  workflowResp.Identifier,
 					Name:        workflowResp.Name,
 					Description: workflowResp.Description,
 					Enabled:     workflowResp.Enabled,
 					// Note: Workflow field is not populated from response
 				}
-				h.Workflows[workflowResp.ID] = workflow
+				h.Workflows[workflowResp.Identifier] = workflow
 			}
 		}
 

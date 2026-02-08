@@ -316,7 +316,7 @@ func (s *Server) getAuthPage(c *gin.Context) {
 	// Convert SearchResult array to map for template compatibility
 	foundProviders := make(map[string]models.ProviderResponse)
 	for _, item := range foundProvidersArray {
-		foundProviders[item.Result.ID] = item.Result
+		foundProviders[item.Result.Identifier] = item.Result
 	}
 
 	callback, foundCallback := c.GetQuery("callback")

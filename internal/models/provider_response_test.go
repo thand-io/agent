@@ -14,7 +14,7 @@ func TestProvidersResponse_UnmarshalJSON_NewFormat(t *testing.T) {
 				"_id": "aws-prod",
 				"_score": 1.0,
 				"_source": {
-					"id": "aws-prod",
+					"identifier": "aws-prod",
 					"name": "AWS Production",
 					"description": "Production AWS environment",
 					"provider": "aws",
@@ -30,7 +30,7 @@ func TestProvidersResponse_UnmarshalJSON_NewFormat(t *testing.T) {
 				"_id": "gcp-dev",
 				"_score": 1.0,
 				"_source": {
-					"id": "gcp-dev",
+					"identifier": "gcp-dev",
 					"name": "GCP Development",
 					"description": "Development GCP environment",
 					"provider": "gcp",
@@ -53,16 +53,16 @@ func TestProvidersResponse_UnmarshalJSON_NewFormat(t *testing.T) {
 	}
 
 	// Check first provider
-	if response.Providers[0].Result.ID != "aws-prod" {
-		t.Errorf("Expected first provider ID 'aws-prod', got '%s'", response.Providers[0].Result.ID)
+	if response.Providers[0].Result.Identifier != "aws-prod" {
+		t.Errorf("Expected first provider ID 'aws-prod', got '%s'", response.Providers[0].Result.Identifier)
 	}
 	if response.Providers[0].Result.Name != "AWS Production" {
 		t.Errorf("Expected name 'AWS Production', got '%s'", response.Providers[0].Result.Name)
 	}
 
 	// Check second provider
-	if response.Providers[1].Result.ID != "gcp-dev" {
-		t.Errorf("Expected second provider ID 'gcp-dev', got '%s'", response.Providers[1].Result.ID)
+	if response.Providers[1].Result.Identifier != "gcp-dev" {
+		t.Errorf("Expected second provider ID 'gcp-dev', got '%s'", response.Providers[1].Result.Identifier)
 	}
 }
 
@@ -115,7 +115,7 @@ func TestProviderDefinitions_UnmarshalJSON_NewFormat(t *testing.T) {
 			{
 				"_id": "aws-prod",
 				"_source": {
-					"id": "aws-prod",
+					"identifier": "aws-prod",
 					"name": "AWS Production",
 					"description": "Production AWS environment",
 					"provider": "aws",
@@ -184,7 +184,7 @@ func TestProvidersResponse_UnmarshalJSON_RealAPIResponse(t *testing.T) {
 		"version": null,
 		"providers": [{
 			"_source": {
-				"id": "aws-dev",
+				"identifier": "aws-dev",
 				"name": "AWS Development",
 				"description": "Development AWS environment",
 				"provider": "aws",
@@ -214,8 +214,8 @@ func TestProvidersResponse_UnmarshalJSON_RealAPIResponse(t *testing.T) {
 	}
 
 	provider := response.Providers[0].Result
-	if provider.ID != "aws-dev" {
-		t.Errorf("Expected ID 'aws-dev', got '%s'", provider.ID)
+	if provider.Identifier != "aws-dev" {
+		t.Errorf("Expected ID 'aws-dev', got '%s'", provider.Identifier)
 	}
 	if provider.Name != "AWS Development" {
 		t.Errorf("Expected name 'AWS Development', got '%s'", provider.Name)
