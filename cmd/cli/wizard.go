@@ -161,9 +161,11 @@ func getProviderOptions(config *config.Config) []huh.Option[string] {
 	var options []huh.Option[string]
 
 	// Get providers from config
-	for providerKey, provider := range config.Providers.Definitions {
+	for providerKey, provider := range config.GetProvidersByCapability(
+		models.ProviderCapabilityProvisioning,
+	) {
 
-		if len(provider.Name) == 0 { // Only providers with names
+		if len(provider.GetName()) == 0 { // Only providers with names
 			logrus.Debugf("Skipping provider %s as it has no name", providerKey)
 			continue
 		}
@@ -189,13 +191,13 @@ func getProviderOptions(config *config.Config) []huh.Option[string] {
 			continue
 		}
 
-		description := provider.Description
+		description := provider.GetDescription()
 		if len(description) == 0 {
-			description = fmt.Sprintf("%s provider", provider.Provider)
+			description = fmt.Sprintf("%s provider", provider.GetProvider())
 		}
 
 		option := huh.NewOption(
-			fmt.Sprintf("%s - %s", provider.Name, description),
+			fmt.Sprintf("%s - %s", provider.GetName(), description),
 			providerKey,
 		)
 		options = append(options, option)

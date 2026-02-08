@@ -126,12 +126,12 @@ func (c *Config) processProviderDefinitions(foundProviders []*models.ProviderDef
 
 	for _, provider := range foundProviders {
 
-		if err := provider.Validate(); err != nil {
-			logrus.WithError(err).Errorln("Provider definition validation failed")
-			continue
-		}
-
 		for providerKey, p := range provider.Providers {
+
+			if err := p.Validate(); err != nil {
+				logrus.WithError(err).Errorln("Provider definition validation failed")
+				continue
+			}
 
 			if !c.shouldIncludeProvider(providerKey, p, defs) {
 				continue
@@ -139,7 +139,9 @@ func (c *Config) processProviderDefinitions(foundProviders []*models.ProviderDef
 
 			defs[providerKey] = p
 
-			logrus.Infoln("Found provider:", providerKey, "of type", p.Provider)
+			logrus.WithFields(logrus.Fields{
+				"capabiltiies": p.Capabilities,
+			}).Infoln("Found provider:", providerKey, "of type", p.Provider)
 		}
 	}
 
