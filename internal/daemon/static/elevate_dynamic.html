@@ -320,8 +320,8 @@
                     .then(response => response.json())
                     .then(data => {
                         const providers = data.providers.map(item => ({
-                            value: item._source.id,
-                            label: item._source.name || item._source.id,
+                            value: item._source.identifier,
+                            label: item._source.name || item._source.identifier,
                             customProperties: {
                                 description: item._source.description || ''
                             }

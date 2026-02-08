@@ -29,9 +29,9 @@
                                 <span class="badge badge-secondary">{{$provider.Result.Provider}}</span>
                             </td>
                             <td>
-                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$provider.Result.ID}}/identities" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">View Identities</a>
-                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$provider.Result.ID}}/roles" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">View Roles</a>
-                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$provider.Result.ID}}/permissions" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">View Permissions</a>
+                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$provider.Result.Identifier}}/identities" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">View Identities</a>
+                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$provider.Result.Identifier}}/roles" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">View Roles</a>
+                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$provider.Result.Identifier}}/permissions" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">View Permissions</a>
                             </td>
                         </tr>
                         {{else}}
