@@ -137,7 +137,7 @@ func TestWorkflowDefinitions_UnmarshalJSON(t *testing.T) {
 						"_id": "deploy",
 						"_score": 1.0,
 						"_source": {
-							"id": "deploy",
+							"identifier": "deploy",
 							"name": "Deploy Workflow",
 							"description": "Deploys the application",
 							"enabled": true,
@@ -148,7 +148,7 @@ func TestWorkflowDefinitions_UnmarshalJSON(t *testing.T) {
 						"_id": "test",
 						"_score": 0.9,
 						"_source": {
-							"id": "test",
+							"identifier": "test",
 							"name": "Test Workflow",
 							"description": "Runs tests",
 							"enabled": false,
@@ -208,7 +208,7 @@ func TestWorkflowDefinitions_UnmarshalJSON(t *testing.T) {
 				"workflows": [
 					{
 						"_source": {
-							"id": "build",
+							"identifier": "build",
 							"name": "Build Workflow",
 							"description": "Build project",
 							"enabled": true

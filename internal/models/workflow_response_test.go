@@ -11,13 +11,13 @@ func TestWorkflowsResponse_UnmarshalJSON_OldFormat(t *testing.T) {
 		"version": "1.0",
 		"workflows": {
 			"approval-workflow": {
-				"id": "approval-workflow",
+				"identifier": "approval-workflow",
 				"name": "Approval Workflow",
 				"description": "Standard approval process",
 				"enabled": true
 			},
 			"auto-approve": {
-				"id": "auto-approve",
+				"identifier": "auto-approve",
 				"name": "Auto Approve",
 				"description": "Automatic approval",
 				"enabled": true
@@ -73,7 +73,7 @@ func TestWorkflowsResponse_UnmarshalJSON_NewFormat(t *testing.T) {
 				"_id": "approval-workflow",
 				"_score": 1.0,
 				"_source": {
-					"id": "approval-workflow",
+					"identifier": "approval-workflow",
 					"name": "Approval Workflow",
 					"description": "Standard approval process",
 					"enabled": true
@@ -83,7 +83,7 @@ func TestWorkflowsResponse_UnmarshalJSON_NewFormat(t *testing.T) {
 				"_id": "auto-approve",
 				"_score": 1.0,
 				"_source": {
-					"id": "auto-approve",
+					"identifier": "auto-approve",
 					"name": "Auto Approve",
 					"description": "Automatic approval",
 					"enabled": true
@@ -172,7 +172,7 @@ func TestWorkflowDefinitions_UnmarshalJSON_NewFormat(t *testing.T) {
 			{
 				"_id": "approval-workflow",
 				"_source": {
-					"id": "approval-workflow",
+					"identifier": "approval-workflow",
 					"name": "Approval Workflow",
 					"description": "Standard approval process",
 					"enabled": true
@@ -250,14 +250,14 @@ func TestWorkflowsResponse_UnmarshalJSON_RealAPIResponse(t *testing.T) {
 		"version": "1.0",
 		"workflows": [{
 			"_source": {
-				"id": "account_management",
+				"identifier": "account_management",
 				"name": "account_management",
 				"description": "Account management workflow with multiple form options",
 				"enabled": true
 			}
 		}, {
 			"_source": {
-				"id": "aws_email_approval",
+				"identifier": "aws_email_approval",
 				"name": "aws_email_approval",
 				"description": "AWS access elevation with email approval via SES",
 				"enabled": true

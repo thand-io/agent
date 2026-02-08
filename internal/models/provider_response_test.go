@@ -14,7 +14,7 @@ func TestProvidersResponse_UnmarshalJSON_NewFormat(t *testing.T) {
 				"_id": "aws-prod",
 				"_score": 1.0,
 				"_source": {
-					"id": "aws-prod",
+					"identifier": "aws-prod",
 					"name": "AWS Production",
 					"description": "Production AWS environment",
 					"provider": "aws",
@@ -30,7 +30,7 @@ func TestProvidersResponse_UnmarshalJSON_NewFormat(t *testing.T) {
 				"_id": "gcp-dev",
 				"_score": 1.0,
 				"_source": {
-					"id": "gcp-dev",
+					"identifier": "gcp-dev",
 					"name": "GCP Development",
 					"description": "Development GCP environment",
 					"provider": "gcp",
@@ -115,7 +115,7 @@ func TestProviderDefinitions_UnmarshalJSON_NewFormat(t *testing.T) {
 			{
 				"_id": "aws-prod",
 				"_source": {
-					"id": "aws-prod",
+					"identifier": "aws-prod",
 					"name": "AWS Production",
 					"description": "Production AWS environment",
 					"provider": "aws",
@@ -184,7 +184,7 @@ func TestProvidersResponse_UnmarshalJSON_RealAPIResponse(t *testing.T) {
 		"version": null,
 		"providers": [{
 			"_source": {
-				"id": "aws-dev",
+				"identifier": "aws-dev",
 				"name": "AWS Development",
 				"description": "Development AWS environment",
 				"provider": "aws",
