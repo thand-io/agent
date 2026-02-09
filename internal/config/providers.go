@@ -381,10 +381,14 @@ func (c *Config) GetProvidersByCapabilityWithUser(user *models.User, capability 
 		// Skip providers that don't have a client initialized
 
 		if !provider.HasPermission(user) {
+			logrus.Debugln("Skipping provider", name, "due to missing permissions for user")
 			continue
 		}
 
 		if len(capability) != 0 && !provider.HasAnyCapability(capability...) {
+			logrus.WithFields(logrus.Fields{
+				"capabilities": provider.GetCapabilities(),
+			}).Debugln("Skipping provider", name, "due to missing capability:", capability)
 			continue
 		}
 

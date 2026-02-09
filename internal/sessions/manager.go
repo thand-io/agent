@@ -93,9 +93,11 @@ func (m *SessionManager) AddSession(loginServer string, provider string, session
 		"sessionVersion": session.Version,
 	}).Debugln("Adding new provider session")
 
+	m.lock.Lock()
 	m.createLoginServer(loginServer)
 
 	m.Servers[loginServer].Sessions[provider] = session
+	m.lock.Unlock()
 
 	return m.Commit(loginServer)
 }
@@ -436,6 +438,13 @@ func (m *SessionManager) createLoginServer(loginServer string) {
 			Version:   "1.0",
 			Timestamp: time.Now().UTC(),
 			Sessions:  make(map[string]models.LocalSession),
+		}
+	} else {
+		// Ensure Sessions map is initialized even if LoginServer exists
+		server := m.Servers[loginServer]
+		if server.Sessions == nil {
+			server.Sessions = make(map[string]models.LocalSession)
+			m.Servers[loginServer] = server
 		}
 	}
 }

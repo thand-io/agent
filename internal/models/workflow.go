@@ -19,7 +19,7 @@ type Validatable interface {
 
 type Workflow struct {
 	Version     *version.Version `json:"version,omitempty"`
-	Identifier  string           `json:"-"`
+	Identifier  string           `json:"identifier"` // To be set by the system
 	Name        string           `json:"name" validate:"required,min=1,max=100"`
 	Description string           `json:"description" validate:"max=500"`
 	Workflow    *model.Workflow  `json:"workflow,omitempty" validate:"required"`
@@ -64,7 +64,7 @@ func (w *Workflow) GetWorkflow() *model.Workflow {
 func (w *Workflow) Validate() error {
 
 	if len(w.Name) == 0 {
-		return fmt.Errorf("workflow '%s' is missing required field 'name'", w.Identifier)
+		return fmt.Errorf("workflow is missing required field 'name'")
 	}
 
 	// Validate individual tasks within the workflow

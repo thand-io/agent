@@ -12,7 +12,7 @@ import (
 
 type Role struct {
 	Version     *version.Version `json:"version,omitempty"`
-	Identifier  string           `json:"identifier"`
+	Identifier  string           `json:"identifier"` // To be set by the system
 	Name        string           `json:"name" validate:"required,min=1,max=100"`
 	Description string           `json:"description" validate:"max=500"`
 
