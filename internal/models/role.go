@@ -12,7 +12,7 @@ import (
 
 type Role struct {
 	Version     *version.Version `json:"version,omitempty"`
-	Identifier  string           `json:"identifier"`
+	Identifier  string           `json:"identifier"` // To be set by the system
 	Name        string           `json:"name" validate:"required,min=1,max=100"`
 	Description string           `json:"description" validate:"max=500"`
 
@@ -172,6 +172,33 @@ func (r *Role) HasPermission(user *User) bool {
 
 	// Allow lists exist but user didn't match any
 	return false
+}
+
+func (r *Role) Validate() error {
+	const (
+		MaxInherits  = 50
+		MaxProviders = 5
+		MaxWorkflows = 5
+	)
+
+	validate := common.GetValidator()
+	// Validate struct tags
+	if err := validate.Struct(r); err != nil {
+		return fmt.Errorf("role '%s' validation failed: %w", r.GetName(), err)
+	}
+
+	// Additional business logic validations
+	if len(r.Inherits) > MaxInherits {
+		return fmt.Errorf("role '%s' exceeds maximum inherits limit (%d > %d)", r.GetName(), len(r.Inherits), MaxInherits)
+	}
+	if len(r.Providers) > MaxProviders {
+		return fmt.Errorf("role '%s' exceeds maximum providers limit (%d > %d)", r.GetName(), len(r.Providers), MaxProviders)
+	}
+	if len(r.Workflows) > MaxWorkflows {
+		return fmt.Errorf("role '%s' exceeds maximum workflows limit (%d > %d)", r.GetName(), len(r.Workflows), MaxWorkflows)
+	}
+
+	return nil
 }
 
 func (r *Role) AsMap() map[string]any {

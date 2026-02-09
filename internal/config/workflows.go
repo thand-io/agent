@@ -79,26 +79,31 @@ func (c *Config) ApplyWorkflows(foundWorkflows []*models.WorkflowDefinitions) (m
 
 	for _, workflow := range foundWorkflows {
 
-		if err := workflow.Validate(); err != nil {
-			logrus.WithError(err).Errorln("Workflow definition validation failed")
-			continue
-		}
+		for workflowKey, w := range workflow.Workflows {
 
-		for workflowKey, p := range workflow.Workflows {
+			if err := w.Validate(); err != nil {
+				logrus.WithError(err).Errorln("Workflow definition validation failed")
+				continue
+			}
 
-			if !p.Enabled {
+			if !w.Enabled {
 				logrus.Infoln("Workflow disabled:", workflowKey)
 				continue
 			}
 
-			if p.Version == nil {
-				p.Version = workflow.Version
+			if !c.IsClient() && w.Workflow == nil {
+				logrus.Infoln("Workflow definition missing 'workflow' field, skipping:", workflowKey)
+				continue
 			}
 
-			p.Identifier = common.ConvertToSnakeCase(workflowKey)
+			if w.Version == nil {
+				w.Version = workflow.Version
+			}
 
-			if len(p.Name) == 0 {
-				p.Name = workflowKey
+			w.Identifier = common.ConvertToSnakeCase(workflowKey)
+
+			if len(w.Name) == 0 {
+				w.Name = workflowKey
 			}
 
 			if _, exists := defs[workflowKey]; exists {
@@ -106,7 +111,7 @@ func (c *Config) ApplyWorkflows(foundWorkflows []*models.WorkflowDefinitions) (m
 				continue
 			}
 
-			defs[workflowKey] = p
+			defs[workflowKey] = w
 		}
 	}
 

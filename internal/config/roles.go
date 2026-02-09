@@ -140,12 +140,19 @@ func (c *Config) ApplyRoles(foundRoles []*models.RoleDefinitions) (map[string]mo
 
 	for _, role := range foundRoles {
 
-		if err := role.Validate(); err != nil {
-			logrus.WithError(err).Errorln("Role definition validation failed")
-			continue
-		}
-
 		for roleKey, r := range role.Roles {
+
+			r.Identifier = common.ConvertToSnakeCase(roleKey)
+
+			if err := r.Validate(); err != nil {
+				logrus.WithError(err).Errorln("Role definition validation failed")
+				continue
+			}
+
+			if len(r.Name) == 0 {
+				r.Name = roleKey
+			}
+
 			if !r.Enabled {
 				logrus.Infoln("Role disabled:", roleKey)
 				continue
@@ -158,12 +165,6 @@ func (c *Config) ApplyRoles(foundRoles []*models.RoleDefinitions) (map[string]mo
 
 			if r.Version == nil {
 				r.Version = role.Version
-			}
-
-			r.Identifier = common.ConvertToSnakeCase(roleKey)
-
-			if len(r.Name) == 0 {
-				r.Name = roleKey
 			}
 
 			// Validate role limits

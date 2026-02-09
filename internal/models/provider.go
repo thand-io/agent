@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
+	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/interpolate"
 )
 
@@ -50,6 +51,17 @@ type ProviderConfig struct {
 	Config       *BasicConfig          `json:"config,omitempty"`                                          // Provider-specific configuration
 	Role         *Role                 `json:"role,omitempty"`                                            // The base role for this provider
 	Enabled      bool                  `json:"enabled"`                                                   // Whether this provider is enabled
+}
+
+func (p *ProviderConfig) Validate() error {
+
+	validate := common.GetValidator()
+
+	if err := validate.Struct(p); err != nil {
+		return fmt.Errorf("provider '%s' validation failed: %w", p.Name, err)
+	}
+
+	return nil
 }
 
 func (p *ProviderConfig) ResolveConfig(vars map[string]any) error {
