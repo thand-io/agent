@@ -69,7 +69,7 @@ func (w *Workflow) Validate() error {
 
 	// Validate individual tasks within the workflow
 	if w.Workflow != nil && w.Workflow.Do != nil {
-		if err := validateTaskList(w.Identifier, *w.Workflow.Do); err != nil {
+		if err := validateTaskList(w.GetName(), *w.Workflow.Do); err != nil {
 			return err
 		}
 	}
@@ -81,6 +81,7 @@ func (w *Workflow) Validate() error {
 // validateTaskList validates all tasks in a task list
 func validateTaskList(workflowKey string, tasks model.TaskList) error {
 	for _, taskItem := range tasks {
+
 		if taskItem == nil || taskItem.Task == nil {
 			continue
 		}

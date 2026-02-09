@@ -140,7 +140,7 @@ func (c *Config) processProviderDefinitions(foundProviders []*models.ProviderDef
 			defs[providerKey] = p
 
 			logrus.WithFields(logrus.Fields{
-				"capabiltiies": p.Capabilities,
+				"capabilities": p.Capabilities,
 			}).Infoln("Found provider:", providerKey, "of type", p.Provider)
 		}
 	}

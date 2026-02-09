@@ -184,18 +184,18 @@ func (r *Role) Validate() error {
 	validate := common.GetValidator()
 	// Validate struct tags
 	if err := validate.Struct(r); err != nil {
-		return fmt.Errorf("role '%s' validation failed: %w", r.Identifier, err)
+		return fmt.Errorf("role '%s' validation failed: %w", r.GetName(), err)
 	}
 
 	// Additional business logic validations
 	if len(r.Inherits) > MaxInherits {
-		return fmt.Errorf("role '%s' exceeds maximum inherits limit (%d > %d)", r.Identifier, len(r.Inherits), MaxInherits)
+		return fmt.Errorf("role '%s' exceeds maximum inherits limit (%d > %d)", r.GetName(), len(r.Inherits), MaxInherits)
 	}
 	if len(r.Providers) > MaxProviders {
-		return fmt.Errorf("role '%s' exceeds maximum providers limit (%d > %d)", r.Identifier, len(r.Providers), MaxProviders)
+		return fmt.Errorf("role '%s' exceeds maximum providers limit (%d > %d)", r.GetName(), len(r.Providers), MaxProviders)
 	}
 	if len(r.Workflows) > MaxWorkflows {
-		return fmt.Errorf("role '%s' exceeds maximum workflows limit (%d > %d)", r.Identifier, len(r.Workflows), MaxWorkflows)
+		return fmt.Errorf("role '%s' exceeds maximum workflows limit (%d > %d)", r.GetName(), len(r.Workflows), MaxWorkflows)
 	}
 
 	return nil

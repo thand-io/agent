@@ -114,7 +114,7 @@ func (h *RoleDefinitions) Validate() error {
 
 	for roleKey, role := range h.Roles {
 
-		if role.Validate() != nil {
+		if err := role.Validate(); err != nil {
 			return fmt.Errorf("role '%s' validation failed: %w", roleKey, role.Validate())
 		}
 
