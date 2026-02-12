@@ -41,3 +41,19 @@ func getSharedData() (*azureData, error) {
 	})
 	return sharedData, sharedDataErr
 }
+
+func GetRoles() ([]models.ProviderRole, error) {
+	data, err := getSharedData()
+	if err != nil {
+		return nil, err
+	}
+	return data.roles, nil
+}
+
+func GetPermissions() ([]models.ProviderPermission, error) {
+	data, err := getSharedData()
+	if err != nil {
+		return nil, err
+	}
+	return data.permissions, nil
+}

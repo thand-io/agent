@@ -93,12 +93,13 @@ func (m *SessionManager) AddSession(loginServer string, provider string, session
 		"sessionVersion": session.Version,
 	}).Debugln("Adding new provider session")
 
-	m.lock.Lock()
 	m.createLoginServer(loginServer)
 
+	m.lock.Lock()
 	m.Servers[loginServer].Sessions[provider] = session
 	m.lock.Unlock()
 
+	// Commit holds a lock
 	return m.Commit(loginServer)
 }
 
@@ -431,6 +432,9 @@ func loadSessionFile(logonServerHostName string) *os.File {
 }
 
 func (m *SessionManager) createLoginServer(loginServer string) {
+
+	m.lock.Lock()
+	defer m.lock.Unlock()
 
 	// check if logon server exists
 	if _, ok := m.Servers[loginServer]; !ok {
