@@ -1,4 +1,4 @@
-package main
+package providers
 
 import (
 	"encoding/json"
@@ -8,7 +8,7 @@ import (
 	"github.com/thand-io/agent/internal/data/iam-dataset/generated/gcp"
 )
 
-func generateGCPFlatBuffers() error {
+func GenerateGCPFlatBuffers() error {
 	// Read and parse JSON
 	rolesData, err := os.ReadFile("third_party/iam-dataset/gcp/predefined_roles.json")
 	if err != nil {

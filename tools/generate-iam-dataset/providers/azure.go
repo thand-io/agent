@@ -1,4 +1,4 @@
-package main
+package providers
 
 import (
 	"encoding/json"
@@ -8,7 +8,7 @@ import (
 	"github.com/thand-io/agent/internal/data/iam-dataset/generated/azure"
 )
 
-func generateAzureFlatBuffers() error {
+func GenerateAzureFlatBuffers() error {
 	// Generate Azure Roles FlatBuffer
 	if err := generateAzureRoles(); err != nil {
 		return err
