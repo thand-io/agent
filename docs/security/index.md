@@ -289,13 +289,15 @@ Thand Server logs are designed for audit and compliance:
 
 ### Local Agent Telemetry
 
-Thand Agent collects minimal telemetry for operational purposes:
+Thand Agent collects minimal telemetry for operational purposes through its configurable analytics service:
 
 **Collected**:
 - Agent version, platform, and architecture
+- Authentication events (provider type, success/failure)
 - Session lifecycle events (start, end, expiry)
 - Connection health (success/failure to server)
 - Error codes and types (sanitized, no sensitive context)
+- Feature usage patterns
 
 **NOT Collected**:
 - User credentials, tokens, or passwords
@@ -303,6 +305,9 @@ Thand Agent collects minimal telemetry for operational purposes:
 - Session contents, command output, or payloads
 - File paths, hostnames, or resource identifiers from sessions
 - Network traffic contents or intercepted data
+- User identity or personally identifiable information
+
+**Configuration**: Analytics collection can be completely disabled by setting `services.analytics.disabled: true` in your configuration. See the [Analytics Service Configuration](../configuration/services.html#analytics-service) for detailed options.
 
 
 ### Log Retention

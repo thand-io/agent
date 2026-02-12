@@ -22,12 +22,15 @@ Complete reference for configuring Thand Agent's backend services including encr
 
 ## Overview
 
-Thand Agent uses pluggable services for core functionality like encryption, secrets management, scheduling, and workflow orchestration. Each service supports multiple providers (AWS, GCP, Azure, Local) allowing you to choose the best fit for your infrastructure.
+Thand Agent uses pluggable services for core functionality like encryption, secrets management, scheduling, workflow orchestration, and analytics. Each service supports multiple providers (AWS, GCP, Azure, Local) allowing you to choose the best fit for your infrastructure.
 
 Services are configured under the `services` key in your configuration file:
 
 ```yaml
 services:
+  analytics:
+    provider: posthog
+    disabled: false
   encryption:
     provider: local
     password: "your-secure-password"
@@ -128,6 +131,73 @@ Configuration values are resolved in this order (later values override earlier o
 
 {: .note }
 > The `provider` option must always be specified at the service level. It is not inherited from `environment.platform`.
+
+---
+
+## Analytics Service
+
+The analytics service handles telemetry and usage data collection for operational insights and improvement. This service is used for tracking authentication events, session lifecycle, error reporting, and feature usage.
+
+### Provider Selection
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `services.analytics.provider` | string | `posthog` | Analytics provider: `posthog` |
+| `services.analytics.disabled` | boolean | `false` | Disable analytics collection entirely |
+
+### PostHog Provider (Default)
+
+Thand Agent uses PostHog for analytics collection with a privacy-focused approach. The service collects operational telemetry to improve the product while respecting user privacy.
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `services.analytics.disabled` | boolean | `false` | Completely disable analytics collection |
+| `services.analytics.config` | object | - | Additional provider-specific configuration |
+
+**What is Collected:**
+- Authentication events (provider type, success/failure)
+- Agent initialization and version information
+- Session lifecycle events (start, end, expiry)
+- Error codes and types (sanitized, no sensitive context)
+- Feature usage patterns
+
+**What is NOT Collected:**
+- User credentials, tokens, or passwords
+- Command-line arguments or environment variables
+- Session contents, command output, or data payloads
+- File paths, hostnames, or resource identifiers
+- Network traffic contents or intercepted data
+- User identity or personally identifiable information
+
+{: .note }
+> **Privacy**: PostHog project API keys are safe to be stored publicly and do not expose sensitive data. The analytics endpoint is `us.ph.thand.io`.
+
+**Example Configuration:**
+
+```yaml
+services:
+  analytics:
+    provider: posthog
+    disabled: false  # Set to true to disable analytics
+```
+
+**Disable Analytics:**
+
+```yaml
+services:
+  analytics:
+    disabled: true
+```
+
+**Environment Variables:**
+
+```bash
+THAND_SERVICES_ANALYTICS_PROVIDER=posthog
+THAND_SERVICES_ANALYTICS_DISABLED=false
+```
+
+{: .warning }
+> **Compliance**: If you're operating in environments with strict data governance requirements, consider disabling analytics by setting `disabled: true`.
 
 ---
 
