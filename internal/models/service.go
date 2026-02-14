@@ -96,7 +96,7 @@ func (e *ServicesConfig) GetSchedulerConfig() *ServiceConfig {
 	return e.Scheduler
 }
 
-func (e *ServicesConfig) GetLLMConfig() *LargeLanguageModelConfig {
+func (e *ServicesConfig) GetLargeLanguageModelConfig() *LargeLanguageModelConfig {
 	return e.LargeLanguageModel
 }
 

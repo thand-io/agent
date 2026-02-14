@@ -67,8 +67,8 @@ func TestConfigureMTLSInline(t *testing.T) {
 			config.MtlsKey = tt.keyPEM
 
 			temporalClient := &TemporalClient{
-				config:   config,
-				identity: "test-identity",
+				config:     config,
+				identities: []string{"test-identity"},
 			}
 
 			tlsConfig, err := temporalClient.configureMTLSInline()

@@ -42,7 +42,7 @@ func NewThandWorkflowManager(cfg *config.Config) (*ThandWorkflowManager, error) 
 
 	// Register all custom tasks
 	for _, task := range []tasks.TaskCollection{
-		taskThand.NewThandCollection(cfg),
+		taskThand.NewThandCollection(cfg, workflowConfig),
 	} {
 		task.RegisterTasks(workflowConfig.GetTaskRegistry())
 	}

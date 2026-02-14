@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/config/services"
 	"github.com/thand-io/agent/internal/models"
@@ -10,11 +11,7 @@ import (
 func (c *Config) GetServices() models.ServicesClientImpl {
 
 	c.initializeServiceClientOnce.Do(func() {
-		newClient := services.NewServicesClient(
-			&c.Environment,
-			&c.Services,
-			&c.Secret,
-		)
+		newClient := services.NewServicesClient(c)
 		err := newClient.Initialize()
 		if err != nil {
 			logrus.WithError(err).Fatalf("Failed to initialize services client: %v", err)

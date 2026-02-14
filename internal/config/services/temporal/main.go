@@ -15,39 +15,59 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
+// MaxWorkers is the maximum number of identity-specific workers per client.
+// A default of 5 is chosen as a conservative limit to balance concurrency with CPU
+// and memory usage for typical agent deployments. If agents are expected to manage
+// significantly more identities concurrently, this value should be revisited and
+// validated under expected load before being increased.
+const MaxWorkers = 5
+
 type TemporalClient struct {
-	config   *models.TemporalConfig
-	client   client.Client
-	worker   worker.Worker
-	identity string
-	vault    models.VaultImpl
+	config     *models.TemporalConfig
+	client     client.Client
+	workers    map[string]worker.Worker
+	identities []string
+	vault      models.VaultImpl
 
 	mu sync.Mutex
 }
 
 func NewTemporalClient(
 	config *models.TemporalConfig,
-	identity string,
 	vault models.VaultImpl,
+	identities ...string,
 ) *TemporalClient {
+	// Deduplicate identities to prevent orphaned workers
+	seen := make(map[string]struct{}, len(identities))
+	unique := make([]string, 0, len(identities))
+	for _, id := range identities {
+		if _, exists := seen[id]; !exists {
+			seen[id] = struct{}{}
+			unique = append(unique, id)
+		}
+	}
+	if len(unique) > MaxWorkers {
+		unique = unique[:MaxWorkers]
+	}
 	return &TemporalClient{
-		config:   config,
-		identity: identity,
-		vault:    vault,
+		config:     config,
+		identities: unique,
+		vault:      vault,
+		workers:    make(map[string]worker.Worker, len(unique)),
 	}
 }
 
 func (a *TemporalClient) Initialize() error {
 
-	if len(a.identity) == 0 {
-		return fmt.Errorf("temporal client identity cannot be empty")
+	if len(a.identities) == 0 {
+		return fmt.Errorf("temporal client requires at least one identity")
 	}
 
 	clientOptions := client.Options{
 		Logger:    newLogrusLogger(),
 		HostPort:  a.GetHostPort(),
 		Namespace: a.GetNamespace(),
-		Identity:  a.identity,
+		Identity:  a.identities[0],
 	}
 
 	// Configure authentication (API key or mTLS)
@@ -60,6 +80,8 @@ func (a *TemporalClient) Initialize() error {
 	temporalClient, err := client.Dial(clientOptions)
 
 	if err != nil {
+		// Common errors:
+		// - no children to pick from: The namespace does not exist in temporal cloud.
 		logrus.WithError(err).
 			WithFields(logrus.Fields{
 				"endpoint":  a.GetHostPort(),
@@ -105,34 +127,39 @@ func (a *TemporalClient) Initialize() error {
 		}
 	}
 
-	// Create worker with configured options
-	newWorker := worker.New(
-		temporalClient,
-		a.GetTaskQueue(),
-		workerOptions,
-	)
-
-	// Only start the worker if it hasn't been started before
-	// Temporal workers cannot be restarted once stopped, so we track
-	// whether this worker instance has been started to prevent panics
+	// Create and start a worker for each identity (task queue)
 	a.mu.Lock()
-	if a.worker == nil {
-		a.worker = newWorker
-		defer a.mu.Unlock()
+	defer a.mu.Unlock()
 
-		logrus.Infof("Starting Temporal worker with Build ID: %s", buildID)
+	if len(a.workers) > 0 {
+		logrus.Warn("Temporal workers already started, skipping worker initialization")
+		return nil
+	}
 
-		// Use the worker instance captured in the closure to avoid race conditions
-		// with the Shutdown() method. This ensures we always run the worker we created.
-		err := a.worker.Start()
-		if err != nil {
-			logrus.WithError(err).Error("Failed to start temporal")
-			a.worker = nil
-			return err
+	for _, identity := range a.identities {
+		newWorker := worker.New(
+			temporalClient,
+			identity,
+			workerOptions,
+		)
+
+		logrus.WithFields(logrus.Fields{
+			"BuildID":   buildID,
+			"taskQueue": identity,
+		}).Infof("Starting Temporal worker")
+
+		if err := newWorker.Start(); err != nil {
+			logrus.WithError(err).
+				WithField("taskQueue", identity).
+				Error("Failed to start temporal worker")
+			continue
 		}
 
-	} else {
-		logrus.Warn("Temporal worker already started, skipping worker initialization")
+		a.workers[identity] = newWorker
+	}
+
+	if len(a.workers) == 0 {
+		return fmt.Errorf("failed to start any Temporal workers")
 	}
 
 	return nil
@@ -147,11 +174,38 @@ func (c *TemporalClient) HasClient() bool {
 }
 
 func (c *TemporalClient) HasWorker() bool {
-	return c.worker != nil
+	return len(c.workers) > 0
 }
 
-func (c *TemporalClient) GetWorker() worker.Worker {
-	return c.worker
+// GetWorker returns a synthetic worker that broadcasts registration calls
+// across all (or a filtered subset of) identity-specific workers.
+// If identities are provided, only matching workers are included.
+// Returns nil if no matching workers are found.
+func (c *TemporalClient) GetWorker(identities ...string) worker.Worker {
+	if len(c.workers) == 0 {
+		return nil
+	}
+
+	// No filter: return all workers
+	if len(identities) == 0 {
+		workers := make([]worker.Worker, 0, len(c.workers))
+		for _, w := range c.workers {
+			workers = append(workers, w)
+		}
+		return &multiWorker{workers: workers}
+	}
+
+	// Filtered: return only matching workers
+	workers := make([]worker.Worker, 0, len(identities))
+	for _, id := range identities {
+		if w, ok := c.workers[id]; ok {
+			workers = append(workers, w)
+		}
+	}
+	if len(workers) == 0 {
+		return nil
+	}
+	return &multiWorker{workers: workers}
 }
 
 func (c *TemporalClient) GetHostPort() string {
@@ -166,11 +220,17 @@ func (c *TemporalClient) GetNamespace() string {
 }
 
 func (c *TemporalClient) GetTaskQueue() string {
-	return c.identity
+	if len(c.identities) == 0 {
+		return ""
+	}
+	return c.identities[0]
 }
 
 func (c *TemporalClient) GetIdentity() string {
-	return c.identity
+	if len(c.identities) == 0 {
+		return ""
+	}
+	return c.identities[0]
 }
 
 func (c *TemporalClient) IsVersioningDisabled() bool {
@@ -178,20 +238,19 @@ func (c *TemporalClient) IsVersioningDisabled() bool {
 }
 
 func (c *TemporalClient) Shutdown() error {
-	// Signal the worker goroutine to not start if it hasn't started yet
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Stop worker first before closing the client
-	// The worker depends on the client connection
-	if c.worker != nil {
-		c.worker.Stop()
+	// Stop all workers before closing the client
+	for id, w := range c.workers {
+		logrus.WithField("taskQueue", id).Info("Stopping Temporal worker")
+		w.Stop()
 	}
 	if c.client != nil {
 		c.client.Close()
 	}
 
-	c.worker = nil
+	c.workers = nil
 	c.client = nil
 
 	return nil

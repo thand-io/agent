@@ -1,18 +1,17 @@
 package services
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/sirupsen/logrus"
-	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/config/services/temporal"
 	"github.com/thand-io/agent/internal/models"
+	"github.com/thand-io/agent/internal/sessions"
 )
 
 type localClient struct {
-	environment *models.EnvironmentConfig
-	config      *models.ServicesConfig
-	secret      *string
+	config models.ConfigImpl
 
 	Analytics models.Analytics
 	encrypt   models.EncryptionImpl
@@ -25,31 +24,22 @@ type localClient struct {
 	mu sync.Mutex
 }
 
-func NewServicesClient(
-	environment *models.EnvironmentConfig,
-	config *models.ServicesConfig,
-	secret *string,
-) *localClient {
+func NewServicesClient(config models.ConfigImpl) *localClient {
 	return &localClient{
-		environment: environment,
-		config:      config,
-		secret:      secret,
+		config: config,
 	}
 }
 
 func (e *localClient) GetServicesConfig() *models.ServicesConfig {
-	return e.config
+	return e.config.GetServicesConfig()
 }
 
 func (e *localClient) GetEnvironmentConfig() *models.EnvironmentConfig {
-	return e.environment
+	return e.config.GetEnvironmentConfig()
 }
 
 func (e *localClient) GetSecret() string {
-	if e.secret == nil {
-		return common.DefaultServerSecret
-	}
-	return *e.secret
+	return e.config.GetSecret()
 }
 
 func (e *localClient) Initialize() error {
@@ -83,19 +73,20 @@ func (e *localClient) Initialize() error {
 		e.ReloadScheduler()
 	})
 
-	if e.config.LargeLanguageModel != nil {
+	servicesConfig := e.config.GetServicesConfig()
+	if servicesConfig != nil && servicesConfig.GetLargeLanguageModelConfig() != nil {
 		wg.Go(func() {
 			e.ReloadLargeLanguageModel()
 		})
 	}
 
-	if e.config.PublicKeyInfrastructure != nil {
+	if servicesConfig != nil && servicesConfig.GetPublicKeyInfrastructureConfig() != nil {
 		wg.Go(func() {
 			e.ReloadPublicKeyInfrastructure()
 		})
 	}
 
-	if e.config.Temporal != nil {
+	if servicesConfig != nil && servicesConfig.GetTemporalConfig() != nil {
 		wg.Go(func() {
 			e.ReloadTemporal()
 		})
@@ -380,12 +371,58 @@ func (e *localClient) ReloadTemporal() error {
 		e.mu.Unlock()
 	}
 
+	// Client mode NEVER starts Temporal
+	if e.config.IsClient() {
+		logrus.Info("Skipping Temporal initialization in client mode")
+		return nil
+	}
+
 	logrus.Infof("Initializing temporal...")
 
+	// Determine identities based on mode
+	environment := e.config.GetEnvironment()
+	identities := []string{environment.GetIdentifier()}
+
+	if e.config.IsAgent() {
+		// Agent mode: query session manager for all active identities + hostname
+		sessionMgr := sessions.GetSessionManager()
+		loginServerName := e.config.GetLoginServerHostname()
+
+		loginServer, err := sessionMgr.GetLoginServer(loginServerName)
+
+		if err != nil {
+			logrus.WithError(err).Warn("Failed to get login server, using hostname identity only")
+		} else {
+			activeSessions := loginServer.GetSessions()
+
+			// Add active session providers as identities
+			for providerName, session := range activeSessions {
+				if !session.IsExpired() {
+					identities = append(identities, providerName)
+					logrus.WithFields(logrus.Fields{
+						"provider": providerName,
+						"expiry":   session.Expiry,
+					}).Debug("Adding active session identity to worker pool")
+				}
+			}
+		}
+
+		logrus.WithField("identities", identities).Info("Configuring Temporal workers for agent mode")
+	}
+
+	// Get Temporal config from services
+	servicesConfig := e.config.GetServicesConfig()
+
+	if servicesConfig == nil {
+		return fmt.Errorf("Services config is missing")
+	}
+
+	temporalConfig := servicesConfig.GetTemporalConfig()
+
 	temporalService := temporal.NewTemporalClient(
-		e.config.Temporal,
-		e.environment.GetIdentifier(),
+		temporalConfig,
 		e.vault,
+		identities...,
 	)
 	if err := temporalService.Initialize(); err != nil {
 		logrus.Errorf("Error initializing temporal: %v", err)

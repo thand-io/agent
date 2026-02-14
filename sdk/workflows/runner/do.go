@@ -15,7 +15,10 @@ func (r *ResumableWorkflowRunner) executeDoRunner(
 	return r.resumeTasks(doTask.Do, 0, input)
 }
 
-func (r *ResumableWorkflowRunner) executeTaskList(
+// ExecuteTaskList runs a task list sequentially and returns the output.
+// This is exported so that custom task handlers can execute sub-task lists
+// using their own runner instances.
+func (r *ResumableWorkflowRunner) ExecuteTaskList(
 	taskList *model.TaskList, input any) (any, error) {
 	return r.resumeTasks(taskList, 0, input)
 }

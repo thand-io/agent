@@ -74,5 +74,8 @@ type WorkflowTaskSupport interface {
 	HasTemporalContext() bool
 	GetTemporalContext() workflow.Context
 
+	GetTaskQueue() string
+	SetTaskQueue(taskQueue string)
+
 	AddLocalExprVars(vars map[string]any)
 }

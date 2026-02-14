@@ -117,7 +117,7 @@ func (s *Server) searchAndFilterRoles(c *gin.Context, query string, limit int, p
 	}
 
 	// Search roles using the index
-	searchResults, err := s.Config.GetRoles().ListRoles(c.Request.Context(), searchRequest)
+	searchResults, err := s.Config.GetRolesConfig().ListRoles(c.Request.Context(), searchRequest)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +142,7 @@ func (s *Server) searchAndFilterRoles(c *gin.Context, query string, limit int, p
 // filterAllRoles returns all roles with filters applied
 func (s *Server) filterAllRoles(providers []string, authenticatorProvider string, authenticatedUser *models.Session) []models.RoleResponse {
 	var filteredRoles []models.RoleResponse
-	for _, role := range s.Config.GetRoles().Definitions {
+	for _, role := range s.Config.GetRolesConfig().Definitions {
 		if s.shouldIncludeRole(role, providers, authenticatorProvider, authenticatedUser) {
 			filteredRoles = append(filteredRoles, role)
 		}

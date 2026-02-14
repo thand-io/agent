@@ -73,6 +73,7 @@ func (ctx *WorkflowTask) Clone() swctx.WorkflowContext {
 		WorkflowID:      ctx.WorkflowID,
 		Workflow:        ctx.Workflow,
 		internalContext: ctx.internalContext,
+		taskQueue:       ctx.taskQueue,
 	}
 }
 

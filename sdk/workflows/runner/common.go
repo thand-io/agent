@@ -16,3 +16,10 @@ var DefaultRetryPolicy = &temporal.RetryPolicy{
 	MaximumInterval:    time.Minute,
 	MaximumAttempts:    5,
 }
+
+var CriticalPathRetryPolicy = &temporal.RetryPolicy{
+	InitialInterval:    time.Second,
+	BackoffCoefficient: 2.0,
+	MaximumInterval:    time.Minute,
+	MaximumAttempts:    0, // infinite retries for critical path tasks
+}

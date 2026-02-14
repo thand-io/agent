@@ -11,6 +11,17 @@ type ConfigImpl interface {
 	// Core
 	GetServices() ServicesClientImpl
 	GetEnvironment() EnvironmentConfig
+	GetSecret() string
+	GetLoginServerHostname() string
+
+	// Mode checking
+	IsServer() bool
+	IsAgent() bool
+	IsClient() bool
+
+	// Config structures
+	GetServicesConfig() *ServicesConfig
+	GetEnvironmentConfig() *EnvironmentConfig
 
 	GetResumeCallbackUrl(workflowTask *ElevateWorkflowTask) string
 	GetAuthCallbackUrl(providerName string) string

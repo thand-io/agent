@@ -70,7 +70,7 @@ func (p *awsProvider) RevokeRole(
 	useIdentityCenter := p.shouldUseIdentityCenter(user)
 
 	if useIdentityCenter {
-		err := p.revokeRoleIdentityCenter(ctx, user, role, targetAccountID)
+		err := p.revokeRoleIdentityCenter(ctx, req, targetAccountID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to revoke Identity Center role: %w", err)
 		}

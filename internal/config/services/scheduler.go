@@ -9,16 +9,16 @@ func (e *localClient) configureScheduler() models.SchedulerImpl {
 
 	provider := "local"
 
-	schedulerConfig := e.GetServicesConfig().GetSchedulerConfig()
+	schedulerConfig := e.config.GetServicesConfig().GetSchedulerConfig()
 
 	if schedulerConfig != nil && len(schedulerConfig.GetProvider()) > 0 {
 		provider = schedulerConfig.GetProvider()
-	} else if e.environment != nil && len(e.environment.Platform) > 0 {
-		provider = string(e.environment.Platform)
+	} else if e.config.GetEnvironmentConfig() != nil && len(e.config.GetEnvironmentConfig().Platform) > 0 {
+		provider = string(e.config.GetEnvironmentConfig().Platform)
 	}
 
 	// This allows us to pass in any config values defined in the environment
-	configValues := e.config.GetSchedulerConfigWithDefaults(e.GetEnvironmentConfig().Config)
+	configValues := e.config.GetServicesConfig().GetSchedulerConfigWithDefaults(e.config.GetEnvironmentConfig().Config)
 
 	switch provider {
 	case string(models.AWS):
