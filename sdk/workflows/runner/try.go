@@ -35,7 +35,7 @@ func (r *ResumableWorkflowRunner) executeTryTask(
 	workflowTask := r.GetWorkflowTask()
 
 	// Attempt to execute the try block
-	tryOutput, tryErr := r.executeTaskList(tryTask.Try, input)
+	tryOutput, tryErr := r.ExecuteTaskList(tryTask.Try, input)
 
 	// If no error occurred, return the successful output
 	if tryErr == nil {
@@ -99,7 +99,7 @@ func (r *ResumableWorkflowRunner) executeTryTask(
 			"task": taskName,
 		}).Debug("Executing catch block")
 
-		return r.executeTaskList(tryTask.Catch.Do, input)
+		return r.ExecuteTaskList(tryTask.Catch.Do, input)
 	}
 
 	// No catch block to execute, return the original error
@@ -340,7 +340,7 @@ func (r *ResumableWorkflowRunner) executeRetryAttempt(
 		"attempt": attempt,
 	}).Info("Retrying try block")
 
-	return r.executeTaskList(tryTask.Try, input)
+	return r.ExecuteTaskList(tryTask.Try, input)
 }
 
 // handleRetryLogic implements the retry mechanism with backoff strategies

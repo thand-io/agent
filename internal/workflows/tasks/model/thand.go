@@ -20,6 +20,7 @@ const (
 	ThandTypeRevoke    = "revoke"
 	ThandTypeMonitor   = "monitor"
 	ThandTypeForm      = "form"
+	ThandTypeAgent     = "agent"
 )
 
 // ValidThandTypes contains all valid thand task types
@@ -31,6 +32,7 @@ var ValidThandTypes = []string{
 	ThandTypeRevoke,
 	ThandTypeMonitor,
 	ThandTypeForm,
+	ThandTypeAgent,
 }
 
 // ThandTask defines a custom Thand task
@@ -39,6 +41,7 @@ type ThandTask struct {
 	Thand          string              `json:"thand" validate:"required,thand_type"`
 	On             *models.BasicConfig `json:"on,omitempty"`
 	With           *models.BasicConfig `json:"with,omitempty"`
+	Do             *model.TaskList     `json:"do,omitempty"`
 }
 
 func (f *ThandTask) GetBase() *model.TaskBase {
@@ -60,6 +63,8 @@ func (t *ThandTask) Validate() error {
 	case ThandTypeValidate, ThandTypeRevoke, ThandTypeMonitor:
 		// These task types have minimal or no required With configuration
 		return nil
+	case ThandTypeAgent:
+		return t.validateAgentTask()
 	default:
 		return fmt.Errorf("unknown thand task type: %s", t.Thand)
 	}
@@ -106,6 +111,20 @@ func (t *ThandTask) validateFormTask() error {
 	// Form requires notifiers for where to send the form
 	if _, hasNotifiers := (*t.With)["notifiers"]; !hasNotifiers {
 		return fmt.Errorf("form task requires 'with.notifiers' field")
+	}
+	return nil
+}
+
+// validateAgentTask validates the agent task configuration
+func (t *ThandTask) validateAgentTask() error {
+	if t.With == nil {
+		return fmt.Errorf("agent task requires 'with' field")
+	}
+	if _, hasIdentities := (*t.With)["identities"]; !hasIdentities {
+		return fmt.Errorf("agent task requires 'with.identities' field")
+	}
+	if t.Do == nil || len(*t.Do) == 0 {
+		return fmt.Errorf("agent task requires 'do' field with at least one sub-task")
 	}
 	return nil
 }

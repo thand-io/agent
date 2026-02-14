@@ -384,8 +384,8 @@ func (e *localClient) ReloadTemporal() error {
 
 	temporalService := temporal.NewTemporalClient(
 		e.config.Temporal,
-		e.environment.GetIdentifier(),
 		e.vault,
+		e.environment.GetIdentifier(),
 	)
 	if err := temporalService.Initialize(); err != nil {
 		logrus.Errorf("Error initializing temporal: %v", err)

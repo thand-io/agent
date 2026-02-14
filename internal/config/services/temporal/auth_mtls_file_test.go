@@ -83,8 +83,8 @@ func TestConfigureMTLSFile(t *testing.T) {
 			config.MtlsKeyFile = tt.keyFile
 
 			temporalClient := &TemporalClient{
-				config:   config,
-				identity: "test-identity",
+				config:     config,
+				identities: []string{"test-identity"},
 			}
 
 			tlsConfig, err := temporalClient.configureMTLSFile()

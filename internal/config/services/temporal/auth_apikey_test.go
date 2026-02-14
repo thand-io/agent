@@ -39,8 +39,8 @@ func TestConfigureAPIKeyAuth(t *testing.T) {
 			config.ApiKey = tt.apiKey
 
 			temporalClient := &TemporalClient{
-				config:   config,
-				identity: "test-identity",
+				config:     config,
+				identities: []string{"test-identity"},
 			}
 
 			// Configure client options
