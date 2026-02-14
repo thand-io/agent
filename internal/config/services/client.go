@@ -392,31 +392,29 @@ func (e *localClient) ReloadTemporal() error {
 
 		if err != nil {
 			logrus.WithError(err).Warn("Failed to get login server, using hostname identity only")
-			return fmt.Errorf("failed to get login server for temporal initialization: %w", err)
-		}
+		} else {
+			activeSessions := loginServer.GetSessions()
 
-		activeSessions := loginServer.GetSessions()
-
-		// Add active session providers as identities
-		for providerName, session := range activeSessions {
-			if !session.IsExpired() {
-				identities = append(identities, providerName)
-				logrus.WithFields(logrus.Fields{
-					"provider": providerName,
-					"expiry":   session.Expiry,
-				}).Debug("Adding active session identity to worker pool")
+			// Add active session providers as identities
+			for providerName, session := range activeSessions {
+				if !session.IsExpired() {
+					identities = append(identities, providerName)
+					logrus.WithFields(logrus.Fields{
+						"provider": providerName,
+						"expiry":   session.Expiry,
+					}).Debug("Adding active session identity to worker pool")
+				}
 			}
 		}
 
 		logrus.WithField("identities", identities).Info("Configuring Temporal workers for agent mode")
-
 	}
 
 	// Get Temporal config from services
 	servicesConfig := e.config.GetServicesConfig()
 
 	if servicesConfig == nil {
-		return fmt.Errorf("No service config provided")
+		return fmt.Errorf("Services config is missing")
 	}
 
 	temporalConfig := servicesConfig.GetTemporalConfig()

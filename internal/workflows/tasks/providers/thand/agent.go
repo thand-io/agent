@@ -143,7 +143,8 @@ func (t *thandTask) executeAgentTemporal(
 
 	// Collect results keyed by identity
 	results := make(map[string]any, len(identities))
-	var lastError error
+	var failedIdentities []string
+	failureDetails := make(map[string]error)
 
 	for range identities {
 		var result agentBranchResult
@@ -153,18 +154,36 @@ func (t *thandTask) executeAgentTemporal(
 			logrus.WithError(result.err).
 				WithField("identity", result.identity).
 				Error("Agent task branch failed")
-			lastError = result.err
+			failedIdentities = append(failedIdentities, result.identity)
+			failureDetails[result.identity] = result.err
 			continue
 		}
 
 		results[result.identity] = result.result
 	}
 
-	if lastError != nil && len(results) == 0 {
-		return nil, fmt.Errorf("all agent task branches failed, last error: %w", lastError)
+	// Handle failures based on success/failure ratio
+	if len(failedIdentities) > 0 {
+		if len(results) == 0 {
+			// All branches failed
+			return nil, fmt.Errorf("all agent task branches failed for identities %v: %v",
+				failedIdentities, failureDetails)
+		}
+
+		// Partial failure - some succeeded, some failed
+		logrus.WithFields(logrus.Fields{
+			"succeeded":         len(results),
+			"failed":            len(failedIdentities),
+			"failed_identities": failedIdentities,
+		}).Warn("Agent task completed with partial failures")
+
+		return map[string]any{
+				taskName: results,
+			}, fmt.Errorf("partial failure: %d/%d identities failed (%v): %v",
+				len(failedIdentities), len(identities), failedIdentities, failureDetails)
 	}
 
-	// Return results keyed as taskName[identity] = output
+	// All branches succeeded
 	return map[string]any{
 		taskName: results,
 	}, nil

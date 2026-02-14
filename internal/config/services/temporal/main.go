@@ -16,6 +16,10 @@ import (
 )
 
 // MaxWorkers is the maximum number of identity-specific workers per client.
+// A default of 5 is chosen as a conservative limit to balance concurrency with CPU
+// and memory usage for typical agent deployments. If agents are expected to manage
+// significantly more identities concurrently, this value should be revisited and
+// validated under expected load before being increased.
 const MaxWorkers = 5
 
 type TemporalClient struct {

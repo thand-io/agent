@@ -66,7 +66,7 @@ func (p *awsProvider) authorizeRoleIdentityCenter(
 func (p *awsProvider) getIdentityCenterInstance(ctx context.Context) (instanceArn string, identityStoreId string, err error) {
 	resp, err := p.ssoAdminService.ListInstances(ctx, &ssoadmin.ListInstancesInput{})
 	if err != nil {
-		return "", "", fmt.Errorf("failed to list Identity Center instances: %w in region: %s", err, p.GetRegion())
+		return "", "", fmt.Errorf("failed to list Identity Center instances in region %s: %w", p.GetRegion(), err)
 	}
 
 	if len(resp.Instances) == 0 {
@@ -97,6 +97,7 @@ func (p *awsProvider) findOrCreatePermissionSet(ctx context.Context, instanceArn
 			NextToken:   nextToken,
 		})
 		if err != nil {
+			logrus.WithError(err).Error("Failed to list permission sets in Identity Center")
 			return "", fmt.Errorf("failed to list permission sets: %w", err)
 		}
 
@@ -106,6 +107,7 @@ func (p *awsProvider) findOrCreatePermissionSet(ctx context.Context, instanceArn
 				PermissionSetArn: aws.String(permissionSetArn),
 			})
 			if err != nil {
+				logrus.WithError(err).WithField("permissionSetArn", permissionSetArn).Error("Failed to describe permission set")
 				continue
 			}
 
@@ -120,6 +122,7 @@ func (p *awsProvider) findOrCreatePermissionSet(ctx context.Context, instanceArn
 				if len(role.Permissions.Allow) > 0 || len(role.Permissions.Deny) > 0 {
 					err = p.attachPermissionsToPermissionSet(ctx, instanceArn, permissionSetArn, role.Permissions)
 					if err != nil {
+						logrus.WithError(err).WithField("permissionSetArn", permissionSetArn).Error("Failed to attach permissions to existing permission set")
 						return "", fmt.Errorf("failed to attach permissions to existing permission set: %w", err)
 					}
 				}
