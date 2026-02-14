@@ -97,8 +97,28 @@ func (c *Config) IsClient() bool {
 	return c.mode == ModeClient
 }
 
-func (c *Config) GetRoles() *RoleConfig {
+func (c *Config) GetServicesConfig() *models.ServicesConfig {
+	return &c.Services
+}
+
+func (c *Config) GetEnvironmentConfig() *models.EnvironmentConfig {
+	return &c.Environment
+}
+
+func (c *Config) GetRolesConfig() *RoleConfig {
 	return &c.Roles
+}
+
+func (c *Config) GetWorkflowsConfig() *WorkflowConfig {
+	return &c.Workflows
+}
+
+func (c *Config) GetProvidersConfig() *ProviderDefinitionsConfig {
+	return &c.Providers
+}
+
+func (c *Config) GetThandConfig() *models.ThandConfig {
+	return &c.Thand
 }
 
 func (c *Config) GetVault() models.VaultImpl {

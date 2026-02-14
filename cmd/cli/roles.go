@@ -31,7 +31,7 @@ func runListRoles(cmd *cobra.Command, args []string) error {
 
 func displayRoles(provider string) {
 
-	roles := cfg.GetRoles().Definitions
+	roles := cfg.GetRolesConfig().Definitions
 
 	if len(roles) == 0 {
 		if len(provider) > 0 {
