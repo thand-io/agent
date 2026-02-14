@@ -755,6 +755,12 @@ func (c *Config) syncWithEndpoint(loginUrl string, authentication *model.Referen
 			if err != nil {
 				return nil, fmt.Errorf("reloading temporal service: %w", err)
 			}
+
+			// Re-register temporal workflows and activities now that we have new configuration
+			err = c.SetupTemporal()
+			if err != nil {
+				return nil, fmt.Errorf("setting up temporal services: %w", err)
+			}
 		}
 	}
 
