@@ -257,7 +257,7 @@ func (t *thandTask) executeTemporalRevokeParallel(
 	ao := workflow.ActivityOptions{
 		TaskQueue:           workflowTask.GetTaskQueue(),
 		StartToCloseTimeout: 10 * time.Minute,
-		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+		RetryPolicy:         sdkWorkflowsRunner.CriticalPathRetryPolicy,
 	}
 	aoctx := workflow.WithActivityOptions(temporalContext, ao)
 

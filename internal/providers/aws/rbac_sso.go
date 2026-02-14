@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/arn"
 	"github.com/aws/aws-sdk-go-v2/service/identitystore"
 	identitystoretypes "github.com/aws/aws-sdk-go-v2/service/identitystore/types"
 	"github.com/aws/aws-sdk-go-v2/service/ssoadmin"
@@ -27,7 +28,7 @@ func (p *awsProvider) authorizeRoleIdentityCenter(
 	role := req.GetRole()
 
 	// 1. Find the Identity Center instance
-	instanceArn, err := p.getIdentityCenterInstance(ctx)
+	instanceArn, identityStoreId, err := p.getIdentityCenterInstance(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find Identity Center instance: %w", err)
 	}
@@ -39,7 +40,7 @@ func (p *awsProvider) authorizeRoleIdentityCenter(
 	}
 
 	// 3. Find the user in Identity Center by email
-	principalId, err := p.findIdentityCenterUser(ctx, user.Email)
+	principalId, err := p.findIdentityCenterUser(ctx, identityStoreId, user.Email)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find user in Identity Center: %w", err)
 	}
@@ -60,64 +61,85 @@ func (p *awsProvider) authorizeRoleIdentityCenter(
 	}, nil
 }
 
-// getIdentityCenterInstance finds the Identity Center instance ARN
-func (p *awsProvider) getIdentityCenterInstance(ctx context.Context) (string, error) {
+// getIdentityCenterInstance finds the Identity Center instance ARN and identity store ID.
+// AWS Organizations typically have a single Identity Center instance per region.
+func (p *awsProvider) getIdentityCenterInstance(ctx context.Context) (instanceArn string, identityStoreId string, err error) {
 	resp, err := p.ssoAdminService.ListInstances(ctx, &ssoadmin.ListInstancesInput{})
 	if err != nil {
-		return "", fmt.Errorf("failed to list Identity Center instances: %w in region: %s", err, p.GetRegion())
+		return "", "", fmt.Errorf("failed to list Identity Center instances: %w in region: %s", err, p.GetRegion())
 	}
 
 	if len(resp.Instances) == 0 {
-		return "", fmt.Errorf("no Identity Center instances found in region: %s", p.GetRegion())
+		return "", "", fmt.Errorf("no Identity Center instances found in region: %s", p.GetRegion())
 	}
 
-	// Return the first instance (typically there's only one per organization)
-	return *resp.Instances[0].InstanceArn, nil
+	instance := resp.Instances[0]
+	if instance.InstanceArn == nil {
+		return "", "", fmt.Errorf("Identity Center instance ARN is nil in region: %s", p.GetRegion())
+	}
+	if instance.IdentityStoreId == nil {
+		return "", "", fmt.Errorf("Identity Center identity store ID is nil in region: %s", p.GetRegion())
+	}
+
+	return *instance.InstanceArn, *instance.IdentityStoreId, nil
 }
 
-// findOrCreatePermissionSet finds an existing permission set or creates a new one
+// findOrCreatePermissionSet finds an existing permission set by name, or creates a new one
+// with the specified role's policies and permissions. Uses pagination to search all permission sets.
 func (p *awsProvider) findOrCreatePermissionSet(ctx context.Context, instanceArn string, role *models.Role) (string, error) {
 	permissionSetName := role.GetIdentifier()
 
-	// First, try to find existing permission set
-	resp, err := p.ssoAdminService.ListPermissionSets(ctx, &ssoadmin.ListPermissionSetsInput{
-		InstanceArn: aws.String(instanceArn),
-	})
-	if err != nil {
-		return "", fmt.Errorf("failed to list permission sets: %w", err)
-	}
-
-	// Check if permission set already exists
-	for _, permissionSetArn := range resp.PermissionSets {
-		desc, err := p.ssoAdminService.DescribePermissionSet(ctx, &ssoadmin.DescribePermissionSetInput{
-			InstanceArn:      aws.String(instanceArn),
-			PermissionSetArn: aws.String(permissionSetArn),
+	// Search existing permission sets with pagination
+	var nextToken *string
+	for {
+		resp, err := p.ssoAdminService.ListPermissionSets(ctx, &ssoadmin.ListPermissionSetsInput{
+			InstanceArn: aws.String(instanceArn),
+			NextToken:   nextToken,
 		})
 		if err != nil {
-			continue
+			return "", fmt.Errorf("failed to list permission sets: %w", err)
 		}
 
-		if *desc.PermissionSet.Name == permissionSetName {
-			// Permission set exists, ensure it has the required policies attached
-
-			// Attach inline permissions if any
-			if len(role.Permissions.Allow) > 0 || len(role.Permissions.Deny) > 0 {
-				err = p.attachPermissionsToPermissionSet(ctx, instanceArn, permissionSetArn, role.Permissions)
-				if err != nil {
-					return "", fmt.Errorf("failed to attach permissions to existing permission set: %w", err)
-				}
+		for _, permissionSetArn := range resp.PermissionSets {
+			desc, err := p.ssoAdminService.DescribePermissionSet(ctx, &ssoadmin.DescribePermissionSetInput{
+				InstanceArn:      aws.String(instanceArn),
+				PermissionSetArn: aws.String(permissionSetArn),
+			})
+			if err != nil {
+				continue
 			}
 
-			// Attach managed policies from role.Inherits
-			if len(role.Inherits) > 0 {
-				err = p.attachManagedPoliciesToPermissionSet(ctx, instanceArn, permissionSetArn, role.Inherits)
-				if err != nil {
-					return "", fmt.Errorf("failed to attach managed policies to existing permission set: %w", err)
-				}
+			if desc.PermissionSet == nil || desc.PermissionSet.Name == nil {
+				continue
 			}
 
-			return permissionSetArn, nil
+			if *desc.PermissionSet.Name == permissionSetName {
+				// Permission set exists, ensure it has the required policies attached
+
+				// Attach inline permissions if any
+				if len(role.Permissions.Allow) > 0 || len(role.Permissions.Deny) > 0 {
+					err = p.attachPermissionsToPermissionSet(ctx, instanceArn, permissionSetArn, role.Permissions)
+					if err != nil {
+						return "", fmt.Errorf("failed to attach permissions to existing permission set: %w", err)
+					}
+				}
+
+				// Attach managed policies from role.Inherits
+				if len(role.Inherits) > 0 {
+					err = p.attachManagedPoliciesToPermissionSet(ctx, instanceArn, permissionSetArn, role.Inherits)
+					if err != nil {
+						return "", fmt.Errorf("failed to attach managed policies to existing permission set: %w", err)
+					}
+				}
+
+				return permissionSetArn, nil
+			}
 		}
+
+		if resp.NextToken == nil {
+			break
+		}
+		nextToken = resp.NextToken
 	}
 
 	// Create new permission set
@@ -253,16 +275,13 @@ func (p *awsProvider) attachPolicyToPermissionSet(ctx context.Context, instanceA
 		}).Info("Successfully attached AWS managed policy to permission set")
 
 	} else {
-		// Customer managed policy - extract account ID and policy name from ARN
-		// ARN format: arn:aws:iam::123456789012:policy/PolicyName
-		arnParts := strings.Split(policyArn, ":")
-		if len(arnParts) != 6 {
-			return fmt.Errorf("invalid customer managed policy ARN format: %s", policyArn)
+		// Customer managed policy - parse ARN to extract account ID and policy name
+		parsed, err := arn.Parse(policyArn)
+		if err != nil {
+			return fmt.Errorf("invalid customer managed policy ARN: %w", err)
 		}
 
-		accountId := arnParts[4]
-		policyPath := arnParts[5] // This is "policy/PolicyName"
-		policyName := strings.TrimPrefix(policyPath, "policy/")
+		policyName := strings.TrimPrefix(parsed.Resource, "policy/")
 
 		// Check if customer managed policy is already attached
 		isAlreadyAttached, err := p.isCustomerManagedPolicyAttached(ctx, instanceArn, permissionSetArn, policyName)
@@ -273,7 +292,7 @@ func (p *awsProvider) attachPolicyToPermissionSet(ctx context.Context, instanceA
 		if isAlreadyAttached {
 			logrus.WithFields(logrus.Fields{
 				"policyName":       policyName,
-				"accountId":        accountId,
+				"accountId":        parsed.AccountID,
 				"permissionSetArn": permissionSetArn,
 			}).Info("Customer managed policy is already attached to permission set - skipping")
 			return nil
@@ -288,12 +307,12 @@ func (p *awsProvider) attachPolicyToPermissionSet(ctx context.Context, instanceA
 			},
 		})
 		if err != nil {
-			return fmt.Errorf("failed to attach customer managed policy %s (account: %s): %w", policyName, accountId, err)
+			return fmt.Errorf("failed to attach customer managed policy %s (account: %s): %w", policyName, parsed.AccountID, err)
 		}
 
 		logrus.WithFields(logrus.Fields{
 			"policyName":       policyName,
-			"accountId":        accountId,
+			"accountId":        parsed.AccountID,
 			"permissionSetArn": permissionSetArn,
 		}).Info("Successfully attached customer managed policy to permission set")
 	}
@@ -343,27 +362,12 @@ func (p *awsProvider) isCustomerManagedPolicyAttached(ctx context.Context, insta
 	return false, nil
 }
 
-// findIdentityCenterUser finds a user in Identity Center by email
-func (p *awsProvider) findIdentityCenterUser(ctx context.Context, email string) (string, error) {
-
-	// First, get the identity store ID from the SSO instance
-	resp, err := p.ssoAdminService.ListInstances(ctx, &ssoadmin.ListInstancesInput{})
-	if err != nil {
-		return "", fmt.Errorf("failed to list SSO instances: %w", err)
-	}
-
-	if len(resp.Instances) == 0 {
-		return "", fmt.Errorf("no SSO instances found")
-	}
-
-	identityStoreId := resp.Instances[0].IdentityStoreId
-	if identityStoreId == nil {
-		return "", fmt.Errorf("identity store ID not found in SSO instance")
-	}
-
-	// Search for user by email
+// findIdentityCenterUser finds a user in Identity Center by email.
+// It first searches by userName, then falls back to the emails.value attribute.
+func (p *awsProvider) findIdentityCenterUser(ctx context.Context, identityStoreId string, email string) (string, error) {
+	// Search for user by userName
 	usersResp, err := p.identityStoreClient.ListUsers(ctx, &identitystore.ListUsersInput{
-		IdentityStoreId: identityStoreId,
+		IdentityStoreId: aws.String(identityStoreId),
 		Filters: []identitystoretypes.Filter{
 			{
 				AttributePath:  aws.String("userName"),
@@ -372,13 +376,13 @@ func (p *awsProvider) findIdentityCenterUser(ctx context.Context, email string) 
 		},
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to search for user by email: %w", err)
+		return "", fmt.Errorf("failed to search for user by userName: %w", err)
 	}
 
 	if len(usersResp.Users) == 0 {
-		// Try searching by email attribute as well
+		// Fallback: search by email attribute
 		usersResp, err = p.identityStoreClient.ListUsers(ctx, &identitystore.ListUsersInput{
-			IdentityStoreId: identityStoreId,
+			IdentityStoreId: aws.String(identityStoreId),
 			Filters: []identitystoretypes.Filter{
 				{
 					AttributePath:  aws.String("emails.value"),
@@ -393,11 +397,17 @@ func (p *awsProvider) findIdentityCenterUser(ctx context.Context, email string) 
 		if len(usersResp.Users) == 0 {
 			return "", fmt.Errorf("user with email %s not found in Identity Center", email)
 		}
-	} // Return the first matching user's ID
+	}
+
+	if usersResp.Users[0].UserId == nil {
+		return "", fmt.Errorf("user ID is nil for user with email %s in Identity Center", email)
+	}
+
 	return *usersResp.Users[0].UserId, nil
 }
 
-// createAccountAssignment assigns a permission set to a user for the target account
+// createAccountAssignment assigns a permission set to a user for the target account.
+// If the assignment already exists (ConflictException), it is treated as success.
 func (p *awsProvider) createAccountAssignment(ctx context.Context, instanceArn, permissionSetArn, principalId, targetAccountID string) error {
 
 	assignmentOutput, err := p.ssoAdminService.CreateAccountAssignment(ctx, &ssoadmin.CreateAccountAssignmentInput{
@@ -412,37 +422,75 @@ func (p *awsProvider) createAccountAssignment(ctx context.Context, instanceArn, 
 	if err != nil {
 		// Check if assignment already exists
 		if strings.Contains(err.Error(), "ConflictException") {
-			return nil // Assignment already exists, which is fine
+			logrus.WithFields(logrus.Fields{
+				"principalId":      principalId,
+				"targetAccountID":  targetAccountID,
+				"permissionSetArn": permissionSetArn,
+			}).Info("Account assignment already exists - treating as success")
+			return nil
 		}
 		return fmt.Errorf("failed to create account assignment: %w", err)
 	}
 
-	logrus.WithFields(logrus.Fields{
-		"principalId":     *assignmentOutput.AccountAssignmentCreationStatus.PrincipalId,
-		"targetAccountID": targetAccountID,
-	}).Info("Created account assignment")
+	if assignmentOutput != nil &&
+		assignmentOutput.AccountAssignmentCreationStatus != nil &&
+		assignmentOutput.AccountAssignmentCreationStatus.PrincipalId != nil {
+		logrus.WithFields(logrus.Fields{
+			"principalId":     *assignmentOutput.AccountAssignmentCreationStatus.PrincipalId,
+			"targetAccountID": targetAccountID,
+		}).Info("Created account assignment")
+	} else {
+		logrus.WithFields(logrus.Fields{
+			"principalId":     principalId,
+			"targetAccountID": targetAccountID,
+		}).Info("Created account assignment")
+	}
 
 	return nil
 }
 
-// revokeRoleIdentityCenter removes role authorization for Identity Center users
-func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models.User, role *models.Role, targetAccountID string) error {
+// revokeRoleIdentityCenter removes role authorization for Identity Center users.
+// It deletes the account assignment and cleans up the permission set if no longer in use.
+// Operations are idempotent — already-deleted resources are treated as success.
+func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, req *models.RevokeRoleRequest, targetAccountID string) error {
+	user := req.GetUser()
+	role := req.GetRole()
+
 	// 1. Find the Identity Center instance
-	instanceArn, err := p.getIdentityCenterInstance(ctx)
+	instanceArn, identityStoreId, err := p.getIdentityCenterInstance(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to find Identity Center instance: %w in region: %s", err, p.GetRegion())
+		return fmt.Errorf("failed to find Identity Center instance: %w", err)
 	}
 
-	// 2. Find the Permission Set
-	permissionSetArn, err := p.findPermissionSetByName(ctx, instanceArn, role.GetIdentifier())
-	if err != nil {
-		return fmt.Errorf("failed to find permission set: %w in region: %s", err, p.GetRegion())
+	// 2. Find the Permission Set - try to use stored ARN from authorization metadata first
+	var permissionSetArn string
+	if req.AuthorizeRoleResponse != nil && req.AuthorizeRoleResponse.Metadata != nil {
+		if arn, ok := req.AuthorizeRoleResponse.Metadata["permissionSetArn"].(string); ok && len(arn) > 0 {
+			permissionSetArn = arn
+			logrus.WithFields(logrus.Fields{
+				"permissionSetArn": arn,
+				"principalId":      user.Email,
+				"accountId":        targetAccountID,
+			}).Info("Using stored permission set ARN from authorization metadata")
+		}
+	}
+
+	// Fallback to lookup by name if no metadata available (for legacy grants)
+	if len(permissionSetArn) == 0 {
+		logrus.WithFields(logrus.Fields{
+			"roleName":  role.GetIdentifier(),
+			"accountId": targetAccountID,
+		}).Warn("No permission set ARN in metadata, falling back to name-based lookup")
+		permissionSetArn, err = p.findPermissionSetByName(ctx, instanceArn, role.GetIdentifier())
+		if err != nil {
+			return fmt.Errorf("failed to find permission set: %w in region: %s", err, p.GetRegion())
+		}
 	}
 
 	// 3. Find the user in Identity Center
-	principalId, err := p.findIdentityCenterUser(ctx, user.Email)
+	principalId, err := p.findIdentityCenterUser(ctx, identityStoreId, user.Email)
 	if err != nil {
-		return fmt.Errorf("failed to find user in Identity Center: %w in region: %s", err, p.GetRegion())
+		return fmt.Errorf("failed to find user in Identity Center: %w", err)
 	}
 
 	// 4. Delete the Account Assignment
@@ -456,6 +504,18 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models
 	})
 
 	if err != nil {
+		// Treat "not found" errors as success - already revoked (idempotent)
+		if strings.Contains(err.Error(), "ResourceNotFoundException") ||
+			strings.Contains(err.Error(), "NotFoundException") {
+			logrus.WithFields(logrus.Fields{
+				"permissionSetArn": permissionSetArn,
+				"principalId":      principalId,
+				"accountId":        targetAccountID,
+			}).Info("Account assignment not found - already revoked or never existed, treating as success")
+			// Still attempt to clean up the permission set
+			p.tryCleanupPermissionSet(ctx, instanceArn, permissionSetArn)
+			return nil
+		}
 		return fmt.Errorf("failed to delete account assignment: %w", err)
 	}
 
@@ -532,6 +592,10 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models
 				"principalId":     statusOutputPrincipalId,
 				"targetAccountID": targetAccountID,
 			}).Info("Account assignment deletion succeeded")
+
+			// 6. Clean up the permission set if no longer in use across the organization
+			p.tryCleanupPermissionSet(ctx, instanceArn, permissionSetArn)
+
 			return nil
 		default:
 			return fmt.Errorf("unknown status value %s", statusOutputStatus)
@@ -539,28 +603,128 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, user *models
 	}
 }
 
-// findPermissionSetByName finds a permission set by name
-func (p *awsProvider) findPermissionSetByName(ctx context.Context, instanceArn, name string) (string, error) {
-	resp, err := p.ssoAdminService.ListPermissionSets(ctx, &ssoadmin.ListPermissionSetsInput{
-		InstanceArn: aws.String(instanceArn),
+// tryCleanupPermissionSet attempts to clean up a permission set after account assignment deletion.
+// Errors are logged but never propagated — the primary revocation has already succeeded.
+func (p *awsProvider) tryCleanupPermissionSet(ctx context.Context, instanceArn, permissionSetArn string) {
+	err := p.cleanupPermissionSetIfUnused(ctx, instanceArn, permissionSetArn)
+	if err != nil {
+		logrus.WithFields(logrus.Fields{
+			"permissionSetArn": permissionSetArn,
+			"error":            err.Error(),
+		}).Warn("Failed to clean up permission set, but account assignment was successfully deleted")
+	}
+}
+
+// cleanupPermissionSetIfUnused deletes a permission set if it has no remaining account
+// assignments across the entire organization. This prevents dangling permission sets
+// from accumulating after revocations.
+func (p *awsProvider) cleanupPermissionSetIfUnused(ctx context.Context, instanceArn, permissionSetArn string) error {
+	// Check if there are any remaining account assignments for this permission set across all accounts
+	inUse, err := p.isPermissionSetInUse(ctx, instanceArn, permissionSetArn)
+	if err != nil {
+		return fmt.Errorf("failed to check for remaining account assignments: %w", err)
+	}
+
+	if inUse {
+		logrus.WithFields(logrus.Fields{
+			"permissionSetArn": permissionSetArn,
+		}).Info("Permission set still has account assignments - skipping deletion")
+		return nil
+	}
+
+	// No assignments remain, safe to delete the permission set
+	logrus.WithFields(logrus.Fields{
+		"permissionSetArn": permissionSetArn,
+	}).Info("Deleting unused permission set")
+
+	_, err = p.ssoAdminService.DeletePermissionSet(ctx, &ssoadmin.DeletePermissionSetInput{
+		InstanceArn:      aws.String(instanceArn),
+		PermissionSetArn: aws.String(permissionSetArn),
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to list permission sets: %w", err)
+		// Check if it's already deleted
+		if strings.Contains(err.Error(), "ResourceNotFoundException") ||
+			strings.Contains(err.Error(), "NotFoundException") {
+			logrus.WithFields(logrus.Fields{
+				"permissionSetArn": permissionSetArn,
+			}).Info("Permission set already deleted")
+			return nil
+		}
+		return fmt.Errorf("failed to delete permission set: %w", err)
 	}
 
-	for _, permissionSetArn := range resp.PermissionSets {
-		desc, err := p.ssoAdminService.DescribePermissionSet(ctx, &ssoadmin.DescribePermissionSetInput{
-			InstanceArn:      aws.String(instanceArn),
-			PermissionSetArn: aws.String(permissionSetArn),
+	logrus.WithFields(logrus.Fields{
+		"permissionSetArn": permissionSetArn,
+	}).Info("Successfully deleted permission set")
+
+	return nil
+}
+
+// isPermissionSetInUse checks whether a permission set is provisioned to any account
+// in the organization. Uses ListAccountsForProvisionedPermissionSet which provides
+// an org-wide view, unlike ListAccountAssignments which requires a specific account ID.
+func (p *awsProvider) isPermissionSetInUse(ctx context.Context, instanceArn, permissionSetArn string) (bool, error) {
+	resp, err := p.ssoAdminService.ListAccountsForProvisionedPermissionSet(ctx, &ssoadmin.ListAccountsForProvisionedPermissionSetInput{
+		InstanceArn:      aws.String(instanceArn),
+		PermissionSetArn: aws.String(permissionSetArn),
+	})
+	if err != nil {
+		// If we get an error, assume it's in use to be safe (avoid accidental deletion)
+		logrus.WithFields(logrus.Fields{
+			"permissionSetArn": permissionSetArn,
+			"error":            err.Error(),
+		}).Warn("Failed to list accounts for permission set, assuming it is still in use")
+		return true, nil
+	}
+
+	return len(resp.AccountIds) > 0, nil
+}
+
+// findPermissionSetByName finds a permission set by name using paginated search.
+// Returns the permission set ARN if found, or an error with diagnostic context.
+func (p *awsProvider) findPermissionSetByName(ctx context.Context, instanceArn, name string) (string, error) {
+	var nextToken *string
+	searchedCount := 0
+
+	for {
+		resp, err := p.ssoAdminService.ListPermissionSets(ctx, &ssoadmin.ListPermissionSetsInput{
+			InstanceArn: aws.String(instanceArn),
+			NextToken:   nextToken,
 		})
 		if err != nil {
-			continue
+			return "", fmt.Errorf("failed to list permission sets: %w", err)
 		}
 
-		if *desc.PermissionSet.Name == name {
-			return permissionSetArn, nil
+		for _, permissionSetArn := range resp.PermissionSets {
+			searchedCount++
+			desc, err := p.ssoAdminService.DescribePermissionSet(ctx, &ssoadmin.DescribePermissionSetInput{
+				InstanceArn:      aws.String(instanceArn),
+				PermissionSetArn: aws.String(permissionSetArn),
+			})
+			if err != nil {
+				continue
+			}
+
+			if desc.PermissionSet == nil || desc.PermissionSet.Name == nil {
+				continue
+			}
+
+			if *desc.PermissionSet.Name == name {
+				return permissionSetArn, nil
+			}
 		}
+
+		if resp.NextToken == nil {
+			break
+		}
+		nextToken = resp.NextToken
 	}
 
-	return "", fmt.Errorf("permission set with name %s not found", name)
+	return "", fmt.Errorf(
+		"permission set with name %s not found in region %s (searched %d permission sets in instance %s)",
+		name,
+		p.GetRegion(),
+		searchedCount,
+		instanceArn,
+	)
 }

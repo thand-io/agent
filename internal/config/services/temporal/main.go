@@ -76,6 +76,8 @@ func (a *TemporalClient) Initialize() error {
 	temporalClient, err := client.Dial(clientOptions)
 
 	if err != nil {
+		// Common errors:
+		// - no children to pick from: The namespace does not exist in temporal cloud.
 		logrus.WithError(err).
 			WithFields(logrus.Fields{
 				"endpoint":  a.GetHostPort(),
@@ -143,16 +145,17 @@ func (a *TemporalClient) Initialize() error {
 		}).Infof("Starting Temporal worker")
 
 		if err := newWorker.Start(); err != nil {
-			logrus.WithError(err).WithField("taskQueue", identity).Error("Failed to start temporal worker")
-			// Stop any workers that were already started
-			for _, w := range a.workers {
-				w.Stop()
-			}
-			a.workers = make(map[string]worker.Worker)
-			return err
+			logrus.WithError(err).
+				WithField("taskQueue", identity).
+				Error("Failed to start temporal worker")
+			continue
 		}
 
 		a.workers[identity] = newWorker
+	}
+
+	if len(a.workers) == 0 {
+		return fmt.Errorf("failed to start any Temporal workers")
 	}
 
 	return nil
