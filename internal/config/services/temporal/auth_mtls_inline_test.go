@@ -66,10 +66,11 @@ func TestConfigureMTLSInline(t *testing.T) {
 			config.MtlsCert = tt.certPEM
 			config.MtlsKey = tt.keyPEM
 
-			temporalClient := &TemporalClient{
-				config:     config,
-				identities: []string{"test-identity"},
-			}
+			temporalClient := NewTemporalClient(
+				config,
+				nil,
+				"test-identity",
+			)
 
 			tlsConfig, err := temporalClient.configureMTLSInline()
 
@@ -125,9 +126,10 @@ func TestHasMTLSInline(t *testing.T) {
 			config.MtlsCert = tt.cert
 			config.MtlsKey = tt.key
 
-			temporalClient := &TemporalClient{
-				config: config,
-			}
+			temporalClient := NewTemporalClient(
+				config,
+				nil,
+			)
 
 			got := temporalClient.hasMTLSInline()
 			assert.Equal(t, tt.want, got)

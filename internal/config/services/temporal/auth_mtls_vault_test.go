@@ -54,11 +54,11 @@ func TestConfigureMTLSVault_PEM_Combined(t *testing.T) {
 		},
 	}
 
-	temporalClient := &TemporalClient{
-		config:   config,
-		vault:    mockVault,
-		identities: []string{"test-identity"},
-	}
+	temporalClient := NewTemporalClient(
+		config,
+		mockVault,
+		"test-identity",
+	)
 
 	tlsConfig, err := temporalClient.configureMTLSVault()
 
@@ -85,11 +85,11 @@ func TestConfigureMTLSVault_PEM_Separate(t *testing.T) {
 		},
 	}
 
-	temporalClient := &TemporalClient{
-		config:   config,
-		vault:    mockVault,
-		identities: []string{"test-identity"},
-	}
+	temporalClient := NewTemporalClient(
+		config,
+		mockVault,
+		"test-identity",
+	)
 
 	// This should fail because we only have the certificate, not the key
 	_, err = temporalClient.configureMTLSVault()
@@ -114,11 +114,11 @@ func TestConfigureMTLSVault_PKCS12_Unencrypted(t *testing.T) {
 		},
 	}
 
-	temporalClient := &TemporalClient{
-		config:   config,
-		vault:    mockVault,
-		identities: []string{"test-identity"},
-	}
+	temporalClient := NewTemporalClient(
+		config,
+		mockVault,
+		"test-identity",
+	)
 
 	tlsConfig, err := temporalClient.configureMTLSVault()
 
@@ -146,11 +146,11 @@ func TestConfigureMTLSVault_PKCS12_Encrypted(t *testing.T) {
 		},
 	}
 
-	temporalClient := &TemporalClient{
-		config:   config,
-		vault:    mockVault,
-		identities: []string{"test-identity"},
-	}
+	temporalClient := NewTemporalClient(
+		config,
+		mockVault,
+		"test-identity",
+	)
 
 	tlsConfig, err := temporalClient.configureMTLSVault()
 
@@ -178,11 +178,11 @@ func TestConfigureMTLSVault_PKCS12_WrongPassword(t *testing.T) {
 		},
 	}
 
-	temporalClient := &TemporalClient{
-		config:   config,
-		vault:    mockVault,
-		identities: []string{"test-identity"},
-	}
+	temporalClient := NewTemporalClient(
+		config,
+		mockVault,
+		"test-identity",
+	)
 
 	_, err = temporalClient.configureMTLSVault()
 	require.Error(t, err)
@@ -206,11 +206,11 @@ func TestConfigureMTLSVault_AutoDetect_PEM(t *testing.T) {
 		},
 	}
 
-	temporalClient := &TemporalClient{
-		config:   config,
-		vault:    mockVault,
-		identities: []string{"test-identity"},
-	}
+	temporalClient := NewTemporalClient(
+		config,
+		mockVault,
+		"test-identity",
+	)
 
 	tlsConfig, err := temporalClient.configureMTLSVault()
 
@@ -237,11 +237,11 @@ func TestConfigureMTLSVault_AutoDetect_PKCS12(t *testing.T) {
 		},
 	}
 
-	temporalClient := &TemporalClient{
-		config:   config,
-		vault:    mockVault,
-		identities: []string{"test-identity"},
-	}
+	temporalClient := NewTemporalClient(
+		config,
+		mockVault,
+		"test-identity",
+	)
 
 	tlsConfig, err := temporalClient.configureMTLSVault()
 
@@ -264,11 +264,11 @@ func TestConfigureMTLSVault_VaultError(t *testing.T) {
 		},
 	}
 
-	temporalClient := &TemporalClient{
-		config:   config,
-		vault:    mockVault,
-		identities: []string{"test-identity"},
-	}
+	temporalClient := NewTemporalClient(
+		config,
+		mockVault,
+		"test-identity",
+	)
 
 	_, err := temporalClient.configureMTLSVault()
 	require.Error(t, err)
@@ -290,11 +290,11 @@ func TestConfigureMTLSVault_InvalidFormat(t *testing.T) {
 		},
 	}
 
-	temporalClient := &TemporalClient{
-		config:   config,
-		vault:    mockVault,
-		identities: []string{"test-identity"},
-	}
+	temporalClient := NewTemporalClient(
+		config,
+		mockVault,
+		"test-identity",
+	)
 
 	_, err := temporalClient.configureMTLSVault()
 	require.Error(t, err)
@@ -333,14 +333,15 @@ func TestHasMTLSVault(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			config := &models.TemporalConfig{}
-			
+
 			if !tt.vaultIsNil {
 				config.MtlsVaultName = tt.vaultName
 			}
 
-			temporalClient := &TemporalClient{
-				config: config,
-			}
+			temporalClient := NewTemporalClient(
+				config,
+				nil,
+			)
 
 			got := temporalClient.hasMTLSVault()
 			assert.Equal(t, tt.want, got)

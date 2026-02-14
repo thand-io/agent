@@ -82,10 +82,11 @@ func TestConfigureMTLSFile(t *testing.T) {
 			config.MtlsCertFile = tt.certFile
 			config.MtlsKeyFile = tt.keyFile
 
-			temporalClient := &TemporalClient{
-				config:     config,
-				identities: []string{"test-identity"},
-			}
+			temporalClient := NewTemporalClient(
+				config,
+				nil,
+				"test-identity",
+			)
 
 			tlsConfig, err := temporalClient.configureMTLSFile()
 
@@ -141,9 +142,10 @@ func TestHasMTLSFile(t *testing.T) {
 			config.MtlsCertFile = tt.certFile
 			config.MtlsKeyFile = tt.keyFile
 
-			temporalClient := &TemporalClient{
-				config: config,
-			}
+			temporalClient := NewTemporalClient(
+				config,
+				nil,
+			)
 
 			got := temporalClient.hasMTLSFile()
 			assert.Equal(t, tt.want, got)

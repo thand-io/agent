@@ -432,5 +432,6 @@ func (e *localClient) ReloadTemporal() error {
 	e.mu.Lock()
 	e.temporal = temporalService
 	e.mu.Unlock()
+
 	return nil
 }
