@@ -14,6 +14,7 @@ import (
 
 type ProviderResource struct {
 	ID          string `json:"id"`
+	Tenant      string `json:"tenant,omitempty"`
 	Type        string `json:"type"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
