@@ -598,7 +598,6 @@ func TestMergePatchLogic_OutgoingPatchCapturesLocalExtras(t *testing.T) {
 	// to transform incoming into existing — i.e., the local extras.
 	outgoingPatch, err := jsonpatch.MergePatch(incomingData, existingData)
 	require.NoError(t, err)
-	_ = outgoingPatch // just ensure it doesn't error
 
 	// Use CreateMergePatch which is what the production code actually calls
 	// jsonpatch.CreateMergePatch is used in sync.go, but here we test the

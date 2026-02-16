@@ -630,7 +630,8 @@ func (c *Config) syncWithEndpoint(loginUrl string, authentication *model.Referen
 		Version:    version,
 		Commit:     commit,
 		Identifier: common.GetClientIdentifier(),
-		Endpoint:   c.GetLocalServerUrl(),
+		Endpoint:   c.GetLoginServerUrl(),
+		Origin:     c.GetLocalServerUrl(),
 	})
 
 	if err != nil {
@@ -666,7 +667,8 @@ func (c *Config) syncWithEndpoint(loginUrl string, authentication *model.Referen
 		Version:     version,
 		Commit:      commit,
 		Identifier:  common.GetClientIdentifier(),
-		Endpoint:    c.GetLocalServerUrl(),
+		Endpoint:    c.GetLoginServerUrl(),
+		Origin:      c.GetLocalServerUrl(),
 	})
 
 	if err != nil {

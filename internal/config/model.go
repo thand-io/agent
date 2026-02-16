@@ -488,7 +488,8 @@ type PreflightRequest struct {
 	Version    string    `json:"version,omitempty"`
 	Commit     string    `json:"commit,omitempty"`
 	Identifier uuid.UUID `json:"identifier,omitempty"`
-	Endpoint   string    `json:"endpoint,omitempty"`
+	Endpoint   string    `json:"endpoint,omitempty"` // Login server endpoint
+	Origin     string    `json:"origin,omitempty"`   // Where the agent is running, used for logging and analytics
 }
 
 type PreflightResponse struct {
@@ -501,7 +502,8 @@ type RegistrationRequest struct {
 	Version     string                    `json:"version,omitempty"`
 	Commit      string                    `json:"commit,omitempty"`
 	Identifier  uuid.UUID                 `json:"identifier,omitempty"`
-	Endpoint    string                    `json:"endpoint,omitempty"`
+	Endpoint    string                    `json:"endpoint,omitempty"` // Login server endpoint
+	Origin      string                    `json:"origin,omitempty"`   // Where the agent is running, used for logging and analytics
 }
 
 type RegistrationResponse struct {
