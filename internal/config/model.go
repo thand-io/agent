@@ -488,6 +488,7 @@ type PreflightRequest struct {
 	Version    string    `json:"version,omitempty"`
 	Commit     string    `json:"commit,omitempty"`
 	Identifier uuid.UUID `json:"identifier,omitempty"`
+	Endpoint   string    `json:"endpoint,omitempty"`
 }
 
 type PreflightResponse struct {
@@ -500,6 +501,7 @@ type RegistrationRequest struct {
 	Version     string                    `json:"version,omitempty"`
 	Commit      string                    `json:"commit,omitempty"`
 	Identifier  uuid.UUID                 `json:"identifier,omitempty"`
+	Endpoint    string                    `json:"endpoint,omitempty"`
 }
 
 type RegistrationResponse struct {
@@ -516,6 +518,7 @@ type PostflightRequest struct {
 	Version    string    `json:"version,omitempty"`
 	Commit     string    `json:"commit,omitempty"`
 	Identifier uuid.UUID `json:"identifier,omitempty"`
+	Endpoint   string    `json:"endpoint,omitempty"`
 }
 
 type PostflightResponse struct {
