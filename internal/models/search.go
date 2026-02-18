@@ -11,9 +11,10 @@ import (
 )
 
 type SearchRequest struct {
-	Query string   `json:"query"`
-	Terms []string `json:"terms"`
-	Limit int      `json:"limit,omitempty"`
+	Query  string   `json:"query"`
+	Terms  []string `json:"terms"`
+	Limit  int      `json:"limit,omitempty"`
+	Offset int      `json:"offset,omitempty"`
 }
 
 func (sr *SearchRequest) IsEmpty() bool {

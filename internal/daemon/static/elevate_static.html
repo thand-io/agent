@@ -839,39 +839,63 @@
                  */
                 async loadTenants() {
                     if (!this.selectedProvider) return;
-                    
-                    this.loadingTenants = true;
-                    
-                    try {
-                        // Get a list of tenants for the selected provider
-                        const response = await fetch(`${this.apiBasePath}/provider/${encodeURIComponent(this.selectedProvider)}/tenants`);
-                        
-                        if (!response.ok) {
-                            // If the endpoint returns 404 or error, just skip tenant loading
-                            // Some providers may not support tenants
-                            console.log('No tenants available for this provider');
-                            this.tenants = {};
-                            return;
-                        }
-                        
-                        const data = await response.json();
-                        let tenantsData = data.tenants || {};
-                        // Normalize tenants: API may return an array, but the UI expects an object/map.
-                        if (Array.isArray(tenantsData)) {
-                            const tenantsMap = {};
-                            tenantsData.forEach((tenant, index) => {
-                                // Unwrap _source if present
-                                if (tenant._source) {
-                                    tenant = tenant._source;
-                                }
-                                // Prefer stable identifiers as keys; fall back to index if needed.
-                                const key = tenant.id || tenant.key || tenant.name || String(index);
-                                tenantsMap[key] = tenant;
-                            });
-                            tenantsData = tenantsMap;
-                        }
-                        this.tenants = tenantsData;
 
+                    this.loadingTenants = true;
+
+                    try {
+                        // Fetch all tenants with pagination
+                        const allTenants = [];
+                        let offset = 0;
+                        const limit = 100;
+                        let hasMore = true;
+
+                        while (hasMore) {
+                            const response = await fetch(
+                                `${this.apiBasePath}/provider/${encodeURIComponent(this.selectedProvider)}/tenants?limit=${limit}&offset=${offset}`
+                            );
+
+                            if (!response.ok) {
+                                // If the endpoint returns 404 or error, just skip tenant loading
+                                // Some providers may not support tenants
+                                console.log('No tenants available for this provider');
+                                break;
+                            }
+
+                            const data = await response.json();
+                            const tenants = data.tenants || [];
+
+                            if (tenants.length === 0) {
+                                break;
+                            }
+
+                            allTenants.push(...tenants);
+
+                            // Check if there are more results
+                            hasMore = data.has_more || false;
+                            offset += tenants.length;
+
+                            // Safety limit to prevent infinite loops
+                            if (offset > 10000) {
+                                console.warn('Reached safety limit of 10,000 tenants');
+                                break;
+                            }
+                        }
+
+                        // Normalize tenants: API returns an array, but the UI expects an object/map
+                        const tenantsMap = {};
+                        allTenants.forEach((tenant, index) => {
+                            // Unwrap _source if present
+                            if (tenant._source) {
+                                tenant = tenant._source;
+                            }
+                            // Prefer stable identifiers as keys; fall back to index if needed
+                            const key = tenant.id || tenant.key || tenant.name || String(index);
+                            tenantsMap[key] = tenant;
+                        });
+
+                        this.tenants = tenantsMap;
+
+                        console.log(`Loaded ${allTenants.length} tenants for provider ${this.selectedProvider}`);
                         this.preselectTenant();
                     } catch (error) {
                         console.error('Error fetching tenants:', error);

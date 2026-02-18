@@ -13,6 +13,8 @@ type ProviderTenantsResponse struct {
 	Version  string                         `json:"version"`
 	Provider string                         `json:"provider"`
 	Tenants  []SearchResult[ProviderTenant] `json:"tenants"`
+	HasMore  bool                           `json:"has_more"`
+	Total    int                            `json:"total,omitempty"`
 }
 
 type ProviderTenant struct {
@@ -69,45 +71,62 @@ func (p *BaseProvider) ListTenants(ctx context.Context, searchReq *SearchRequest
 		return nil, fmt.Errorf("provider has no tenants support")
 	}
 
-	// If no filters, return all tenants
-	if searchReq == nil || searchReq.IsEmpty() {
-		p.tenants.mu.RLock()
-		tenants := p.tenants.tenants
-		p.tenants.mu.RUnlock()
-		return ReturnSearchResults(tenants), nil
-	}
-
-	// Check if search index is ready
 	p.tenants.mu.RLock()
+	tenants := p.tenants.tenants
 	tenantsIndex := p.tenants.tenantsIndex
 	p.tenants.mu.RUnlock()
 
-	if tenantsIndex != nil {
+	var results []ProviderTenant
+
+	// If no filters, use all tenants
+	if searchReq == nil || searchReq.IsEmpty() {
+		results = tenants
+	} else if tenantsIndex != nil {
 		// Use Bleve search for better search capabilities
-		p.tenants.mu.RLock()
-		tenants := p.tenants.tenants
-		p.tenants.mu.RUnlock()
-		return BleveListSearch(ctx, tenantsIndex, func(a *search.DocumentMatch, b ProviderTenant) bool {
+		searchResults, err := BleveListSearch(ctx, tenantsIndex, func(a *search.DocumentMatch, b ProviderTenant) bool {
 			return strings.EqualFold(a.ID, b.Name)
 		}, tenants, searchReq)
-	}
-
-	// Fallback to simple substring filtering while index is being built
-	p.tenants.mu.RLock()
-	tenants := p.tenants.tenants
-	p.tenants.mu.RUnlock()
-
-	var filtered []ProviderTenant
-	filterText := strings.ToLower(strings.Join(searchReq.Terms, " "))
-
-	for _, tnt := range tenants {
-		// Check if any filter matches the tenant name or description
-		if strings.Contains(strings.ToLower(tnt.Name), filterText) {
-			filtered = append(filtered, tnt)
+		if err != nil {
+			return nil, err
+		}
+		// Extract the actual results from SearchResult
+		for _, sr := range searchResults {
+			results = append(results, sr.Result)
+		}
+	} else {
+		// Fallback to simple substring filtering while index is being built
+		filterText := strings.ToLower(strings.Join(searchReq.Terms, " "))
+		for _, tnt := range tenants {
+			if strings.Contains(strings.ToLower(tnt.Name), filterText) {
+				results = append(results, tnt)
+			}
 		}
 	}
 
-	return ReturnSearchResults(filtered), nil
+	// Apply offset and limit for pagination
+	offset := 0
+	if searchReq != nil && searchReq.Offset > 0 {
+		offset = searchReq.Offset
+	}
+
+	limit := len(results)
+	if searchReq != nil && searchReq.Limit > 0 {
+		limit = searchReq.Limit
+	}
+
+	// Apply pagination
+	start := offset
+	if start > len(results) {
+		start = len(results)
+	}
+
+	end := start + limit
+	if end > len(results) {
+		end = len(results)
+	}
+
+	paginatedResults := results[start:end]
+	return ReturnSearchResults(paginatedResults), nil
 }
 
 func (p *BaseProvider) SynchronizeTenants(

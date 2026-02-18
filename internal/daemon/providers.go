@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -321,8 +322,45 @@ func (s *Server) getProviderTenants(c *gin.Context) {
 
 	query := c.Query("q")
 
+	// Parse limit parameter, default to 100
+	limit := 100
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+			limit = parsedLimit
+		}
+	}
+
+	// Parse offset parameter, default to 0
+	offset := 0
+	if offsetStr := c.Query("offset"); offsetStr != "" {
+		if parsedOffset, err := strconv.Atoi(offsetStr); err == nil && parsedOffset >= 0 {
+			offset = parsedOffset
+		}
+	}
+
+	// First, get total count by fetching all matching tenants
+	totalSearchRequest := &models.SearchRequest{}
+	if len(query) > 0 {
+		totalSearchRequest.Terms = []string{query}
+		if !strings.HasSuffix(query, "*") {
+			totalSearchRequest.Query = query + "*"
+		} else {
+			totalSearchRequest.Query = query
+		}
+	}
+
+	allTenants, err := provider.ListTenants(context.Background(), totalSearchRequest)
+	if err != nil {
+		s.getErrorPage(c, http.StatusInternalServerError, "Failed to list tenants", err)
+		return
+	}
+
+	total := len(allTenants)
+
+	// Now get paginated results
 	searchRequest := &models.SearchRequest{
-		Limit: 10,
+		Limit:  limit,
+		Offset: offset,
 	}
 
 	if len(query) > 0 {
@@ -341,10 +379,14 @@ func (s *Server) getProviderTenants(c *gin.Context) {
 		return
 	}
 
+	hasMore := (offset + len(tenants)) < total
+
 	c.JSON(http.StatusOK, models.ProviderTenantsResponse{
 		Version:  "1.0",
 		Provider: providerName,
 		Tenants:  tenants,
+		HasMore:  hasMore,
+		Total:    total,
 	})
 }
 
