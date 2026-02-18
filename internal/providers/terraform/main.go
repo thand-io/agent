@@ -69,6 +69,20 @@ func (p *terraformProvider) Initialize(identifier string, provider models.Provid
 	return nil
 }
 
+// ValidateConfig validates the Terraform configuration without initialization
+func (p *terraformProvider) ValidateConfig(config *models.BasicConfig) error {
+	schema := &ConfigSchema{}
+	if err := schema.Unmarshal(config); err != nil {
+		return fmt.Errorf("failed to unmarshal Terraform config: %w", err)
+	}
+	return schema.Validate()
+}
+
+// Validate validates the Terraform provider configuration
+func (p *terraformProvider) Validate() error {
+	return p.ValidateConfig(p.GetConfig())
+}
+
 func init() {
 	providers.Register(TerraformProviderName, &terraformProvider{})
 }

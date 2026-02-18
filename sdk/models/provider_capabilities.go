@@ -1,40 +1,27 @@
 package models
 
 import (
-	awsInternal "github.com/thand-io/agent/internal/providers/aws"
-	azureInternal "github.com/thand-io/agent/internal/providers/azure"
-	gcpInternal "github.com/thand-io/agent/internal/providers/gcp"
-	emailInternal "github.com/thand-io/agent/internal/providers/email"
-	oktaInternal "github.com/thand-io/agent/internal/providers/okta"
-	kubernetesInternal "github.com/thand-io/agent/internal/providers/kubernetes"
-	cloudflareInternal "github.com/thand-io/agent/internal/providers/cloudflare"
-	githubInternal "github.com/thand-io/agent/internal/providers/github"
-	salesforceInternal "github.com/thand-io/agent/internal/providers/salesforce"
 	internal "github.com/thand-io/agent/internal/models"
 )
 
-var AwsCapabilities = awsInternal.AwsCapabilities
-var AzureCapabilities = azureInternal.AzureCapabilities
-var CloudflareCapabilities = cloudflareInternal.CloudflareCapabilities
-var EmailCapabilities = emailInternal.EmailCapabilities
-var GcpCapabilities = gcpInternal.GcpCapabilities
-var GithubCapabilities = githubInternal.GithubCapabilities
-var KubernetesCapabilities = kubernetesInternal.KubernetesCapabilities
-var OktaCapabilities = oktaInternal.OktaCapabilities
-var SalesforceCapabilities = salesforceInternal.SalesforceCapabilities
-
-var ProviderCapabilitiesMap = map[string]*ProviderCapabilities{
-	awsInternal.AwsProviderName:     AwsCapabilities,
-	azureInternal.AzureProviderName: AzureCapabilities,
-	cloudflareInternal.CloudflareProviderName: CloudflareCapabilities,
-	emailInternal.EmailProviderName:    EmailCapabilities,
-	gcpInternal.GcpProviderName:     GcpCapabilities,
-	githubInternal.GithubProviderName: GithubCapabilities,
-	kubernetesInternal.KubernetesProviderName: KubernetesCapabilities,
-	oktaInternal.OktaProviderName:   OktaCapabilities,
-	salesforceInternal.SalesforceProviderName: SalesforceCapabilities,
-}
+// Re-export provider capability functions from internal package
+// Provider capability types are already defined in provider.go
+// For provider-specific capabilities and validation, use sdk/providers package
 
 var GetCapabilityFromString = internal.GetCapabilityFromString
-
 var NewProviderCapabilities = internal.NewProviderCapabilities
+
+// Capability constants
+const (
+	ProviderCapabilityIdentities   = internal.ProviderCapabilityIdentities
+	ProviderCapabilityUsers        = internal.ProviderCapabilityUsers
+	ProviderCapabilityGroups       = internal.ProviderCapabilityGroups
+	ProviderCapabilityRoles        = internal.ProviderCapabilityRoles
+	ProviderCapabilityPermissions  = internal.ProviderCapabilityPermissions
+	ProviderCapabilityResources    = internal.ProviderCapabilityResources
+	ProviderCapabilityProvisioning = internal.ProviderCapabilityProvisioning
+	ProviderCapabilityAuthorizer   = internal.ProviderCapabilityAuthorizer
+	ProviderCapabilityNotifier     = internal.ProviderCapabilityNotifier
+	ProviderCapabilityWebhook      = internal.ProviderCapabilityWebhook
+	ProviderCapabilityTenants      = internal.ProviderCapabilityTenants
+)

@@ -53,6 +53,20 @@ func (p *cloudflareProvider) Initialize(identifier string, provider models.Provi
 	return nil
 }
 
+// ValidateConfig validates the Cloudflare configuration without initialization
+func (p *cloudflareProvider) ValidateConfig(config *models.BasicConfig) error {
+	schema := &ConfigSchema{}
+	if err := schema.Unmarshal(config); err != nil {
+		return fmt.Errorf("failed to unmarshal Cloudflare config: %w", err)
+	}
+	return schema.Validate()
+}
+
+// Validate validates the Cloudflare provider configuration
+func (p *cloudflareProvider) Validate() error {
+	return p.ValidateConfig(p.GetConfig())
+}
+
 // CreateCloudflareClient creates a Cloudflare API client from configuration
 func CreateCloudflareClient(cfConfig *models.BasicConfig) (*cloudflare.API, string, error) {
 	// Check for API token (recommended method)

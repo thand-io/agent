@@ -144,6 +144,20 @@ func (p *samlProvider) Initialize(identifier string, provider models.ProviderCon
 	return nil
 }
 
+// ValidateConfig validates the SAML configuration without initialization
+func (p *samlProvider) ValidateConfig(config *models.BasicConfig) error {
+	schema := &ConfigSchema{}
+	if err := schema.Unmarshal(config); err != nil {
+		return fmt.Errorf("failed to unmarshal SAML config: %w", err)
+	}
+	return schema.Validate()
+}
+
+// Validate validates the SAML provider configuration
+func (p *samlProvider) Validate() error {
+	return p.ValidateConfig(p.GetConfig())
+}
+
 func (p *samlProvider) AuthorizeSession(ctx context.Context, authRequest *models.AuthorizeUser) (*models.AuthorizeSessionResponse, error) {
 	if p.middleware == nil {
 		return nil, fmt.Errorf("SAML provider not initialized")

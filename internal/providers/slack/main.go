@@ -47,6 +47,20 @@ func (p *slackProvider) Initialize(identifier string, provider models.ProviderCo
 	return nil
 }
 
+// ValidateConfig validates the Slack configuration without initialization
+func (p *slackProvider) ValidateConfig(config *models.BasicConfig) error {
+	schema := &ConfigSchema{}
+	if err := schema.Unmarshal(config); err != nil {
+		return fmt.Errorf("failed to unmarshal Slack config: %w", err)
+	}
+	return schema.Validate()
+}
+
+// Validate validates the Slack provider configuration
+func (p *slackProvider) Validate() error {
+	return p.ValidateConfig(p.GetConfig())
+}
+
 type SlackNotificationRequest struct {
 	To     string       `json:"channel"`
 	Text   string       `json:"text,omitempty"`

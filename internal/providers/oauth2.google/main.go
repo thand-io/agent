@@ -64,6 +64,20 @@ func (p *oauth2Provider) Initialize(identifier string, provider models.ProviderC
 	return nil
 }
 
+// ValidateConfig validates the Google OAuth2 configuration without initialization
+func (p *oauth2Provider) ValidateConfig(config *models.BasicConfig) error {
+	schema := &ConfigSchema{}
+	if err := schema.Unmarshal(config); err != nil {
+		return fmt.Errorf("failed to unmarshal Google OAuth2 config: %w", err)
+	}
+	return schema.Validate()
+}
+
+// Validate validates the Google OAuth2 provider configuration
+func (p *oauth2Provider) Validate() error {
+	return p.ValidateConfig(p.GetConfig())
+}
+
 func (p *oauth2Provider) AuthorizeSession(ctx context.Context, authRequest *models.AuthorizeUser) (*models.AuthorizeSessionResponse, error) {
 
 	googleConfig := p.oauthConfig

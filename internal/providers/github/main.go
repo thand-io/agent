@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -99,6 +100,20 @@ func (p *githubProvider) Initialize(identifier string, provider models.ProviderC
 	}
 
 	return nil
+}
+
+// ValidateConfig validates the GitHub configuration without initialization
+func (p *githubProvider) ValidateConfig(config *models.BasicConfig) error {
+	schema := &ConfigSchema{}
+	if err := schema.Unmarshal(config); err != nil {
+		return fmt.Errorf("failed to unmarshal GitHub config: %w", err)
+	}
+	return schema.Validate()
+}
+
+// Validate validates the GitHub provider configuration
+func (p *githubProvider) Validate() error {
+	return p.ValidateConfig(p.GetConfig())
 }
 
 func init() {

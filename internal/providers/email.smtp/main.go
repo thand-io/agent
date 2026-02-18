@@ -78,6 +78,20 @@ func (p *emailSmtpProvider) Initialize(identifier string, provider models.Provid
 	return nil
 }
 
+// ValidateConfig validates the SMTP Email configuration without initialization
+func (p *emailSmtpProvider) ValidateConfig(config *models.BasicConfig) error {
+	schema := &ConfigSchema{}
+	if err := schema.Unmarshal(config); err != nil {
+		return fmt.Errorf("failed to unmarshal SMTP Email config: %w", err)
+	}
+	return schema.Validate()
+}
+
+// Validate validates the SMTP Email provider configuration
+func (p *emailSmtpProvider) Validate() error {
+	return p.ValidateConfig(p.GetConfig())
+}
+
 func (p *emailSmtpProvider) SendNotification(
 	ctx context.Context, notification models.NotificationRequest,
 ) error {

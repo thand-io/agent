@@ -95,6 +95,20 @@ func (p *gcpIAPProvider) Initialize(identifier string, provider models.ProviderC
 	return nil
 }
 
+// ValidateConfig validates the GCP IAP configuration without initialization
+func (p *gcpIAPProvider) ValidateConfig(config *models.BasicConfig) error {
+	schema := &ConfigSchema{}
+	if err := schema.Unmarshal(config); err != nil {
+		return fmt.Errorf("failed to unmarshal GCP IAP config: %w", err)
+	}
+	return schema.Validate()
+}
+
+// Validate validates the GCP IAP provider configuration
+func (p *gcpIAPProvider) Validate() error {
+	return p.ValidateConfig(p.GetConfig())
+}
+
 // AuthorizeSession is not applicable for IAP as authorization happens at the IAP layer
 func (p *gcpIAPProvider) AuthorizeSession(ctx context.Context, auth *models.AuthorizeUser) (*models.AuthorizeSessionResponse, error) {
 	return p.oauthProvider.AuthorizeSession(ctx, auth)
