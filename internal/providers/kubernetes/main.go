@@ -71,5 +71,5 @@ func (p *kubernetesProvider) getKubernetesConfig() (*rest.Config, error) {
 }
 
 func init() {
-	providers.Register(KubernetesProviderName, &kubernetesProvider{})
+	providers.Register(KubernetesProviderName, &kubernetesProvider{}, KubernetesCapabilities, &ConfigSchema{})
 }

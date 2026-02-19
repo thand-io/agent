@@ -105,5 +105,5 @@ func (p *oktaProvider) GetApiToken() string {
 }
 
 func init() {
-	providers.Register(OktaProviderName, &oktaProvider{})
+	providers.Register(OktaProviderName, &oktaProvider{}, OktaCapabilities, &ConfigSchema{})
 }

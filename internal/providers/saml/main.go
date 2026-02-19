@@ -460,5 +460,5 @@ func (p *samlProvider) parseSAMLConfig(config *models.BasicConfig) (*SAMLConfig,
 }
 
 func init() {
-	providers.Register(SamlProviderName, &samlProvider{})
+	providers.Register(SamlProviderName, &samlProvider{}, SamlCapabilities, &ConfigSchema{})
 }

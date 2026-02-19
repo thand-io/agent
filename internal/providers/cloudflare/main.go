@@ -109,5 +109,5 @@ type CloudflareConfigurationProvider struct {
 }
 
 func init() {
-	providers.Register(CloudflareProviderName, &cloudflareProvider{})
+	providers.Register(CloudflareProviderName, &cloudflareProvider{}, CloudflareCapabilities, &ConfigSchema{})
 }

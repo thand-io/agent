@@ -7,5 +7,11 @@ import (
 
 func init() {
 	// Register mock Azure provider to override the real one for all tests
-	coreProviders.Set(azure.AzureProviderName, azure.NewMockAzureProvider())
+	// Use Register() to properly set metadata including capabilities
+	coreProviders.Register(
+		azure.AzureProviderName,
+		azure.NewMockAzureProvider(),
+		azure.AzureCapabilities,
+		&azure.ConfigSchema{},
+	)
 }

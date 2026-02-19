@@ -85,5 +85,5 @@ func (p *gsuiteProvider) Initialize(identifier string, provider models.ProviderC
 }
 
 func init() {
-	providers.Register(GsuiteProviderName, &gsuiteProvider{})
+	providers.Register(GsuiteProviderName, &gsuiteProvider{}, GsuiteCapabilities, &ConfigSchema{})
 }

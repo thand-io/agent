@@ -185,5 +185,5 @@ type GcpConfigurationProvider struct {
 }
 
 func init() {
-	providers.Register(GcpProviderName, &gcpProvider{})
+	providers.Register(GcpProviderName, &gcpProvider{}, GcpCapabilities, &ConfigSchema{})
 }

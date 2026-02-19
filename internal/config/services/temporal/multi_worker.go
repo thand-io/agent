@@ -23,19 +23,19 @@ var _ worker.Worker = (*multiWorker)(nil)
 
 // --- WorkflowRegistry ---
 
-func (m *multiWorker) RegisterWorkflow(w interface{}) {
+func (m *multiWorker) RegisterWorkflow(w any) {
 	for _, wr := range m.workers {
 		wr.RegisterWorkflow(w)
 	}
 }
 
-func (m *multiWorker) RegisterWorkflowWithOptions(w interface{}, options workflow.RegisterOptions) {
+func (m *multiWorker) RegisterWorkflowWithOptions(w any, options workflow.RegisterOptions) {
 	for _, wr := range m.workers {
 		wr.RegisterWorkflowWithOptions(w, options)
 	}
 }
 
-func (m *multiWorker) RegisterDynamicWorkflow(w interface{}, options workflow.DynamicRegisterOptions) {
+func (m *multiWorker) RegisterDynamicWorkflow(w any, options workflow.DynamicRegisterOptions) {
 	for _, wr := range m.workers {
 		wr.RegisterDynamicWorkflow(w, options)
 	}
@@ -43,19 +43,19 @@ func (m *multiWorker) RegisterDynamicWorkflow(w interface{}, options workflow.Dy
 
 // --- ActivityRegistry ---
 
-func (m *multiWorker) RegisterActivity(a interface{}) {
+func (m *multiWorker) RegisterActivity(a any) {
 	for _, wr := range m.workers {
 		wr.RegisterActivity(a)
 	}
 }
 
-func (m *multiWorker) RegisterActivityWithOptions(a interface{}, options activity.RegisterOptions) {
+func (m *multiWorker) RegisterActivityWithOptions(a any, options activity.RegisterOptions) {
 	for _, wr := range m.workers {
 		wr.RegisterActivityWithOptions(a, options)
 	}
 }
 
-func (m *multiWorker) RegisterDynamicActivity(a interface{}, options activity.DynamicRegisterOptions) {
+func (m *multiWorker) RegisterDynamicActivity(a any, options activity.DynamicRegisterOptions) {
 	for _, wr := range m.workers {
 		wr.RegisterDynamicActivity(a, options)
 	}
@@ -73,6 +73,6 @@ func (m *multiWorker) RegisterNexusService(s *nexus.Service) {
 
 func (m *multiWorker) Start() error { return nil }
 
-func (m *multiWorker) Run(interruptCh <-chan interface{}) error { return nil }
+func (m *multiWorker) Run(interruptCh <-chan any) error { return nil }
 
 func (m *multiWorker) Stop() {}

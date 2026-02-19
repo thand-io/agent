@@ -357,5 +357,5 @@ func (p *gcpIAPProvider) GetAudience() string {
 }
 
 func init() {
-	providers.Register(GcpIAPProviderName, &gcpIAPProvider{})
+	providers.Register(GcpIAPProviderName, &gcpIAPProvider{}, GcpIAPCapabilities, &ConfigSchema{})
 }

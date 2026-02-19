@@ -135,5 +135,5 @@ func CreateSalesforceClient(salesForceConfig *models.BasicConfig) (*simpleforce.
 }
 
 func init() {
-	providers.Register(SalesforceProviderName, &salesForceProvider{})
+	providers.Register(SalesforceProviderName, &salesForceProvider{}, SalesforceCapabilities, &ConfigSchema{})
 }
