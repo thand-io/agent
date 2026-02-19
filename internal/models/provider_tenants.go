@@ -71,7 +71,7 @@ func (p *BaseProvider) ListTenants(ctx context.Context, searchRequest *SearchReq
 		return nil, fmt.Errorf("provider has no tenants support")
 	}
 
-	// If no filters, return all resources
+	// If no filters, return all tenants
 	if searchRequest == nil || searchRequest.IsEmpty() {
 		p.tenants.mu.RLock()
 		tenants := p.tenants.tenants
