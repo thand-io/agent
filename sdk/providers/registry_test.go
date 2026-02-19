@@ -153,6 +153,15 @@ func TestValidateConfig(t *testing.T) {
 		err := ValidateConfig("nil-config", nil)
 		assert.NoError(t, err)
 	})
+
+	t.Run("Validate Config for Provider with Nil Schema", func(t *testing.T) {
+		mockProvider := NewMockProvider("nil-schema", caps)
+		providers.Register("nil-schema", mockProvider, caps, nil)
+
+		config := &models.BasicConfig{"key": "value"}
+		err := ValidateConfig("nil-schema", config)
+		assert.NoError(t, err)
+	})
 }
 
 func TestListProviders(t *testing.T) {
@@ -421,11 +430,11 @@ func TestGetSchema(t *testing.T) {
 			if providerName == "no-schema-test" || providerName == "test-caps" ||
 				providerName == "no-caps" || providerName == "validate-test" ||
 				providerName == "validate-error" || providerName == "nil-config" ||
-				providerName == "exists-test" || providerName == "info-test" ||
-				providerName == "all-info-1" || providerName == "all-info-2" ||
-				providerName == "all-info-3" || providerName == "integration-test" ||
-				providerName == "list-test-1" || providerName == "list-test-2" ||
-				providerName == "list-test-3" {
+				providerName == "nil-schema" || providerName == "exists-test" ||
+				providerName == "info-test" || providerName == "all-info-1" ||
+				providerName == "all-info-2" || providerName == "all-info-3" ||
+				providerName == "integration-test" || providerName == "list-test-1" ||
+				providerName == "list-test-2" || providerName == "list-test-3" {
 				continue
 			}
 
