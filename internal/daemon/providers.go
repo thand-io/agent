@@ -330,35 +330,9 @@ func (s *Server) getProviderTenants(c *gin.Context) {
 		}
 	}
 
-	// Parse next_token parameter, default to empty
-	nextToken := ""
-	if nextTokenStr := c.Query("next_token"); nextTokenStr != "" {
-		nextToken = nextTokenStr
-	}
-
-	// First, get total count by fetching all matching tenants
-	totalSearchRequest := &models.SearchRequest{}
-	if len(query) > 0 {
-		totalSearchRequest.Terms = []string{query}
-		if !strings.HasSuffix(query, "*") {
-			totalSearchRequest.Query = query + "*"
-		} else {
-			totalSearchRequest.Query = query
-		}
-	}
-
-	allTenants, err := provider.ListTenants(context.Background(), totalSearchRequest)
-	if err != nil {
-		s.getErrorPage(c, http.StatusInternalServerError, "Failed to list tenants", err)
-		return
-	}
-
-	total := len(allTenants)
-
 	// Now get paginated results
 	searchRequest := &models.SearchRequest{
-		Limit:     limit,
-		NextToken: nextToken,
+		Limit: limit,
 	}
 
 	if len(query) > 0 {
@@ -370,21 +344,17 @@ func (s *Server) getProviderTenants(c *gin.Context) {
 		}
 	}
 
-	tenants, err := provider.ListTenants(context.Background(), searchRequest)
+	tenants, err := provider.ListTenants(c.Request.Context(), searchRequest)
 
 	if err != nil {
 		s.getErrorPage(c, http.StatusInternalServerError, "Failed to list tenants", err)
 		return
 	}
 
-	hasMore := (len(tenants)) < total
-
 	c.JSON(http.StatusOK, models.ProviderTenantsResponse{
 		Version:  "1.0",
 		Provider: providerName,
 		Tenants:  tenants,
-		HasMore:  hasMore,
-		Total:    total,
 	})
 }
 

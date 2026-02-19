@@ -10,12 +10,9 @@ import (
 )
 
 type ProviderTenantsResponse struct {
-	Version   string                         `json:"version"`
-	Provider  string                         `json:"provider"`
-	Tenants   []SearchResult[ProviderTenant] `json:"tenants"`
-	HasMore   bool                           `json:"has_more"`
-	NextToken string                         `json:"next_token,omitempty"`
-	Total     int                            `json:"total,omitempty"`
+	Version  string                         `json:"version"`
+	Provider string                         `json:"provider"`
+	Tenants  []SearchResult[ProviderTenant] `json:"tenants"`
 }
 
 type ProviderTenant struct {
@@ -63,7 +60,7 @@ func (p *BaseProvider) GetTenant(ctx context.Context, tenant string) (*ProviderT
 	return nil, fmt.Errorf("tenant not found")
 }
 
-func (p *BaseProvider) ListTenants(ctx context.Context, searchReq *SearchRequest) ([]SearchResult[ProviderTenant], error) {
+func (p *BaseProvider) ListTenants(ctx context.Context, searchRequest *SearchRequest) ([]SearchResult[ProviderTenant], error) {
 
 	if p.tenants == nil || !p.HasCapability(
 		ProviderCapabilityTenants,
@@ -72,42 +69,42 @@ func (p *BaseProvider) ListTenants(ctx context.Context, searchReq *SearchRequest
 		return nil, fmt.Errorf("provider has no tenants support")
 	}
 
+	// If no filters, return all resources
+	if searchRequest == nil || searchRequest.IsEmpty() {
+		p.tenants.mu.RLock()
+		tenants := p.tenants.tenants
+		p.tenants.mu.RUnlock()
+		return ReturnSearchResults(tenants), nil
+	}
+
+	// Check if search index is ready
 	p.tenants.mu.RLock()
-	tenants := p.tenants.tenants
 	tenantsIndex := p.tenants.tenantsIndex
+	tenants := p.tenants.tenants
 	p.tenants.mu.RUnlock()
 
-	var results []ProviderTenant
-
-	// If no filters, use all tenants
-	if searchReq == nil || searchReq.IsEmpty() {
-		results = tenants
-	} else if tenantsIndex != nil {
+	if tenantsIndex != nil {
 		// Use Bleve search for better search capabilities
-		searchResults, err := BleveListSearch(ctx, tenantsIndex, func(a *search.DocumentMatch, b ProviderTenant) bool {
-			return strings.EqualFold(a.ID, b.Name)
-		}, tenants, searchReq)
-		if err != nil {
-			return nil, err
-		}
-		// Extract the actual results from SearchResult
-		for _, sr := range searchResults {
-			results = append(results, sr.Result)
-		}
-	} else {
-		// Fallback to simple substring filtering while index is being built
-		filterText := strings.ToLower(strings.Join(searchReq.Terms, " "))
-		for _, tnt := range tenants {
-			if strings.Contains(strings.ToLower(tnt.Name), filterText) {
-				results = append(results, tnt)
-				if len(results) >= searchReq.GetLimit() {
-					break
-				}
+		return BleveListSearch(ctx, tenantsIndex, func(a *search.DocumentMatch, b ProviderTenant) bool {
+			return strings.EqualFold(a.ID, b.ID)
+		}, tenants, searchRequest)
+	}
+
+	// Fallback to simple substring filtering while index is being built
+	var filtered []ProviderTenant
+	filterText := strings.ToLower(strings.Join(searchRequest.Terms, " "))
+
+	for _, tenant := range tenants {
+		// Check if any filter matches the tenant name
+		if strings.Contains(strings.ToLower(tenant.Name), filterText) {
+			filtered = append(filtered, tenant)
+			if len(filtered) >= searchRequest.GetLimit() {
+				break
 			}
 		}
 	}
 
-	return ReturnSearchResults(results), nil
+	return ReturnSearchResults(filtered), nil
 }
 
 func (p *BaseProvider) SynchronizeTenants(
