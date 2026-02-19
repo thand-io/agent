@@ -11,6 +11,7 @@
                 <p>Choose your elevation method to proceed with privilege escalation.</p>
             </div>
             <div class="elevate-methods">
+                {{if .Config.Server.Capabilities.Elevations.Static.Enabled}}
                 <div class="method-option">
                     <a href="/elevate/static" class="method-button" 
                        @mouseenter="description = staticDesc" 
@@ -29,8 +30,9 @@
                         </div>
                     </a>
                 </div>
+                {{end}}
 
-                {{if .Config.Services.HasLargeLanguageModel}}
+                {{if and .Config.Services.HasLargeLanguageModel .Config.Server.Capabilities.Elevations.LargeLanguageModel.Enabled}}
                 <div class="method-option">
                     <a href="/elevate/llm" class="method-button"
                        @mouseenter="description = aiDesc" 
@@ -55,6 +57,7 @@
                 </div>
                 {{end}}
 
+                {{if .Config.Server.Capabilities.Elevations.Dynamic.Enabled}}
                 <div class="method-option">
                     <a href="/elevate/dynamic" class="method-button"
                        @mouseenter="description = dynamicDesc" 
@@ -69,6 +72,7 @@
                         </div>
                     </a>
                 </div>
+                {{end}}
             </div>
 
             <div class="description-container">

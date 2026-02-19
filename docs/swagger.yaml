@@ -139,6 +139,8 @@ definitions:
     type: object
   daemon.SimpleServer:
     properties:
+      capabilities:
+        $ref: '#/definitions/models.CapabilitiesConfig'
       health:
         $ref: '#/definitions/daemon.SimpleHealth'
       host:
@@ -188,12 +190,18 @@ definitions:
     properties:
       commit:
         type: string
+      endpoint:
+        description: Login server endpoint
+        type: string
       environment:
         $ref: '#/definitions/github_com_thand-io_agent_internal_models.EnvironmentConfig'
       identifier:
         type: string
       mode:
         $ref: '#/definitions/github_com_thand-io_agent_internal_config.Mode'
+      origin:
+        description: Where the agent is running, used for logging and analytics
+        type: string
       version:
         type: string
     type: object
@@ -214,6 +222,44 @@ definitions:
     type: object
   github_com_thand-io_agent_internal_models.BasicConfig:
     additionalProperties: {}
+    type: object
+  github_com_thand-io_agent_internal_models.ElevateLLMRequest:
+    properties:
+      reason:
+        type: string
+    type: object
+  github_com_thand-io_agent_internal_models.ElevateRequest:
+    properties:
+      authenticator:
+        description: Which provider to use for authentication
+        type: string
+      duration:
+        description: Duration in ISO 8601 format
+        type: string
+      identities:
+        description: Optional identities to elevate, if empty the requesting user
+          is used
+        items:
+          type: string
+        type: array
+      providers:
+        description: A role can be applied to multiple providers
+        items:
+          type: string
+        type: array
+      reason:
+        type: string
+      role:
+        $ref: '#/definitions/github_com_thand-io_agent_internal_models.Role'
+      session:
+        $ref: '#/definitions/github_com_thand-io_agent_internal_models.LocalSession'
+      tenants:
+        description: Optional tenant IDs for multi-account providers
+        items:
+          type: string
+        type: array
+      workflow:
+        type: string
     type: object
   github_com_thand-io_agent_internal_models.EnvironmentConfig:
     properties:
@@ -448,6 +494,8 @@ definitions:
         type: object
       name:
         type: string
+      tenant:
+        type: string
       type:
         type: string
     type: object
@@ -459,13 +507,15 @@ definitions:
         type: string
       enabled:
         type: boolean
-      id:
+      identifier:
         type: string
       name:
         type: string
       provider:
         description: e.g. aws, gcp, azure
         type: string
+      version:
+        $ref: '#/definitions/version.Version'
     type: object
   github_com_thand-io_agent_internal_models.ProviderRole:
     properties:
@@ -474,6 +524,8 @@ definitions:
       id:
         type: string
       name:
+        type: string
+      tenant:
         type: string
       title:
         type: string
@@ -496,7 +548,18 @@ definitions:
           type: object
         type: array
       version:
-        type: string
+        $ref: '#/definitions/version.Version'
+    type: object
+  github_com_thand-io_agent_internal_models.ResponseMeta:
+    properties:
+      page:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+      total_pages:
+        type: integer
     type: object
   github_com_thand-io_agent_internal_models.Role:
     properties:
@@ -519,6 +582,7 @@ definitions:
         description: By default enable the role
         type: boolean
       identifier:
+        description: To be set by the system
         type: string
       inherits:
         description: roles to inherit from or provider specific roles/policies etc
@@ -568,12 +632,90 @@ definitions:
         maxItems: 500
         type: array
     type: object
+  github_com_thand-io_agent_internal_models.RoleResponse:
+    properties:
+      authenticators:
+        description: All the auth providers that the role can use. If empty then any
+          provider can be used
+        items:
+          type: string
+        type: array
+      composite:
+        default: false
+        description: Whether this role is a composite role (i.e., aggregates other
+          roles)
+        type: boolean
+      description:
+        maxLength: 500
+        type: string
+      enabled:
+        default: true
+        description: By default enable the role
+        type: boolean
+      identifier:
+        description: To be set by the system
+        type: string
+      inherits:
+        description: roles to inherit from or provider specific roles/policies etc
+        items:
+          type: string
+        maxItems: 50
+        type: array
+      name:
+        maxLength: 100
+        minLength: 1
+        type: string
+      permissions:
+        allOf:
+        - $ref: '#/definitions/github_com_thand-io_agent_internal_models.RolePermissions'
+        description: CSP-agnostic permission statements
+      providers:
+        description: providers that can assign this role
+        items:
+          type: string
+        maxItems: 5
+        type: array
+      scopes:
+        allOf:
+        - $ref: '#/definitions/github_com_thand-io_agent_internal_models.RoleScopes'
+        description: scope of who can be assigned this role
+      version:
+        $ref: '#/definitions/version.Version'
+      workflows:
+        description: The workflows to execute
+        items:
+          type: string
+        maxItems: 5
+        type: array
+    required:
+    - name
+    type: object
   github_com_thand-io_agent_internal_models.RoleScopes:
     properties:
       allow:
         $ref: '#/definitions/models.ScopeIdentities'
       deny:
         $ref: '#/definitions/models.ScopeIdentities'
+    type: object
+  github_com_thand-io_agent_internal_models.RolesResponse:
+    properties:
+      meta:
+        $ref: '#/definitions/github_com_thand-io_agent_internal_models.ResponseMeta'
+      roles:
+        items:
+          properties:
+            _id:
+              type: string
+            _reason:
+              type: string
+            _score:
+              type: number
+            _source:
+              $ref: '#/definitions/github_com_thand-io_agent_internal_models.RoleResponse'
+          type: object
+        type: array
+      version:
+        $ref: '#/definitions/version.Version'
     type: object
   github_com_thand-io_agent_internal_models.ServicesConfig:
     properties:
@@ -679,6 +821,9 @@ definitions:
         default: true
         description: By default enable the workflow
         type: boolean
+      identifier:
+        description: To be set by the system
+        type: string
       name:
         maxLength: 100
         minLength: 1
@@ -738,6 +883,39 @@ definitions:
         type: string
       user:
         type: string
+    type: object
+  github_com_thand-io_agent_internal_models.WorkflowResponse:
+    properties:
+      description:
+        type: string
+      enabled:
+        type: boolean
+      identifier:
+        type: string
+      name:
+        type: string
+      version:
+        $ref: '#/definitions/version.Version'
+    type: object
+  github_com_thand-io_agent_internal_models.WorkflowsResponse:
+    properties:
+      meta:
+        $ref: '#/definitions/github_com_thand-io_agent_internal_models.ResponseMeta'
+      version:
+        $ref: '#/definitions/version.Version'
+      workflows:
+        items:
+          properties:
+            _id:
+              type: string
+            _reason:
+              type: string
+            _score:
+              type: number
+            _source:
+              $ref: '#/definitions/github_com_thand-io_agent_internal_models.WorkflowResponse'
+          type: object
+        type: array
     type: object
   model.AuthenticationPolicy:
     properties:
@@ -1251,43 +1429,25 @@ definitions:
       enabled:
         type: boolean
     type: object
-  models.ElevateLLMRequest:
+  models.CapabilitiesConfig:
     properties:
-      reason:
-        type: string
+      elevations:
+        $ref: '#/definitions/models.ElevationsConfig'
     type: object
-  models.ElevateRequest:
+  models.DynamicElevationsConfig:
     properties:
-      authenticator:
-        description: Which provider to use for authentication
-        type: string
-      duration:
-        description: Duration in ISO 8601 format
-        type: string
-      identities:
-        description: Optional identities to elevate, if empty the requesting user
-          is used
-        items:
-          type: string
-        type: array
-      providers:
-        description: A role can be applied to multiple providers
-        items:
-          type: string
-        type: array
-      reason:
-        type: string
-      role:
-        $ref: '#/definitions/github_com_thand-io_agent_internal_models.Role'
-      session:
-        $ref: '#/definitions/github_com_thand-io_agent_internal_models.LocalSession'
-      tenants:
-        description: Optional tenant IDs for multi-account providers
-        items:
-          type: string
-        type: array
-      workflow:
-        type: string
+      enabled:
+        default: true
+        type: boolean
+    type: object
+  models.ElevationsConfig:
+    properties:
+      dynamic:
+        $ref: '#/definitions/models.DynamicElevationsConfig'
+      llm:
+        $ref: '#/definitions/models.LargeLanguageModelElevationsConfig'
+      static:
+        $ref: '#/definitions/models.StaticElevationsConfig'
     type: object
   models.EnvironmentPlatform:
     enum:
@@ -1369,6 +1529,12 @@ definitions:
         - gemini
         - anthropic
         type: string
+    type: object
+  models.LargeLanguageModelElevationsConfig:
+    properties:
+      enabled:
+        default: true
+        type: boolean
     type: object
   models.MetricsInfo:
     properties:
@@ -1464,7 +1630,7 @@ definitions:
           type: object
         type: array
       version:
-        type: string
+        $ref: '#/definitions/version.Version'
     type: object
   models.ProviderRolesResponse:
     properties:
@@ -1545,63 +1711,6 @@ definitions:
       synchronizable:
         type: boolean
     type: object
-  models.RoleResponse:
-    properties:
-      authenticators:
-        description: All the auth providers that the role can use. If empty then any
-          provider can be used
-        items:
-          type: string
-        type: array
-      composite:
-        default: false
-        description: Whether this role is a composite role (i.e., aggregates other
-          roles)
-        type: boolean
-      description:
-        maxLength: 500
-        type: string
-      enabled:
-        default: true
-        description: By default enable the role
-        type: boolean
-      identifier:
-        type: string
-      inherits:
-        description: roles to inherit from or provider specific roles/policies etc
-        items:
-          type: string
-        maxItems: 50
-        type: array
-      name:
-        maxLength: 100
-        minLength: 1
-        type: string
-      permissions:
-        allOf:
-        - $ref: '#/definitions/github_com_thand-io_agent_internal_models.RolePermissions'
-        description: CSP-agnostic permission statements
-      providers:
-        description: providers that can assign this role
-        items:
-          type: string
-        maxItems: 5
-        type: array
-      scopes:
-        allOf:
-        - $ref: '#/definitions/github_com_thand-io_agent_internal_models.RoleScopes'
-        description: scope of who can be assigned this role
-      version:
-        $ref: '#/definitions/version.Version'
-      workflows:
-        description: The workflows to execute
-        items:
-          type: string
-        maxItems: 5
-        type: array
-    required:
-    - name
-    type: object
   models.RolesConfiguration:
     properties:
       enabled:
@@ -1613,15 +1722,6 @@ definitions:
         type: integer
       synchronizable:
         type: boolean
-    type: object
-  models.RolesResponse:
-    properties:
-      roles:
-        additionalProperties:
-          $ref: '#/definitions/models.RoleResponse'
-        type: object
-      version:
-        type: string
     type: object
   models.ScopeIdentities:
     properties:
@@ -1727,6 +1827,12 @@ definitions:
         maxItems: 100
         type: array
     type: object
+  models.StaticElevationsConfig:
+    properties:
+      enabled:
+        default: true
+        type: boolean
+    type: object
   models.TenantsConfiguration:
     properties:
       enabled:
@@ -1764,24 +1870,6 @@ definitions:
         allOf:
         - $ref: '#/definitions/github_com_thand-io_agent_internal_models.User'
         description: The authenticated user
-    type: object
-  models.WorkflowResponse:
-    properties:
-      description:
-        type: string
-      enabled:
-        type: boolean
-      name:
-        type: string
-    type: object
-  models.WorkflowsResponse:
-    properties:
-      version:
-        type: string
-      workflows:
-        additionalProperties:
-          $ref: '#/definitions/models.WorkflowResponse'
-        type: object
     type: object
   version.Version:
     type: object
@@ -2059,7 +2147,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/models.ElevateRequest'
+          $ref: '#/definitions/github_com_thand-io_agent_internal_models.ElevateRequest'
       produces:
       - application/json
       responses:
@@ -2113,7 +2201,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/models.ElevateLLMRequest'
+          $ref: '#/definitions/github_com_thand-io_agent_internal_models.ElevateLLMRequest'
       produces:
       - application/json
       responses:
@@ -2783,6 +2871,10 @@ paths:
         in: query
         name: q
         type: string
+      - description: 'Maximum number of results to return (default: 100)'
+        in: query
+        name: limit
+        type: integer
       produces:
       - application/json
       responses:
@@ -2797,6 +2889,11 @@ paths:
             type: object
         "500":
           description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+        "501":
+          description: Provider does not implement tenants
           schema:
             additionalProperties: true
             type: object
@@ -2941,7 +3038,7 @@ paths:
         "200":
           description: List of roles
           schema:
-            $ref: '#/definitions/models.RolesResponse'
+            $ref: '#/definitions/github_com_thand-io_agent_internal_models.RolesResponse'
         "401":
           description: Unauthorized
           schema:
@@ -3269,7 +3366,7 @@ paths:
         "200":
           description: List of workflows
           schema:
-            $ref: '#/definitions/models.WorkflowsResponse'
+            $ref: '#/definitions/github_com_thand-io_agent_internal_models.WorkflowsResponse'
         "401":
           description: Unauthorized
           schema:

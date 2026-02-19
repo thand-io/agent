@@ -17,8 +17,9 @@ type SimpleServer struct {
 	Host string
 	Port int
 
-	Health  SimpleHealth
-	Metrics SimpleMetrics
+	Health       SimpleHealth
+	Metrics      SimpleMetrics
+	Capabilities models.CapabilitiesConfig
 }
 
 type SimpleHealth struct {

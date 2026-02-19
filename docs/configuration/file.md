@@ -133,6 +133,34 @@ Settings for the Thand server when running in server mode.
 | `server.security.cors.allow_credentials` | boolean | `false` | Allow credentials |
 | `server.security.cors.max_age` | integer | `86400` | CORS preflight cache duration (seconds) |
 
+### Capabilities
+
+Feature toggles that control which elevation modes are available on this server. All three modes are enabled by default and can be disabled independently via config or environment variable.
+
+#### Elevations
+
+| Option | Type | Default | Env var | Description |
+|--------|------|---------|---------|-------------|
+| `server.capabilities.elevations.static.enabled` | boolean | `true` | `THAND_SERVER_CAPABILITIES_ELEVATIONS_STATIC_ENABLED` | Enable static (pre-defined role) elevation requests |
+| `server.capabilities.elevations.dynamic.enabled` | boolean | `true` | `THAND_SERVER_CAPABILITIES_ELEVATIONS_DYNAMIC_ENABLED` | Enable dynamic (runtime-defined role) elevation requests |
+| `server.capabilities.elevations.llm.enabled` | boolean | `true` | `THAND_SERVER_CAPABILITIES_ELEVATIONS_LLM_ENABLED` | Enable LLM-assisted elevation requests |
+
+When an elevation mode is disabled:
+- The corresponding API endpoint returns `403 Forbidden`
+- The option is hidden in the web UI
+
+```yaml
+server:
+  capabilities:
+    elevations:
+      static:
+        enabled: true
+      dynamic:
+        enabled: false  # disable dynamic elevation
+      llm:
+        enabled: true
+```
+
 ---
 
 ## Login Server Configuration
