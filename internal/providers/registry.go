@@ -42,18 +42,6 @@ func Register(
 	}
 }
 
-// Set replaces a provider in the registry (useful for testing).
-// Note: Set does not update metadata registry since providers may not be initialized yet.
-// For proper registration with metadata, use Register() instead.
-func Set(name string, provider models.Provider) {
-	name = strings.ToLower(name)
-	registryMutex.Lock()
-	defer registryMutex.Unlock()
-	registry[name] = provider
-	// Do not attempt to extract metadata from potentially uninitialized providers
-	// Metadata should be set explicitly via Register() for production use
-}
-
 // Get returns a provider from the registry.
 func Get(name string) (models.Provider, error) {
 	name = strings.ToLower(name)

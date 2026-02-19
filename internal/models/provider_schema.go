@@ -16,10 +16,12 @@ type ConfigSchema interface {
 // BaseConfigSchema provides common unmarshal functionality
 type BaseConfigSchema struct{}
 
-// Unmarshal converts BasicConfig to a typed struct using mapstructure
+// Unmarshal converts BasicConfig to a typed struct using mapstructure.
+// A nil config is treated as an empty configuration (all fields take their zero/default values).
 func (b *BaseConfigSchema) Unmarshal(config *BasicConfig, target any) error {
-	if config == nil {
-		return fmt.Errorf("config cannot be nil")
+	configMap := map[string]any{}
+	if config != nil {
+		configMap = config.AsMap()
 	}
 
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
@@ -31,7 +33,7 @@ func (b *BaseConfigSchema) Unmarshal(config *BasicConfig, target any) error {
 		return fmt.Errorf("failed to create decoder: %w", err)
 	}
 
-	if err := decoder.Decode(config.AsMap()); err != nil {
+	if err := decoder.Decode(configMap); err != nil {
 		return fmt.Errorf("failed to decode config: %w", err)
 	}
 

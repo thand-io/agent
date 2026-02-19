@@ -16,12 +16,29 @@ func GetCapabilities(providerName string) (*models.ProviderCapabilities, error) 
 // ValidateConfig validates a provider's configuration without initialization
 // This uses the provider's schema validation
 func ValidateConfig(providerName string, config *models.BasicConfig) error {
-	provider, err := providers.Get(providerName)
+
+	// Validate provider config against schema
+	schemaRaw, err := providers.GetSchema(providerName)
 	if err != nil {
-		return fmt.Errorf("provider not found: %s", providerName)
+		return fmt.Errorf("failed to get schema for provider '%s': %w", providerName, err)
 	}
 
-	return provider.ValidateConfig(config)
+	// Type-assert to ConfigSchema interface and unmarshal resolved config into it
+	cs, ok := schemaRaw.(models.ConfigSchema)
+	if !ok {
+		return fmt.Errorf("schema for provider '%s' does not implement ConfigSchema interface", providerName)
+	}
+
+	if err := cs.Unmarshal(config); err != nil {
+		return fmt.Errorf("failed to unmarshal config for provider '%s': %w", providerName, err)
+	}
+
+	// Validate the resolved config using common.GetValidator
+	if err := cs.Validate(); err != nil {
+		return fmt.Errorf("config validation failed for provider '%s': %w", providerName, err)
+	}
+
+	return nil
 }
 
 // ListProviders returns a list of all registered provider names
