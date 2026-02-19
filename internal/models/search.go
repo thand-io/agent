@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/blevesearch/bleve/v2"
@@ -13,7 +14,16 @@ import (
 type SearchRequest struct {
 	Query string   `json:"query"`
 	Terms []string `json:"terms"`
-	Limit int      `json:"limit,omitempty"`
+	Limit int      `json:"limit,omitempty" default:"100"`
+}
+
+func (sr *SearchRequest) GetLimit() int {
+	if sr.Limit < 0 { // Enforce a minimum limit to prevent abuse
+		return 100
+	} else if sr.Limit > 500 { // Enforce a maximum limit to prevent abuse
+		return 500
+	}
+	return sr.Limit
 }
 
 func (sr *SearchRequest) IsEmpty() bool {
@@ -66,21 +76,32 @@ func BleveListSearch[T any](
 	var queries []query.Query
 
 	if len(searchReq.Terms) > 0 {
-		// Build a conjunction query from the terms
+		// Build a conjunction query from the terms; each term is a disjunction
+		// of MatchQuery (full-word) | PrefixQuery (prefix) | WildcardQuery
+		// (*term* — substring) so that "prod" matches "Production".
 		termQueries := []query.Query{}
 		for _, term := range searchReq.Terms {
-			termQueries = append(termQueries, bleve.NewMatchQuery(term))
+			lower := strings.ToLower(term)
+			termMatch := bleve.NewDisjunctionQuery(
+				bleve.NewMatchQuery(lower),
+				bleve.NewPrefixQuery(lower),
+				bleve.NewWildcardQuery("*"+lower+"*"),
+			)
+			termQueries = append(termQueries, termMatch)
 		}
 		// All terms must be present (conjunction)
 		queries = append(queries, bleve.NewConjunctionQuery(termQueries...))
 	}
 
 	if len(searchReq.Query) > 0 {
-		// Use a match query to search across all fields generically
-		// This avoids issues with special characters in query string parsing
-		matchQuery := bleve.NewMatchQuery(searchReq.Query)
-		// Don't set a specific field - this makes it search across all fields
-		queries = append(queries, matchQuery)
+		// Disjunction of match / prefix / wildcard for the free-text query
+		// so that partial input like "prod" hits "Production Account".
+		lower := strings.ToLower(searchReq.Query)
+		queries = append(queries, bleve.NewDisjunctionQuery(
+			bleve.NewMatchQuery(lower),
+			bleve.NewPrefixQuery(lower),
+			bleve.NewWildcardQuery("*"+lower+"*"),
+		))
 	}
 
 	if len(queries) == 0 {
@@ -89,14 +110,13 @@ func BleveListSearch[T any](
 		queryBuilder = bleve.NewDisjunctionQuery(queries...)
 	}
 
-	limitResults := 10
-
-	if searchReq.Limit > 0 {
-		limitResults = searchReq.Limit
-	}
-
 	searchRequest := bleve.NewSearchRequest(queryBuilder)
-	searchRequest.Size = limitResults // Return all matches
+
+	if searchReq.GetLimit() > 0 {
+		searchRequest.Size = searchReq.GetLimit()
+	} else {
+		searchRequest.Size = math.MaxInt32 // 0 means unlimited
+	}
 
 	searchResults, err := searchIndex.Search(searchRequest)
 	if err != nil {

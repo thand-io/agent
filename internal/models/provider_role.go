@@ -100,11 +100,15 @@ func (p *BaseProvider) ListRoles(
 	// Fallback to simple substring filtering while index is being built
 	var filtered []ProviderRole
 	filterText := strings.ToLower(strings.Join(searchRequest.Terms, " "))
+	limit := searchRequest.GetLimit()
 
 	for _, role := range roles {
 		// Check if any filter matches the role name
 		if strings.Contains(strings.ToLower(role.Name), filterText) {
 			filtered = append(filtered, role)
+			if limit > 0 && len(filtered) >= limit {
+				break
+			}
 		}
 	}
 

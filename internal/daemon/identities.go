@@ -50,12 +50,7 @@ func (s *Server) getIdentities(c *gin.Context) {
 	}
 
 	if len(query) > 0 {
-		searchRequest.Terms = []string{query}
-		if !strings.HasSuffix(query, "*") {
-			searchRequest.Query = query + "*"
-		} else {
-			searchRequest.Query = query
-		}
+		searchRequest.Query = query
 	}
 
 	identityProvidersCount := s.Config.GetProvidersByCapabilityWithUser(

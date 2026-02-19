@@ -78,12 +78,16 @@ func (p *BaseProvider) ListPermissions(ctx context.Context, searchReq *SearchReq
 	// Fallback to simple substring filtering while index is being built
 	var filtered []ProviderPermission
 	filterText := strings.ToLower(strings.Join(searchReq.Terms, " "))
+	limit := searchReq.GetLimit()
 
 	for _, perm := range permissions {
 		// Check if any filter matches the permission name or description
 		if strings.Contains(strings.ToLower(perm.Name), filterText) ||
 			strings.Contains(strings.ToLower(perm.Description), filterText) {
 			filtered = append(filtered, perm)
+			if limit > 0 && len(filtered) >= limit {
+				break
+			}
 		}
 	}
 

@@ -57,19 +57,20 @@
                         </template>
                     </select>
 
-                    <!-- Tenant Select -->
-                    <select name="tenants" 
-                            x-model="selectedTenant" 
-                            x-show="tenants && Object.keys(tenants).length > 0"
-                            class="form-select" 
-                            :disabled="!selectedProvider || loadingTenants" 
-                            :style="{ opacity: (!selectedProvider || loadingTenants) ? '0.5' : '1' }">
-                        <option value="" x-show="loadingTenants">Loading tenants...</option>
-                        <option value="" x-show="!loadingTenants">Select a Tenant (optional)</option>
-                        <template x-for="(tenant, key) in tenants" :key="key">
-                            <option :value="key" x-text="tenant.name || key"></option>
-                        </template>
-                    </select>
+                    <!-- Tenant Select with Choices.js -->
+                    <div class="choice-wrapper choice-wrapper-single" x-show="selectedProvider">
+                        <select name="tenants" 
+                                id="elevate-tenants"
+                                data-placeholder="Select a Tenant (optional)">
+                            <!-- Options populated dynamically via Choices.js -->
+                        </select>
+                        <div class="choice-help" x-show="selectedProvider && loadingTenants">
+                            Loading tenants...
+                        </div>
+                        <div class="choice-help" x-show="selectedProvider && !loadingTenants && Object.keys(tenants).length === 0">
+                            No tenants available for this provider.
+                        </div>
+                    </div>
 
                     <!-- Role Select with Choices.js -->
                     <div class="choice-wrapper choice-wrapper-single">
@@ -317,6 +318,7 @@
         // Choices.js instances (kept outside Alpine to avoid reactivity issues)
         let identityChoicesInstance = null;
         let roleChoicesInstance = null;
+        let tenantChoicesInstance = null;
 
         /**
          * Initialize the identity and role selectors using Choices.js
@@ -329,7 +331,8 @@
                 removeItemButton: true,
                 searchEnabled: true,
                 placeholder: true,
-                placeholderValue: 'Search identities...',
+                placeholderValue: 'Select identities to assign the role to',
+                searchPlaceholderValue: 'Search identities...',
                 noResultsText: 'No identities found',
                 shouldSort: false,
                 searchResultLimit: 50,
@@ -342,6 +345,7 @@
                 searchEnabled: true,
                 placeholder: true,
                 placeholderValue: 'Select a Role',
+                searchPlaceholderValue: 'Search roles...',
                 noResultsText: 'No roles found',
                 shouldSort: false,
                 searchResultLimit: 1000,
@@ -352,7 +356,58 @@
             });
 
             // Disable roles selector initially (no provider selected)
-            roleChoicesInstance.setChoices([{ value: '', label: 'Select a provider first', disabled: true }]);
+            roleChoicesInstance.setChoices([{ value: '', label: 'Select a provider first', disabled: true, selected: true }]);
+
+            // Initialize Choices.js for tenant select
+            tenantChoicesInstance = new Choices('#elevate-tenants', {
+                searchEnabled: true,
+                placeholder: true,
+                placeholderValue: 'Select a Tenant (optional)',
+                searchPlaceholderValue: 'Search tenants...',
+                noResultsText: 'No tenants found',
+                shouldSort: false,
+                searchResultLimit: 1000,
+                searchFields: ['label', 'value'],
+                // Disable client-side search - we handle it via backend
+                searchFloor: 0,
+                searchChoices: false,
+            });
+
+            // Disable tenant selector initially (no provider selected)
+            tenantChoicesInstance.setChoices([{ value: '', label: 'Select a provider first', disabled: true, selected: true }]);
+
+            // Set up tenant search and selection listeners
+            const tenantElement = document.getElementById('elevate-tenants');
+            let tenantSearchTimeout;
+
+            if (tenantElement) {
+                // Listen for search events from Choices.js
+                tenantElement.addEventListener('search', function(e) {
+                    clearTimeout(tenantSearchTimeout);
+                    const query = e.detail.value.trim() || '';
+
+                    tenantSearchTimeout = setTimeout(() => {
+                        const elevateFormElement = document.querySelector('[x-data*="elevateForm"]');
+                        if (elevateFormElement && Alpine) {
+                            const alpineComponent = Alpine.$data(elevateFormElement);
+                            if (alpineComponent && alpineComponent.selectedProvider) {
+                                alpineComponent.loadTenants(query);
+                            }
+                        }
+                    }, 300);
+                });
+
+                // Listen for selection changes
+                tenantElement.addEventListener('change', function(e) {
+                    const elevateFormElement = document.querySelector('[x-data*="elevateForm"]');
+                    if (elevateFormElement && Alpine) {
+                        const alpineComponent = Alpine.$data(elevateFormElement);
+                        if (alpineComponent) {
+                            alpineComponent.selectedTenant = e.target.value;
+                        }
+                    }
+                });
+            }
 
             // Initialize Choices.js with backend identities
             const identityChoices = buildIdentityChoices(PREFILLED_IDENTITIES, true);
@@ -713,7 +768,8 @@
                         const data = await response.json();
                         // Convert array format to object format for Alpine.js template compatibility
                         this.providers = {};
-                        data.providers.forEach(item => {
+                        const rawProviders = data.providers || [];
+                        rawProviders.forEach(item => {
                             this.providers[item._source.identifier] = item._source;
                         });
 
@@ -742,7 +798,17 @@
                     this.evaluatedRole = null;
                     this.roles = {};
                     this.tenants = {};
-                    
+
+                    // Reset Choices.js instances
+                    if (roleChoicesInstance) {
+                        roleChoicesInstance.clearChoices();
+                        roleChoicesInstance.setChoices([{ value: '', label: 'Loading roles...', disabled: true, selected: true }]);
+                    }
+                    if (tenantChoicesInstance) {
+                        tenantChoicesInstance.clearChoices();
+                        tenantChoicesInstance.setChoices([{ value: '', label: 'Loading tenants...', disabled: true, selected: true }]);
+                    }
+
                     if (this.selectedProvider) {
                         await Promise.all([
                             this.loadTenants(),
@@ -760,7 +826,7 @@
                         // Clear roles in Choices.js when no provider selected
                         if (roleChoicesInstance) {
                             roleChoicesInstance.clearChoices();
-                            roleChoicesInstance.setChoices([{ value: '', label: 'Select a provider first', disabled: true }]);
+                            roleChoicesInstance.setChoices([{ value: '', label: 'Select a provider first', disabled: true, selected: true }]);
                         }
                         return;
                     }
@@ -784,7 +850,8 @@
                         
                         // Convert array format to object format for Alpine.js template compatibility
                         this.roles = {};
-                        data.roles.forEach(item => {
+                        const rawRoles = data.roles || [];
+                        rawRoles.forEach(item => {
                             const roleResponse = item._source;
                             const roleKey = roleResponse.identifier || item._id;
                             this.roles[roleKey] = roleResponse;
@@ -808,13 +875,13 @@
                             roleChoicesInstance.clearChoices();
                             if (roleChoices.length > 0) {
                                 roleChoicesInstance.setChoices([
-                                    { value: '', label: 'Select a Role', placeholder: true },
+                                    { value: '', label: 'Select a Role', placeholder: true, selected: true },
                                     ...roleChoices
                                 ], 'value', 'label', true);
                                 roleChoicesInstance.enable();
                             } else {
                                 roleChoicesInstance.setChoices([
-                                    { value: '', label: 'No roles available', disabled: true }
+                                    { value: '', label: 'No roles available', disabled: true, selected: true }
                                 ]);
                             }
                         }
@@ -826,7 +893,7 @@
                         if (roleChoicesInstance) {
                             roleChoicesInstance.clearChoices();
                             roleChoicesInstance.setChoices([
-                                { value: '', label: 'Error loading roles' }
+                                { value: '', label: 'Error loading roles', disabled: true, selected: true }
                             ]);
                         }
                     } finally {
@@ -836,46 +903,90 @@
 
                 /**
                  * Load tenants for the selected provider
+                 * @param {string} query - Optional search query for backend filtering
                  */
-                async loadTenants() {
-                    if (!this.selectedProvider) return;
-                    
+                async loadTenants(query = '') {
+                    if (!this.selectedProvider) {
+                        // Clear tenants in Choices.js when no provider selected
+                        if (tenantChoicesInstance) {
+                            tenantChoicesInstance.clearChoices();
+                            tenantChoicesInstance.setChoices([{ value: '', label: 'Select a provider first', disabled: true, selected: true }]);
+                        }
+                        return;
+                    }
+
                     this.loadingTenants = true;
-                    
+
                     try {
-                        // Get a list of tenants for the selected provider
-                        const response = await fetch(`${this.apiBasePath}/provider/${encodeURIComponent(this.selectedProvider)}/tenants`);
-                        
+                        // Build URL with optional search query
+                        let url = `${this.apiBasePath}/provider/${encodeURIComponent(this.selectedProvider)}/tenants?limit=100`;
+                        if (query) {
+                            url += `&q=${encodeURIComponent(query)}`;
+                        }
+
+                        const response = await fetch(url);
+
                         if (!response.ok) {
-                            // If the endpoint returns 404 or error, just skip tenant loading
                             // Some providers may not support tenants
                             console.log('No tenants available for this provider');
+                            if (tenantChoicesInstance) {
+                                tenantChoicesInstance.clearChoices();
+                                tenantChoicesInstance.setChoices([{ value: '', label: 'No tenants available', disabled: true, selected: true }]);
+                            }
                             this.tenants = {};
                             return;
                         }
-                        
+
                         const data = await response.json();
-                        let tenantsData = data.tenants || {};
-                        // Normalize tenants: API may return an array, but the UI expects an object/map.
-                        if (Array.isArray(tenantsData)) {
-                            const tenantsMap = {};
-                            tenantsData.forEach((tenant, index) => {
-                                // Unwrap _source if present
-                                if (tenant._source) {
-                                    tenant = tenant._source;
-                                }
-                                // Prefer stable identifiers as keys; fall back to index if needed.
-                                const key = tenant.id || tenant.key || tenant.name || String(index);
-                                tenantsMap[key] = tenant;
-                            });
-                            tenantsData = tenantsMap;
+                        const rawTenants = data.tenants || [];
+
+                        // Normalize tenants into an object map
+                        const tenantsMap = {};
+                        rawTenants.forEach((tenant, index) => {
+                            if (tenant._source) {
+                                tenant = tenant._source;
+                            }
+                            const key = tenant.id || tenant.key || tenant.name || String(index);
+                            tenantsMap[key] = tenant;
+                        });
+
+                        this.tenants = tenantsMap;
+
+                        // Convert tenants map to Choices.js format
+                        const tenantChoices = Object.keys(this.tenants).map(key => {
+                            const tenant = this.tenants[key];
+                            return {
+                                value: key,
+                                label: tenant.name || key,
+                            };
+                        });
+
+                        // Update Choices.js instance
+                        if (tenantChoicesInstance) {
+                            tenantChoicesInstance.clearChoices();
+                            if (tenantChoices.length > 0) {
+                                tenantChoicesInstance.setChoices([
+                                    { value: '', label: 'Select a Tenant (optional)', placeholder: true, selected: true },
+                                    ...tenantChoices
+                                ], 'value', 'label', true);
+                                tenantChoicesInstance.enable();
+                            } else {
+                                tenantChoicesInstance.setChoices([
+                                    { value: '', label: 'No tenants available', disabled: true, selected: true }
+                                ]);
+                            }
                         }
-                        this.tenants = tenantsData;
 
                         this.preselectTenant();
                     } catch (error) {
                         console.error('Error fetching tenants:', error);
                         this.tenants = {};
+                        if (tenantChoicesInstance) {
+                            tenantChoicesInstance.clearChoices();
+                            tenantChoicesInstance.setChoices([
+                                { value: '', label: 'Error loading tenants', disabled: true, selected: true }
+                            ]);
+                        }
                     } finally {
                         this.loadingTenants = false;
                     }
@@ -887,23 +998,27 @@
                  */
                 preselectTenant() {
                     if (!this.prefilledTenants || this.prefilledTenants.length === 0) return;
-                    
+
                     const tenantToSelect = this.prefilledTenants[0];
-                    
+                    let tenantKeyToSelect = null;
+
                     // Try exact key match first
                     if (this.tenants[tenantToSelect]) {
-                        this.selectedTenant = tenantToSelect;
-                        return;
+                        tenantKeyToSelect = tenantToSelect;
+                    } else {
+                        // Try case-insensitive name match
+                        tenantKeyToSelect = Object.keys(this.tenants).find(key => {
+                            const tenant = this.tenants[key];
+                            return tenant.name && tenant.name.toLowerCase() === tenantToSelect.toLowerCase();
+                        });
                     }
-                    
-                    // Try case-insensitive name match
-                    const tenantKey = Object.keys(this.tenants).find(key => {
-                        const tenant = this.tenants[key];
-                        return tenant.name && tenant.name.toLowerCase() === tenantToSelect.toLowerCase();
-                    });
-                    
-                    if (tenantKey) {
-                        this.selectedTenant = tenantKey;
+
+                    if (tenantKeyToSelect) {
+                        this.selectedTenant = tenantKeyToSelect;
+                        // Sync with Choices.js component
+                        if (tenantChoicesInstance) {
+                            tenantChoicesInstance.setChoiceByValue(tenantKeyToSelect);
+                        }
                     }
                 },
 

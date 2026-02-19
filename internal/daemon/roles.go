@@ -105,15 +105,7 @@ func (s *Server) searchAndFilterRoles(c *gin.Context, query string, limit int, p
 	searchRequest := &models.SearchRequest{
 		Limit: limit,
 		Terms: []string{query},
-	}
-
-	// For queries with special characters (like ec2:, arn:), don't add wildcard
-	// For simple text queries, add wildcard for partial matching
-	hasSpecialChars := strings.ContainsAny(query, ":/*")
-	if !hasSpecialChars && !strings.HasSuffix(query, "*") {
-		searchRequest.Query = query + "*"
-	} else {
-		searchRequest.Query = query
+		Query: query,
 	}
 
 	// Search roles using the index

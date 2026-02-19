@@ -3,7 +3,6 @@ package config
 import (
 	"context"
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -156,16 +155,8 @@ func TestRoleSearch(t *testing.T) {
 			var searchRequest *models.SearchRequest
 
 			if tt.query != "" {
-				query := tt.query
-				// For simple text queries without special characters, add wildcard for prefix matching
-				// For queries with colons or wildcards, pass through as-is (handled by smart query logic)
-				hasSpecialChars := strings.ContainsAny(query, ":/*")
-				if !hasSpecialChars && !strings.HasSuffix(query, "*") {
-					query = query + "*"
-				}
-
 				searchRequest = &models.SearchRequest{
-					Query: query,
+					Query: tt.query,
 					Limit: 100,
 				}
 			}

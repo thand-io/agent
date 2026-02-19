@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -107,12 +108,7 @@ func (s *Server) getProviderRoles(c *gin.Context) {
 	}
 
 	if len(query) > 0 {
-		searchRequest.Terms = []string{query}
-		if !strings.HasSuffix(query, "*") {
-			searchRequest.Query = query + "*"
-		} else {
-			searchRequest.Query = query
-		}
+		searchRequest.Query = query
 	}
 
 	roles, err := provider.ListRoles(context.Background(), searchRequest)
@@ -203,12 +199,7 @@ func (s *Server) getProviderPermissions(c *gin.Context) {
 	}
 
 	if len(query) > 0 {
-		searchRequest.Terms = []string{query}
-		if !strings.HasSuffix(query, "*") {
-			searchRequest.Query = query + "*"
-		} else {
-			searchRequest.Query = query
-		}
+		searchRequest.Query = query
 	}
 
 	permissions, err := provider.ListPermissions(context.Background(), searchRequest)
@@ -267,12 +258,7 @@ func (s *Server) getProviderResources(c *gin.Context) {
 	}
 
 	if len(query) > 0 {
-		searchRequest.Terms = []string{query}
-		if !strings.HasSuffix(query, "*") {
-			searchRequest.Query = query + "*"
-		} else {
-			searchRequest.Query = query
-		}
+		searchRequest.Query = query
 	}
 
 	resources, err := provider.ListResources(context.Background(), searchRequest)
@@ -298,8 +284,10 @@ func (s *Server) getProviderResources(c *gin.Context) {
 //	@Produce		json
 //	@Param			provider	path		string								true	"Provider name"
 //	@Param			q			query		string								false	"Filter query"
+//	@Param			limit		query		int									false	"Maximum number of results to return (default: 100)"
 //	@Success		200			{object}	models.ProviderTenantsResponse		"Provider tenants"
 //	@Failure		404			{object}	map[string]any				"Provider not found"
+//	@Failure		501			{object}	map[string]any				"Provider does not implement tenants"
 //	@Failure		500			{object}	map[string]any				"Internal server error"
 //	@Router			/provider/{provider}/tenants [get]
 //	@Security		BearerAuth
@@ -321,20 +309,24 @@ func (s *Server) getProviderTenants(c *gin.Context) {
 
 	query := c.Query("q")
 
-	searchRequest := &models.SearchRequest{
-		Limit: 10,
-	}
-
-	if len(query) > 0 {
-		searchRequest.Terms = []string{query}
-		if !strings.HasSuffix(query, "*") {
-			searchRequest.Query = query + "*"
-		} else {
-			searchRequest.Query = query
+	// Parse limit parameter, default to 100
+	limit := 100
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+			limit = parsedLimit
 		}
 	}
 
-	tenants, err := provider.ListTenants(context.Background(), searchRequest)
+	// Now get paginated results
+	searchRequest := &models.SearchRequest{
+		Limit: limit,
+	}
+
+	if len(query) > 0 {
+		searchRequest.Query = query
+	}
+
+	tenants, err := provider.ListTenants(c.Request.Context(), searchRequest)
 
 	if err != nil {
 		s.getErrorPage(c, http.StatusInternalServerError, "Failed to list tenants", err)

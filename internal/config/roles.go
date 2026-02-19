@@ -219,11 +219,15 @@ func (rc *RoleConfig) ListRoles(
 	// Fallback to simple substring filtering while index is being built
 	var filtered []models.Role
 	filterText := strings.ToLower(strings.Join(searchRequest.Terms, " "))
+	limit := searchRequest.GetLimit()
 
 	for _, role := range roles {
 		if strings.Contains(strings.ToLower(role.Name), filterText) ||
 			strings.Contains(strings.ToLower(role.Description), filterText) {
 			filtered = append(filtered, role)
+			if limit > 0 && len(filtered) >= limit {
+				break
+			}
 		}
 	}
 
