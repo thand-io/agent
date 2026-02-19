@@ -64,25 +64,6 @@ func (p *emailAcsProvider) Initialize(identifier string, provider models.Provide
 	return nil
 }
 
-// ValidateConfig validates the Azure ACS Email configuration without initialization
-func (p *emailAcsProvider) ValidateConfig(config *models.BasicConfig) error {
-	schema := &ConfigSchema{}
-	if err := schema.Unmarshal(config); err != nil {
-		return fmt.Errorf("failed to unmarshal Azure ACS Email config: %w", err)
-	}
-	return schema.Validate()
-}
-
-// GetConfigSchema returns the Azure ACS Email configuration schema
-func (p *emailAcsProvider) GetConfigSchema() any {
-	return &ConfigSchema{}
-}
-
-// Validate validates the Azure ACS Email provider configuration
-func (p *emailAcsProvider) Validate() error {
-	return p.ValidateConfig(p.GetConfig())
-}
-
 func (p *emailAcsProvider) SendNotification(
 	ctx context.Context, notification models.NotificationRequest,
 ) error {

@@ -78,25 +78,6 @@ func (p *azureProvider) Initialize(identifier string, provider models.ProviderCo
 	return nil
 }
 
-// ValidateConfig validates the Azure configuration without initialization
-func (p *azureProvider) ValidateConfig(config *models.BasicConfig) error {
-	schema := &ConfigSchema{}
-	if err := schema.Unmarshal(config); err != nil {
-		return fmt.Errorf("failed to unmarshal Azure config: %w", err)
-	}
-	return schema.Validate()
-}
-
-// GetConfigSchema returns the Azure configuration schema
-func (p *azureProvider) GetConfigSchema() any {
-	return &ConfigSchema{}
-}
-
-// Validate validates the Azure provider configuration
-func (p *azureProvider) Validate() error {
-	return p.ValidateConfig(p.GetConfig())
-}
-
 func init() {
 	providers.Register(AzureProviderName, &azureProvider{}, AzureCapabilities, &ConfigSchema{})
 }

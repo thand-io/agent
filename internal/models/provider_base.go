@@ -207,30 +207,6 @@ func (p *BaseProvider) GetBaseRole() *Role {
 	return p.role
 }
 
-// Validate provides a default implementation that returns nil
-// Providers with configuration requirements should override this method
-func (p *BaseProvider) Validate() error {
-	return nil
-}
-
-// ValidateConfig provides a default implementation that returns nil
-// Providers should override this to validate their specific configuration
-func (p *BaseProvider) ValidateConfig(config *BasicConfig) error {
-	return nil
-}
-
-// GetDefaultCapabilities returns the provider's default capabilities
-// Providers should override this to return their specific capabilities
-func (p *BaseProvider) GetDefaultCapabilities() *ProviderCapabilities {
-	return p.capabilities
-}
-
-// GetConfigSchema returns the config schema for the provider
-// Providers should override this to return their schema struct
-func (p *BaseProvider) GetConfigSchema() any {
-	return nil
-}
-
 func (p *BaseProvider) Initialize(identifier string, provider ProviderConfig) error {
 	// Initialize the provider
 	return nil

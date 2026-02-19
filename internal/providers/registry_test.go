@@ -35,17 +35,6 @@ func (m *MockProvider) Initialize(providerType string, config models.ProviderCon
 	return nil
 }
 
-func (m *MockProvider) ValidateConfig(config *models.BasicConfig) error {
-	if m.validateErr != nil {
-		return m.validateErr
-	}
-	return nil
-}
-
-func (m *MockProvider) GetDefaultCapabilities() *models.ProviderCapabilities {
-	return m.capabilities
-}
-
 func TestRegisterProvider(t *testing.T) {
 	// Create a test registry (save and restore original)
 	originalRegistry := registry
@@ -125,49 +114,6 @@ func TestGetProvider(t *testing.T) {
 	})
 }
 
-func TestSetProvider(t *testing.T) {
-	// Create a test registry
-	originalRegistry := registry
-	defer func() {
-		registry = originalRegistry
-	}()
-	registry = make(map[string]models.Provider)
-
-	caps1 := &models.ProviderCapabilities{
-		Identities: models.NewSynchronizableCapability(),
-	}
-	caps2 := &models.ProviderCapabilities{
-		Identities: models.NewSynchronizableCapability(),
-		Authorizer: models.NewCapability(),
-	}
-
-	mockProvider1 := NewMockProvider("test", caps1)
-	mockProvider2 := NewMockProvider("test", caps2)
-
-	t.Run("Set New Provider", func(t *testing.T) {
-		Set("new-provider", mockProvider1)
-
-		provider, err := Get("new-provider")
-		require.NoError(t, err)
-		assert.NotNil(t, provider)
-	})
-
-	t.Run("Replace Existing Provider", func(t *testing.T) {
-		Set("replaceable", mockProvider1)
-
-		provider, err := Get("replaceable")
-		require.NoError(t, err)
-		assert.Nil(t, provider.GetDefaultCapabilities().Authorizer)
-
-		// Replace with different provider
-		Set("replaceable", mockProvider2)
-
-		provider, err = Get("replaceable")
-		require.NoError(t, err)
-		assert.NotNil(t, provider.GetDefaultCapabilities().Authorizer)
-	})
-}
-
 func TestCreateInstance(t *testing.T) {
 	// Create a test registry
 	originalRegistry := registry
@@ -232,59 +178,6 @@ func TestListProviders(t *testing.T) {
 		assert.Contains(t, providers, "provider1")
 		assert.Contains(t, providers, "provider2")
 		assert.Contains(t, providers, "provider3")
-	})
-}
-
-func TestValidateProviderConfigIntegration(t *testing.T) {
-	// Create a test registry
-	originalRegistry := registry
-	originalValidator := models.ValidateProviderConfig
-	defer func() {
-		registry = originalRegistry
-		models.ValidateProviderConfig = originalValidator
-	}()
-	registry = make(map[string]models.Provider)
-
-	// Re-initialize the validator
-	models.ValidateProviderConfig = func(providerName string, config *models.BasicConfig) error {
-		if config == nil {
-			return nil
-		}
-
-		provider, err := Get(providerName)
-		if err != nil {
-			return nil
-		}
-
-		return provider.ValidateConfig(config)
-	}
-
-	caps := &models.ProviderCapabilities{
-		Identities: models.NewSynchronizableCapability(),
-	}
-	mockProvider := NewMockProvider("validator-test", caps)
-	Register("validator-test", mockProvider, caps, &struct{}{})
-
-	t.Run("Validate with Registered Provider", func(t *testing.T) {
-		config := &models.BasicConfig{
-			"key": "value",
-		}
-		err := models.ValidateProviderConfig("validator-test", config)
-		assert.NoError(t, err)
-	})
-
-	t.Run("Validate with Unregistered Provider", func(t *testing.T) {
-		config := &models.BasicConfig{
-			"key": "value",
-		}
-		// Should not error for unregistered provider (graceful fallback)
-		err := models.ValidateProviderConfig("unregistered", config)
-		assert.NoError(t, err)
-	})
-
-	t.Run("Validate with Nil Config", func(t *testing.T) {
-		err := models.ValidateProviderConfig("validator-test", nil)
-		assert.NoError(t, err)
 	})
 }
 

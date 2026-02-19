@@ -57,25 +57,6 @@ func (p *emailSesProvider) Initialize(identifier string, provider models.Provide
 	return nil
 }
 
-// ValidateConfig validates the AWS SES Email configuration without initialization
-func (p *emailSesProvider) ValidateConfig(config *models.BasicConfig) error {
-	schema := &ConfigSchema{}
-	if err := schema.Unmarshal(config); err != nil {
-		return fmt.Errorf("failed to unmarshal AWS SES Email config: %w", err)
-	}
-	return schema.Validate()
-}
-
-// GetConfigSchema returns the AWS SES Email configuration schema
-func (p *emailSesProvider) GetConfigSchema() any {
-	return &ConfigSchema{}
-}
-
-// Validate validates the AWS SES Email provider configuration
-func (p *emailSesProvider) Validate() error {
-	return p.ValidateConfig(p.GetConfig())
-}
-
 func (p *emailSesProvider) SendNotification(
 	ctx context.Context, notification models.NotificationRequest,
 ) error {

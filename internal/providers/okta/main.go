@@ -57,25 +57,6 @@ func (p *oktaProvider) Initialize(identifier string, provider models.ProviderCon
 	return nil
 }
 
-// ValidateConfig validates the Okta configuration without initialization
-func (p *oktaProvider) ValidateConfig(config *models.BasicConfig) error {
-	schema := &ConfigSchema{}
-	if err := schema.Unmarshal(config); err != nil {
-		return fmt.Errorf("failed to unmarshal Okta config: %w", err)
-	}
-	return schema.Validate()
-}
-
-// GetConfigSchema returns the Okta configuration schema
-func (p *oktaProvider) GetConfigSchema() any {
-	return &ConfigSchema{}
-}
-
-// Validate validates the Okta provider configuration
-func (p *oktaProvider) Validate() error {
-	return p.ValidateConfig(p.GetConfig())
-}
-
 // CreateOktaClient creates and configures an Okta API client
 func CreateOktaClient(oktaConfig *models.BasicConfig) (*okta.Client, error) {
 	ctx := context.Background()

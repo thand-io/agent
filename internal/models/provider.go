@@ -61,13 +61,6 @@ func (p *ProviderConfig) Validate() error {
 		return fmt.Errorf("provider '%s' validation failed: %w", p.Name, err)
 	}
 
-	// Validate provider-specific config using provider registry (no initialization needed)
-	if p.Config != nil {
-		if err := ValidateProviderConfig(p.Provider, p.Config); err != nil {
-			return fmt.Errorf("provider '%s': %w", p.Name, err)
-		}
-	}
-
 	return nil
 }
 
@@ -104,14 +97,8 @@ These permissions, along with access to specific resources (e.g., "company finan
 
 // Interface for provider implementations
 type Provider interface {
-	// Metadata methods (work without initialization)
-	ValidateConfig(config *BasicConfig) error
-	GetDefaultCapabilities() *ProviderCapabilities
-	GetConfigSchema() any // Returns the provider's config schema struct
-
 	// Lifecycle methods
 	Initialize(identifier string, provider ProviderConfig) error
-	Validate() error // Validate provider configuration against schema
 
 	// Form base provider
 	GetConfig() *BasicConfig
@@ -177,20 +164,4 @@ func (r *RoleRequest) GetRole() *Role {
 
 func (r *RoleRequest) GetDuration() *time.Duration {
 	return r.Duration
-}
-
-// ValidateProviderConfig is a variable holding the config validation function
-// This is set by the providers package to avoid circular dependencies
-var ValidateProviderConfig = func(providerName string, config *BasicConfig) error {
-	// Default implementation: no validation
-	// This will be overridden by providers.SetConfigValidator() in providers package
-	return fmt.Errorf("provider config validation not initialized for provider '%s'", providerName)
-}
-
-// GetProviderCapabilities is a variable holding the capabilities lookup function
-// This is set by the providers package to avoid circular dependencies
-var GetProviderCapabilities = func(providerName string) (*ProviderCapabilities, error) {
-	// Default implementation: return nil
-	// This will be overridden by providers package in init()
-	return nil, fmt.Errorf("provider capabilities lookup not initialized for provider '%s'", providerName)
 }

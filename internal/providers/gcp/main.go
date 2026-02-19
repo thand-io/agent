@@ -70,25 +70,6 @@ func (p *gcpProvider) Initialize(identifier string, provider models.ProviderConf
 	return nil
 }
 
-// ValidateConfig validates the GCP configuration without initialization
-func (p *gcpProvider) ValidateConfig(config *models.BasicConfig) error {
-	schema := &ConfigSchema{}
-	if err := schema.Unmarshal(config); err != nil {
-		return fmt.Errorf("failed to unmarshal GCP config: %w", err)
-	}
-	return schema.Validate()
-}
-
-// GetConfigSchema returns the GCP configuration schema
-func (p *gcpProvider) GetConfigSchema() any {
-	return &ConfigSchema{}
-}
-
-// Validate validates the GCP provider configuration
-func (p *gcpProvider) Validate() error {
-	return p.ValidateConfig(p.GetConfig())
-}
-
 func (p *gcpProvider) GetIamClient() *iam.Service {
 	return p.iamClient
 }

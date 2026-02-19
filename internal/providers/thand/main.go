@@ -54,25 +54,6 @@ func (p *thandProvider) Initialize(identifier string, provider models.ProviderCo
 	return nil
 }
 
-// ValidateConfig validates the Thand configuration without initialization
-func (p *thandProvider) ValidateConfig(config *models.BasicConfig) error {
-	schema := &ConfigSchema{}
-	if err := schema.Unmarshal(config); err != nil {
-		return fmt.Errorf("failed to unmarshal Thand config: %w", err)
-	}
-	return schema.Validate()
-}
-
-// GetConfigSchema returns the Thand configuration schema
-func (p *thandProvider) GetConfigSchema() any {
-	return &ConfigSchema{}
-}
-
-// Validate validates the Thand provider configuration
-func (p *thandProvider) Validate() error {
-	return p.ValidateConfig(p.GetConfig())
-}
-
 func (p *thandProvider) AuthorizeSession(ctx context.Context, authRequest *models.AuthorizeUser) (*models.AuthorizeSessionResponse, error) {
 	// Build the OAuth2 authorization URL
 

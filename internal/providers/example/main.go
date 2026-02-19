@@ -2,7 +2,6 @@ package example
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -46,25 +45,6 @@ func (p *exampleProvider) Initialize(identifier string, provider models.Provider
 		ExampleCapabilities,
 	)
 	return nil
-}
-
-// ValidateConfig validates the Example configuration without initialization
-func (p *exampleProvider) ValidateConfig(config *models.BasicConfig) error {
-	schema := &ConfigSchema{}
-	if err := schema.Unmarshal(config); err != nil {
-		return fmt.Errorf("failed to unmarshal Example config: %w", err)
-	}
-	return schema.Validate()
-}
-
-// GetConfigSchema returns the Example configuration schema
-func (p *exampleProvider) GetConfigSchema() any {
-	return &ConfigSchema{}
-}
-
-// Validate validates the Example provider configuration
-func (p *exampleProvider) Validate() error {
-	return p.ValidateConfig(p.GetConfig())
 }
 
 func (p *exampleProvider) AuthorizeSession(ctx context.Context, authRequest *models.AuthorizeUser) (*models.AuthorizeSessionResponse, error) {

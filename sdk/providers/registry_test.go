@@ -44,10 +44,6 @@ func (m *MockProvider) ValidateConfig(config *models.BasicConfig) error {
 	return nil
 }
 
-func (m *MockProvider) GetDefaultCapabilities() *models.ProviderCapabilities {
-	return m.capabilities
-}
-
 func TestGetCapabilities(t *testing.T) {
 	caps := &models.ProviderCapabilities{
 		Identities: models.NewSynchronizableCapability(),

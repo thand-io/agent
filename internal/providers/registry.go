@@ -21,28 +21,6 @@ var (
 	registryMutex    sync.RWMutex
 )
 
-func init() {
-	// Set up the config validator to use the provider registry
-	models.ValidateProviderConfig = func(providerName string, config *models.BasicConfig) error {
-		if config == nil {
-			return nil
-		}
-
-		provider, err := Get(providerName)
-		if err != nil {
-			// Provider not registered - skip validation
-			return nil
-		}
-
-		return provider.ValidateConfig(config)
-	}
-
-	// Set up the capabilities lookup to use the provider registry
-	models.GetProviderCapabilities = func(providerName string) (*models.ProviderCapabilities, error) {
-		return GetCapabilities(providerName)
-	}
-}
-
 // Register adds a provider to the registry with its metadata.
 func Register(
 	name string,

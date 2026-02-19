@@ -146,25 +146,6 @@ func (p *awsProvider) GetRegion() string {
 	return p.region
 }
 
-// ValidateConfig validates the AWS configuration without initialization
-func (p *awsProvider) ValidateConfig(config *models.BasicConfig) error {
-	schema := &ConfigSchema{}
-	if err := schema.Unmarshal(config); err != nil {
-		return fmt.Errorf("failed to unmarshal AWS config: %w", err)
-	}
-	return schema.Validate()
-}
-
-// GetConfigSchema returns the AWS configuration schema
-func (p *awsProvider) GetConfigSchema() any {
-	return &ConfigSchema{}
-}
-
-// Validate validates the AWS provider configuration
-func (p *awsProvider) Validate() error {
-	return p.ValidateConfig(p.GetConfig())
-}
-
 // GetAccountId sets the AWS account ID from config or retrieves it via STS
 func (p *awsProvider) GetAccountId(config *models.BasicConfig) error {
 

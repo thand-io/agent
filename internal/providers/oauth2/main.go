@@ -25,25 +25,6 @@ func (p *oauth2Provider) Initialize(identifier string, provider models.ProviderC
 	return nil
 }
 
-// ValidateConfig validates the OAuth2 configuration without initialization
-func (p *oauth2Provider) ValidateConfig(config *models.BasicConfig) error {
-	schema := &ConfigSchema{}
-	if err := schema.Unmarshal(config); err != nil {
-		return fmt.Errorf("failed to unmarshal OAuth2 config: %w", err)
-	}
-	return schema.Validate()
-}
-
-// GetConfigSchema returns the OAuth2 configuration schema
-func (p *oauth2Provider) GetConfigSchema() any {
-	return &ConfigSchema{}
-}
-
-// Validate validates the OAuth2 provider configuration
-func (p *oauth2Provider) Validate() error {
-	return p.ValidateConfig(p.GetConfig())
-}
-
 func (p *oauth2Provider) AuthorizeSession(ctx context.Context, authRequest *models.AuthorizeUser) (*models.AuthorizeSessionResponse, error) {
 	// TODO: Implement OAuth2 user authorization logic
 	return nil, fmt.Errorf("AuthorizeSession not implemented for OAuth2 provider")

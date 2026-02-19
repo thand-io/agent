@@ -46,25 +46,6 @@ func (p *kubernetesProvider) Initialize(identifier string, provider models.Provi
 	return nil
 }
 
-// ValidateConfig validates the Kubernetes configuration without initialization
-func (p *kubernetesProvider) ValidateConfig(config *models.BasicConfig) error {
-	schema := &ConfigSchema{}
-	if err := schema.Unmarshal(config); err != nil {
-		return fmt.Errorf("failed to unmarshal Kubernetes config: %w", err)
-	}
-	return schema.Validate()
-}
-
-// GetConfigSchema returns the Kubernetes configuration schema
-func (p *kubernetesProvider) GetConfigSchema() any {
-	return &ConfigSchema{}
-}
-
-// Validate validates the Kubernetes provider configuration
-func (p *kubernetesProvider) Validate() error {
-	return p.ValidateConfig(p.GetConfig())
-}
-
 func (p *kubernetesProvider) GetClient() kubernetes.Interface {
 	return p.client
 }

@@ -48,25 +48,6 @@ func (p *salesForceProvider) Initialize(identifier string, provider models.Provi
 	return nil
 }
 
-// ValidateConfig validates the Salesforce configuration without initialization
-func (p *salesForceProvider) ValidateConfig(config *models.BasicConfig) error {
-	schema := &ConfigSchema{}
-	if err := schema.Unmarshal(config); err != nil {
-		return fmt.Errorf("failed to unmarshal Salesforce config: %w", err)
-	}
-	return schema.Validate()
-}
-
-// GetConfigSchema returns the Salesforce configuration schema
-func (p *salesForceProvider) GetConfigSchema() any {
-	return &ConfigSchema{}
-}
-
-// Validate validates the Salesforce provider configuration
-func (p *salesForceProvider) Validate() error {
-	return p.ValidateConfig(p.GetConfig())
-}
-
 /*
 https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/dome_query.htm
 */
