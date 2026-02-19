@@ -10,11 +10,12 @@ import (
 )
 
 type ProviderTenantsResponse struct {
-	Version  string                         `json:"version"`
-	Provider string                         `json:"provider"`
-	Tenants  []SearchResult[ProviderTenant] `json:"tenants"`
-	HasMore  bool                           `json:"has_more"`
-	Total    int                            `json:"total,omitempty"`
+	Version   string                         `json:"version"`
+	Provider  string                         `json:"provider"`
+	Tenants   []SearchResult[ProviderTenant] `json:"tenants"`
+	HasMore   bool                           `json:"has_more"`
+	NextToken string                         `json:"next_token,omitempty"`
+	Total     int                            `json:"total,omitempty"`
 }
 
 type ProviderTenant struct {
@@ -99,34 +100,14 @@ func (p *BaseProvider) ListTenants(ctx context.Context, searchReq *SearchRequest
 		for _, tnt := range tenants {
 			if strings.Contains(strings.ToLower(tnt.Name), filterText) {
 				results = append(results, tnt)
+				if len(results) >= searchReq.Limit {
+					break
+				}
 			}
 		}
 	}
 
-	// Apply offset and limit for pagination
-	offset := 0
-	if searchReq != nil && searchReq.Offset > 0 {
-		offset = searchReq.Offset
-	}
-
-	limit := len(results)
-	if searchReq != nil && searchReq.Limit > 0 {
-		limit = searchReq.Limit
-	}
-
-	// Apply pagination
-	start := offset
-	if start > len(results) {
-		start = len(results)
-	}
-
-	end := start + limit
-	if end > len(results) {
-		end = len(results)
-	}
-
-	paginatedResults := results[start:end]
-	return ReturnSearchResults(paginatedResults), nil
+	return ReturnSearchResults(results), nil
 }
 
 func (p *BaseProvider) SynchronizeTenants(

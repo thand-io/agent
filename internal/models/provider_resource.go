@@ -98,6 +98,9 @@ func (p *BaseProvider) ListResources(ctx context.Context, searchRequest *SearchR
 		// Check if any filter matches the resource name
 		if strings.Contains(strings.ToLower(resource.Name), filterText) {
 			filtered = append(filtered, resource)
+			if len(filtered) >= searchRequest.Limit {
+				break
+			}
 		}
 	}
 

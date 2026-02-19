@@ -330,12 +330,10 @@ func (s *Server) getProviderTenants(c *gin.Context) {
 		}
 	}
 
-	// Parse offset parameter, default to 0
-	offset := 0
-	if offsetStr := c.Query("offset"); offsetStr != "" {
-		if parsedOffset, err := strconv.Atoi(offsetStr); err == nil && parsedOffset >= 0 {
-			offset = parsedOffset
-		}
+	// Parse next_token parameter, default to empty
+	nextToken := ""
+	if nextTokenStr := c.Query("next_token"); nextTokenStr != "" {
+		nextToken = nextTokenStr
 	}
 
 	// First, get total count by fetching all matching tenants
@@ -359,8 +357,8 @@ func (s *Server) getProviderTenants(c *gin.Context) {
 
 	// Now get paginated results
 	searchRequest := &models.SearchRequest{
-		Limit:  limit,
-		Offset: offset,
+		Limit:     limit,
+		NextToken: nextToken,
 	}
 
 	if len(query) > 0 {
@@ -379,7 +377,7 @@ func (s *Server) getProviderTenants(c *gin.Context) {
 		return
 	}
 
-	hasMore := (offset + len(tenants)) < total
+	hasMore := (len(tenants)) < total
 
 	c.JSON(http.StatusOK, models.ProviderTenantsResponse{
 		Version:  "1.0",

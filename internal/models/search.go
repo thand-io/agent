@@ -11,10 +11,10 @@ import (
 )
 
 type SearchRequest struct {
-	Query  string   `json:"query"`
-	Terms  []string `json:"terms"`
-	Limit  int      `json:"limit,omitempty"`
-	Offset int      `json:"offset,omitempty"`
+	Query     string   `json:"query"`
+	Terms     []string `json:"terms"`
+	Limit     int      `json:"limit,omitempty"`
+	NextToken string   `json:"next_token,omitempty"`
 }
 
 func (sr *SearchRequest) IsEmpty() bool {
@@ -90,7 +90,7 @@ func BleveListSearch[T any](
 		queryBuilder = bleve.NewDisjunctionQuery(queries...)
 	}
 
-	limitResults := 10
+	limitResults := 100
 
 	if searchReq.Limit > 0 {
 		limitResults = searchReq.Limit
