@@ -70,24 +70,24 @@ require (
 	github.com/aws/smithy-go v1.24.0 // indirect
 	github.com/beevik/etree v1.5.0 // indirect
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
-	github.com/blevesearch/bleve/v2 v2.5.5 // indirect
-	github.com/blevesearch/bleve_index_api v1.2.11 // indirect
+	github.com/blevesearch/bleve/v2 v2.5.7 // indirect
+	github.com/blevesearch/bleve_index_api v1.3.1 // indirect
 	github.com/blevesearch/geo v0.2.4 // indirect
-	github.com/blevesearch/go-faiss v1.0.26 // indirect
+	github.com/blevesearch/go-faiss v1.0.27 // indirect
 	github.com/blevesearch/go-porterstemmer v1.0.3 // indirect
 	github.com/blevesearch/gtreap v0.1.1 // indirect
-	github.com/blevesearch/mmap-go v1.0.4 // indirect
-	github.com/blevesearch/scorch_segment_api/v2 v2.3.13 // indirect
+	github.com/blevesearch/mmap-go v1.2.0 // indirect
+	github.com/blevesearch/scorch_segment_api/v2 v2.4.1 // indirect
 	github.com/blevesearch/segment v0.9.1 // indirect
 	github.com/blevesearch/snowballstem v0.9.0 // indirect
 	github.com/blevesearch/upsidedown_store_api v1.0.2 // indirect
-	github.com/blevesearch/vellum v1.1.0 // indirect
-	github.com/blevesearch/zapx/v11 v11.4.2 // indirect
-	github.com/blevesearch/zapx/v12 v12.4.2 // indirect
-	github.com/blevesearch/zapx/v13 v13.4.2 // indirect
-	github.com/blevesearch/zapx/v14 v14.4.2 // indirect
-	github.com/blevesearch/zapx/v15 v15.4.2 // indirect
-	github.com/blevesearch/zapx/v16 v16.2.7 // indirect
+	github.com/blevesearch/vellum v1.2.0 // indirect
+	github.com/blevesearch/zapx/v11 v11.4.3 // indirect
+	github.com/blevesearch/zapx/v12 v12.4.3 // indirect
+	github.com/blevesearch/zapx/v13 v13.4.3 // indirect
+	github.com/blevesearch/zapx/v14 v14.4.3 // indirect
+	github.com/blevesearch/zapx/v15 v15.4.3 // indirect
+	github.com/blevesearch/zapx/v16 v16.3.1 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic v1.14.2 // indirect
 	github.com/bytedance/sonic/loader v0.4.0 // indirect
@@ -289,7 +289,7 @@ require (
 	golang.org/x/net v0.48.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/sys v0.39.0 // indirect
+	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/term v0.38.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
