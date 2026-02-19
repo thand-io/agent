@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/blevesearch/bleve/v2"
@@ -112,9 +113,9 @@ func BleveListSearch[T any](
 	searchRequest := bleve.NewSearchRequest(queryBuilder)
 
 	if searchReq.GetLimit() > 0 {
-		searchRequest.Size = searchReq.GetLimit() // Return all matches
+		searchRequest.Size = searchReq.GetLimit()
 	} else {
-		searchRequest.Size = 100 // Default limit
+		searchRequest.Size = math.MaxInt32 // 0 means unlimited
 	}
 
 	searchResults, err := searchIndex.Search(searchRequest)

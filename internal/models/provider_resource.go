@@ -93,12 +93,13 @@ func (p *BaseProvider) ListResources(ctx context.Context, searchRequest *SearchR
 	// Fallback to simple substring filtering while index is being built
 	var filtered []ProviderResource
 	filterText := strings.ToLower(strings.Join(searchRequest.Terms, " "))
+	limit := searchRequest.GetLimit()
 
 	for _, resource := range resources {
 		// Check if any filter matches the resource name
 		if strings.Contains(strings.ToLower(resource.Name), filterText) {
 			filtered = append(filtered, resource)
-			if len(filtered) >= searchRequest.GetLimit() {
+			if limit > 0 && len(filtered) >= limit {
 				break
 			}
 		}
