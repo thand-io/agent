@@ -34,6 +34,11 @@ func (p *oauth2Provider) ValidateConfig(config *models.BasicConfig) error {
 	return schema.Validate()
 }
 
+// GetConfigSchema returns the OAuth2 configuration schema
+func (p *oauth2Provider) GetConfigSchema() any {
+	return &ConfigSchema{}
+}
+
 // Validate validates the OAuth2 provider configuration
 func (p *oauth2Provider) Validate() error {
 	return p.ValidateConfig(p.GetConfig())
@@ -102,5 +107,5 @@ func (p *oauth2Provider) ListRoles(ctx context.Context, searchRequest *models.Se
 }
 
 func init() {
-	providers.Register(Oauth2ProviderName, &oauth2Provider{})
+	providers.Register(Oauth2ProviderName, &oauth2Provider{}, OAuth2Capabilities, &ConfigSchema{})
 }

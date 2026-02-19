@@ -51,12 +51,12 @@ func (m *mockProviderForSync) Initialize(identifier string, provider ProviderCon
 func (m *mockProviderForSync) SynchronizeUsers(ctx context.Context, req *SynchronizeUsersRequest) (*SynchronizeUsersResponse, error) {
 	m.usersCalled = true
 	m.usersCallCount++
-	
+
 	// Use custom function if provided
 	if m.usersFunc != nil {
 		return m.usersFunc(ctx, req)
 	}
-	
+
 	if m.usersError != nil {
 		return nil, m.usersError
 	}

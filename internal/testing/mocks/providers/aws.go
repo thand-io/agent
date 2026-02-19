@@ -7,5 +7,11 @@ import (
 
 func init() {
 	// Register mock AWS provider to override the real one for all tests
-	coreProviders.Set(aws.AwsProviderName, aws.NewMockAwsProvider())
+	// Use Register() to properly set metadata including capabilities
+	coreProviders.Register(
+		aws.AwsProviderName,
+		aws.NewMockAwsProvider(),
+		aws.AwsCapabilities,
+		&aws.ConfigSchema{},
+	)
 }

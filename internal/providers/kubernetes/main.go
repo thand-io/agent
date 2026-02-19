@@ -55,6 +55,11 @@ func (p *kubernetesProvider) ValidateConfig(config *models.BasicConfig) error {
 	return schema.Validate()
 }
 
+// GetConfigSchema returns the Kubernetes configuration schema
+func (p *kubernetesProvider) GetConfigSchema() any {
+	return &ConfigSchema{}
+}
+
 // Validate validates the Kubernetes provider configuration
 func (p *kubernetesProvider) Validate() error {
 	return p.ValidateConfig(p.GetConfig())
@@ -85,5 +90,5 @@ func (p *kubernetesProvider) getKubernetesConfig() (*rest.Config, error) {
 }
 
 func init() {
-	providers.Register(KubernetesProviderName, &kubernetesProvider{})
+	providers.Register(KubernetesProviderName, &kubernetesProvider{}, KubernetesCapabilities, &ConfigSchema{})
 }

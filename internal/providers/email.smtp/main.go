@@ -87,6 +87,11 @@ func (p *emailSmtpProvider) ValidateConfig(config *models.BasicConfig) error {
 	return schema.Validate()
 }
 
+// GetConfigSchema returns the SMTP Email configuration schema
+func (p *emailSmtpProvider) GetConfigSchema() any {
+	return &ConfigSchema{}
+}
+
 // Validate validates the SMTP Email provider configuration
 func (p *emailSmtpProvider) Validate() error {
 	return p.ValidateConfig(p.GetConfig())
@@ -144,5 +149,5 @@ func NewEmailSmtpProvider() models.Provider {
 }
 
 func init() {
-	providers.Register(EmailSmtpProviderName, &emailSmtpProvider{})
+	providers.Register(EmailSmtpProviderName, &emailSmtpProvider{}, EmailCapabilities, &ConfigSchema{})
 }

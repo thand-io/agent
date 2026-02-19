@@ -66,6 +66,11 @@ func (p *oktaProvider) ValidateConfig(config *models.BasicConfig) error {
 	return schema.Validate()
 }
 
+// GetConfigSchema returns the Okta configuration schema
+func (p *oktaProvider) GetConfigSchema() any {
+	return &ConfigSchema{}
+}
+
 // Validate validates the Okta provider configuration
 func (p *oktaProvider) Validate() error {
 	return p.ValidateConfig(p.GetConfig())
@@ -119,5 +124,5 @@ func (p *oktaProvider) GetApiToken() string {
 }
 
 func init() {
-	providers.Register(OktaProviderName, &oktaProvider{})
+	providers.Register(OktaProviderName, &oktaProvider{}, OktaCapabilities, &ConfigSchema{})
 }

@@ -73,6 +73,11 @@ func (p *emailAcsProvider) ValidateConfig(config *models.BasicConfig) error {
 	return schema.Validate()
 }
 
+// GetConfigSchema returns the Azure ACS Email configuration schema
+func (p *emailAcsProvider) GetConfigSchema() any {
+	return &ConfigSchema{}
+}
+
 // Validate validates the Azure ACS Email provider configuration
 func (p *emailAcsProvider) Validate() error {
 	return p.ValidateConfig(p.GetConfig())
@@ -167,5 +172,5 @@ func NewEmailAcsProvider() models.Provider {
 }
 
 func init() {
-	providers.Register(EmailAcsProviderName, &emailAcsProvider{})
+	providers.Register(EmailAcsProviderName, &emailAcsProvider{}, EmailCapabilities, &ConfigSchema{})
 }

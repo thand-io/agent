@@ -62,6 +62,11 @@ func (p *cloudflareProvider) ValidateConfig(config *models.BasicConfig) error {
 	return schema.Validate()
 }
 
+// GetConfigSchema returns the Cloudflare configuration schema
+func (p *cloudflareProvider) GetConfigSchema() any {
+	return &ConfigSchema{}
+}
+
 // Validate validates the Cloudflare provider configuration
 func (p *cloudflareProvider) Validate() error {
 	return p.ValidateConfig(p.GetConfig())
@@ -123,5 +128,5 @@ type CloudflareConfigurationProvider struct {
 }
 
 func init() {
-	providers.Register(CloudflareProviderName, &cloudflareProvider{})
+	providers.Register(CloudflareProviderName, &cloudflareProvider{}, CloudflareCapabilities, &ConfigSchema{})
 }

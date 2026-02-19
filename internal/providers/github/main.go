@@ -111,11 +111,16 @@ func (p *githubProvider) ValidateConfig(config *models.BasicConfig) error {
 	return schema.Validate()
 }
 
+// GetConfigSchema returns the GitHub configuration schema
+func (p *githubProvider) GetConfigSchema() any {
+	return &ConfigSchema{}
+}
+
 // Validate validates the GitHub provider configuration
 func (p *githubProvider) Validate() error {
 	return p.ValidateConfig(p.GetConfig())
 }
 
 func init() {
-	providers.Register(GithubProviderName, &githubProvider{})
+	providers.Register(GithubProviderName, &githubProvider{}, GithubCapabilities, &ConfigSchema{})
 }

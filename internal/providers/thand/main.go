@@ -63,6 +63,11 @@ func (p *thandProvider) ValidateConfig(config *models.BasicConfig) error {
 	return schema.Validate()
 }
 
+// GetConfigSchema returns the Thand configuration schema
+func (p *thandProvider) GetConfigSchema() any {
+	return &ConfigSchema{}
+}
+
 // Validate validates the Thand provider configuration
 func (p *thandProvider) Validate() error {
 	return p.ValidateConfig(p.GetConfig())
@@ -211,5 +216,5 @@ func (p *thandProvider) RenewSession(ctx context.Context, session *models.Sessio
 }
 
 func init() {
-	providers.Register(ThandProviderName, &thandProvider{})
+	providers.Register(ThandProviderName, &thandProvider{}, ThandCapabilities, &ConfigSchema{})
 }

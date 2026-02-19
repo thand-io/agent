@@ -79,6 +79,11 @@ func (p *gcpProvider) ValidateConfig(config *models.BasicConfig) error {
 	return schema.Validate()
 }
 
+// GetConfigSchema returns the GCP configuration schema
+func (p *gcpProvider) GetConfigSchema() any {
+	return &ConfigSchema{}
+}
+
 // Validate validates the GCP provider configuration
 func (p *gcpProvider) Validate() error {
 	return p.ValidateConfig(p.GetConfig())
@@ -199,5 +204,5 @@ type GcpConfigurationProvider struct {
 }
 
 func init() {
-	providers.Register(GcpProviderName, &gcpProvider{})
+	providers.Register(GcpProviderName, &gcpProvider{}, GcpCapabilities, &ConfigSchema{})
 }

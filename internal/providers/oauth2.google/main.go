@@ -73,6 +73,11 @@ func (p *oauth2Provider) ValidateConfig(config *models.BasicConfig) error {
 	return schema.Validate()
 }
 
+// GetConfigSchema returns the Google OAuth2 configuration schema
+func (p *oauth2Provider) GetConfigSchema() any {
+	return &ConfigSchema{}
+}
+
 // Validate validates the Google OAuth2 provider configuration
 func (p *oauth2Provider) Validate() error {
 	return p.ValidateConfig(p.GetConfig())
@@ -198,5 +203,5 @@ func (p *oauth2Provider) RenewSession(ctx context.Context, session *models.Sessi
 }
 
 func init() {
-	providers.Register(Oauth2GoogleProviderName, &oauth2Provider{})
+	providers.Register(Oauth2GoogleProviderName, &oauth2Provider{}, GoogleOAuth2Capabilities, &ConfigSchema{})
 }

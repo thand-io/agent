@@ -66,6 +66,11 @@ func (p *emailSesProvider) ValidateConfig(config *models.BasicConfig) error {
 	return schema.Validate()
 }
 
+// GetConfigSchema returns the AWS SES Email configuration schema
+func (p *emailSesProvider) GetConfigSchema() any {
+	return &ConfigSchema{}
+}
+
 // Validate validates the AWS SES Email provider configuration
 func (p *emailSesProvider) Validate() error {
 	return p.ValidateConfig(p.GetConfig())
@@ -144,5 +149,5 @@ func NewEmailSesProvider() models.Provider {
 }
 
 func init() {
-	providers.Register(EmailSesProviderName, &emailSesProvider{})
+	providers.Register(EmailSesProviderName, &emailSesProvider{}, EmailCapabilities, &ConfigSchema{})
 }

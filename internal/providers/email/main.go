@@ -62,6 +62,11 @@ func (p *emailProvider) ValidateConfig(config *models.BasicConfig) error {
 	return schema.Validate()
 }
 
+// GetConfigSchema returns the Email configuration schema
+func (p *emailProvider) GetConfigSchema() any {
+	return &ConfigSchema{}
+}
+
 // Validate validates the Email provider configuration
 func (p *emailProvider) Validate() error {
 	return p.ValidateConfig(p.GetConfig())
@@ -79,5 +84,5 @@ func (p *emailProvider) SendNotification(
 }
 
 func init() {
-	providers.Register(EmailProviderName, &emailProvider{})
+	providers.Register(EmailProviderName, &emailProvider{}, EmailCapabilities, &ConfigSchema{})
 }

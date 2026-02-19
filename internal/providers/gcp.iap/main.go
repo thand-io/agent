@@ -104,6 +104,11 @@ func (p *gcpIAPProvider) ValidateConfig(config *models.BasicConfig) error {
 	return schema.Validate()
 }
 
+// GetConfigSchema returns the GCP IAP configuration schema
+func (p *gcpIAPProvider) GetConfigSchema() any {
+	return &ConfigSchema{}
+}
+
 // Validate validates the GCP IAP provider configuration
 func (p *gcpIAPProvider) Validate() error {
 	return p.ValidateConfig(p.GetConfig())
@@ -371,5 +376,5 @@ func (p *gcpIAPProvider) GetAudience() string {
 }
 
 func init() {
-	providers.Register(GcpIAPProviderName, &gcpIAPProvider{})
+	providers.Register(GcpIAPProviderName, &gcpIAPProvider{}, GcpIAPCapabilities, &ConfigSchema{})
 }

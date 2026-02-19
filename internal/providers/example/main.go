@@ -57,6 +57,11 @@ func (p *exampleProvider) ValidateConfig(config *models.BasicConfig) error {
 	return schema.Validate()
 }
 
+// GetConfigSchema returns the Example configuration schema
+func (p *exampleProvider) GetConfigSchema() any {
+	return &ConfigSchema{}
+}
+
 // Validate validates the Example provider configuration
 func (p *exampleProvider) Validate() error {
 	return p.ValidateConfig(p.GetConfig())
@@ -121,5 +126,5 @@ func (p *exampleProvider) ListRoles(ctx context.Context, searchRequest *models.S
 }
 
 func init() {
-	providers.Register(ExampleProviderName, &exampleProvider{})
+	providers.Register(ExampleProviderName, &exampleProvider{}, ExampleCapabilities, &ConfigSchema{})
 }

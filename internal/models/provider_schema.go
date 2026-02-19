@@ -17,7 +17,7 @@ type ConfigSchema interface {
 type BaseConfigSchema struct{}
 
 // Unmarshal converts BasicConfig to a typed struct using mapstructure
-func (b *BaseConfigSchema) Unmarshal(config *BasicConfig, target interface{}) error {
+func (b *BaseConfigSchema) Unmarshal(config *BasicConfig, target any) error {
 	if config == nil {
 		return fmt.Errorf("config cannot be nil")
 	}

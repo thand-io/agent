@@ -57,6 +57,11 @@ func (p *salesForceProvider) ValidateConfig(config *models.BasicConfig) error {
 	return schema.Validate()
 }
 
+// GetConfigSchema returns the Salesforce configuration schema
+func (p *salesForceProvider) GetConfigSchema() any {
+	return &ConfigSchema{}
+}
+
 // Validate validates the Salesforce provider configuration
 func (p *salesForceProvider) Validate() error {
 	return p.ValidateConfig(p.GetConfig())
@@ -149,5 +154,5 @@ func CreateSalesforceClient(salesForceConfig *models.BasicConfig) (*simpleforce.
 }
 
 func init() {
-	providers.Register(SalesforceProviderName, &salesForceProvider{})
+	providers.Register(SalesforceProviderName, &salesForceProvider{}, SalesforceCapabilities, &ConfigSchema{})
 }

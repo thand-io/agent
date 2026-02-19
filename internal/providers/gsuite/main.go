@@ -93,11 +93,16 @@ func (p *gsuiteProvider) ValidateConfig(config *models.BasicConfig) error {
 	return schema.Validate()
 }
 
+// GetConfigSchema returns the GSuite configuration schema
+func (p *gsuiteProvider) GetConfigSchema() any {
+	return &ConfigSchema{}
+}
+
 // Validate validates the GSuite provider configuration
 func (p *gsuiteProvider) Validate() error {
 	return p.ValidateConfig(p.GetConfig())
 }
 
 func init() {
-	providers.Register(GsuiteProviderName, &gsuiteProvider{})
+	providers.Register(GsuiteProviderName, &gsuiteProvider{}, GsuiteCapabilities, &ConfigSchema{})
 }

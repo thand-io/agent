@@ -78,11 +78,16 @@ func (p *terraformProvider) ValidateConfig(config *models.BasicConfig) error {
 	return schema.Validate()
 }
 
+// GetConfigSchema returns the Terraform configuration schema
+func (p *terraformProvider) GetConfigSchema() any {
+	return &ConfigSchema{}
+}
+
 // Validate validates the Terraform provider configuration
 func (p *terraformProvider) Validate() error {
 	return p.ValidateConfig(p.GetConfig())
 }
 
 func init() {
-	providers.Register(TerraformProviderName, &terraformProvider{})
+	providers.Register(TerraformProviderName, &terraformProvider{}, TerraformCapabilities, &ConfigSchema{})
 }

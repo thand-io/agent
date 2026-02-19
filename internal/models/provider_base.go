@@ -225,6 +225,12 @@ func (p *BaseProvider) GetDefaultCapabilities() *ProviderCapabilities {
 	return p.capabilities
 }
 
+// GetConfigSchema returns the config schema for the provider
+// Providers should override this to return their schema struct
+func (p *BaseProvider) GetConfigSchema() any {
+	return nil
+}
+
 func (p *BaseProvider) Initialize(identifier string, provider ProviderConfig) error {
 	// Initialize the provider
 	return nil

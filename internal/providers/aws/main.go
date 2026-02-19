@@ -155,6 +155,11 @@ func (p *awsProvider) ValidateConfig(config *models.BasicConfig) error {
 	return schema.Validate()
 }
 
+// GetConfigSchema returns the AWS configuration schema
+func (p *awsProvider) GetConfigSchema() any {
+	return &ConfigSchema{}
+}
+
 // Validate validates the AWS provider configuration
 func (p *awsProvider) Validate() error {
 	return p.ValidateConfig(p.GetConfig())
@@ -200,5 +205,5 @@ type AwsConfigurationProvider struct {
 }
 
 func init() {
-	providers.Register(AwsProviderName, &awsProvider{})
+	providers.Register(AwsProviderName, &awsProvider{}, AwsCapabilities, &ConfigSchema{})
 }

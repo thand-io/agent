@@ -10,9 +10,15 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
+type ProviderMetadata struct {
+	Capabilities *models.ProviderCapabilities
+	Schema       any
+}
+
 var (
-	registry      = make(map[string]models.Provider)
-	registryMutex sync.RWMutex
+	registry         = make(map[string]models.Provider)
+	metadataRegistry = make(map[string]*ProviderMetadata)
+	registryMutex    sync.RWMutex
 )
 
 func init() {
@@ -30,10 +36,20 @@ func init() {
 
 		return provider.ValidateConfig(config)
 	}
+
+	// Set up the capabilities lookup to use the provider registry
+	models.GetProviderCapabilities = func(providerName string) (*models.ProviderCapabilities, error) {
+		return GetCapabilities(providerName)
+	}
 }
 
-// Register adds a provider to the registry.
-func Register(name string, provider models.Provider) {
+// Register adds a provider to the registry with its metadata.
+func Register(
+	name string,
+	provider models.Provider,
+	capabilities *models.ProviderCapabilities,
+	schema any,
+) {
 	name = strings.ToLower(name)
 	registryMutex.Lock()
 	defer registryMutex.Unlock()
@@ -42,14 +58,22 @@ func Register(name string, provider models.Provider) {
 		return
 	}
 	registry[name] = provider
+	metadataRegistry[name] = &ProviderMetadata{
+		Capabilities: capabilities,
+		Schema:       schema,
+	}
 }
 
-// Set replaces a provider in the registry (useful for testing)
+// Set replaces a provider in the registry (useful for testing).
+// Note: Set does not update metadata registry since providers may not be initialized yet.
+// For proper registration with metadata, use Register() instead.
 func Set(name string, provider models.Provider) {
 	name = strings.ToLower(name)
 	registryMutex.Lock()
 	defer registryMutex.Unlock()
 	registry[name] = provider
+	// Do not attempt to extract metadata from potentially uninitialized providers
+	// Metadata should be set explicitly via Register() for production use
 }
 
 // Get returns a provider from the registry.
@@ -93,4 +117,31 @@ func List() []string {
 		names = append(names, name)
 	}
 	return names
+}
+
+// GetCapabilities returns the capabilities for a provider without initialization
+func GetCapabilities(name string) (*models.ProviderCapabilities, error) {
+	name = strings.ToLower(name)
+	registryMutex.RLock()
+	defer registryMutex.RUnlock()
+	metadata, exists := metadataRegistry[name]
+	if !exists {
+		return nil, fmt.Errorf("provider not found: %s", name)
+	}
+	if metadata.Capabilities == nil {
+		return nil, fmt.Errorf("provider '%s' does not define default capabilities", name)
+	}
+	return metadata.Capabilities, nil
+}
+
+// GetSchema returns the configuration schema for a provider without initialization
+func GetSchema(name string) (any, error) {
+	name = strings.ToLower(name)
+	registryMutex.RLock()
+	defer registryMutex.RUnlock()
+	metadata, exists := metadataRegistry[name]
+	if !exists {
+		return nil, fmt.Errorf("provider not found: %s", name)
+	}
+	return metadata.Schema, nil
 }

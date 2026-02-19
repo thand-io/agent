@@ -56,6 +56,11 @@ func (p *slackProvider) ValidateConfig(config *models.BasicConfig) error {
 	return schema.Validate()
 }
 
+// GetConfigSchema returns the Slack configuration schema
+func (p *slackProvider) GetConfigSchema() any {
+	return &ConfigSchema{}
+}
+
 // Validate validates the Slack provider configuration
 func (p *slackProvider) Validate() error {
 	return p.ValidateConfig(p.GetConfig())
@@ -158,5 +163,5 @@ func (p *slackProvider) getUserIDByUsername(ctx context.Context, username string
 }
 
 func init() {
-	providers.Register(SlackProviderName, &slackProvider{})
+	providers.Register(SlackProviderName, &slackProvider{}, SlackCapabilities, &ConfigSchema{})
 }

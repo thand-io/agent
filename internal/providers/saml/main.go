@@ -153,6 +153,11 @@ func (p *samlProvider) ValidateConfig(config *models.BasicConfig) error {
 	return schema.Validate()
 }
 
+// GetConfigSchema returns the SAML configuration schema
+func (p *samlProvider) GetConfigSchema() any {
+	return &ConfigSchema{}
+}
+
 // Validate validates the SAML provider configuration
 func (p *samlProvider) Validate() error {
 	return p.ValidateConfig(p.GetConfig())
@@ -474,5 +479,5 @@ func (p *samlProvider) parseSAMLConfig(config *models.BasicConfig) (*SAMLConfig,
 }
 
 func init() {
-	providers.Register(SamlProviderName, &samlProvider{})
+	providers.Register(SamlProviderName, &samlProvider{}, SamlCapabilities, &ConfigSchema{})
 }

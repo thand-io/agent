@@ -10,17 +10,7 @@ import (
 // GetCapabilities returns the default capabilities for a provider by name
 // This queries the provider registry without initializing the provider
 func GetCapabilities(providerName string) (*models.ProviderCapabilities, error) {
-	provider, err := providers.Get(providerName)
-	if err != nil {
-		return nil, fmt.Errorf("provider not found: %s", providerName)
-	}
-
-	caps := provider.GetDefaultCapabilities()
-	if caps == nil {
-		return nil, fmt.Errorf("provider '%s' does not define default capabilities", providerName)
-	}
-
-	return caps, nil
+	return providers.GetCapabilities(providerName)
 }
 
 // ValidateConfig validates a provider's configuration without initialization
@@ -54,14 +44,14 @@ type ProviderInfo struct {
 
 // GetProviderInfo retrieves provider metadata
 func GetProviderInfo(providerName string) (*ProviderInfo, error) {
-	provider, err := providers.Get(providerName)
+	caps, err := providers.GetCapabilities(providerName)
 	if err != nil {
-		return nil, fmt.Errorf("provider not found: %s", providerName)
+		return nil, err
 	}
 
 	return &ProviderInfo{
 		Name:         providerName,
-		Capabilities: provider.GetDefaultCapabilities(),
+		Capabilities: caps,
 		Available:    true,
 	}, nil
 }
@@ -78,4 +68,11 @@ func GetAllProviderInfo() map[string]*ProviderInfo {
 	}
 
 	return result
+}
+
+// GetSchema returns the configuration schema for a provider
+// The schema is returned as an any that can be marshaled to JSON
+// Returns nil if the provider doesn't define a schema
+func GetSchema(providerName string) (any, error) {
+	return providers.GetSchema(providerName)
 }
