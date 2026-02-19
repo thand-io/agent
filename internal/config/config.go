@@ -191,6 +191,11 @@ func bindServerEnvVars(v *viper.Viper) {
 	v.BindEnv("server.security.upstream.auth.iap", "THAND_SERVER_SECURITY_UPSTREAM_AUTH_IAP")
 	v.BindEnv("server.security.upstream.auth.ava", "THAND_SERVER_SECURITY_UPSTREAM_AUTH_AVA")
 	v.BindEnv("server.security.upstream.auth.eap", "THAND_SERVER_SECURITY_UPSTREAM_AUTH_EAP")
+
+	// Capabilities environment variables
+	v.BindEnv("server.capabilities.elevations.static.enabled", "THAND_SERVER_CAPABILITIES_ELEVATIONS_STATIC_ENABLED")
+	v.BindEnv("server.capabilities.elevations.dynamic.enabled", "THAND_SERVER_CAPABILITIES_ELEVATIONS_DYNAMIC_ENABLED")
+	v.BindEnv("server.capabilities.elevations.llm.enabled", "THAND_SERVER_CAPABILITIES_ELEVATIONS_LLM_ENABLED")
 }
 
 // bindCloudProviderEnvVars binds cloud provider specific environment variables
@@ -817,6 +822,11 @@ func setDefaults(v *viper.Viper) {
 	// Ready defaults
 	v.SetDefault("server.ready.enabled", true)
 	v.SetDefault("server.ready.path", "/ready")
+
+	// Capabilities defaults
+	v.SetDefault("server.capabilities.elevations.static.enabled", true)
+	v.SetDefault("server.capabilities.elevations.dynamic.enabled", true)
+	v.SetDefault("server.capabilities.elevations.llm.enabled", true)
 
 	// Security defaults
 	v.SetDefault("server.security.cors.allowed_origins", []string{"https://thand.io", "https://*.thand.io", "https://app.thand.io", "https://*.app.thand.io"})

@@ -161,6 +161,21 @@ func (c *Config) HasAnalytics() bool {
 	return c.GetServices().HasAnalytics()
 }
 
+// IsStaticElevationEnabled returns whether static (pre-defined role) elevation is enabled.
+func (c *Config) IsStaticElevationEnabled() bool {
+	return c.Server.Capabilities.Elevations.Static.Enabled
+}
+
+// IsDynamicElevationEnabled returns whether runtime dynamic elevation is enabled.
+func (c *Config) IsDynamicElevationEnabled() bool {
+	return c.Server.Capabilities.Elevations.Dynamic.Enabled
+}
+
+// IsLLMElevationEnabled returns whether LLM-assisted elevation is enabled.
+func (c *Config) IsLLMElevationEnabled() bool {
+	return c.Server.Capabilities.Elevations.LargeLanguageModel.Enabled
+}
+
 type RoleConfig struct {
 	Path  string          `mapstructure:"path" json:"path"`
 	URL   *model.Endpoint `mapstructure:"url" json:"url"`

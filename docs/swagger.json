@@ -408,7 +408,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.ElevateRequest"
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.ElevateRequest"
                         }
                     }
                 ],
@@ -488,7 +488,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.ElevateLLMRequest"
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.ElevateLLMRequest"
                         }
                     }
                 ],
@@ -1423,6 +1423,12 @@
                         "description": "Filter query",
                         "name": "q",
                         "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum number of results to return (default: 100)",
+                        "name": "limit",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -1441,6 +1447,13 @@
                     },
                     "500": {
                         "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "501": {
+                        "description": "Provider does not implement tenants",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -1737,7 +1750,7 @@
                     "200": {
                         "description": "List of roles",
                         "schema": {
-                            "$ref": "#/definitions/models.RolesResponse"
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.RolesResponse"
                         }
                     },
                     "401": {
@@ -2228,7 +2241,7 @@
                     "200": {
                         "description": "List of workflows",
                         "schema": {
-                            "$ref": "#/definitions/models.WorkflowsResponse"
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.WorkflowsResponse"
                         }
                     },
                     "401": {
@@ -2457,6 +2470,9 @@
         "daemon.SimpleServer": {
             "type": "object",
             "properties": {
+                "capabilities": {
+                    "$ref": "#/definitions/models.CapabilitiesConfig"
+                },
                 "health": {
                     "$ref": "#/definitions/daemon.SimpleHealth"
                 },
@@ -2531,6 +2547,10 @@
                 "commit": {
                     "type": "string"
                 },
+                "endpoint": {
+                    "description": "Login server endpoint",
+                    "type": "string"
+                },
                 "environment": {
                     "$ref": "#/definitions/github_com_thand-io_agent_internal_models.EnvironmentConfig"
                 },
@@ -2539,6 +2559,10 @@
                 },
                 "mode": {
                     "$ref": "#/definitions/github_com_thand-io_agent_internal_config.Mode"
+                },
+                "origin": {
+                    "description": "Where the agent is running, used for logging and analytics",
+                    "type": "string"
                 },
                 "version": {
                     "type": "string"
@@ -2571,6 +2595,60 @@
         "github_com_thand-io_agent_internal_models.BasicConfig": {
             "type": "object",
             "additionalProperties": {}
+        },
+        "github_com_thand-io_agent_internal_models.ElevateLLMRequest": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_thand-io_agent_internal_models.ElevateRequest": {
+            "type": "object",
+            "properties": {
+                "authenticator": {
+                    "description": "Which provider to use for authentication",
+                    "type": "string"
+                },
+                "duration": {
+                    "description": "Duration in ISO 8601 format",
+                    "type": "string"
+                },
+                "identities": {
+                    "description": "Optional identities to elevate, if empty the requesting user is used",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "providers": {
+                    "description": "A role can be applied to multiple providers",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "role": {
+                    "$ref": "#/definitions/github_com_thand-io_agent_internal_models.Role"
+                },
+                "session": {
+                    "$ref": "#/definitions/github_com_thand-io_agent_internal_models.LocalSession"
+                },
+                "tenants": {
+                    "description": "Optional tenant IDs for multi-account providers",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "workflow": {
+                    "type": "string"
+                }
+            }
         },
         "github_com_thand-io_agent_internal_models.EnvironmentConfig": {
             "type": "object",
@@ -2905,6 +2983,9 @@
                 "name": {
                     "type": "string"
                 },
+                "tenant": {
+                    "type": "string"
+                },
                 "type": {
                     "type": "string"
                 }
@@ -2922,7 +3003,7 @@
                 "enabled": {
                     "type": "boolean"
                 },
-                "id": {
+                "identifier": {
                     "type": "string"
                 },
                 "name": {
@@ -2931,6 +3012,9 @@
                 "provider": {
                     "description": "e.g. aws, gcp, azure",
                     "type": "string"
+                },
+                "version": {
+                    "$ref": "#/definitions/version.Version"
                 }
             }
         },
@@ -2944,6 +3028,9 @@
                     "type": "string"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "tenant": {
                     "type": "string"
                 },
                 "title": {
@@ -2978,7 +3065,24 @@
                     }
                 },
                 "version": {
-                    "type": "string"
+                    "$ref": "#/definitions/version.Version"
+                }
+            }
+        },
+        "github_com_thand-io_agent_internal_models.ResponseMeta": {
+            "type": "object",
+            "properties": {
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
                 }
             }
         },
@@ -3010,6 +3114,7 @@
                     "default": true
                 },
                 "identifier": {
+                    "description": "To be set by the system",
                     "type": "string"
                 },
                 "inherits": {
@@ -3081,6 +3186,87 @@
                 }
             }
         },
+        "github_com_thand-io_agent_internal_models.RoleResponse": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "authenticators": {
+                    "description": "All the auth providers that the role can use. If empty then any provider can be used",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "composite": {
+                    "description": "Whether this role is a composite role (i.e., aggregates other roles)",
+                    "type": "boolean",
+                    "default": false
+                },
+                "description": {
+                    "type": "string",
+                    "maxLength": 500
+                },
+                "enabled": {
+                    "description": "By default enable the role",
+                    "type": "boolean",
+                    "default": true
+                },
+                "identifier": {
+                    "description": "To be set by the system",
+                    "type": "string"
+                },
+                "inherits": {
+                    "description": "roles to inherit from or provider specific roles/policies etc",
+                    "type": "array",
+                    "maxItems": 50,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "minLength": 1
+                },
+                "permissions": {
+                    "description": "CSP-agnostic permission statements",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.RolePermissions"
+                        }
+                    ]
+                },
+                "providers": {
+                    "description": "providers that can assign this role",
+                    "type": "array",
+                    "maxItems": 5,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "scopes": {
+                    "description": "scope of who can be assigned this role",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.RoleScopes"
+                        }
+                    ]
+                },
+                "version": {
+                    "$ref": "#/definitions/version.Version"
+                },
+                "workflows": {
+                    "description": "The workflows to execute",
+                    "type": "array",
+                    "maxItems": 5,
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "github_com_thand-io_agent_internal_models.RoleScopes": {
             "type": "object",
             "properties": {
@@ -3089,6 +3275,37 @@
                 },
                 "deny": {
                     "$ref": "#/definitions/models.ScopeIdentities"
+                }
+            }
+        },
+        "github_com_thand-io_agent_internal_models.RolesResponse": {
+            "type": "object",
+            "properties": {
+                "meta": {
+                    "$ref": "#/definitions/github_com_thand-io_agent_internal_models.ResponseMeta"
+                },
+                "roles": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "_id": {
+                                "type": "string"
+                            },
+                            "_reason": {
+                                "type": "string"
+                            },
+                            "_score": {
+                                "type": "number"
+                            },
+                            "_source": {
+                                "$ref": "#/definitions/github_com_thand-io_agent_internal_models.RoleResponse"
+                            }
+                        }
+                    }
+                },
+                "version": {
+                    "$ref": "#/definitions/version.Version"
                 }
             }
         },
@@ -3253,6 +3470,10 @@
                     "type": "boolean",
                     "default": true
                 },
+                "identifier": {
+                    "description": "To be set by the system",
+                    "type": "string"
+                },
                 "name": {
                     "type": "string",
                     "maxLength": 100,
@@ -3331,6 +3552,57 @@
                 },
                 "user": {
                     "type": "string"
+                }
+            }
+        },
+        "github_com_thand-io_agent_internal_models.WorkflowResponse": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "identifier": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "version": {
+                    "$ref": "#/definitions/version.Version"
+                }
+            }
+        },
+        "github_com_thand-io_agent_internal_models.WorkflowsResponse": {
+            "type": "object",
+            "properties": {
+                "meta": {
+                    "$ref": "#/definitions/github_com_thand-io_agent_internal_models.ResponseMeta"
+                },
+                "version": {
+                    "$ref": "#/definitions/version.Version"
+                },
+                "workflows": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "_id": {
+                                "type": "string"
+                            },
+                            "_reason": {
+                                "type": "string"
+                            },
+                            "_score": {
+                                "type": "number"
+                            },
+                            "_source": {
+                                "$ref": "#/definitions/github_com_thand-io_agent_internal_models.WorkflowResponse"
+                            }
+                        }
+                    }
                 }
             }
         },
@@ -4102,57 +4374,34 @@
                 }
             }
         },
-        "models.ElevateLLMRequest": {
+        "models.CapabilitiesConfig": {
             "type": "object",
             "properties": {
-                "reason": {
-                    "type": "string"
+                "elevations": {
+                    "$ref": "#/definitions/models.ElevationsConfig"
                 }
             }
         },
-        "models.ElevateRequest": {
+        "models.DynamicElevationsConfig": {
             "type": "object",
             "properties": {
-                "authenticator": {
-                    "description": "Which provider to use for authentication",
-                    "type": "string"
+                "enabled": {
+                    "type": "boolean",
+                    "default": true
+                }
+            }
+        },
+        "models.ElevationsConfig": {
+            "type": "object",
+            "properties": {
+                "dynamic": {
+                    "$ref": "#/definitions/models.DynamicElevationsConfig"
                 },
-                "duration": {
-                    "description": "Duration in ISO 8601 format",
-                    "type": "string"
+                "llm": {
+                    "$ref": "#/definitions/models.LargeLanguageModelElevationsConfig"
                 },
-                "identities": {
-                    "description": "Optional identities to elevate, if empty the requesting user is used",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "providers": {
-                    "description": "A role can be applied to multiple providers",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "reason": {
-                    "type": "string"
-                },
-                "role": {
-                    "$ref": "#/definitions/github_com_thand-io_agent_internal_models.Role"
-                },
-                "session": {
-                    "$ref": "#/definitions/github_com_thand-io_agent_internal_models.LocalSession"
-                },
-                "tenants": {
-                    "description": "Optional tenant IDs for multi-account providers",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "workflow": {
-                    "type": "string"
+                "static": {
+                    "$ref": "#/definitions/models.StaticElevationsConfig"
                 }
             }
         },
@@ -4265,6 +4514,15 @@
                         "gemini",
                         "anthropic"
                     ]
+                }
+            }
+        },
+        "models.LargeLanguageModelElevationsConfig": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "default": true
                 }
             }
         },
@@ -4411,7 +4669,7 @@
                     }
                 },
                 "version": {
-                    "type": "string"
+                    "$ref": "#/definitions/version.Version"
                 }
             }
         },
@@ -4537,86 +4795,6 @@
                 }
             }
         },
-        "models.RoleResponse": {
-            "type": "object",
-            "required": [
-                "name"
-            ],
-            "properties": {
-                "authenticators": {
-                    "description": "All the auth providers that the role can use. If empty then any provider can be used",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "composite": {
-                    "description": "Whether this role is a composite role (i.e., aggregates other roles)",
-                    "type": "boolean",
-                    "default": false
-                },
-                "description": {
-                    "type": "string",
-                    "maxLength": 500
-                },
-                "enabled": {
-                    "description": "By default enable the role",
-                    "type": "boolean",
-                    "default": true
-                },
-                "identifier": {
-                    "type": "string"
-                },
-                "inherits": {
-                    "description": "roles to inherit from or provider specific roles/policies etc",
-                    "type": "array",
-                    "maxItems": 50,
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "name": {
-                    "type": "string",
-                    "maxLength": 100,
-                    "minLength": 1
-                },
-                "permissions": {
-                    "description": "CSP-agnostic permission statements",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.RolePermissions"
-                        }
-                    ]
-                },
-                "providers": {
-                    "description": "providers that can assign this role",
-                    "type": "array",
-                    "maxItems": 5,
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "scopes": {
-                    "description": "scope of who can be assigned this role",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.RoleScopes"
-                        }
-                    ]
-                },
-                "version": {
-                    "$ref": "#/definitions/version.Version"
-                },
-                "workflows": {
-                    "description": "The workflows to execute",
-                    "type": "array",
-                    "maxItems": 5,
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
         "models.RolesConfiguration": {
             "type": "object",
             "properties": {
@@ -4631,20 +4809,6 @@
                 },
                 "synchronizable": {
                     "type": "boolean"
-                }
-            }
-        },
-        "models.RolesResponse": {
-            "type": "object",
-            "properties": {
-                "roles": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "$ref": "#/definitions/models.RoleResponse"
-                    }
-                },
-                "version": {
-                    "type": "string"
                 }
             }
         },
@@ -4784,6 +4948,15 @@
                 }
             }
         },
+        "models.StaticElevationsConfig": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "default": true
+                }
+            }
+        },
         "models.TenantsConfiguration": {
             "type": "object",
             "properties": {
@@ -4840,34 +5013,6 @@
                             "$ref": "#/definitions/github_com_thand-io_agent_internal_models.User"
                         }
                     ]
-                }
-            }
-        },
-        "models.WorkflowResponse": {
-            "type": "object",
-            "properties": {
-                "description": {
-                    "type": "string"
-                },
-                "enabled": {
-                    "type": "boolean"
-                },
-                "name": {
-                    "type": "string"
-                }
-            }
-        },
-        "models.WorkflowsResponse": {
-            "type": "object",
-            "properties": {
-                "version": {
-                    "type": "string"
-                },
-                "workflows": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "$ref": "#/definitions/models.WorkflowResponse"
-                    }
                 }
             }
         },

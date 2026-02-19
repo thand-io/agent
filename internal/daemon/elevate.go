@@ -157,6 +157,12 @@ func (s *Server) postElevateJSON(c *gin.Context) {
 
 func (s *Server) handleDynamicRequest(c *gin.Context, dynamicRequest models.ElevateDynamicRequest) {
 
+	// Capability gate: dynamic elevation can be disabled via config
+	if !s.Config.IsDynamicElevationEnabled() {
+		s.getErrorPage(c, http.StatusForbidden, "Dynamic elevation requests are disabled on this server")
+		return
+	}
+
 	// Validate required fields
 	if len(dynamicRequest.Reason) == 0 {
 		s.getErrorPage(c, http.StatusBadRequest, "Reason is required")
@@ -647,6 +653,11 @@ func (s *Server) postElevateLLM(c *gin.Context) {
 
 func (s *Server) handleLargeLanguageModelRequest(c *gin.Context, elevateRequest models.ElevateLLMRequest) {
 
+	if !s.Config.IsLLMElevationEnabled() {
+		s.getErrorPage(c, http.StatusForbidden, "LLM elevation requests are disabled on this server")
+		return
+	}
+
 	if !s.Config.HasLargeLanguageModel() {
 		s.getErrorPage(c, http.StatusInternalServerError, "Gemini is not initialized")
 		return
@@ -798,13 +809,25 @@ func (s *Server) getElevationPagePrefill(c *gin.Context) ElevateStaticPageData {
 }
 
 func (s *Server) getElevateStaticPage(c *gin.Context) {
+	if !s.Config.IsStaticElevationEnabled() {
+		s.getErrorPage(c, http.StatusForbidden, "Static elevation requests are disabled on this server")
+		return
+	}
 	s.renderHtml(c, "elevate_static.html", s.getElevationPagePrefill(c))
 }
 
 func (s *Server) getElevateDynamicPage(c *gin.Context) {
+	if !s.Config.IsDynamicElevationEnabled() {
+		s.getErrorPage(c, http.StatusForbidden, "Dynamic elevation requests are disabled on this server")
+		return
+	}
 	s.renderHtml(c, "elevate_dynamic.html", s.getElevationPagePrefill(c))
 }
 
 func (s *Server) getElevateLLMPage(c *gin.Context) {
+	if !s.Config.IsLLMElevationEnabled() {
+		s.getErrorPage(c, http.StatusForbidden, "LLM elevation requests are disabled on this server")
+		return
+	}
 	s.renderHtml(c, "elevate_llm.html", s.getElevationPagePrefill(c))
 }

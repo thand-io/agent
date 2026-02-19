@@ -165,6 +165,7 @@ func (s *Server) GetTemplateData(c *gin.Context) TemplateData {
 					Enabled: s.Config.Server.Metrics.Enabled,
 					Path:    s.Config.Server.Metrics.Path,
 				},
+				Capabilities: s.Config.Server.Capabilities,
 			},
 			Services: SimpleServices{
 				HasTemporal:           hasTemporal,

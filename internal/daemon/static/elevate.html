@@ -11,6 +11,7 @@
                 <p>Choose your elevation method to proceed with privilege escalation.</p>
             </div>
             <div class="elevate-methods">
+                {{if .Config.Server.Capabilities.Elevations.Static.Enabled}}
                 <div class="method-option">
                     <a href="/elevate/static" class="method-button" 
                        @mouseenter="description = staticDesc" 
@@ -29,8 +30,9 @@
                         </div>
                     </a>
                 </div>
+                {{end}}
 
-                {{if .Config.Services.HasLargeLanguageModel}}
+                {{if and .Config.Services.HasLargeLanguageModel .Config.Server.Capabilities.Elevations.LargeLanguageModel.Enabled}}
                 <div class="method-option">
                     <a href="/elevate/llm" class="method-button"
                        @mouseenter="description = aiDesc" 
@@ -55,6 +57,7 @@
                 </div>
                 {{end}}
 
+                {{if .Config.Server.Capabilities.Elevations.Dynamic.Enabled}}
                 <div class="method-option">
                     <a href="/elevate/dynamic" class="method-button"
                        @mouseenter="description = dynamicDesc" 
@@ -69,7 +72,22 @@
                         </div>
                     </a>
                 </div>
+                {{end}}
             </div>
+
+            {{if and (not .Config.Server.Capabilities.Elevations.Static.Enabled) (not .Config.Server.Capabilities.Elevations.Dynamic.Enabled) (not (and .Config.Services.HasLargeLanguageModel .Config.Server.Capabilities.Elevations.LargeLanguageModel.Enabled))}}
+            <div class="notice notice-warning">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/>
+                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                <div>
+                    <strong>Elevation requests are disabled</strong>
+                    <p>All elevation methods have been disabled by the server administrator. Contact your administrator to enable elevation requests.</p>
+                </div>
+            </div>
+            {{end}}
 
             <div class="description-container">
                 <p id="hover-description" class="hover-description" x-text="description">
