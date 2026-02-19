@@ -75,21 +75,32 @@ func BleveListSearch[T any](
 	var queries []query.Query
 
 	if len(searchReq.Terms) > 0 {
-		// Build a conjunction query from the terms
+		// Build a conjunction query from the terms; each term is a disjunction
+		// of MatchQuery (full-word) | PrefixQuery (prefix) | WildcardQuery
+		// (*term* — substring) so that "prod" matches "Production".
 		termQueries := []query.Query{}
 		for _, term := range searchReq.Terms {
-			termQueries = append(termQueries, bleve.NewMatchQuery(term))
+			lower := strings.ToLower(term)
+			termMatch := bleve.NewDisjunctionQuery(
+				bleve.NewMatchQuery(lower),
+				bleve.NewPrefixQuery(lower),
+				bleve.NewWildcardQuery("*"+lower+"*"),
+			)
+			termQueries = append(termQueries, termMatch)
 		}
 		// All terms must be present (conjunction)
 		queries = append(queries, bleve.NewConjunctionQuery(termQueries...))
 	}
 
 	if len(searchReq.Query) > 0 {
-		// Use a match query to search across all fields generically
-		// This avoids issues with special characters in query string parsing
-		matchQuery := bleve.NewMatchQuery(searchReq.Query)
-		// Don't set a specific field - this makes it search across all fields
-		queries = append(queries, matchQuery)
+		// Disjunction of match / prefix / wildcard for the free-text query
+		// so that partial input like "prod" hits "Production Account".
+		lower := strings.ToLower(searchReq.Query)
+		queries = append(queries, bleve.NewDisjunctionQuery(
+			bleve.NewMatchQuery(lower),
+			bleve.NewPrefixQuery(lower),
+			bleve.NewWildcardQuery("*"+lower+"*"),
+		))
 	}
 
 	if len(queries) == 0 {
