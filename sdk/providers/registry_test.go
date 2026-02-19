@@ -19,6 +19,30 @@ type MockProvider struct {
 	validateErr  error
 }
 
+type MockSchema struct {
+	data map[string]string
+}
+
+func (s *MockSchema) Unmarshal(config *models.BasicConfig) error {
+	if config == nil {
+		return nil
+	}
+	s.data = make(map[string]string)
+	for k, v := range *config {
+		if str, ok := v.(string); ok {
+			s.data[k] = str
+		}
+	}
+	return nil
+}
+
+func (s *MockSchema) Validate() error {
+	if _, ok := s.data["invalid"]; ok {
+		return fmt.Errorf("validation error: 'invalid' key is not allowed")
+	}
+	return nil
+}
+
 func NewMockProvider(name string, caps *models.ProviderCapabilities) *MockProvider {
 	config := models.ProviderConfig{
 		Name:     name,
@@ -50,7 +74,7 @@ func TestGetCapabilities(t *testing.T) {
 		Authorizer: models.NewCapability(),
 	}
 	mockProvider := NewMockProvider("test-caps", caps)
-	providers.Register("test-caps", mockProvider, caps, &struct{}{})
+	providers.Register("test-caps", mockProvider, caps, &MockSchema{})
 
 	t.Run("Get Capabilities for Registered Provider", func(t *testing.T) {
 		result, err := GetCapabilities("test-caps")
@@ -75,7 +99,7 @@ func TestGetCapabilities(t *testing.T) {
 
 	t.Run("Get Capabilities for Provider Without Defaults", func(t *testing.T) {
 		mockProviderNoCaps := NewMockProvider("no-caps", nil)
-		providers.Register("no-caps", mockProviderNoCaps, nil, &struct{}{})
+		providers.Register("no-caps", mockProviderNoCaps, nil, &MockSchema{})
 
 		result, err := GetCapabilities("no-caps")
 		assert.Error(t, err)
@@ -91,7 +115,7 @@ func TestValidateConfig(t *testing.T) {
 
 	t.Run("Validate Valid Config", func(t *testing.T) {
 		mockProvider := NewMockProvider("validate-test", caps)
-		providers.Register("validate-test", mockProvider, caps, &struct{}{})
+		providers.Register("validate-test", mockProvider, caps, &MockSchema{})
 
 		config := &models.BasicConfig{
 			"key": "value",
@@ -103,7 +127,7 @@ func TestValidateConfig(t *testing.T) {
 	t.Run("Validate Invalid Config", func(t *testing.T) {
 		mockProvider := NewMockProvider("validate-error", caps)
 		mockProvider.validateErr = fmt.Errorf("validation error")
-		providers.Register("validate-error", mockProvider, caps, &struct{}{})
+		providers.Register("validate-error", mockProvider, caps, &MockSchema{})
 
 		config := &models.BasicConfig{
 			"invalid": "config",
@@ -124,7 +148,7 @@ func TestValidateConfig(t *testing.T) {
 
 	t.Run("Validate Nil Config", func(t *testing.T) {
 		mockProvider := NewMockProvider("nil-config", caps)
-		providers.Register("nil-config", mockProvider, caps, &struct{}{})
+		providers.Register("nil-config", mockProvider, caps, &MockSchema{})
 
 		err := ValidateConfig("nil-config", nil)
 		assert.NoError(t, err)
@@ -138,9 +162,9 @@ func TestListProviders(t *testing.T) {
 
 	t.Run("List Providers", func(t *testing.T) {
 		// Register some test providers
-		providers.Register("list-test-1", NewMockProvider("list-test-1", caps), caps, &struct{}{})
-		providers.Register("list-test-2", NewMockProvider("list-test-2", caps), caps, &struct{}{})
-		providers.Register("list-test-3", NewMockProvider("list-test-3", caps), caps, &struct{}{})
+		providers.Register("list-test-1", NewMockProvider("list-test-1", caps), caps, &MockSchema{})
+		providers.Register("list-test-2", NewMockProvider("list-test-2", caps), caps, &MockSchema{})
+		providers.Register("list-test-3", NewMockProvider("list-test-3", caps), caps, &MockSchema{})
 
 		result := ListProviders()
 		assert.NotEmpty(t, result)
@@ -166,7 +190,7 @@ func TestProviderExists(t *testing.T) {
 		Identities: models.NewSynchronizableCapability(),
 	}
 	mockProvider := NewMockProvider("exists-test", caps)
-	providers.Register("exists-test", mockProvider, caps, &struct{}{})
+	providers.Register("exists-test", mockProvider, caps, &MockSchema{})
 
 	t.Run("Provider Exists", func(t *testing.T) {
 		exists := ProviderExists("exists-test")
@@ -206,7 +230,7 @@ func TestGetProviderInfo(t *testing.T) {
 	}
 	mockProvider := NewMockProvider("info-test", caps)
 	// Use Register() instead of Set() to properly store metadata
-	providers.Register("info-test", mockProvider, caps, &struct{}{})
+	providers.Register("info-test", mockProvider, caps, &MockSchema{})
 
 	t.Run("Get Provider Info", func(t *testing.T) {
 		info, err := GetProviderInfo("info-test")
@@ -251,9 +275,9 @@ func TestGetAllProviderInfo(t *testing.T) {
 		Permissions: models.NewSynchronizableCapability(),
 	}
 
-	providers.Register("all-info-1", NewMockProvider("all-info-1", caps1), caps1, &struct{}{})
-	providers.Register("all-info-2", NewMockProvider("all-info-2", caps2), caps2, &struct{}{})
-	providers.Register("all-info-3", NewMockProvider("all-info-3", caps3), caps3, &struct{}{})
+	providers.Register("all-info-1", NewMockProvider("all-info-1", caps1), caps1, &MockSchema{})
+	providers.Register("all-info-2", NewMockProvider("all-info-2", caps2), caps2, &MockSchema{})
+	providers.Register("all-info-3", NewMockProvider("all-info-3", caps3), caps3, &MockSchema{})
 
 	t.Run("Get All Provider Info", func(t *testing.T) {
 		allInfo := GetAllProviderInfo()
@@ -302,7 +326,7 @@ func TestSDKRegistryIntegration(t *testing.T) {
 		Provisioning: nil,
 	}
 	mockProvider := NewMockProvider("integration-test", caps)
-	providers.Register("integration-test", mockProvider, caps, &struct{}{})
+	providers.Register("integration-test", mockProvider, caps, &MockSchema{})
 
 	t.Run("Full Integration Flow", func(t *testing.T) {
 		// 1. Check if provider exists

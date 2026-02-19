@@ -12,7 +12,7 @@ import (
 
 type ProviderMetadata struct {
 	Capabilities *models.ProviderCapabilities
-	Schema       any
+	Schema       models.ConfigSchema
 }
 
 var (
@@ -26,7 +26,7 @@ func Register(
 	name string,
 	provider models.Provider,
 	capabilities *models.ProviderCapabilities,
-	schema any,
+	schema models.ConfigSchema,
 ) {
 	name = strings.ToLower(name)
 	registryMutex.Lock()

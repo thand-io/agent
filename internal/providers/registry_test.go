@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -35,6 +36,31 @@ func (m *MockProvider) Initialize(providerType string, config models.ProviderCon
 	return nil
 }
 
+// MockSchema is a test schema implementation
+type MockSchema struct {
+	data map[string]string
+}
+
+func (s *MockSchema) Unmarshal(config *models.BasicConfig) error {
+	if config == nil {
+		return nil
+	}
+	s.data = make(map[string]string)
+	for k, v := range *config {
+		if str, ok := v.(string); ok {
+			s.data[k] = str
+		}
+	}
+	return nil
+}
+
+func (s *MockSchema) Validate() error {
+	if _, ok := s.data["invalid"]; ok {
+		return fmt.Errorf("validation error: 'invalid' key is not allowed")
+	}
+	return nil
+}
+
 func TestRegisterProvider(t *testing.T) {
 	// Create a test registry (save and restore original)
 	originalRegistry := registry
@@ -49,7 +75,7 @@ func TestRegisterProvider(t *testing.T) {
 	mockProvider := NewMockProvider("test-provider", caps)
 
 	t.Run("Register New Provider", func(t *testing.T) {
-		Register("test-provider", mockProvider, caps, &struct{}{})
+		Register("test-provider", mockProvider, caps, &MockSchema{})
 
 		provider, err := Get("test-provider")
 		require.NoError(t, err)
@@ -57,7 +83,7 @@ func TestRegisterProvider(t *testing.T) {
 	})
 
 	t.Run("Register Provider Case Insensitive", func(t *testing.T) {
-		Register("CaseSensitive", mockProvider, caps, &struct{}{})
+		Register("CaseSensitive", mockProvider, caps, &MockSchema{})
 
 		// Should be retrievable with lowercase
 		provider, err := Get("casesensitive")
@@ -71,8 +97,8 @@ func TestRegisterProvider(t *testing.T) {
 	})
 
 	t.Run("Register Duplicate Provider", func(t *testing.T) {
-		Register("duplicate", mockProvider, caps, &struct{}{})
-		Register("duplicate", mockProvider, caps, &struct{}{}) // Should not panic
+		Register("duplicate", mockProvider, caps, &MockSchema{})
+		Register("duplicate", mockProvider, caps, &MockSchema{}) // Should not panic
 
 		provider, err := Get("duplicate")
 		require.NoError(t, err)
@@ -92,7 +118,7 @@ func TestGetProvider(t *testing.T) {
 		Identities: models.NewSynchronizableCapability(),
 	}
 	mockProvider := NewMockProvider("existing-provider", caps)
-	Register("existing-provider", mockProvider, caps, &struct{}{})
+	Register("existing-provider", mockProvider, caps, &MockSchema{})
 
 	t.Run("Get Existing Provider", func(t *testing.T) {
 		provider, err := Get("existing-provider")
@@ -126,7 +152,7 @@ func TestCreateInstance(t *testing.T) {
 		Identities: models.NewSynchronizableCapability(),
 	}
 	mockProvider := NewMockProvider("template", caps)
-	Register("template", mockProvider, caps, &struct{}{})
+	Register("template", mockProvider, caps, &MockSchema{})
 
 	t.Run("Create Instance from Template", func(t *testing.T) {
 		instance, err := CreateInstance("template")
@@ -169,9 +195,9 @@ func TestListProviders(t *testing.T) {
 	})
 
 	t.Run("List Multiple Providers", func(t *testing.T) {
-		Register("provider1", NewMockProvider("provider1", caps), caps, &struct{}{})
-		Register("provider2", NewMockProvider("provider2", caps), caps, &struct{}{})
-		Register("provider3", NewMockProvider("provider3", caps), caps, &struct{}{})
+		Register("provider1", NewMockProvider("provider1", caps), caps, &MockSchema{})
+		Register("provider2", NewMockProvider("provider2", caps), caps, &MockSchema{})
+		Register("provider3", NewMockProvider("provider3", caps), caps, &MockSchema{})
 
 		providers := List()
 		assert.Len(t, providers, 3)
@@ -200,7 +226,7 @@ func TestRegistryConcurrency(t *testing.T) {
 		for i := 0; i < 10; i++ {
 			go func(idx int) {
 				provider := NewMockProvider("concurrent", caps)
-				Register("concurrent", provider, caps, &struct{}{})
+				Register("concurrent", provider, caps, &MockSchema{})
 				done <- true
 			}(i)
 		}
@@ -225,8 +251,8 @@ func TestRegistryConcurrency(t *testing.T) {
 	})
 
 	t.Run("Concurrent List", func(t *testing.T) {
-		Register("list-test-1", NewMockProvider("list-test-1", caps), caps, &struct{}{})
-		Register("list-test-2", NewMockProvider("list-test-2", caps), caps, &struct{}{})
+		Register("list-test-1", NewMockProvider("list-test-1", caps), caps, &MockSchema{})
+		Register("list-test-2", NewMockProvider("list-test-2", caps), caps, &MockSchema{})
 
 		done := make(chan bool)
 
