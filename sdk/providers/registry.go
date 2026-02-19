@@ -23,6 +23,11 @@ func ValidateConfig(providerName string, config *models.BasicConfig) error {
 		return fmt.Errorf("failed to get schema for provider '%s': %w", providerName, err)
 	}
 
+	// If schema is nil, the provider does not require configuration; skip validation
+	if schemaRaw == nil {
+		return nil
+	}
+
 	// Type-assert to ConfigSchema interface and unmarshal resolved config into it
 	cs, ok := schemaRaw.(models.ConfigSchema)
 	if !ok {
