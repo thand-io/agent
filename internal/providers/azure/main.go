@@ -27,7 +27,6 @@ type azureProvider struct {
 	subscriptionsClient *armsubscriptions.Client
 	subscriptionID      string
 	resourceGroupName   string
-
 }
 
 func (p *azureProvider) Initialize(identifier string, provider models.ProviderConfig) error {
@@ -80,7 +79,7 @@ func (p *azureProvider) Initialize(identifier string, provider models.ProviderCo
 }
 
 func init() {
-	providers.Register(AzureProviderName, &azureProvider{})
+	providers.Register(AzureProviderName, &azureProvider{}, AzureCapabilities, &ConfigSchema{})
 }
 
 // CreateAzureConfig creates Azure credentials based on the provided configuration

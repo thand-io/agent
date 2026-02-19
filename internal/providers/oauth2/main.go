@@ -88,5 +88,5 @@ func (p *oauth2Provider) ListRoles(ctx context.Context, searchRequest *models.Se
 }
 
 func init() {
-	providers.Register(Oauth2ProviderName, &oauth2Provider{})
+	providers.Register(Oauth2ProviderName, &oauth2Provider{}, OAuth2Capabilities, &ConfigSchema{})
 }

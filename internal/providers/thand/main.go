@@ -197,5 +197,5 @@ func (p *thandProvider) RenewSession(ctx context.Context, session *models.Sessio
 }
 
 func init() {
-	providers.Register(ThandProviderName, &thandProvider{})
+	providers.Register(ThandProviderName, &thandProvider{}, ThandCapabilities, &ConfigSchema{})
 }

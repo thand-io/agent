@@ -7,5 +7,11 @@ import (
 
 func init() {
 	// Register mock Email provider to override the real one for all tests
-	coreProviders.Set(email.EmailProviderName, email.NewMockEmailProvider())
+	// Use Register() to properly set metadata including capabilities
+	coreProviders.Register(
+		email.EmailProviderName,
+		email.NewMockEmailProvider(),
+		email.EmailCapabilities,
+		&email.ConfigSchema{},
+	)
 }

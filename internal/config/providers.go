@@ -11,6 +11,7 @@ import (
 	"github.com/thand-io/agent/internal/config/environment"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/providers"
+	providerSdk "github.com/thand-io/agent/sdk/providers"
 
 	// Load modules
 	_ "github.com/thand-io/agent/internal/providers/aws"
@@ -288,6 +289,12 @@ func (c *Config) initializeSingleProvider(providerKey string, p *models.Provider
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve environment variables for provider %s: %w", providerKey, err)
+	}
+
+	err = providerSdk.ValidateConfig(p.Provider, p.Config)
+
+	if err != nil {
+		return nil, fmt.Errorf("provider config validation failed for provider %s: %w", providerKey, err)
 	}
 
 	if err := impl.Initialize(providerKey, *p); err != nil {

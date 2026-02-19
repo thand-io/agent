@@ -130,5 +130,5 @@ func NewEmailSesProvider() models.Provider {
 }
 
 func init() {
-	providers.Register(EmailSesProviderName, &emailSesProvider{})
+	providers.Register(EmailSesProviderName, &emailSesProvider{}, EmailCapabilities, &ConfigSchema{})
 }

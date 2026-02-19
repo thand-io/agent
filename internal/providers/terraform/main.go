@@ -70,5 +70,5 @@ func (p *terraformProvider) Initialize(identifier string, provider models.Provid
 }
 
 func init() {
-	providers.Register(TerraformProviderName, &terraformProvider{})
+	providers.Register(TerraformProviderName, &terraformProvider{}, TerraformCapabilities, &ConfigSchema{})
 }

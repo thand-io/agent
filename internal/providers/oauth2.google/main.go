@@ -184,5 +184,5 @@ func (p *oauth2Provider) RenewSession(ctx context.Context, session *models.Sessi
 }
 
 func init() {
-	providers.Register(Oauth2GoogleProviderName, &oauth2Provider{})
+	providers.Register(Oauth2GoogleProviderName, &oauth2Provider{}, GoogleOAuth2Capabilities, &ConfigSchema{})
 }

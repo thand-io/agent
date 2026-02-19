@@ -102,5 +102,5 @@ func (p *githubProvider) Initialize(identifier string, provider models.ProviderC
 }
 
 func init() {
-	providers.Register(GithubProviderName, &githubProvider{})
+	providers.Register(GithubProviderName, &githubProvider{}, GithubCapabilities, &ConfigSchema{})
 }

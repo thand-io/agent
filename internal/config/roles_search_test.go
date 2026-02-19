@@ -9,67 +9,63 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/thand-io/agent/internal/models"
-	"github.com/thand-io/agent/internal/providers/aws"
 )
 
 func TestRoleSearch(t *testing.T) {
-	// Create a config with test roles
-	cfg := &Config{
-		Roles: RoleConfig{
-			Definitions: map[string]models.Role{
-				"Admin": {
-					Name:        "Admin",
-					Description: "Full access to all resources and capabilities with AdministratorAccess",
-					Permissions: models.RolePermissions{
-						Allow: models.RoleStatements{
-							{Operations: []string{"ec2:*"}},
-							{Operations: []string{"s3:*"}},
-							{Operations: []string{"rds:*"}},
-							{Operations: []string{}, Targets: []string{"aws:*"}},
-						},
-					},
-					Providers: []string{"aws-prod", "aws-dev"},
-					Enabled:   true,
-				},
-				"User": {
-					Name:        "User",
-					Description: "Basic access with AmazonEC2ReadOnlyAccess and AmazonS3ReadOnlyAccess policies.",
-					Permissions: models.RolePermissions{
-						Allow: models.RoleStatements{
-							{Operations: []string{"ec2:describeInstances"}},
-							{Operations: []string{"s3:listBuckets"}},
-						},
-					},
-					Providers: []string{"aws-thand-dev", "aws"},
-					Enabled:   true,
-				},
-				"Developer": {
-					Name:        "Developer",
-					Description: "Developer role with lambda and dynamodb access",
-					Permissions: models.RolePermissions{
-						Allow: models.RoleStatements{
-							{Operations: []string{"lambda:*"}},
-							{Operations: []string{"dynamodb:GetItem", "dynamodb:PutItem"}},
-						},
-					},
-					Providers: []string{"aws-dev"},
-					Enabled:   true,
-				},
-				"GCP Admin": {
-					Name:        "GCP Admin",
-					Description: "Full access to GCP resources",
-					Permissions: models.RolePermissions{
-						Allow: models.RoleStatements{
-							{Operations: []string{"compute.instances.list"}},
-							{Operations: []string{"storage.buckets.get"}},
-						},
-					},
-					Providers: []string{"gcp-prod"},
-					Enabled:   true,
+	roles := map[string]models.Role{
+		"Admin": {
+			Name:        "Admin",
+			Description: "Full access to all resources and capabilities with AdministratorAccess",
+			Permissions: models.RolePermissions{
+				Allow: models.RoleStatements{
+					{Operations: []string{"ec2:*"}},
+					{Operations: []string{"s3:*"}},
+					{Operations: []string{"rds:*"}},
+					{Operations: []string{}, Targets: []string{"aws:*"}},
 				},
 			},
+			Providers: []string{"aws-prod", "aws-dev"},
+			Enabled:   true,
+		},
+		"User": {
+			Name:        "User",
+			Description: "Basic access with AmazonEC2ReadOnlyAccess and AmazonS3ReadOnlyAccess policies.",
+			Permissions: models.RolePermissions{
+				Allow: models.RoleStatements{
+					{Operations: []string{"ec2:describeInstances"}},
+					{Operations: []string{"s3:listBuckets"}},
+				},
+			},
+			Providers: []string{"aws-thand-dev", "aws"},
+			Enabled:   true,
+		},
+		"Developer": {
+			Name:        "Developer",
+			Description: "Developer role with lambda and dynamodb access",
+			Permissions: models.RolePermissions{
+				Allow: models.RoleStatements{
+					{Operations: []string{"lambda:*"}},
+					{Operations: []string{"dynamodb:GetItem", "dynamodb:PutItem"}},
+				},
+			},
+			Providers: []string{"aws-dev"},
+			Enabled:   true,
+		},
+		"GCP Admin": {
+			Name:        "GCP Admin",
+			Description: "Full access to GCP resources",
+			Permissions: models.RolePermissions{
+				Allow: models.RoleStatements{
+					{Operations: []string{"compute.instances.list"}},
+					{Operations: []string{"storage.buckets.get"}},
+				},
+			},
+			Providers: []string{"gcp-prod"},
+			Enabled:   true,
 		},
 	}
+
+	cfg := newTestConfig(t, roles, nil)
 
 	// Create the search index
 	err := cfg.ReloadRoleIndexes()
@@ -203,31 +199,29 @@ func TestRoleSearch(t *testing.T) {
 
 func TestRoleSearchWithInheritance(t *testing.T) {
 	// Test that inherited permissions are searchable
-	cfg := &Config{
-		Roles: RoleConfig{
-			Definitions: map[string]models.Role{
-				"base": {
-					Name: "base",
-					Permissions: models.RolePermissions{
-						Allow: models.RoleStatements{
-							{Operations: []string{"s3:GetObject"}},
-						},
-					},
-					Enabled: true,
-				},
-				"extended": {
-					Name:     "extended",
-					Inherits: []string{"base"},
-					Permissions: models.RolePermissions{
-						Allow: models.RoleStatements{
-							{Operations: []string{"ec2:DescribeInstances"}},
-						},
-					},
-					Enabled: true,
+	roles := map[string]models.Role{
+		"base": {
+			Name: "base",
+			Permissions: models.RolePermissions{
+				Allow: models.RoleStatements{
+					{Operations: []string{"s3:GetObject"}},
 				},
 			},
+			Enabled: true,
+		},
+		"extended": {
+			Name:     "extended",
+			Inherits: []string{"base"},
+			Permissions: models.RolePermissions{
+				Allow: models.RoleStatements{
+					{Operations: []string{"ec2:DescribeInstances"}},
+				},
+			},
+			Enabled: true,
 		},
 	}
+
+	cfg := newTestConfig(t, roles, nil)
 
 	err := cfg.ReloadRoleIndexes()
 	require.NoError(t, err, "Failed to create role index")
@@ -260,22 +254,20 @@ func TestRoleSearchWithInheritance(t *testing.T) {
 }
 
 func TestRoleSearchCaseSensitivity(t *testing.T) {
-	cfg := &Config{
-		Roles: RoleConfig{
-			Definitions: map[string]models.Role{
-				"TestRole": {
-					Name:        "TestRole",
-					Description: "Test role with EC2 permissions",
-					Permissions: models.RolePermissions{
-						Allow: models.RoleStatements{
-							{Operations: []string{"ec2:DescribeInstances"}},
-						},
-					},
-					Enabled: true,
+	roles := map[string]models.Role{
+		"TestRole": {
+			Name:        "TestRole",
+			Description: "Test role with EC2 permissions",
+			Permissions: models.RolePermissions{
+				Allow: models.RoleStatements{
+					{Operations: []string{"ec2:DescribeInstances"}},
 				},
 			},
+			Enabled: true,
 		},
 	}
+
+	cfg := newTestConfig(t, roles, nil)
 
 	err := cfg.ReloadRoleIndexes()
 	require.NoError(t, err, "Failed to create role index")
@@ -308,55 +300,48 @@ func TestRoleSearchCaseSensitivity(t *testing.T) {
 }
 
 func TestRoleSearchWithProviderFilter(t *testing.T) {
-
-	// Create minimal config for initialization
-	testConfig := models.ProviderConfig{
-		Name:        "test-aws",
-		Description: "Test AWS provider",
-		Provider:    "aws",
-		Config: &models.BasicConfig{
-			"region":            "us-east-1",
-			"account_id":        "000000000000",
-			"access_key_id":     "test",
-			"secret_access_key": "test",
-		},
-		Enabled: true,
-	}
-
-	// Initialize the provider
-	mockProvider := aws.NewMockAwsProvider()
-	err := mockProvider.Initialize("aws", testConfig)
-
-	cfg := &Config{
-		Roles: RoleConfig{
-			Definitions: map[string]models.Role{
-				"aws_admin": {
-					Name:        "AWS Admin",
-					Description: "AWS admin role",
-					Permissions: models.RolePermissions{
-						Allow: models.RoleStatements{
-							{Operations: []string{"ec2:*"}},
-						},
-					},
-					Providers: []string{"aws-prod"},
-					Enabled:   true,
-				},
-				"gcp_admin": {
-					Name:        "GCP Admin",
-					Description: "GCP admin role",
-					Permissions: models.RolePermissions{
-						Allow: models.RoleStatements{
-							{Operations: []string{"compute.instances.list"}},
-						},
-					},
-					Providers: []string{"gcp-prod"},
-					Enabled:   true,
+	roles := map[string]models.Role{
+		"aws_admin": {
+			Name:        "AWS Admin",
+			Description: "AWS admin role",
+			Permissions: models.RolePermissions{
+				Allow: models.RoleStatements{
+					{Operations: []string{"ec2:*"}},
 				},
 			},
+			Providers: []string{"aws-prod"},
+			Enabled:   true,
+		},
+		"gcp_admin": {
+			Name:        "GCP Admin",
+			Description: "GCP admin role",
+			Permissions: models.RolePermissions{
+				Allow: models.RoleStatements{
+					{Operations: []string{"compute.instances.list"}},
+				},
+			},
+			Providers: []string{"gcp-prod"},
+			Enabled:   true,
 		},
 	}
-	cfg.AddProvider("mock", mockProvider)
-	err = cfg.ReloadRoleIndexes()
+
+	providers := map[string]models.ProviderConfig{
+		"aws-prod": {
+			Name:        "AWS Production",
+			Description: "Production AWS Account",
+			Provider:    "aws",
+			Enabled:     true,
+		},
+		"gcp-prod": {
+			Name:     "GCP Production",
+			Provider: "gcp",
+			Enabled:  true,
+		},
+	}
+
+	cfg := newTestConfig(t, roles, providers)
+
+	err := cfg.ReloadRoleIndexes()
 	require.NoError(t, err, "Failed to create role index")
 
 	ctx := context.Background()
@@ -379,16 +364,11 @@ func TestRoleSearchWithProviderFilter(t *testing.T) {
 }
 
 func TestRoleSearchLimit(t *testing.T) {
-	cfg := &Config{
-		Roles: RoleConfig{
-			Definitions: map[string]models.Role{},
-		},
-	}
-
 	// Create 20 test roles
+	roles := make(map[string]models.Role, 20)
 	for i := 0; i < 20; i++ {
 		roleName := fmt.Sprintf("role-%d", i)
-		cfg.Roles.Definitions[roleName] = models.Role{
+		roles[roleName] = models.Role{
 			Name:        roleName,
 			Description: "Test role with ec2 permissions",
 			Permissions: models.RolePermissions{
@@ -397,6 +377,8 @@ func TestRoleSearchLimit(t *testing.T) {
 			Enabled: true,
 		}
 	}
+
+	cfg := newTestConfig(t, roles, nil)
 
 	err := cfg.ReloadRoleIndexes()
 	require.NoError(t, err, "Failed to create role index")
@@ -417,20 +399,18 @@ func TestRoleSearchLimit(t *testing.T) {
 
 func TestRoleSearchNoIndex(t *testing.T) {
 	// Test fallback behavior when index is not ready
-	cfg := &Config{
-		Roles: RoleConfig{
-			Definitions: map[string]models.Role{
-				"test-role": {
-					Name:        "Test Role",
-					Description: "Role with ec2 permissions",
-					Permissions: models.RolePermissions{
-						Allow: models.RoleStatements{{Operations: []string{"ec2:*"}}},
-					},
-					Enabled: true,
-				},
+	roles := map[string]models.Role{
+		"test-role": {
+			Name:        "Test Role",
+			Description: "Role with ec2 permissions",
+			Permissions: models.RolePermissions{
+				Allow: models.RoleStatements{{Operations: []string{"ec2:*"}}},
 			},
+			Enabled: true,
 		},
 	}
+
+	cfg := newTestConfig(t, roles, nil)
 
 	// Don't create index - test fallback behavior
 	ctx := context.Background()
@@ -495,35 +475,25 @@ func TestRoleSearchWithInheritsARN(t *testing.T) {
 		},
 	}
 
-	// Initialize AWS mock provider to load AWS managed policies
-	testConfig := models.ProviderConfig{
-		Name:        "aws-prod",
-		Description: "AWS Production",
-		Provider:    "aws",
-		Config: &models.BasicConfig{
-			"region":            "us-east-1",
-			"account_id":        "000000000000",
-			"access_key_id":     "test",
-			"secret_access_key": "test",
-		},
-		Enabled: true,
-	}
-
-	mockProvider := aws.NewMockAwsProvider()
-	err := mockProvider.Initialize("aws-prod", testConfig)
-	require.NoError(t, err, "Failed to initialize AWS mock provider")
-
-	cfg := &Config{
-		mode: "server",
-		Roles: RoleConfig{
-			Definitions: roles,
+	providers := map[string]models.ProviderConfig{
+		"aws-prod": {
+			Name:        "AWS Production",
+			Description: "AWS Production",
+			Provider:    "aws",
+			Config: &models.BasicConfig{
+				"region":            "us-east-1",
+				"account_id":        "000000000000",
+				"access_key_id":     "test",
+				"secret_access_key": "test",
+			},
+			Enabled: true,
 		},
 	}
-	cfg.providerInstances = make(map[string]models.Provider)
-	cfg.providerInstances["aws-prod"] = mockProvider
+
+	cfg := newTestConfig(t, roles, providers)
 
 	// Use ReloadRoleIndexes to properly index all roles
-	err = cfg.ReloadRoleIndexes()
+	err := cfg.ReloadRoleIndexes()
 	require.NoError(t, err, "Failed to reload role indexes")
 
 	// Debug: Check what got indexed

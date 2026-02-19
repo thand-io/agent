@@ -97,6 +97,7 @@ These permissions, along with access to specific resources (e.g., "company finan
 
 // Interface for provider implementations
 type Provider interface {
+	// Lifecycle methods
 	Initialize(identifier string, provider ProviderConfig) error
 
 	// Form base provider

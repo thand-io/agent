@@ -106,5 +106,5 @@ func (p *exampleProvider) ListRoles(ctx context.Context, searchRequest *models.S
 }
 
 func init() {
-	providers.Register(ExampleProviderName, &exampleProvider{})
+	providers.Register(ExampleProviderName, &exampleProvider{}, ExampleCapabilities, &ConfigSchema{})
 }

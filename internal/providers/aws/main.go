@@ -186,5 +186,5 @@ type AwsConfigurationProvider struct {
 }
 
 func init() {
-	providers.Register(AwsProviderName, &awsProvider{})
+	providers.Register(AwsProviderName, &awsProvider{}, AwsCapabilities, &ConfigSchema{})
 }
