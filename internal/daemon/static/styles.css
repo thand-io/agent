@@ -1960,3 +1960,35 @@ footer p {
     background-color: #dc2626;
     border-color: #dc2626;
 }
+
+/* Notice / alert banners */
+.notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.875rem;
+    padding: 1rem 1.25rem;
+    border-radius: var(--radius, 0.5rem);
+    border: 1px solid hsl(var(--border));
+    margin: 1.5rem 0;
+}
+
+.notice svg {
+    flex-shrink: 0;
+    margin-top: 0.125rem;
+}
+
+.notice p {
+    margin: 0.25rem 0 0;
+    font-size: 0.875rem;
+    color: hsl(var(--muted-foreground));
+}
+
+.notice-warning {
+    background-color: hsl(var(--status-inactive) / 0.1);
+    border-color: hsl(var(--status-inactive) / 0.4);
+    color: hsl(var(--foreground));
+}
+
+.notice-warning svg {
+    color: hsl(var(--status-inactive));
+}
