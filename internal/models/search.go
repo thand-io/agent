@@ -13,8 +13,15 @@ import (
 type SearchRequest struct {
 	Query     string   `json:"query"`
 	Terms     []string `json:"terms"`
-	Limit     int      `json:"limit,omitempty"`
+	Limit     int      `json:"limit,omitempty" default:"100"`
 	NextToken string   `json:"next_token,omitempty"`
+}
+
+func (sr *SearchRequest) GetLimit() int {
+	if sr.Limit <= 0 {
+		return 100
+	}
+	return sr.Limit
 }
 
 func (sr *SearchRequest) IsEmpty() bool {
@@ -92,8 +99,8 @@ func BleveListSearch[T any](
 
 	limitResults := 100
 
-	if searchReq.Limit > 0 {
-		limitResults = searchReq.Limit
+	if searchReq.GetLimit() > 0 {
+		limitResults = searchReq.GetLimit()
 	}
 
 	searchRequest := bleve.NewSearchRequest(queryBuilder)

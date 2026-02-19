@@ -100,7 +100,7 @@ func (p *BaseProvider) ListTenants(ctx context.Context, searchReq *SearchRequest
 		for _, tnt := range tenants {
 			if strings.Contains(strings.ToLower(tnt.Name), filterText) {
 				results = append(results, tnt)
-				if len(results) >= searchReq.Limit {
+				if len(results) >= searchReq.GetLimit() {
 					break
 				}
 			}

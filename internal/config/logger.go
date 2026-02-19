@@ -347,6 +347,13 @@ type LogFilter struct {
 	Limit int `json:"limit,omitempty"`
 }
 
+func (f *LogFilter) GetLimit() int {
+	if f.Limit <= 0 {
+		return 100
+	}
+	return f.Limit
+}
+
 // GetEventsWithFilter returns events that match the specified filter criteria
 func (t *thandLogger) GetEventsWithFilter(filter LogFilter) []*models.LogEntry {
 	t.mu.RLock()
@@ -380,7 +387,7 @@ func (t *thandLogger) GetEventsWithFilter(filter LogFilter) []*models.LogEntry {
 		filtered = append(filtered, entry)
 
 		// Apply limit if specified
-		if filter.Limit > 0 && len(filtered) >= filter.Limit {
+		if filter.GetLimit() > 0 && len(filtered) >= filter.GetLimit() {
 			break
 		}
 	}
