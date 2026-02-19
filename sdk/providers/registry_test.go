@@ -418,40 +418,16 @@ func TestGetSchema(t *testing.T) {
 		assert.Nil(t, schema)
 	})
 
-	t.Run("Get Schema for Registered Providers", func(t *testing.T) {
-		providersList := ListProviders()
-		assert.NotEmpty(t, providersList)
-
-		schemasFound := 0
-		providersChecked := 0
-
-		for _, providerName := range providersList {
-			// Skip mock providers
-			if providerName == "no-schema-test" || providerName == "test-caps" ||
-				providerName == "no-caps" || providerName == "validate-test" ||
-				providerName == "validate-error" || providerName == "nil-config" ||
-				providerName == "nil-schema" || providerName == "exists-test" ||
-				providerName == "info-test" || providerName == "all-info-1" ||
-				providerName == "all-info-2" || providerName == "all-info-3" ||
-				providerName == "integration-test" || providerName == "list-test-1" ||
-				providerName == "list-test-2" || providerName == "list-test-3" {
-				continue
-			}
-
-			providersChecked++
-			schema, err := GetSchema(providerName)
-			if err == nil && schema != nil {
-				schemasFound++
-				t.Logf("Provider %s has schema: %T", providerName, schema)
-			}
+	t.Run("Get Schema for Provider with Schema", func(t *testing.T) {
+		caps := &models.ProviderCapabilities{
+			Identities: models.NewSynchronizableCapability(),
 		}
+		expectedSchema := &MockSchema{}
+		mockProvider := NewMockProvider("schema-test", caps)
+		providers.Register("schema-test", mockProvider, caps, expectedSchema)
 
-		t.Logf("Found %d providers with schemas out of %d real providers checked (%d total)",
-			schemasFound, providersChecked, len(providersList))
-
-		// We expect at least some real providers to have schemas
-		if providersChecked > 0 {
-			assert.Greater(t, schemasFound, 0, "At least one real provider should have a schema")
-		}
+		schema, err := GetSchema("schema-test")
+		require.NoError(t, err)
+		assert.Equal(t, expectedSchema, schema)
 	})
 }
