@@ -17,7 +17,7 @@ type ConfigSchema struct {
 
 	// SMTP authentication (required)
 	User string `json:"user" mapstructure:"user" validate:"required"`
-	Pass string `json:"pass" mapstructure:"pass" validate:"required"`
+	Pass string `json:"pass" mapstructure:"pass" validate:"required" sensitive:"true"`
 
 	// Default from address (required)
 	From string `json:"from" mapstructure:"from" validate:"required,email"`

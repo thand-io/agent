@@ -15,9 +15,9 @@ type ConfigSchema struct {
 	Region string `json:"region" mapstructure:"region" validate:"omitempty"`
 
 	// Authentication options (all optional, uses credential chain)
-	AccessKeyID     string `json:"access_key_id" mapstructure:"access_key_id" validate:"omitempty"`
-	SecretAccessKey string `json:"secret_access_key" mapstructure:"secret_access_key" validate:"omitempty"`
-	SessionToken    string `json:"session_token" mapstructure:"session_token" validate:"omitempty"`
+	AccessKeyID     string `json:"access_key_id" mapstructure:"access_key_id" validate:"omitempty" sensitive:"true"`
+	SecretAccessKey string `json:"secret_access_key" mapstructure:"secret_access_key" validate:"omitempty" sensitive:"true"`
+	SessionToken    string `json:"session_token" mapstructure:"session_token" validate:"omitempty" sensitive:"true"`
 	Profile         string `json:"profile" mapstructure:"profile" validate:"omitempty"`
 	SSOStartURL     string `json:"sso_start_url" mapstructure:"sso_start_url" validate:"omitempty,url"`
 

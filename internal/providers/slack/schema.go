@@ -13,13 +13,13 @@ type ConfigSchema struct {
 
 	// Slack bot token (required)
 	// Format: xoxb-...
-	BotToken string `json:"bot_token" mapstructure:"bot_token" validate:"required"`
+	BotToken string `json:"bot_token" mapstructure:"bot_token" validate:"required" sensitive:"true"`
 
 	// OAuth fields (optional, for OAuth flow)
 	ClientID          string `json:"client_id" mapstructure:"client_id" validate:"omitempty"`
-	ClientSecret      string `json:"client_secret" mapstructure:"client_secret" validate:"omitempty"`
-	SigningSecret     string `json:"signing_secret" mapstructure:"signing_secret" validate:"omitempty"`
-	VerificationToken string `json:"verification_token" mapstructure:"verification_token" validate:"omitempty"`
+	ClientSecret      string `json:"client_secret" mapstructure:"client_secret" validate:"omitempty" sensitive:"true"`
+	SigningSecret     string `json:"signing_secret" mapstructure:"signing_secret" validate:"omitempty" sensitive:"true"`
+	VerificationToken string `json:"verification_token" mapstructure:"verification_token" validate:"omitempty" sensitive:"true"`
 }
 
 // Unmarshal converts BasicConfig to ConfigSchema

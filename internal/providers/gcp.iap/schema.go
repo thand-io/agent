@@ -17,7 +17,7 @@ type ConfigSchema struct {
 
 	// OAuth2 configuration for authorization flow
 	ClientID     string   `json:"client_id" mapstructure:"client_id" validate:"required"`
-	ClientSecret string   `json:"client_secret" mapstructure:"client_secret" validate:"required"`
+	ClientSecret string   `json:"client_secret" mapstructure:"client_secret" validate:"required" sensitive:"true"`
 	Scopes       []string `json:"scopes" mapstructure:"scopes"`
 }
 

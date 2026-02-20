@@ -12,7 +12,7 @@ type ConfigSchema struct {
 	models.BaseConfigSchema
 
 	// Terraform Cloud API token (required)
-	Token string `json:"token" mapstructure:"token" validate:"required"`
+	Token string `json:"token" mapstructure:"token" validate:"required" sensitive:"true"`
 
 	// Optional organization name
 	Organization string `json:"organization" mapstructure:"organization" validate:"omitempty"`

@@ -13,8 +13,8 @@ type ConfigSchema struct {
 
 	// Salesforce credentials (required)
 	Username string `json:"username" mapstructure:"username" validate:"required"`
-	Password string `json:"password" mapstructure:"password" validate:"required"`
-	Token    string `json:"token" mapstructure:"token" validate:"required"` // Security token
+	Password string `json:"password" mapstructure:"password" validate:"required" sensitive:"true"`
+	Token    string `json:"token" mapstructure:"token" validate:"required" sensitive:"true"` // Security token
 
 	// Optional endpoint (defaults to https://login.salesforce.com)
 	Endpoint string `json:"endpoint" mapstructure:"endpoint" validate:"omitempty,url"`

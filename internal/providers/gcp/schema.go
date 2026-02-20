@@ -19,7 +19,7 @@ type ConfigSchema struct {
 
 	// Authentication options (one of these should be provided)
 	ServiceAccountKeyPath string                               `json:"service_account_key_path" mapstructure:"service_account_key_path" validate:"omitempty"`
-	ServiceAccountKey     string                               `json:"service_account_key" mapstructure:"service_account_key" validate:"omitempty"`
+	ServiceAccountKey     string                               `json:"service_account_key" mapstructure:"service_account_key" validate:"omitempty" sensitive:"true"`
 	Credentials           *models.GCPServiceAccountCredentials `json:"credentials" mapstructure:"credentials" validate:"omitempty"`
 }
 

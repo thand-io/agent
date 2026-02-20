@@ -16,7 +16,7 @@ type ConfigSchema struct {
 	Endpoint string `json:"endpoint" mapstructure:"endpoint" validate:"required,url"`
 
 	// Okta API token (required)
-	Token string `json:"token" mapstructure:"token" validate:"required"`
+	Token string `json:"token" mapstructure:"token" validate:"required" sensitive:"true"`
 }
 
 // Unmarshal converts BasicConfig to ConfigSchema
