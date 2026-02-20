@@ -20,7 +20,7 @@ type ConfigSchema struct {
 	// Authentication options (optional, uses credential chain)
 	TenantID     string `json:"tenant_id" mapstructure:"tenant_id" validate:"omitempty,uuid"`
 	ClientID     string `json:"client_id" mapstructure:"client_id" validate:"omitempty,uuid"`
-	ClientSecret string `json:"client_secret" mapstructure:"client_secret" validate:"omitempty"`
+	ClientSecret string `json:"client_secret" mapstructure:"client_secret" validate:"omitempty" sensitive:"true"`
 }
 
 // Unmarshal converts BasicConfig to ConfigSchema

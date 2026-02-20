@@ -13,7 +13,7 @@ type ConfigSchema struct {
 
 	// Google OAuth2 client credentials (required)
 	ClientID     string `json:"client_id" mapstructure:"client_id" validate:"required"`
-	ClientSecret string `json:"client_secret" mapstructure:"client_secret" validate:"required"`
+	ClientSecret string `json:"client_secret" mapstructure:"client_secret" validate:"required" sensitive:"true"`
 
 	// Requested scopes (optional, defaults to email and profile)
 	Scopes []string `json:"scopes" mapstructure:"scopes"`

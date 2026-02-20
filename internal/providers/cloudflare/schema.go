@@ -15,8 +15,8 @@ type ConfigSchema struct {
 	AccountID string `json:"account_id" mapstructure:"account_id" validate:"required"`
 
 	// Authentication: either API token (recommended) OR API key + email
-	APIToken string `json:"api_token" mapstructure:"api_token" validate:"omitempty"`
-	APIKey   string `json:"api_key" mapstructure:"api_key" validate:"omitempty"`
+	APIToken string `json:"api_token" mapstructure:"api_token" validate:"omitempty" sensitive:"true"`
+	APIKey   string `json:"api_key" mapstructure:"api_key" validate:"omitempty" sensitive:"true"`
 	Email    string `json:"email" mapstructure:"email" validate:"omitempty,email"`
 }
 

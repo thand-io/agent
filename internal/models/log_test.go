@@ -191,7 +191,6 @@ func TestLogEntry_MarshalJSON_StructWithFunctionField(t *testing.T) {
 		},
 	}
 
-	// Should convert struct to string representation since it can't be marshaled
 	data, err := json.Marshal(entry)
 	require.NoError(t, err)
 
@@ -200,9 +199,15 @@ func TestLogEntry_MarshalJSON_StructWithFunctionField(t *testing.T) {
 	require.NoError(t, err)
 
 	dataField := result["data"].(map[string]any)
-	// Should be a string representation of the struct
-	assert.IsType(t, "", dataField["request"])
-	assert.Contains(t, dataField["request"].(string), "example.com")
+	// Struct is now serialized field-by-field: primitive fields come through,
+	// the function field is converted to its string representation.
+	request := dataField["request"].(map[string]any)
+	assert.Equal(t, "https://example.com", request["URL"])
+	assert.Equal(t, "GET", request["Method"])
+	// GetBody is a func — should be serialized as a non-empty string
+	getBodyStr, ok := request["GetBody"].(string)
+	assert.True(t, ok, "function field should be converted to string")
+	assert.NotEmpty(t, getBodyStr)
 }
 
 func TestLogEntry_MarshalJSON_Maps(t *testing.T) {
@@ -368,4 +373,75 @@ func TestLogEntry_MarshalJSON_MultipleDataFields(t *testing.T) {
 	metadata := dataField["metadata"].(map[string]any)
 	assert.Equal(t, float64(3), metadata["retries"])
 	assert.Equal(t, "30s", metadata["timeout"])
+}
+
+func TestLogEntry_MarshalJSON_SensitiveFieldsRedacted(t *testing.T) {
+	// Struct with a mix of normal and sensitive-tagged fields
+	type mockProviderConfig struct {
+		Endpoint    string `json:"endpoint"`
+		Username    string `json:"username"`
+		Password    string `json:"password" sensitive:"true"`
+		APIKey      string `json:"api_key" sensitive:"true"`
+		ServiceName string `json:"service_name"`
+	}
+
+	cfg := mockProviderConfig{
+		Endpoint:    "https://api.example.com",
+		Username:    "admin",
+		Password:    "super-secret-password",
+		APIKey:      "sk-1234567890abcdef",
+		ServiceName: "my-service",
+	}
+
+	entry := &LogEntry{
+		Time:    time.Date(2026, 1, 13, 12, 0, 0, 0, time.UTC),
+		Level:   logrus.InfoLevel,
+		Message: "Provider configured",
+		Data: logrus.Fields{
+			"config": cfg,
+		},
+	}
+
+	data, err := json.Marshal(entry)
+	require.NoError(t, err)
+
+	var result map[string]any
+	err = json.Unmarshal(data, &result)
+	require.NoError(t, err)
+
+	dataField := result["data"].(map[string]any)
+	config := dataField["config"].(map[string]any)
+
+	// Non-sensitive fields should pass through unchanged
+	assert.Equal(t, "https://api.example.com", config["endpoint"])
+	assert.Equal(t, "admin", config["username"])
+	assert.Equal(t, "my-service", config["service_name"])
+
+	// Sensitive fields must be redacted
+	assert.Equal(t, "[REDACTED]", config["password"])
+	assert.Equal(t, "[REDACTED]", config["api_key"])
+}
+
+func TestLogEntry_MarshalJSON_SensitiveFieldsNotLeakedAsString(t *testing.T) {
+	// Ensure the raw secret value does not appear anywhere in the JSON output
+	const secretValue = "top-secret-value-xyz"
+
+	type mockCreds struct {
+		Host  string `json:"host"`
+		Token string `json:"token" sensitive:"true"`
+	}
+
+	entry := &LogEntry{
+		Time:    time.Date(2026, 1, 13, 12, 0, 0, 0, time.UTC),
+		Level:   logrus.WarnLevel,
+		Message: "Credentials used",
+		Data: logrus.Fields{
+			"creds": mockCreds{Host: "db.internal", Token: secretValue},
+		},
+	}
+
+	data, err := json.Marshal(entry)
+	require.NoError(t, err)
+
+	assert.NotContains(t, string(data), secretValue, "secret value must not appear in serialized log output")
 }

@@ -16,9 +16,9 @@ type ConfigSchema struct {
 
 	// AWS credentials (optional, uses AWS credential chain)
 	Region          string `json:"region" mapstructure:"region" validate:"omitempty"`
-	AccessKeyID     string `json:"access_key_id" mapstructure:"access_key_id" validate:"omitempty"`
-	SecretAccessKey string `json:"secret_access_key" mapstructure:"secret_access_key" validate:"omitempty"`
-	SessionToken    string `json:"session_token" mapstructure:"session_token" validate:"omitempty"`
+	AccessKeyID     string `json:"access_key_id" mapstructure:"access_key_id" validate:"omitempty" sensitive:"true"`
+	SecretAccessKey string `json:"secret_access_key" mapstructure:"secret_access_key" validate:"omitempty" sensitive:"true"`
+	SessionToken    string `json:"session_token" mapstructure:"session_token" validate:"omitempty" sensitive:"true"`
 	Profile         string `json:"profile" mapstructure:"profile" validate:"omitempty"`
 	Endpoint        string `json:"endpoint" mapstructure:"endpoint" validate:"omitempty,url"`
 }

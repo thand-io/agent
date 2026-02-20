@@ -21,7 +21,7 @@ type ConfigSchema struct {
 	SubscriptionID string `json:"subscription_id" mapstructure:"subscription_id" validate:"omitempty,uuid"`
 	TenantID       string `json:"tenant_id" mapstructure:"tenant_id" validate:"omitempty,uuid"`
 	ClientID       string `json:"client_id" mapstructure:"client_id" validate:"omitempty,uuid"`
-	ClientSecret   string `json:"client_secret" mapstructure:"client_secret" validate:"omitempty"`
+	ClientSecret   string `json:"client_secret" mapstructure:"client_secret" validate:"omitempty" sensitive:"true"`
 }
 
 // Unmarshal converts BasicConfig to ConfigSchema

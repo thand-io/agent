@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -84,13 +85,28 @@ func sanitizeValue(v any) any {
 		return sanitizeValue(val.Elem().Interface())
 
 	case reflect.Struct:
-		// For structs, try to marshal them once. If it fails, return string representation
-		if b, err := json.Marshal(v); err != nil {
-			return fmt.Sprintf("%+v", v)
-		} else {
-			// Use json.RawMessage so the pre-marshaled JSON is embedded directly
-			return json.RawMessage(b)
+		// Walk struct fields; redact any tagged sensitive:"true", sanitize the rest.
+		result := make(map[string]any)
+		for i := 0; i < val.Type().NumField(); i++ {
+			field := val.Type().Field(i)
+			fval := val.Field(i)
+			if !fval.CanInterface() {
+				continue
+			}
+			// Determine the key name from the json tag (fall back to field name)
+			key := field.Name
+			if jt := field.Tag.Get("json"); jt != "" && jt != "-" {
+				if name := strings.Split(jt, ",")[0]; name != "" {
+					key = name
+				}
+			}
+			if field.Tag.Get("sensitive") == "true" {
+				result[key] = "[REDACTED]"
+			} else {
+				result[key] = sanitizeValue(fval.Interface())
+			}
 		}
+		return result
 
 	case reflect.Map:
 		// Sanitize map values, converting all keys to strings

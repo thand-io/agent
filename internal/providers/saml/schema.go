@@ -25,7 +25,7 @@ type ConfigSchema struct {
 	CertFile string `json:"cert_file" mapstructure:"cert_file" validate:"omitempty"`
 	Cert     string `json:"cert" mapstructure:"cert" validate:"omitempty"`
 	KeyFile  string `json:"key_file" mapstructure:"key_file" validate:"omitempty"`
-	Key      string `json:"key" mapstructure:"key" validate:"omitempty"`
+	Key      string `json:"key" mapstructure:"key" validate:"omitempty" sensitive:"true"`
 
 	// Whether to sign authentication requests (optional, defaults to false)
 	SignRequests bool `json:"sign_requests" mapstructure:"sign_requests"`
