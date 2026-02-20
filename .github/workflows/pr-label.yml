@@ -1,0 +1,136 @@
+name: PR Type Label
+
+# Runs on every PR event that could change the title, commits, or labels.
+# 1. If a recognised type label is already present → pass (nothing to do).
+# 2. Otherwise scan the PR title and all commit messages for a conventional
+#    commit prefix and auto-apply the matching label.
+# 3. If neither is found → fail with a helpful message so the contributor knows
+#    what to do.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write  # needed to add/create labels
+
+jobs:
+  check-and-label:
+    name: Check PR type label
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ensure type labels exist in the repo
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Create labels if they don't already exist.
+          # `gh label create` exits non-zero when the label already exists,
+          # so we suppress that with --force (update colour/description if changed).
+          gh label create "feat"     --color "0075ca" --description "New feature (minor version bump)"              --force --repo "$REPO"
+          gh label create "fix"      --color "e4e669" --description "Bug fix (patch version bump)"                  --force --repo "$REPO"
+          gh label create "refactor" --color "cfd3d7" --description "Code refactoring, no functional change"        --force --repo "$REPO"
+          gh label create "docs"     --color "0052cc" --description "Documentation only"                            --force --repo "$REPO"
+          gh label create "test"     --color "bfd4f2" --description "Adding or updating tests"                      --force --repo "$REPO"
+          gh label create "chore"    --color "d4c5f9" --description "Build, CI, dependency updates"                 --force --repo "$REPO"
+          gh label create "major"    --color "d93f0b" --description "Breaking change (major version bump)"          --force --repo "$REPO"
+
+      - name: Check labels and apply from title / commits if missing
+        id: label-check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+
+          # ── 1. Collect existing labels on this PR ──────────────────────────
+          CURRENT_LABELS=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json labels \
+            --jq '[.labels[].name] | join(" ")')
+          echo "Current labels: $CURRENT_LABELS"
+
+          # ── 2. Check whether any type label is already set ─────────────────
+          TYPE_LABELS="feat fix refactor docs test chore major"
+          FOUND_LABEL=""
+          for lbl in $TYPE_LABELS; do
+            if echo " $CURRENT_LABELS " | grep -qw "$lbl"; then
+              FOUND_LABEL="$lbl"
+              break
+            fi
+          done
+
+          if [ -n "$FOUND_LABEL" ]; then
+            echo "✅ Type label already set: $FOUND_LABEL"
+            echo "label=$FOUND_LABEL" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # ── 3. No label yet – scan PR title first ──────────────────────────
+          # Matches:  feat:  feat!:  feat(scope):  feat(scope)!:
+          # Also matches standalone prefixes: major / BREAKING CHANGE
+          detect_type() {
+            local text="$1"
+            local lower
+            lower=$(echo "$text" | tr '[:upper:]' '[:lower:]')
+
+            if echo "$lower" | grep -qE '^major[^a-z]|breaking.?change'; then
+              echo "major"; return
+            elif echo "$lower" | grep -qE '^feat(\([^)]*\))?!?:'; then
+              echo "feat"; return
+            elif echo "$lower" | grep -qE '^fix(\([^)]*\))?!?:'; then
+              echo "fix"; return
+            elif echo "$lower" | grep -qE '^refactor(\([^)]*\))?!?:'; then
+              echo "refactor"; return
+            elif echo "$lower" | grep -qE '^docs?(\([^)]*\))?!?:'; then
+              echo "docs"; return
+            elif echo "$lower" | grep -qE '^tests?(\([^)]*\))?!?:'; then
+              echo "test"; return
+            elif echo "$lower" | grep -qE '^(chore|build|ci)(\([^)]*\))?!?:'; then
+              echo "chore"; return
+            fi
+            echo ""
+          }
+
+          DETECTED=$(detect_type "$PR_TITLE")
+
+          # ── 4. If not in title, scan commit messages ───────────────────────
+          if [ -z "$DETECTED" ]; then
+            echo "No prefix in PR title – scanning commit messages..."
+            COMMITS=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json commits \
+              --jq '[.commits[].messageHeadline] | join("\n")')
+
+            while IFS= read -r msg; do
+              TYPE=$(detect_type "$msg")
+              if [ -n "$TYPE" ]; then
+                DETECTED="$TYPE"
+                echo "  Found prefix '$DETECTED' in commit: $msg"
+                break
+              fi
+            done <<< "$COMMITS"
+          fi
+
+          # ── 5. Apply label if detected; otherwise fail ─────────────────────
+          if [ -n "$DETECTED" ]; then
+            echo "Applying label: $DETECTED"
+            gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label "$DETECTED"
+            echo "label=$DETECTED" >> "$GITHUB_OUTPUT"
+            echo "✅ Label '$DETECTED' applied automatically."
+          else
+            echo ""
+            echo "❌ No type label found and no conventional commit prefix detected."
+            echo ""
+            echo "Please either:"
+            echo "  • Add one of these labels to the PR:  $TYPE_LABELS"
+            echo "  • OR prefix your PR title or a commit message with one of:"
+            echo "      feat:  fix:  refactor:  docs:  test:  chore:  major:"
+            echo ""
+            echo "Examples:"
+            echo "  feat: add OAuth2 provider support"
+            echo "  fix(sessions): correct token expiry calculation"
+            echo "  major: BREAKING CHANGE: redesign workflow DSL"
+            exit 1
+          fi
