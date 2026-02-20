@@ -154,6 +154,10 @@ func (p *BaseProvider) SetTenantsWithKey(
 		}
 	}
 
+	logrus.WithFields(logrus.Fields{
+		"total_tenants": len(p.tenants.tenants),
+	}).Debug("Set provider tenants")
+
 	// Trigger reindex
 	go func() {
 		err := p.buildTenantIndices()
@@ -190,6 +194,14 @@ func (p *BaseProvider) AddTenants(tenants ...ProviderTenant) {
 	p.tenants.mu.RUnlock()
 
 	combined := append(existingCopy, filtered...)
+
+	logrus.WithFields(logrus.Fields{
+		"existing": len(existing),
+		"new":      len(tenants),
+		"added":    len(filtered),
+		"total":    len(combined),
+	}).Debug("Adding tenants to provider")
+
 	p.SetTenants(combined)
 }
 
