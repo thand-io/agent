@@ -208,13 +208,16 @@ func (p *BaseProvider) SetIdentitiesWithKey(
 	for i := range identities {
 
 		identity := identities[i]
-
 		keys := keyFunc(identity)
 
 		for _, key := range keys {
 			p.identity.identitiesMap[strings.ToLower(key)] = &identity
 		}
 	}
+
+	logrus.WithFields(logrus.Fields{
+		"total_identities": len(p.identity.identities),
+	}).Debug("Set provider identities")
 
 	// Trigger reindex
 	go func() {
@@ -251,5 +254,13 @@ func (p *BaseProvider) AddIdentities(identities ...Identity) {
 	p.identity.mu.RUnlock()
 
 	combined := append(existingCopy, filtered...)
+
+	logrus.WithFields(logrus.Fields{
+		"existing": len(existing),
+		"new":      len(identities),
+		"added":    len(filtered),
+		"total":    len(combined),
+	}).Debug("Adding identities to provider")
+
 	p.SetIdentities(combined)
 }

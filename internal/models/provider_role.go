@@ -151,6 +151,10 @@ func (p *BaseProvider) SetRolesWithKey(
 		}
 	}
 
+	logrus.WithFields(logrus.Fields{
+		"total_roles": len(p.rbac.roles),
+	}).Debug("Set provider roles")
+
 	// Trigger reindex
 	go func() {
 		err := p.buildRoleIndices()
@@ -187,5 +191,13 @@ func (p *BaseProvider) AddRoles(roles ...ProviderRole) {
 	p.rbac.mu.RUnlock()
 
 	combined := append(existingCopy, filtered...)
+
+	logrus.WithFields(logrus.Fields{
+		"existing": len(existing),
+		"new":      len(roles),
+		"added":    len(filtered),
+		"total":    len(combined),
+	}).Debug("Adding roles to provider")
+
 	p.SetRoles(combined)
 }

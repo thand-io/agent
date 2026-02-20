@@ -181,6 +181,10 @@ func (p *BaseProvider) SetResourcesWithKey(
 		}
 	}
 
+	logrus.WithFields(logrus.Fields{
+		"total_resources": len(p.rbac.resources),
+	}).Debug("Set provider resources")
+
 	// Trigger reindex
 	go func() {
 		err := p.buildResourceIndices()
@@ -217,5 +221,13 @@ func (p *BaseProvider) AddResources(resources ...ProviderResource) {
 	p.rbac.mu.RUnlock()
 
 	combined := append(existingCopy, filtered...)
+
+	logrus.WithFields(logrus.Fields{
+		"existing": len(existing),
+		"new":      len(resources),
+		"added":    len(filtered),
+		"total":    len(combined),
+	}).Debug("Adding resources to provider")
+
 	p.SetResources(combined)
 }
