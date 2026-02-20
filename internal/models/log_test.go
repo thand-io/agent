@@ -445,3 +445,164 @@ func TestLogEntry_MarshalJSON_SensitiveFieldsNotLeakedAsString(t *testing.T) {
 
 	assert.NotContains(t, string(data), secretValue, "secret value must not appear in serialized log output")
 }
+
+func TestLogEntry_MarshalJSON_JSONDashFieldsIgnored(t *testing.T) {
+	// Struct with a json:"-" field that should be completely excluded from output.
+	type mockConfig struct {
+		Name     string `json:"name"`
+		Internal string `json:"-"`
+		Debug    bool   `json:"-"`
+		Value    int    `json:"value"`
+	}
+
+	cfg := mockConfig{
+		Name:     "my-config",
+		Internal: "should-not-appear",
+		Debug:    true,
+		Value:    99,
+	}
+
+	entry := &LogEntry{
+		Time:    time.Date(2026, 1, 13, 12, 0, 0, 0, time.UTC),
+		Level:   logrus.InfoLevel,
+		Message: "Config loaded",
+		Data: logrus.Fields{
+			"config": cfg,
+		},
+	}
+
+	data, err := json.Marshal(entry)
+	require.NoError(t, err)
+
+	var result map[string]any
+	err = json.Unmarshal(data, &result)
+	require.NoError(t, err)
+
+	dataField := result["data"].(map[string]any)
+	config := dataField["config"].(map[string]any)
+
+	// Normal fields should be present under their json tag names.
+	assert.Equal(t, "my-config", config["name"])
+	assert.Equal(t, float64(99), config["value"])
+
+	// Fields tagged json:"-" must not appear — neither under the field name nor under "-".
+	assert.NotContains(t, config, "Internal", "json:\"-\" field must be excluded (Go field name)")
+	assert.NotContains(t, config, "Debug", "json:\"-\" field must be excluded (Go field name)")
+	assert.NotContains(t, config, "-", "json:\"-\" field must not appear under the key \"-\"")
+
+	// The secret value itself must not appear anywhere in the raw JSON.
+	assert.NotContains(t, string(data), "should-not-appear")
+}
+
+func TestLogEntry_MarshalJSON_JSONDashFieldsIgnored_Nested(t *testing.T) {
+	// Nested struct where the inner struct has a json:"-" field.
+	type mockInner struct {
+		ID     string `json:"id"`
+		Secret string `json:"-"`
+	}
+	type mockOuter struct {
+		Label string    `json:"label"`
+		Inner mockInner `json:"inner"`
+	}
+
+	obj := mockOuter{
+		Label: "outer-label",
+		Inner: mockInner{
+			ID:     "inner-id",
+			Secret: "inner-secret-value",
+		},
+	}
+
+	entry := &LogEntry{
+		Time:    time.Date(2026, 1, 13, 12, 0, 0, 0, time.UTC),
+		Level:   logrus.DebugLevel,
+		Message: "Nested json dash test",
+		Data: logrus.Fields{
+			"obj": obj,
+		},
+	}
+
+	data, err := json.Marshal(entry)
+	require.NoError(t, err)
+
+	var result map[string]any
+	err = json.Unmarshal(data, &result)
+	require.NoError(t, err)
+
+	dataField := result["data"].(map[string]any)
+	outer := dataField["obj"].(map[string]any)
+	inner := outer["inner"].(map[string]any)
+
+	// Normal fields should be present.
+	assert.Equal(t, "outer-label", outer["label"])
+	assert.Equal(t, "inner-id", inner["id"])
+
+	// The json:"-" field must be excluded from the nested struct too.
+	assert.NotContains(t, inner, "Secret", "nested json:\"-\" field must be excluded (Go field name)")
+	assert.NotContains(t, inner, "-", "nested json:\"-\" field must not appear under the key \"-\"")
+
+	// Raw value must not leak into the JSON output.
+	assert.NotContains(t, string(data), "inner-secret-value")
+}
+
+func TestLogEntry_MarshalJSON_NestedSensitiveFieldsRedacted(t *testing.T) {
+	// Nested structs where the inner struct has sensitive fields.
+	type mockNestedCreds struct {
+		ProjectID    string `json:"project_id"`
+		PrivateKey   string `json:"private_key" sensitive:"true"`
+		PrivateKeyID string `json:"private_key_id" sensitive:"true"`
+	}
+	type mockGCPCredentials struct {
+		Provider string          `json:"provider"`
+		Region   string          `json:"region"`
+		Creds    mockNestedCreds `json:"creds"`
+	}
+	const (
+		privateKey   = "-----BEGIN PRIVATE KEY-----super-secret-key-----END PRIVATE KEY-----"
+		privateKeyID = "private-key-id-12345"
+	)
+	gcpCreds := mockGCPCredentials{
+		Provider: "gcp",
+		Region:   "us-central1",
+		Creds: mockNestedCreds{
+			ProjectID:    "my-project",
+			PrivateKey:   privateKey,
+			PrivateKeyID: privateKeyID,
+		},
+	}
+	entry := &LogEntry{
+		Time:    time.Date(2026, 1, 13, 12, 0, 0, 0, time.UTC),
+		Level:   logrus.InfoLevel,
+		Message: "Using GCP credentials",
+		Data: logrus.Fields{
+			"gcp_credentials": gcpCreds,
+		},
+	}
+	data, err := json.Marshal(entry)
+	require.NoError(t, err)
+	var result map[string]any
+	err = json.Unmarshal(data, &result)
+	require.NoError(t, err)
+	dataField, ok := result["data"].(map[string]any)
+	require.True(t, ok, "data field should be a map")
+	credsAny, ok := dataField["gcp_credentials"]
+	require.True(t, ok, "gcp_credentials field should be present")
+	credsMap, ok := credsAny.(map[string]any)
+	require.True(t, ok, "gcp_credentials should be a map")
+	innerAny, ok := credsMap["creds"]
+	require.True(t, ok, "nested creds field should be present")
+	innerMap, ok := innerAny.(map[string]any)
+	require.True(t, ok, "nested creds should be a map")
+	// Outer non-sensitive fields should be unchanged.
+	assert.Equal(t, "gcp", credsMap["provider"])
+	assert.Equal(t, "us-central1", credsMap["region"])
+	// Inner non-sensitive field should be unchanged.
+	assert.Equal(t, "my-project", innerMap["project_id"])
+	// Inner sensitive fields must be redacted.
+	assert.Equal(t, "[REDACTED]", innerMap["private_key"])
+	assert.Equal(t, "[REDACTED]", innerMap["private_key_id"])
+	// Ensure raw sensitive values do not appear anywhere in the JSON output.
+	jsonStr := string(data)
+	assert.NotContains(t, jsonStr, privateKey)
+	assert.NotContains(t, jsonStr, privateKeyID)
+}

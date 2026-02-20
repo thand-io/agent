@@ -93,9 +93,13 @@ func sanitizeValue(v any) any {
 			if !fval.CanInterface() {
 				continue
 			}
-			// Determine the key name from the json tag (fall back to field name)
+			// Determine the key name from the json tag (fall back to field name).
+			// Skip fields explicitly tagged json:"-" (always omitted, like encoding/json).
 			key := field.Name
-			if jt := field.Tag.Get("json"); jt != "" && jt != "-" {
+			if jt := field.Tag.Get("json"); jt != "" {
+				if jt == "-" || strings.HasPrefix(jt, "-,") {
+					continue
+				}
 				if name := strings.Split(jt, ",")[0]; name != "" {
 					key = name
 				}
