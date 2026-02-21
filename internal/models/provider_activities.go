@@ -5,12 +5,57 @@ import (
 	"errors"
 
 	"github.com/sirupsen/logrus"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 )
 
-// RegisterActivities registers provider-specific activities with the Temporal worker
-func (b *BaseProvider) RegisterActivities(temporalClient TemporalImpl) error {
-	return ErrNotImplemented
+// RegisterProviderActivities is the single entry point for activity registration.
+// It gates generic Synchronize* activities on provider capability, then delegates
+//
+//	func (b *myProvider) RegisterActivities(c models.TemporalImpl) error {
+//	    return models.RegisterProviderActivities(c, b)
+//	}
+func RegisterProviderActivities(temporalClient TemporalImpl, provider Provider) error {
+	if temporalClient == nil {
+		return ErrNotImplemented
+	}
+	worker := temporalClient.GetWorker()
+	if worker == nil {
+		return ErrNotImplemented
+	}
+
+	identifier := provider.GetIdentifier()
+	pa := NewProviderActivities(provider)
+
+	type capabilityActivity struct {
+		capability ProviderCapability
+		fn         any
+		name       string
+	}
+	for _, ca := range []capabilityActivity{
+		{ProviderCapabilityTenants, pa.SynchronizeTenants, "SynchronizeTenants"},
+		{ProviderCapabilityIdentities, pa.SynchronizeIdentities, "SynchronizeIdentities"},
+		{ProviderCapabilityResources, pa.SynchronizeResources, "SynchronizeResources"},
+		{ProviderCapabilityUsers, pa.SynchronizeUsers, "SynchronizeUsers"},
+		{ProviderCapabilityGroups, pa.SynchronizeGroups, "SynchronizeGroups"},
+		{ProviderCapabilityPermissions, pa.SynchronizePermissions, "SynchronizePermissions"},
+		{ProviderCapabilityRoles, pa.SynchronizeRoles, "SynchronizeRoles"},
+	} {
+		if !provider.HasCapability(ca.capability) {
+			logrus.Debugf("Skipping activity %s for provider %s (capability %s not enabled)", ca.name, identifier, ca.capability)
+			continue
+		}
+		activityName := CreateTemporalProviderWorkflowName(identifier, ca.name)
+		worker.RegisterActivityWithOptions(ca.fn, activity.RegisterOptions{Name: activityName})
+		logrus.Debugf("Registered activity: %s for provider: %s", activityName, identifier)
+	}
+
+	return nil
+}
+
+// RegisterActivities — BaseProvider default; returns ErrNotImplemented.
+func (b *BaseProvider) RegisterActivities() any {
+	return nil
 }
 
 type ProviderActivities struct {
@@ -21,26 +66,6 @@ func NewProviderActivities(provider Provider) *ProviderActivities {
 	return &ProviderActivities{
 		provider: provider,
 	}
-}
-
-func (a *ProviderActivities) AuthorizeRole(
-	ctx context.Context,
-	req *AuthorizeRoleRequest,
-) (*AuthorizeRoleResponse, error) {
-
-	logrus.Infoln("Starting AuthorizeRole activity")
-	return handleNotImplementedError(a.provider.AuthorizeRole(ctx, req))
-
-}
-
-func (a *ProviderActivities) RevokeRole(
-	ctx context.Context,
-	req *RevokeRoleRequest,
-) (*RevokeRoleResponse, error) {
-
-	logrus.Infoln("Starting RevokeRole activity")
-	return handleNotImplementedError(a.provider.RevokeRole(ctx, req))
-
 }
 
 func (a *ProviderActivities) SynchronizeTenants(

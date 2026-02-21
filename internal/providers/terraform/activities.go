@@ -6,8 +6,8 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
-func (b *terraformProvider) RegisterActivities(temporalClient models.TemporalImpl) error {
-	return models.RegisterActivities(temporalClient, models.NewProviderActivities(b))
+func (b *terraformProvider) RegisterActivities() any {
+	return &terraformProviderActivities{provider: b}
 }
 
 // Terraform uses static roles and permissions so we don't need to fetch them.

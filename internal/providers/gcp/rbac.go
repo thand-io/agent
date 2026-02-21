@@ -10,7 +10,9 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
+	sdkWorkflowsRunner "github.com/thand-io/agent/sdk/workflows/runner"
 	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 	"google.golang.org/api/cloudresourcemanager/v1"
 	iam "google.golang.org/api/iam/v1"
 )
@@ -43,10 +45,15 @@ func isPrimitiveRole(roleName string) bool {
 }
 
 // Authorize grants access for a user to a role
+// Authorize grants access for a user to a role
 func (p *gcpProvider) AuthorizeRole(
-	ctx context.Context,
+	task models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
+	if task.HasTemporalContext() {
+		return p.authorizeRoleTemporal(task.GetTemporalContext(), task.GetTaskQueue(), req)
+	}
+	ctx := task.GetContext()
 
 	if !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to authorize gcp role")
@@ -160,10 +167,12 @@ func (p *gcpProvider) AuthorizeRole(
 
 // Revoke removes access for a user from a role
 func (p *gcpProvider) RevokeRole(
-	ctx context.Context,
+	task models.ProviderContext,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
-
+	if task.HasTemporalContext() {
+		return p.revokeRoleTemporal(task.GetTemporalContext(), task.GetTaskQueue(), req)
+	}
 	if !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to revoke gcp role")
 	}
@@ -273,9 +282,130 @@ func (p *gcpProvider) GetAuthorizedAccessUrl(
 	req *models.AuthorizeRoleRequest,
 	resp *models.AuthorizeRoleResponse,
 ) string {
-
 	return p.GetConfig().GetStringWithDefault(
 		"sso_start_url", "https://console.cloud.google.com/")
+}
+
+// authorizeRoleTemporal sequences GCP role authorization as independent Temporal activities.
+func (p *gcpProvider) authorizeRoleTemporal(
+	wfCtx workflow.Context,
+	taskQueue string,
+	req *models.AuthorizeRoleRequest,
+) (*models.AuthorizeRoleResponse, error) {
+	if !req.IsValid() {
+		return nil, fmt.Errorf("user and role must be provided to authorize gcp role")
+	}
+
+	identifier := p.GetIdentifier()
+	ao := workflow.ActivityOptions{
+		TaskQueue:           taskQueue,
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+	}
+	wfCtx = workflow.WithActivityOptions(wfCtx, ao)
+
+	user := req.GetUser()
+	role := req.GetRole()
+	projectID := p.GetProjectId()
+	stage := p.GetConfig().GetStringWithDefault("stage", "GA")
+
+	if len(role.Inherits) == 0 && len(role.Permissions.Allow) == 0 {
+		return nil, fmt.Errorf("role %s has no inherits or permissions defined", role.Name)
+	}
+
+	var assignedRoles []string
+
+	for _, inheritedRole := range role.Inherits {
+		var resp BindUserToPredefinedRoleResponse
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(identifier, "BindUserToPredefinedRole"),
+			&BindUserToPredefinedRoleRequest{
+				ProjectID:     projectID,
+				User:          user,
+				InheritedRole: inheritedRole,
+			},
+		).Get(wfCtx, &resp); err != nil {
+			return nil, fmt.Errorf("BindUserToPredefinedRole activity failed for %s: %w", inheritedRole, err)
+		}
+		assignedRoles = append(assignedRoles, resp.RoleName)
+	}
+
+	if len(role.Permissions.Allow) > 0 {
+		var resp GetOrCreateAndBindCustomRoleResponse
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(identifier, "GetOrCreateAndBindCustomRole"),
+			&GetOrCreateAndBindCustomRoleRequest{
+				ProjectID:   projectID,
+				User:        user,
+				RoleName:    role.GetIdentifier(),
+				Title:       role.GetName(),
+				Description: role.GetDescription(),
+				Stage:       stage,
+				Permissions: role.Permissions,
+			},
+		).Get(wfCtx, &resp); err != nil {
+			return nil, fmt.Errorf("GetOrCreateAndBindCustomRole activity failed: %w", err)
+		}
+		assignedRoles = append(assignedRoles, resp.RoleName)
+	}
+
+	return &models.AuthorizeRoleResponse{
+		UserId: user.Email,
+		Roles:  assignedRoles,
+	}, nil
+}
+
+// revokeRoleTemporal sequences GCP role revocation as independent Temporal activities.
+func (p *gcpProvider) revokeRoleTemporal(
+	wfCtx workflow.Context,
+	taskQueue string,
+	req *models.RevokeRoleRequest,
+) (*models.RevokeRoleResponse, error) {
+	identifier := p.GetIdentifier()
+	ao := workflow.ActivityOptions{
+		TaskQueue:           taskQueue,
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+	}
+	wfCtx = workflow.WithActivityOptions(wfCtx, ao)
+
+	user := req.GetUser()
+	projectID := p.GetProjectId()
+
+	if req.AuthorizeRoleResponse == nil || len(req.AuthorizeRoleResponse.Roles) == 0 {
+		return nil, fmt.Errorf("no roles found in authorization response for revocation")
+	}
+
+	for _, roleName := range req.AuthorizeRoleResponse.Roles {
+		if strings.HasPrefix(roleName, "roles/") {
+			if err := workflow.ExecuteActivity(
+				wfCtx,
+				models.CreateTemporalProviderWorkflowName(identifier, "UnbindUserFromPredefinedRole"),
+				&UnbindUserFromPredefinedRoleRequest{
+					ProjectID: projectID,
+					User:      user,
+					RoleName:  roleName,
+				},
+			).Get(wfCtx, nil); err != nil {
+				return nil, fmt.Errorf("UnbindUserFromPredefinedRole activity failed for %s: %w", roleName, err)
+			}
+		} else {
+			if err := workflow.ExecuteActivity(
+				wfCtx,
+				models.CreateTemporalProviderWorkflowName(identifier, "UnbindAndDeleteCustomRole"),
+				&UnbindAndDeleteCustomRoleRequest{
+					ProjectID: projectID,
+					User:      user,
+					RoleName:  roleName,
+				},
+			).Get(wfCtx, nil); err != nil {
+				return nil, fmt.Errorf("UnbindAndDeleteCustomRole activity failed for %s: %w", roleName, err)
+			}
+		}
+	}
+	return &models.RevokeRoleResponse{}, nil
 }
 
 // createRole creates a custom role.

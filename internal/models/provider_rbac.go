@@ -10,6 +10,7 @@ import (
 
 	"github.com/blevesearch/bleve/v2"
 	"github.com/sirupsen/logrus"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 type AuthorizeRoleRequest struct {
@@ -137,6 +138,12 @@ func (r SynchronizeIdentitiesResponse) GetPagination() *PaginationOptions  { ret
 func (r *SynchronizeTenantsRequest) SetPagination(p *PaginationOptions) { r.Pagination = p }
 func (r SynchronizeTenantsResponse) GetPagination() *PaginationOptions  { return r.Pagination }
 
+// ProviderContext is the execution context passed to provider RBAC operations.
+// It is an alias for WorkflowTaskSupport so providers receive both the plain
+// Go context and, when inside a Temporal workflow coroutine, the workflow.Context
+// needed to schedule sub-activities with proper retries.
+type ProviderContext = sdkWorkflowsModel.WorkflowTaskSupport
+
 // ProviderRoleBasedAccessControl defines the interface for providers that support RBAC
 type ProviderRoleBasedAccessControl interface {
 
@@ -177,7 +184,7 @@ type ProviderRoleBasedAccessControl interface {
 
 	// Authorize a role for a user (Bind a user to a role)
 	AuthorizeRole(
-		ctx context.Context,
+		taskSupport sdkWorkflowsModel.WorkflowTaskSupport,
 		req *AuthorizeRoleRequest,
 	) (
 		*AuthorizeRoleResponse, // Return any custom metadata the provider wants to store
@@ -186,7 +193,7 @@ type ProviderRoleBasedAccessControl interface {
 
 	// Revoke a role from a user
 	RevokeRole(
-		ctx context.Context,
+		taskSupport sdkWorkflowsModel.WorkflowTaskSupport,
 		req *RevokeRoleRequest, // Any metadata returned from AuthorizeRole
 	) (*RevokeRoleResponse, error)
 
@@ -199,7 +206,7 @@ type ProviderRoleBasedAccessControl interface {
 }
 
 func (p *BaseProvider) AuthorizeRole(
-	ctx context.Context,
+	taskSupport sdkWorkflowsModel.WorkflowTaskSupport,
 	req *AuthorizeRoleRequest,
 ) (*AuthorizeRoleResponse, error) {
 	// Default implementation does nothing
@@ -207,7 +214,7 @@ func (p *BaseProvider) AuthorizeRole(
 }
 
 func (p *BaseProvider) RevokeRole(
-	ctx context.Context,
+	taskSupport sdkWorkflowsModel.WorkflowTaskSupport,
 	req *RevokeRoleRequest,
 ) (*RevokeRoleResponse, error) {
 	// Default implementation does nothing

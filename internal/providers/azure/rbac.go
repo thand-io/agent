@@ -1,11 +1,13 @@
 package azure
 
 import (
-	"context"
 	"fmt"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
+	sdkWorkflowsRunner "github.com/thand-io/agent/sdk/workflows/runner"
+	"go.temporal.io/sdk/workflow"
 )
 
 const PrincipalIdentifierMetadataKey = "principal_id"
@@ -13,9 +15,13 @@ const RoleDefinitionIdentifierMetadataKey = "role_definition_id"
 
 // Authorize grants access for a user to a role
 func (p *azureProvider) AuthorizeRole(
-	ctx context.Context,
+	task models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
+	if task.HasTemporalContext() {
+		return p.authorizeRoleTemporal(task.GetTemporalContext(), task.GetTaskQueue(), req)
+	}
+	ctx := task.GetContext()
 
 	if !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to authorize azure role")
@@ -46,7 +52,7 @@ func (p *azureProvider) AuthorizeRole(
 		UserId: user.Email,
 		Roles:  []string{role.Name},
 		Metadata: map[string]any{
-			PrincipalIdentifierMetadataKey: principalID,
+			PrincipalIdentifierMetadataKey:      principalID,
 			RoleDefinitionIdentifierMetadataKey: *existingRole.ID,
 		},
 	}, nil
@@ -54,9 +60,13 @@ func (p *azureProvider) AuthorizeRole(
 
 // Revoke removes access for a user from a role
 func (p *azureProvider) RevokeRole(
-	ctx context.Context,
+	task models.ProviderContext,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
+	if task.HasTemporalContext() {
+		return p.revokeRoleTemporal(task.GetTemporalContext(), task.GetTaskQueue(), req)
+	}
+	ctx := task.GetContext()
 
 	if !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to revoke azure role")
@@ -76,7 +86,7 @@ func (p *azureProvider) RevokeRole(
 	}
 
 	if principalID, ok := req.AuthorizeRoleResponse.Metadata[PrincipalIdentifierMetadataKey].(string); ok {
-		
+
 		logrus.WithFields(logrus.Fields{
 			"email":        user.Email,
 			"principal_id": principalID,
@@ -93,6 +103,117 @@ func (p *azureProvider) RevokeRole(
 
 		return nil, fmt.Errorf("invalid principal ID in authorization response metadata")
 
+	}
+
+	return nil, nil
+}
+
+// authorizeRoleTemporal sequences Azure role authorization as two independent Temporal activities.
+func (p *azureProvider) authorizeRoleTemporal(
+	wfCtx workflow.Context,
+	taskQueue string,
+	req *models.AuthorizeRoleRequest,
+) (*models.AuthorizeRoleResponse, error) {
+	if !req.IsValid() {
+		return nil, fmt.Errorf("user and role must be provided to authorize azure role")
+	}
+
+	identifier := p.GetIdentifier()
+	ao := workflow.ActivityOptions{
+		TaskQueue:           taskQueue,
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+	}
+	wfCtx = workflow.WithActivityOptions(wfCtx, ao)
+
+	user := req.GetUser()
+	role := req.GetRole()
+
+	// Step 1 — GetOrCreateRoleDefinition
+	var roleDefResp GetOrCreateRoleDefinitionResponse
+	if err := workflow.ExecuteActivity(
+		wfCtx,
+		models.CreateTemporalProviderWorkflowName(identifier, "GetOrCreateRoleDefinition"),
+		&GetOrCreateRoleDefinitionRequest{
+			RoleName:    role.Name,
+			Description: role.Description,
+			Permissions: role.Permissions,
+		},
+	).Get(wfCtx, &roleDefResp); err != nil {
+		return nil, fmt.Errorf("GetOrCreateRoleDefinition activity failed: %w", err)
+	}
+
+	// Step 2 — CreateRoleAssignment
+	var assignResp CreateRoleAssignmentResponse
+	if err := workflow.ExecuteActivity(
+		wfCtx,
+		models.CreateTemporalProviderWorkflowName(identifier, "CreateRoleAssignment"),
+		&CreateRoleAssignmentRequest{
+			User:             user,
+			RoleDefinitionID: roleDefResp.RoleDefinitionID,
+		},
+	).Get(wfCtx, &assignResp); err != nil {
+		return nil, fmt.Errorf("CreateRoleAssignment activity failed: %w", err)
+	}
+
+	return &models.AuthorizeRoleResponse{
+		UserId: user.Email,
+		Roles:  []string{role.Name},
+		Metadata: map[string]any{
+			PrincipalIdentifierMetadataKey:      assignResp.PrincipalID,
+			RoleDefinitionIdentifierMetadataKey: roleDefResp.RoleDefinitionID,
+		},
+	}, nil
+}
+
+// revokeRoleTemporal sequences Azure role revocation as two independent Temporal activities.
+func (p *azureProvider) revokeRoleTemporal(
+	wfCtx workflow.Context,
+	taskQueue string,
+	req *models.RevokeRoleRequest,
+) (*models.RevokeRoleResponse, error) {
+	if !req.IsValid() {
+		return nil, fmt.Errorf("user and role must be provided to revoke azure role")
+	}
+
+	identifier := p.GetIdentifier()
+	ao := workflow.ActivityOptions{
+		TaskQueue:           taskQueue,
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+	}
+	wfCtx = workflow.WithActivityOptions(wfCtx, ao)
+
+	user := req.GetUser()
+	role := req.GetRole()
+
+	if req.AuthorizeRoleResponse == nil || req.AuthorizeRoleResponse.Metadata == nil {
+		return nil, fmt.Errorf("missing authorization response metadata for revocation")
+	}
+
+	principalID, _ := req.AuthorizeRoleResponse.Metadata[PrincipalIdentifierMetadataKey].(string)
+
+	// Step 1 — GetRoleDefinition
+	var roleDefResp GetRoleDefinitionResponse
+	if err := workflow.ExecuteActivity(
+		wfCtx,
+		models.CreateTemporalProviderWorkflowName(identifier, "GetRoleDefinition"),
+		&GetRoleDefinitionRequest{RoleName: role.Name},
+	).Get(wfCtx, &roleDefResp); err != nil {
+		return nil, fmt.Errorf("GetRoleDefinition activity failed: %w", err)
+	}
+
+	// Step 2 — DeleteRoleAssignment
+	if err := workflow.ExecuteActivity(
+		wfCtx,
+		models.CreateTemporalProviderWorkflowName(identifier, "DeleteRoleAssignment"),
+		&DeleteRoleAssignmentRequest{
+			User:             user,
+			RoleDefinitionID: roleDefResp.RoleDefinitionID,
+			PrincipalID:      principalID,
+		},
+	).Get(wfCtx, nil); err != nil {
+		return nil, fmt.Errorf("DeleteRoleAssignment activity failed: %w", err)
 	}
 
 	return nil, nil

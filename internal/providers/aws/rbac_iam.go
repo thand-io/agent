@@ -4,21 +4,32 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/iam/types"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
+	sdkWorkflowsRunner "github.com/thand-io/agent/sdk/workflows/runner"
+	"go.temporal.io/sdk/workflow"
 )
 
-// authorizeRoleTraditionalIAM handles role authorization for traditional IAM users
+// authorizeRoleTraditionalIAM handles role authorization for traditional IAM users.
+// When the task carries a Temporal workflow context, each sub-step is dispatched as
+// an independent Temporal activity with its own retry policy. Otherwise the steps
+// are executed sequentially in the current goroutine.
 func (p *awsProvider) authorizeRoleTraditionalIAM(
-	ctx context.Context,
+	task models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
 	targetAccountID string,
 ) (*models.AuthorizeRoleResponse, error) {
 
+	if task.HasTemporalContext() {
+		return p.authorizeRoleTraditionalIAMTemporal(task.GetTemporalContext(), task.GetTaskQueue(), req, targetAccountID)
+	}
+
+	ctx := task.GetContext()
 	user := req.GetUser()
 	role := req.GetRole()
 
@@ -49,8 +60,80 @@ func (p *awsProvider) authorizeRoleTraditionalIAM(
 	return nil, nil
 }
 
-// revokeRoleTraditionalIAM handles role revocation for traditional IAM users
-func (p *awsProvider) revokeRoleTraditionalIAM(ctx context.Context, user *models.User, role *models.Role) (*models.RevokeRoleResponse, error) {
+// authorizeRoleTraditionalIAMTemporal sequences IAM authorization as three independent
+// Temporal activities with their own timeouts and retry policies.
+func (p *awsProvider) authorizeRoleTraditionalIAMTemporal(
+	wfCtx workflow.Context,
+	taskQueue string,
+	req *models.AuthorizeRoleRequest,
+	targetAccountID string,
+) (*models.AuthorizeRoleResponse, error) {
+
+	identifier := p.GetIdentifier()
+
+	mutateAo := workflow.ActivityOptions{
+		TaskQueue:           taskQueue,
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+	}
+	mutateCtx := workflow.WithActivityOptions(wfCtx, mutateAo)
+
+	user := req.GetUser()
+	role := req.GetRole()
+
+	// Step 1 — GetOrCreateIAMRole
+	var roleResp GetOrCreateIAMRoleResponse
+	if err := workflow.ExecuteActivity(
+		mutateCtx,
+		models.CreateTemporalProviderWorkflowName(identifier, "GetOrCreateIAMRole"),
+		&GetOrCreateIAMRoleRequest{
+			User:            user,
+			Role:            role,
+			TargetAccountID: targetAccountID,
+		},
+	).Get(mutateCtx, &roleResp); err != nil {
+		return nil, fmt.Errorf("GetOrCreateIAMRole activity failed: %w", err)
+	}
+
+	// Step 2 — AttachPoliciesToIAMRole (only if permissions are defined)
+	if len(role.Permissions.Allow) > 0 || len(role.Permissions.Deny) > 0 {
+		if err := workflow.ExecuteActivity(
+			mutateCtx,
+			models.CreateTemporalProviderWorkflowName(identifier, "AttachPoliciesToIAMRole"),
+			&AttachPoliciesToIAMRoleRequest{
+				RoleName:    roleResp.RoleName,
+				Permissions: role.Permissions,
+			},
+		).Get(mutateCtx, nil); err != nil {
+			return nil, fmt.Errorf("AttachPoliciesToIAMRole activity failed: %w", err)
+		}
+	}
+
+	// Step 3 — BindUserToIAMRole
+	if err := workflow.ExecuteActivity(
+		mutateCtx,
+		models.CreateTemporalProviderWorkflowName(identifier, "BindUserToIAMRole"),
+		&BindUserToIAMRoleRequest{
+			RoleName:        roleResp.RoleName,
+			User:            user,
+			TargetAccountID: targetAccountID,
+		},
+	).Get(mutateCtx, nil); err != nil {
+		return nil, fmt.Errorf("BindUserToIAMRole activity failed: %w", err)
+	}
+
+	return nil, nil
+}
+
+// revokeRoleTraditionalIAM handles role revocation for traditional IAM users.
+// When the task carries a Temporal workflow context, steps are dispatched as activities.
+func (p *awsProvider) revokeRoleTraditionalIAM(task models.ProviderContext, user *models.User, role *models.Role) (*models.RevokeRoleResponse, error) {
+
+	if task.HasTemporalContext() {
+		return p.revokeRoleTraditionalIAMTemporal(task.GetTemporalContext(), task.GetTaskQueue(), user, role)
+	}
+
+	ctx := task.GetContext()
 
 	// Check if the role exists
 	existingRole, err := p.getRole(ctx, user, role)
@@ -63,6 +146,52 @@ func (p *awsProvider) revokeRoleTraditionalIAM(ctx context.Context, user *models
 	err = p.unbindUserFromRole(ctx, user, existingRole.RoleName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unbind user from role: %w", err)
+	}
+
+	return nil, nil
+}
+
+// revokeRoleTraditionalIAMTemporal sequences IAM revocation as two independent
+// Temporal activities with their own timeouts and retry policies.
+func (p *awsProvider) revokeRoleTraditionalIAMTemporal(
+	wfCtx workflow.Context,
+	taskQueue string,
+	user *models.User,
+	role *models.Role,
+) (*models.RevokeRoleResponse, error) {
+
+	identifier := p.GetIdentifier()
+
+	mutateAo := workflow.ActivityOptions{
+		TaskQueue:           taskQueue,
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+	}
+	mutateCtx := workflow.WithActivityOptions(wfCtx, mutateAo)
+
+	// Step 1 — GetOrCreateIAMRole to resolve the role name (idempotent read)
+	var roleResp GetOrCreateIAMRoleResponse
+	if err := workflow.ExecuteActivity(
+		mutateCtx,
+		models.CreateTemporalProviderWorkflowName(identifier, "GetOrCreateIAMRole"),
+		&GetOrCreateIAMRoleRequest{
+			User: user,
+			Role: role,
+		},
+	).Get(mutateCtx, &roleResp); err != nil {
+		return nil, fmt.Errorf("GetOrCreateIAMRole activity failed during revoke: %w", err)
+	}
+
+	// Step 2 — UnbindUserFromIAMRole
+	if err := workflow.ExecuteActivity(
+		mutateCtx,
+		models.CreateTemporalProviderWorkflowName(identifier, "UnbindUserFromIAMRole"),
+		&UnbindUserFromIAMRoleRequest{
+			RoleName: roleResp.RoleName,
+			User:     user,
+		},
+	).Get(mutateCtx, nil); err != nil {
+		return nil, fmt.Errorf("UnbindUserFromIAMRole activity failed: %w", err)
 	}
 
 	return nil, nil

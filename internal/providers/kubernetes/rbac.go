@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
+	sdkWorkflowsRunner "github.com/thand-io/agent/sdk/workflows/runner"
+	"go.temporal.io/sdk/workflow"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,9 +17,13 @@ import (
 
 // AuthorizeRole grants access for a user to a role
 func (p *kubernetesProvider) AuthorizeRole(
-	ctx context.Context,
+	task models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
+	if task.HasTemporalContext() {
+		return p.authorizeRoleTemporal(task.GetTemporalContext(), task.GetTaskQueue(), req)
+	}
+	ctx := task.GetContext()
 
 	if !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to authorize kubernetes role")
@@ -39,9 +46,13 @@ func (p *kubernetesProvider) AuthorizeRole(
 
 // RevokeRole removes access for a user from a role
 func (p *kubernetesProvider) RevokeRole(
-	ctx context.Context,
+	task models.ProviderContext,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
+	if task.HasTemporalContext() {
+		return p.revokeRoleTemporal(task.GetTemporalContext(), task.GetTaskQueue(), req)
+	}
+	ctx := task.GetContext()
 
 	if !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to revoke kubernetes role")
@@ -70,6 +81,92 @@ func (p *kubernetesProvider) GetAuthorizedAccessUrl(
 	return p.GetConfig().GetStringWithDefault(
 		"sso_start_url", "https://docs.thand.io/environments/kubernetes/")
 
+}
+
+// authorizeRoleTemporal dispatches a single Temporal activity for role creation.
+func (p *kubernetesProvider) authorizeRoleTemporal(
+	wfCtx workflow.Context,
+	taskQueue string,
+	req *models.AuthorizeRoleRequest,
+) (*models.AuthorizeRoleResponse, error) {
+	if !req.IsValid() {
+		return nil, fmt.Errorf("user and role must be provided to authorize kubernetes role")
+	}
+
+	identifier := p.GetIdentifier()
+	ao := workflow.ActivityOptions{
+		TaskQueue:           taskQueue,
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+	}
+	wfCtx = workflow.WithActivityOptions(wfCtx, ao)
+
+	user := req.GetUser()
+	role := req.GetRole()
+	namespace := p.getNamespaceFromRole(role)
+
+	var resp models.AuthorizeRoleResponse
+	if len(namespace) > 0 {
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(identifier, "AuthorizeNamespacedRole"),
+			&AuthorizeNamespacedRoleRequest{User: user, Role: role, Namespace: namespace},
+		).Get(wfCtx, &resp); err != nil {
+			return nil, fmt.Errorf("AuthorizeNamespacedRole activity failed: %w", err)
+		}
+	} else {
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(identifier, "AuthorizeClusterRole"),
+			&AuthorizeClusterRoleRequest{User: user, Role: role},
+		).Get(wfCtx, &resp); err != nil {
+			return nil, fmt.Errorf("AuthorizeClusterRole activity failed: %w", err)
+		}
+	}
+	return &resp, nil
+}
+
+// revokeRoleTemporal dispatches a single Temporal activity for role removal.
+func (p *kubernetesProvider) revokeRoleTemporal(
+	wfCtx workflow.Context,
+	taskQueue string,
+	req *models.RevokeRoleRequest,
+) (*models.RevokeRoleResponse, error) {
+	if !req.IsValid() {
+		return nil, fmt.Errorf("user and role must be provided to revoke kubernetes role")
+	}
+
+	identifier := p.GetIdentifier()
+	ao := workflow.ActivityOptions{
+		TaskQueue:           taskQueue,
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+	}
+	wfCtx = workflow.WithActivityOptions(wfCtx, ao)
+
+	user := req.GetUser()
+	role := req.GetRole()
+	namespace := p.getNamespaceFromRole(role)
+
+	var resp models.RevokeRoleResponse
+	if len(namespace) > 0 {
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(identifier, "RevokeNamespacedRole"),
+			&RevokeNamespacedRoleRequest{User: user, Role: role, Namespace: namespace},
+		).Get(wfCtx, &resp); err != nil {
+			return nil, fmt.Errorf("RevokeNamespacedRole activity failed: %w", err)
+		}
+	} else {
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(identifier, "RevokeClusterRole"),
+			&RevokeClusterRoleRequest{User: user, Role: role},
+		).Get(wfCtx, &resp); err != nil {
+			return nil, fmt.Errorf("RevokeClusterRole activity failed: %w", err)
+		}
+	}
+	return &resp, nil
 }
 
 // authorizeNamespacedRole creates Role and RoleBinding for namespace-scoped access

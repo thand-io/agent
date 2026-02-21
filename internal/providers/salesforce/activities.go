@@ -6,8 +6,8 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
-func (b *salesForceProvider) RegisterActivities(temporalClient models.TemporalImpl) error {
-	return models.RegisterActivities(temporalClient, models.NewProviderActivities(b))
+func (b *salesForceProvider) RegisterActivities() any {
+	return &salesForceProviderActivities{provider: b}
 }
 
 // Salesforce uses static roles and permissions so we don't need to fetch them.

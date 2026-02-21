@@ -9,7 +9,9 @@ import (
 	"github.com/okta/okta-sdk-golang/v2/okta"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
+	sdkWorkflowsRunner "github.com/thand-io/agent/sdk/workflows/runner"
 	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 )
 
 // CustomAdminRoleResponse represents the response from creating a custom admin role in Okta
@@ -49,9 +51,13 @@ type ResourceSetAssignmentRequest struct {
 
 // AuthorizeRole assigns a role to a user in Okta
 func (p *oktaProvider) AuthorizeRole(
-	ctx context.Context,
+	task models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
+	if task.HasTemporalContext() {
+		return p.authorizeRoleTemporal(task.GetTemporalContext(), task.GetTaskQueue(), req)
+	}
+	ctx := task.GetContext()
 	if !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to authorize Okta role")
 	}
@@ -258,9 +264,13 @@ func (p *oktaProvider) AuthorizeRole(
 
 // RevokeRole removes a role from a user in Okta
 func (p *oktaProvider) RevokeRole(
-	ctx context.Context,
+	task models.ProviderContext,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
+	if task.HasTemporalContext() {
+		return p.revokeRoleTemporal(task.GetTemporalContext(), task.GetTaskQueue(), req)
+	}
+	ctx := task.GetContext()
 
 	if !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to revoke Okta role")
@@ -407,6 +417,214 @@ func (p *oktaProvider) revokeResources(ctx context.Context, resourceIds []string
 	}
 
 	return nil
+}
+
+// authorizeRoleTemporal sequences Okta role authorization as independent Temporal activities.
+func (p *oktaProvider) authorizeRoleTemporal(
+	wfCtx workflow.Context,
+	taskQueue string,
+	req *models.AuthorizeRoleRequest,
+) (*models.AuthorizeRoleResponse, error) {
+	if !req.IsValid() {
+		return nil, fmt.Errorf("user and role must be provided to authorize Okta role")
+	}
+
+	identifier := p.GetIdentifier()
+	ao := workflow.ActivityOptions{
+		TaskQueue:           taskQueue,
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+	}
+	wfCtx = workflow.WithActivityOptions(wfCtx, ao)
+
+	user := req.GetUser()
+	role := req.GetRole()
+
+	if len(role.Inherits) == 0 && len(role.Permissions.Allow) == 0 {
+		return nil, fmt.Errorf("role %s has no inherits or permissions defined", role.Name)
+	}
+
+	// Step 1 — look up the Okta user
+	var userResp FindOktaUserResponse
+	if err := workflow.ExecuteActivity(
+		wfCtx,
+		models.CreateTemporalProviderWorkflowName(identifier, "FindOktaUser"),
+		&FindOktaUserRequest{UserEmail: user.Email},
+	).Get(wfCtx, &userResp); err != nil {
+		return nil, fmt.Errorf("FindOktaUser activity failed: %w", err)
+	}
+
+	var assignedRoles, assignedGroups, assignedResources []string
+
+	// Step 2 — add user to group targets
+	var groupResp OktaAddGroupTargetsResponse
+	if err := workflow.ExecuteActivity(
+		wfCtx,
+		models.CreateTemporalProviderWorkflowName(identifier, "OktaAddGroupTargets"),
+		&OktaAddGroupTargetsRequest{
+			OktaUserID: userResp.OktaUserID,
+			UserEmail:  user.Email,
+			Role:       role,
+		},
+	).Get(wfCtx, &groupResp); err != nil {
+		return nil, fmt.Errorf("OktaAddGroupTargets activity failed: %w", err)
+	}
+	assignedGroups = append(assignedGroups, groupResp.AssignedGroupIDs...)
+
+	// Step 3 — assign inherited (standard) roles
+	if len(role.Inherits) > 0 {
+		var rolesResp OktaAssignInheritedRolesResponse
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(identifier, "OktaAssignInheritedRoles"),
+			&OktaAssignInheritedRolesRequest{
+				OktaUserID: userResp.OktaUserID,
+				UserEmail:  user.Email,
+				Inherits:   role.Inherits,
+			},
+		).Get(wfCtx, &rolesResp); err != nil {
+			return nil, fmt.Errorf("OktaAssignInheritedRoles activity failed: %w", err)
+		}
+		assignedRoles = append(assignedRoles, rolesResp.AssignedRoleIDs...)
+	}
+
+	// Step 4 — create and assign custom role (if permissions defined)
+	if len(role.Permissions.Allow) > 0 {
+		var customResp OktaCreateAndAssignCustomRoleResponse
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(identifier, "OktaCreateAndAssignCustomRole"),
+			&OktaCreateAndAssignCustomRoleRequest{
+				OktaUserID: userResp.OktaUserID,
+				Role:       role,
+			},
+		).Get(wfCtx, &customResp); err != nil {
+			return nil, fmt.Errorf("OktaCreateAndAssignCustomRole activity failed: %w", err)
+		}
+		assignedRoles = append(assignedRoles, customResp.RoleID)
+	}
+
+	// Step 5 — assign application targets
+	var appResp OktaAssignApplicationTargetsResponse
+	if err := workflow.ExecuteActivity(
+		wfCtx,
+		models.CreateTemporalProviderWorkflowName(identifier, "OktaAssignApplicationTargets"),
+		&OktaAssignApplicationTargetsRequest{
+			OktaUserID: userResp.OktaUserID,
+			UserEmail:  user.Email,
+			Role:       role,
+		},
+	).Get(wfCtx, &appResp); err != nil {
+		return nil, fmt.Errorf("OktaAssignApplicationTargets activity failed: %w", err)
+	}
+	assignedResources = append(assignedResources, appResp.AssignedResourceIDs...)
+
+	return &models.AuthorizeRoleResponse{
+		UserId:    userResp.OktaUserID,
+		Roles:     assignedRoles,
+		Groups:    assignedGroups,
+		Resources: assignedResources,
+	}, nil
+}
+
+// revokeRoleTemporal sequences Okta role revocation as independent Temporal activities.
+func (p *oktaProvider) revokeRoleTemporal(
+	wfCtx workflow.Context,
+	taskQueue string,
+	req *models.RevokeRoleRequest,
+) (*models.RevokeRoleResponse, error) {
+	identifier := p.GetIdentifier()
+	ao := workflow.ActivityOptions{
+		TaskQueue:           taskQueue,
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+	}
+	wfCtx = workflow.WithActivityOptions(wfCtx, ao)
+
+	user := req.GetUser()
+
+	// Step 1 — look up the Okta user
+	var userResp FindOktaUserResponse
+	if err := workflow.ExecuteActivity(
+		wfCtx,
+		models.CreateTemporalProviderWorkflowName(identifier, "FindOktaUser"),
+		&FindOktaUserRequest{UserEmail: user.Email},
+	).Get(wfCtx, &userResp); err != nil {
+		return nil, fmt.Errorf("FindOktaUser activity failed: %w", err)
+	}
+
+	if req.AuthorizeRoleResponse == nil {
+		return nil, fmt.Errorf("no authorize role response found for revocation")
+	}
+	metadata := req.AuthorizeRoleResponse
+
+	// Step 2 — revoke roles
+	if len(metadata.Roles) > 0 {
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(identifier, "OktaRevokeRoles"),
+			&OktaRevokeRolesRequest{
+				OktaUserID: userResp.OktaUserID,
+				UserEmail:  user.Email,
+				RoleIDs:    metadata.Roles,
+			},
+		).Get(wfCtx, nil); err != nil {
+			return nil, temporal.NewApplicationErrorWithOptions(
+				"Failed to revoke roles from user",
+				"OktaRolesRevokationError",
+				temporal.ApplicationErrorOptions{
+					NextRetryDelay: 3 * time.Second,
+					Cause:          err,
+				},
+			)
+		}
+	}
+
+	// Step 3 — revoke groups
+	if len(metadata.Groups) > 0 {
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(identifier, "OktaRevokeGroups"),
+			&OktaRevokeGroupsRequest{
+				OktaUserID: userResp.OktaUserID,
+				UserEmail:  user.Email,
+				GroupIDs:   metadata.Groups,
+			},
+		).Get(wfCtx, nil); err != nil {
+			return nil, temporal.NewApplicationErrorWithOptions(
+				"Failed to revoke groups from user",
+				"OktaGroupsRevocationError",
+				temporal.ApplicationErrorOptions{
+					NextRetryDelay: 3 * time.Second,
+					Cause:          err,
+				},
+			)
+		}
+	}
+
+	// Step 4 — revoke resources (applications)
+	if len(metadata.Resources) > 0 {
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(identifier, "OktaRevokeResources"),
+			&OktaRevokeResourcesRequest{
+				OktaUserID:  userResp.OktaUserID,
+				UserEmail:   user.Email,
+				ResourceIDs: metadata.Resources,
+			},
+		).Get(wfCtx, nil); err != nil {
+			return nil, temporal.NewApplicationErrorWithOptions(
+				"Failed to revoke resources from user",
+				"OktaResourcesRevocationError",
+				temporal.ApplicationErrorOptions{
+					NextRetryDelay: 3 * time.Second,
+					Cause:          err,
+				},
+			)
+		}
+	}
+
+	return &models.RevokeRoleResponse{}, nil
 }
 
 // GetAuthorizedAccessUrl returns the URL where the user can access their Okta dashboard

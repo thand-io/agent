@@ -20,10 +20,14 @@ import (
 	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 	runner "github.com/thand-io/agent/sdk/workflows/runner"
-	sdkWorkflowsRunner "github.com/thand-io/agent/sdk/workflows/runner"
 )
 
 const ThandAuthorizeTask = "authorize"
+
+type ThandAuthorizeRequest struct {
+	Provider string `json:"provider"` // Provider to use for authorization
+	models.AuthorizeRoleRequest
+}
 
 type AuthorizeTask struct {
 	Revocation string                                   `json:"revocation"` // This is the state to request the revocation
@@ -84,16 +88,7 @@ type authTask struct {
 	ProviderName string
 	Identity     string
 	AuthRequest  models.AuthorizeRoleRequest
-	ThandAuthReq thandFunction.ThandAuthorizeRequest
-}
-
-// temporalAuthResult represents the result of an authorization operation for temporal communication
-type temporalAuthResult struct {
-	Index        int
-	Identity     string
-	AuthRequest  *models.AuthorizeRoleRequest
-	AuthResponse *models.AuthorizeRoleResponse
-	Err          error
+	ThandAuthReq ThandAuthorizeRequest
 }
 
 // executeAuthorization performs the main authorization workflow
@@ -194,7 +189,7 @@ func (t *thandTask) executeAuthorization(
 					"role":        elevateRequest.Role.Name,
 				}).Debug("authorize.go: Creating AuthorizeRoleRequest with Tenant")
 
-				thandAuthReq := thandFunction.ThandAuthorizeRequest{
+				thandAuthReq := ThandAuthorizeRequest{
 					AuthorizeRoleRequest: authReq,
 					Provider:             providerName,
 				}
@@ -222,11 +217,7 @@ func (t *thandTask) executeAuthorization(
 
 	var authResults []authResult
 
-	if workflowTask.HasTemporalContext() {
-		authResults, err = t.executeTemporalParallel(workflowTask, taskName, call, authTasks)
-	} else {
-		authResults, err = t.executeGoParallel(workflowTask, authTasks)
-	}
+	authResults, err = t.executeParallel(workflowTask, authTasks)
 
 	if err != nil {
 
@@ -299,118 +290,71 @@ func (t *thandTask) executeAuthorization(
 	return modelOutput, nil
 }
 
-// executeTemporalParallel executes authorization tasks in parallel using Temporal
-func (t *thandTask) executeTemporalParallel(
+// runAuthTask executes a single authorization task and returns its result.
+func (t *thandTask) runAuthTask(
 	workflowTask *models.ElevateWorkflowTask,
-	taskName string,
-	call *taskModel.ThandTask,
-	authTasks []authTask,
-) ([]authResult, error) {
-
-	temporalContext := workflowTask.GetTemporalContext()
-
-	ao := workflow.ActivityOptions{
-		TaskQueue:           workflowTask.GetTaskQueue(),
-		StartToCloseTimeout: 10 * time.Minute,
-		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
-	}
-
-	aoctx := workflow.WithActivityOptions(temporalContext, ao)
-
-	// Create channel and results slice
-	results := make([]authResult, len(authTasks))
-	resultCh := workflow.NewChannel(temporalContext)
-
-	// Start all tasks in parallel using workflow.Go
-	for i, task := range authTasks {
-		taskIndex := i
-		authTask := task
-
-		workflow.Go(temporalContext, func(ctx workflow.Context) {
-			var authOut models.AuthorizeRoleResponse
-			err := workflow.ExecuteActivity(
-				aoctx,
-				// TODO(hugh): Replace with direct call to AuthorizeActivity
-				thandFunction.ThandAuthorizeFunction,
-				workflowTask,
-				taskName,
-				model.CallFunction{
-					Call: thandFunction.ThandNotifyFunction,
-					With: call.With.AsMap(),
-				},
-				authTask.ThandAuthReq,
-			).Get(ctx, &authOut)
-
-			if err != nil {
-				logrus.WithError(err).
-					Errorln("Failed to authorize activity")
-			}
-
-			// Send result through channel
-			resultCh.Send(ctx, temporalAuthResult{
-				Index:        taskIndex,
-				Identity:     authTask.Identity,
-				AuthRequest:  &authTask.AuthRequest,
-				AuthResponse: &authOut,
-				Err:          err,
-			})
-		})
-	}
-
-	// Collect all results
-	for range authTasks {
-		var result temporalAuthResult
-		resultCh.Receive(temporalContext, &result)
-		results[result.Index] = authResult{
-			Identity:     result.Identity,
-			AuthRequest:  result.AuthRequest,
-			AuthResponse: result.AuthResponse,
-			Error:        result.Err,
+	task authTask,
+) authResult {
+	providerCall, err := t.config.GetProviderByName(task.ProviderName)
+	if err != nil {
+		return authResult{
+			Identity:    task.Identity,
+			AuthRequest: &task.AuthRequest,
+			Error:       fmt.Errorf("failed to get provider: %w", err),
 		}
 	}
-
-	return results, nil
+	authOut, err := providerCall.AuthorizeRole(workflowTask, &task.AuthRequest)
+	return authResult{
+		Identity:     task.Identity,
+		AuthRequest:  &task.AuthRequest,
+		AuthResponse: authOut,
+		Error:        err,
+	}
 }
 
-// executeGoParallel executes authorization tasks in parallel using Go routines and WaitGroup
-func (t *thandTask) executeGoParallel(
+// executeParallel runs all authorization tasks concurrently. It uses Temporal
+// goroutines when a Temporal context is present, and standard goroutines otherwise.
+func (t *thandTask) executeParallel(
 	workflowTask *models.ElevateWorkflowTask,
 	authTasks []authTask,
 ) ([]authResult, error) {
 
 	results := make([]authResult, len(authTasks))
-	var wg sync.WaitGroup
 
-	for i, task := range authTasks {
-		wg.Add(1)
-		go func(index int, authTask authTask) {
-			defer wg.Done()
+	if workflowTask.HasTemporalContext() {
+		type indexedResult struct {
+			Index  int
+			Result authResult
+		}
+		ctx := workflowTask.GetTemporalContext()
+		resultCh := workflow.NewChannel(ctx)
 
-			providerCall, err := t.config.GetProviderByName(authTask.ProviderName)
-			if err != nil {
-				results[index] = authResult{
-					Identity:     authTask.Identity,
-					AuthRequest:  &authTask.AuthRequest,
-					AuthResponse: nil,
-					Error:        fmt.Errorf("failed to get provider: %w", err),
-				}
-				return
-			}
+		for i, task := range authTasks {
+			taskIndex, at := i, task
+			workflow.Go(ctx, func(wfCtx workflow.Context) {
+				resultCh.Send(wfCtx, indexedResult{
+					Index:  taskIndex,
+					Result: t.runAuthTask(workflowTask, at),
+				})
+			})
+		}
 
-			authOut, err := providerCall.AuthorizeRole(
-				workflowTask.GetContext(), &authTask.AuthRequest,
-			)
-
-			results[index] = authResult{
-				Identity:     authTask.Identity,
-				AuthRequest:  &authTask.AuthRequest,
-				AuthResponse: authOut,
-				Error:        err,
-			}
-		}(i, task)
+		for range authTasks {
+			var r indexedResult
+			resultCh.Receive(ctx, &r)
+			results[r.Index] = r.Result
+		}
+	} else {
+		var wg sync.WaitGroup
+		for i, task := range authTasks {
+			wg.Add(1)
+			go func(index int, at authTask) {
+				defer wg.Done()
+				results[index] = t.runAuthTask(workflowTask, at)
+			}(i, task)
+		}
+		wg.Wait()
 	}
-
-	wg.Wait()
 
 	return results, nil
 }
