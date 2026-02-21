@@ -19,8 +19,7 @@ func TestGCPProviderPermissions(t *testing.T) {
 		Description: "Test GCP provider",
 		Provider:    "gcp",
 		Config: &models.BasicConfig{
-			"project_id":       "test-project",
-			"credentials_json": "{}",
+			"project_id": "test-project",
 		},
 		Enabled: true,
 	}
@@ -124,8 +123,7 @@ func TestGCPProviderRoles(t *testing.T) {
 		Description: "Test GCP provider",
 		Provider:    "gcp",
 		Config: &models.BasicConfig{
-			"project_id":       "test-project",
-			"credentials_json": "{}",
+			"project_id": "test-project",
 		},
 		Enabled: true,
 	}

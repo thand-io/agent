@@ -92,6 +92,28 @@ type CleanupPermissionSetRequest struct {
 	PermissionSetArn string `json:"permission_set_arn"`
 }
 
+// ProvisionPermissionSetRequest triggers provisioning of a permission set to all
+// provisioned accounts. Must be called after any policy mutation on the set.
+type ProvisionPermissionSetRequest struct {
+	InstanceArn      string `json:"instance_arn"`
+	PermissionSetArn string `json:"permission_set_arn"`
+}
+
+type ProvisionPermissionSetResponse struct {
+	RequestId string `json:"request_id"`
+}
+
+// CheckPermissionSetProvisioningStatusRequest polls the status of a
+// ProvisionPermissionSet operation (single-shot, no sleep).
+type CheckPermissionSetProvisioningStatusRequest struct {
+	InstanceArn string `json:"instance_arn"`
+	RequestId   string `json:"request_id"`
+}
+
+type CheckPermissionSetProvisioningStatusResponse struct {
+	Succeeded bool `json:"succeeded"`
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // IAM request & response types
 // ─────────────────────────────────────────────────────────────────────────────
@@ -121,6 +143,16 @@ type BindUserToIAMRoleRequest struct {
 type UnbindUserFromIAMRoleRequest struct {
 	User     *models.User `json:"user"`
 	RoleName string       `json:"role_name"`
+}
+
+// GetIAMRoleRequest looks up an existing IAM role by name (read-only, no creation).
+type GetIAMRoleRequest struct {
+	Role *models.Role `json:"role"`
+}
+
+type GetIAMRoleResponse struct {
+	RoleName string `json:"role_name"`
+	RoleArn  string `json:"role_arn"`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -241,6 +273,34 @@ func (a *awsProviderActivities) CleanupPermissionSet(
 	return a.provider.cleanupPermissionSetIfUnused(ctx, req.InstanceArn, req.PermissionSetArn)
 }
 
+// ProvisionPermissionSet pushes permission set policy changes to all provisioned
+// accounts. Must be called after PutInlinePolicyToPermissionSet or
+// AttachManagedPolicyToPermissionSet to ensure updates propagate.
+func (a *awsProviderActivities) ProvisionPermissionSet(
+	ctx context.Context,
+	req *ProvisionPermissionSetRequest,
+) (*ProvisionPermissionSetResponse, error) {
+	requestId, err := a.provider.provisionPermissionSet(ctx, req.InstanceArn, req.PermissionSetArn)
+	if err != nil {
+		return nil, err
+	}
+	return &ProvisionPermissionSetResponse{RequestId: requestId}, nil
+}
+
+// CheckPermissionSetProvisioningStatus performs a single poll of the provisioning
+// status returned by ProvisionPermissionSet. The backoff loop and sleep live in
+// the workflow, matching the pattern used for CheckAssignmentDeletionStatus.
+func (a *awsProviderActivities) CheckPermissionSetProvisioningStatus(
+	ctx context.Context,
+	req *CheckPermissionSetProvisioningStatusRequest,
+) (*CheckPermissionSetProvisioningStatusResponse, error) {
+	succeeded, err := a.provider.checkPermissionSetProvisioningStatus(ctx, req.InstanceArn, req.RequestId)
+	if err != nil {
+		return nil, err
+	}
+	return &CheckPermissionSetProvisioningStatusResponse{Succeeded: succeeded}, nil
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // IAM activity implementations
 // ─────────────────────────────────────────────────────────────────────────────
@@ -277,8 +337,7 @@ func (a *awsProviderActivities) AttachPoliciesToIAMRole(
 	if len(req.Permissions.Allow) == 0 && len(req.Permissions.Deny) == 0 {
 		return nil
 	}
-	roleName := req.RoleName
-	return a.provider.attachPoliciesToRole(ctx, &roleName, req.Permissions)
+	return a.provider.attachPoliciesToRole(ctx, req.RoleName, req.Permissions)
 }
 
 // BindUserToIAMRole updates the IAM role's assume-role policy to allow the
@@ -288,8 +347,7 @@ func (a *awsProviderActivities) BindUserToIAMRole(
 	ctx context.Context,
 	req *BindUserToIAMRoleRequest,
 ) error {
-	roleName := req.RoleName
-	return a.provider.bindUserToRole(ctx, req.User, &roleName, req.TargetAccountID)
+	return a.provider.bindUserToRole(ctx, req.User, req.RoleName, req.TargetAccountID)
 }
 
 // UnbindUserFromIAMRole removes the user from the IAM role's assume-role policy.
@@ -298,6 +356,25 @@ func (a *awsProviderActivities) UnbindUserFromIAMRole(
 	ctx context.Context,
 	req *UnbindUserFromIAMRoleRequest,
 ) error {
-	roleName := req.RoleName
-	return a.provider.unbindUserFromRole(ctx, req.User, &roleName)
+	return a.provider.unbindUserFromRole(ctx, req.User, req.RoleName)
+}
+
+// GetIAMRole retrieves an existing IAM role by name. Returns an error if the role
+// does not exist — unlike GetOrCreateIAMRole it never creates one.
+func (a *awsProviderActivities) GetIAMRole(
+	ctx context.Context,
+	req *GetIAMRoleRequest,
+) (*GetIAMRoleResponse, error) {
+	rawRole, err := a.provider.getRole(ctx, nil, req.Role)
+	if err != nil {
+		return nil, fmt.Errorf("IAM role not found: %w", err)
+	}
+	resp := &GetIAMRoleResponse{}
+	if rawRole.RoleName != nil {
+		resp.RoleName = *rawRole.RoleName
+	}
+	if rawRole.Arn != nil {
+		resp.RoleArn = *rawRole.Arn
+	}
+	return resp, nil
 }

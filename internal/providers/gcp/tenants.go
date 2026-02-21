@@ -4,13 +4,16 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
 	"google.golang.org/api/cloudresourcemanager/v3"
+	"google.golang.org/api/googleapi"
 )
 
 // gcpPaginationToken holds pagination state for both projects and folders
@@ -47,6 +50,19 @@ func decodeGCPToken(tokenStr string) gcpPaginationToken {
 	return token
 }
 
+// isExpectedFolderError returns true for GCP API errors that are expected when the
+// service account does not have folder listing permissions, or when not operating
+// within a GCP organization.
+func isExpectedFolderError(err error) bool {
+	var e *googleapi.Error
+	if errors.As(err, &e) {
+		return e.Code == http.StatusForbidden ||
+			e.Code == http.StatusUnauthorized ||
+			e.Code == http.StatusNotFound
+	}
+	return false
+}
+
 func (p *gcpProvider) SynchronizeTenants(ctx context.Context, req *models.SynchronizeTenantsRequest) (*models.SynchronizeTenantsResponse, error) {
 	startTime := time.Now()
 	defer func() {
@@ -54,18 +70,13 @@ func (p *gcpProvider) SynchronizeTenants(ctx context.Context, req *models.Synchr
 		logrus.Debugf("Refreshed GCP tenants (projects and folders) in %s", elapsed)
 	}()
 
-	// Check if crmClient is available
-	if p.crmClient == nil {
-		logrus.Warn("Cloud Resource Manager client not initialized, skipping tenant synchronization")
+	// Check if crmV3Client is available
+	if p.crmV3Client == nil {
+		logrus.Warn("Cloud Resource Manager v3 client not initialized, skipping tenant synchronization")
 		return &models.SynchronizeTenantsResponse{}, nil
 	}
 
-	// Create a v3 client for listing projects and folders
-	crmV3Service, err := cloudresourcemanager.NewService(ctx, p.client.ClientOptions...)
-	if err != nil {
-		logrus.WithError(err).Warn("Failed to create Cloud Resource Manager v3 client")
-		return &models.SynchronizeTenantsResponse{}, nil
-	}
+	crmV3Service := p.crmV3Client
 
 	// Set pagination options
 	if req.Pagination == nil {
@@ -103,7 +114,11 @@ func (p *gcpProvider) SynchronizeTenants(ctx context.Context, req *models.Synchr
 	// This is useful for organizations that use folder hierarchy
 	folders, folderToken, err := p.listFolders(ctx, crmV3Service, folderPagination)
 	if err != nil {
-		logrus.WithError(err).Debug("Failed to list folders (this is expected if not in an organization)")
+		if isExpectedFolderError(err) {
+			logrus.WithError(err).Debug("Failed to list folders (expected if service account lacks folder permissions or organization hierarchy is not used)")
+		} else {
+			logrus.WithError(err).Warn("Failed to list folders; folder synchronization will be skipped for this page")
+		}
 	} else {
 		tenants = append(tenants, folders...)
 	}

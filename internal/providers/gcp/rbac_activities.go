@@ -3,7 +3,6 @@ package gcp
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/thand-io/agent/internal/models"
@@ -70,7 +69,7 @@ func (a *gcpProviderActivities) BindUserToPredefinedRole(
 		return nil, fmt.Errorf("invalid GCP role '%s': %w", req.InheritedRole, err)
 	}
 
-	err = a.provider.bindUserToPredefinedRole(req.ProjectID, req.User, providerRole.Name)
+	err = a.provider.bindUserToPredefinedRole(ctx, req.ProjectID, req.User, providerRole.Name)
 	if err != nil {
 		return nil, temporal.NewApplicationErrorWithOptions(
 			fmt.Sprintf("failed to bind user to role %s: %v", providerRole.Name, err),
@@ -89,9 +88,10 @@ func (a *gcpProviderActivities) GetOrCreateAndBindCustomRole(
 	ctx context.Context,
 	req *GetOrCreateAndBindCustomRoleRequest,
 ) (*GetOrCreateAndBindCustomRoleResponse, error) {
-	existingRole, err := a.provider.getRole(req.ProjectID, req.RoleName)
+	existingRole, err := a.provider.getRole(ctx, req.ProjectID, req.RoleName)
 	if err != nil {
 		existingRole, err = a.provider.createRole(
+			ctx,
 			req.ProjectID,
 			req.RoleName,
 			req.Title,
@@ -109,9 +109,22 @@ func (a *gcpProviderActivities) GetOrCreateAndBindCustomRole(
 				},
 			)
 		}
+	} else {
+		// Role already exists – patch permissions if the desired set has changed
+		existingRole, err = a.provider.patchRoleIfStale(ctx, req.ProjectID, existingRole, req.Permissions)
+		if err != nil {
+			return nil, temporal.NewApplicationErrorWithOptions(
+				fmt.Sprintf("failed to update custom role %s: %v", req.RoleName, err),
+				"GcpCustomRoleUpdateError",
+				temporal.ApplicationErrorOptions{
+					NextRetryDelay: 3 * time.Second,
+					Cause:          err,
+				},
+			)
+		}
 	}
 
-	err = a.provider.bindUserToRole(req.ProjectID, req.User, existingRole)
+	err = a.provider.bindUserToRole(ctx, req.ProjectID, req.User, existingRole)
 	if err != nil {
 		return nil, temporal.NewApplicationErrorWithOptions(
 			fmt.Sprintf("failed to bind user to custom role %s: %v", existingRole.Name, err),
@@ -130,7 +143,7 @@ func (a *gcpProviderActivities) UnbindUserFromPredefinedRole(
 	ctx context.Context,
 	req *UnbindUserFromPredefinedRoleRequest,
 ) error {
-	err := a.provider.unbindUserFromPredefinedRole(req.ProjectID, req.User, req.RoleName)
+	err := a.provider.unbindUserFromPredefinedRole(ctx, req.ProjectID, req.User, req.RoleName)
 	if err != nil {
 		return temporal.NewApplicationErrorWithOptions(
 			fmt.Sprintf("failed to unbind user from predefined role %s: %v", req.RoleName, err),
@@ -150,13 +163,12 @@ func (a *gcpProviderActivities) UnbindAndDeleteCustomRole(
 	req *UnbindAndDeleteCustomRoleRequest,
 ) error {
 	// Extract short name from full path (projects/{project}/roles/{name})
-	parts := strings.Split(req.RoleName, "/")
-	if len(parts) != 4 || len(parts[len(parts)-1]) == 0 {
-		return fmt.Errorf("invalid custom role name format: %q", req.RoleName)
+	customRoleName, err := parseCustomRolePath(req.RoleName)
+	if err != nil {
+		return err
 	}
-	customRoleName := parts[len(parts)-1]
 
-	existingRole, err := a.provider.getRole(req.ProjectID, customRoleName)
+	existingRole, err := a.provider.getRole(ctx, req.ProjectID, customRoleName)
 	if err != nil {
 		return temporal.NewApplicationErrorWithOptions(
 			fmt.Sprintf("failed to get custom role %s: %v", customRoleName, err),
@@ -168,7 +180,7 @@ func (a *gcpProviderActivities) UnbindAndDeleteCustomRole(
 		)
 	}
 
-	if err := a.provider.unbindUserFromRole(req.ProjectID, req.User, existingRole); err != nil {
+	if err := a.provider.unbindUserFromRole(ctx, req.ProjectID, req.User, existingRole); err != nil {
 		return temporal.NewApplicationErrorWithOptions(
 			fmt.Sprintf("failed to unbind user from custom role %s: %v", req.RoleName, err),
 			"GcpCustomRoleUnbindingError",
@@ -179,7 +191,7 @@ func (a *gcpProviderActivities) UnbindAndDeleteCustomRole(
 		)
 	}
 
-	if err := a.provider.deleteRole(req.ProjectID, customRoleName); err != nil {
+	if err := a.provider.deleteRole(ctx, req.ProjectID, customRoleName); err != nil {
 		return temporal.NewApplicationErrorWithOptions(
 			fmt.Sprintf("failed to delete custom role %s: %v", customRoleName, err),
 			"GcpCustomRoleDeletionError",

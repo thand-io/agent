@@ -3,8 +3,10 @@ package azure
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/thand-io/agent/internal/models"
+	"go.temporal.io/sdk/temporal"
 )
 
 // azureProviderActivities exposes granular Azure provider operations as individual
@@ -64,7 +66,14 @@ func (a *azureProviderActivities) GetOrCreateRoleDefinition(
 	if err != nil {
 		role, err = a.provider.createRoleDefinition(ctx, req.RoleName, req.Description, req.Permissions)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create role definition: %w", err)
+			return nil, temporal.NewApplicationErrorWithOptions(
+				fmt.Sprintf("failed to create Azure role definition '%s': %v", req.RoleName, err),
+				"AzureRoleDefinitionError",
+				temporal.ApplicationErrorOptions{
+					NextRetryDelay: 3 * time.Second,
+					Cause:          err,
+				},
+			)
 		}
 	}
 	return &GetOrCreateRoleDefinitionResponse{
@@ -80,7 +89,14 @@ func (a *azureProviderActivities) CreateRoleAssignment(
 ) (*CreateRoleAssignmentResponse, error) {
 	principalID, err := a.provider.createRoleAssignment(ctx, req.User, req.RoleDefinitionID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create role assignment: %w", err)
+		return nil, temporal.NewApplicationErrorWithOptions(
+			fmt.Sprintf("failed to create Azure role assignment for user '%s': %v", req.User.Email, err),
+			"AzureRoleAssignmentError",
+			temporal.ApplicationErrorOptions{
+				NextRetryDelay: 3 * time.Second,
+				Cause:          err,
+			},
+		)
 	}
 	return &CreateRoleAssignmentResponse{
 		PrincipalID: principalID,
@@ -94,7 +110,13 @@ func (a *azureProviderActivities) GetRoleDefinition(
 ) (*GetRoleDefinitionResponse, error) {
 	role, err := a.provider.getRoleDefinition(ctx, req.RoleName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get role definition: %w", err)
+		// A missing role definition during revocation is a permanent failure —
+		// there is nothing to revoke if the role no longer exists.
+		return nil, temporal.NewNonRetryableApplicationError(
+			fmt.Sprintf("Azure role definition '%s' not found during revocation", req.RoleName),
+			"AzureRoleNotFoundError",
+			err,
+		)
 	}
 	return &GetRoleDefinitionResponse{
 		RoleDefinitionID: *role.ID,
@@ -106,5 +128,15 @@ func (a *azureProviderActivities) DeleteRoleAssignment(
 	ctx context.Context,
 	req *DeleteRoleAssignmentRequest,
 ) error {
-	return a.provider.deleteRoleAssignment(ctx, req.User, req.RoleDefinitionID, req.PrincipalID)
+	if err := a.provider.deleteRoleAssignment(ctx, req.User, req.RoleDefinitionID, req.PrincipalID); err != nil {
+		return temporal.NewApplicationErrorWithOptions(
+			fmt.Sprintf("failed to delete Azure role assignment for user '%s': %v", req.User.Email, err),
+			"AzureRoleAssignmentDeleteError",
+			temporal.ApplicationErrorOptions{
+				NextRetryDelay: 3 * time.Second,
+				Cause:          err,
+			},
+		)
+	}
+	return nil
 }

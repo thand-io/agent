@@ -8,6 +8,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armsubscriptions"
+	msgraphsdk "github.com/microsoftgraph/msgraph-sdk-go"
 	"github.com/sirupsen/logrus"
 
 	"github.com/thand-io/agent/internal/models"
@@ -16,7 +17,10 @@ import (
 
 const AzureProviderName = "azure"
 
-var UseLatestVersion = ""
+// UseLatestVersion is the version string passed to Azure Key Vault APIs when the
+// latest active version of a secret or key should be used. An empty string is
+// the documented convention in the Azure SDK to request the latest version.
+const UseLatestVersion = ""
 
 type azureProvider struct {
 	*models.BaseProvider
@@ -25,6 +29,7 @@ type azureProvider struct {
 	authClient          *armauthorization.RoleAssignmentsClient
 	roleDefClient       *armauthorization.RoleDefinitionsClient
 	subscriptionsClient *armsubscriptions.Client
+	graphClient         *msgraphsdk.GraphServiceClient
 	subscriptionID      string
 	resourceGroupName   string
 }
@@ -73,6 +78,16 @@ func (p *azureProvider) Initialize(identifier string, provider models.ProviderCo
 	p.subscriptionsClient, err = armsubscriptions.NewClient(p.cred.Token, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create subscriptions client: %w", err)
+	}
+
+	// Initialize the Microsoft Graph client once; azcore.TokenCredential handles
+	// token refresh internally so the client is safe to reuse across requests.
+	p.graphClient, err = msgraphsdk.NewGraphServiceClientWithCredentials(
+		p.cred.Token,
+		[]string{"https://graph.microsoft.com/.default"},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create Microsoft Graph client: %w", err)
 	}
 
 	return nil

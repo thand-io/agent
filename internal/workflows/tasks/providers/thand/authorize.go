@@ -24,6 +24,30 @@ import (
 
 const ThandAuthorizeTask = "authorize"
 
+// temporalTaskView wraps a WorkflowTaskSupport and pins it to a coroutine-local
+// Temporal context. This prevents the shared workflowTask from being mutated when
+// multiple workflow.Go coroutines run concurrently and each needs its own ctx.
+type temporalTaskView struct {
+	sdkWorkflowsModel.WorkflowTaskSupport
+	temporalCtx workflow.Context
+}
+
+func newTemporalTaskView(base sdkWorkflowsModel.WorkflowTaskSupport, ctx workflow.Context) *temporalTaskView {
+	return &temporalTaskView{WorkflowTaskSupport: base, temporalCtx: ctx}
+}
+
+func (v *temporalTaskView) HasTemporalContext() bool {
+	return v.temporalCtx != nil
+}
+
+func (v *temporalTaskView) GetTemporalContext() workflow.Context {
+	return v.temporalCtx
+}
+
+func (v *temporalTaskView) WithTemporalContext(ctx workflow.Context) sdkWorkflowsModel.WorkflowTaskSupport {
+	return &temporalTaskView{WorkflowTaskSupport: v.WorkflowTaskSupport, temporalCtx: ctx}
+}
+
 type ThandAuthorizeRequest struct {
 	Provider string `json:"provider"` // Provider to use for authorization
 	models.AuthorizeRoleRequest
@@ -292,7 +316,7 @@ func (t *thandTask) executeAuthorization(
 
 // runAuthTask executes a single authorization task and returns its result.
 func (t *thandTask) runAuthTask(
-	workflowTask *models.ElevateWorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	task authTask,
 ) authResult {
 	providerCall, err := t.config.GetProviderByName(task.ProviderName)
@@ -334,7 +358,7 @@ func (t *thandTask) executeParallel(
 			workflow.Go(ctx, func(wfCtx workflow.Context) {
 				resultCh.Send(wfCtx, indexedResult{
 					Index:  taskIndex,
-					Result: t.runAuthTask(workflowTask, at),
+					Result: t.runAuthTask(newTemporalTaskView(workflowTask, wfCtx), at),
 				})
 			})
 		}

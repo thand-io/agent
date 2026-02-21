@@ -11,6 +11,7 @@ import (
 	"github.com/thand-io/agent/internal/models"
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
@@ -237,7 +238,7 @@ func (t *thandTask) executeRevocationTask(
 
 // runRevokeTask executes a single revocation task and returns its result.
 func (t *thandTask) runRevokeTask(
-	workflowTask *models.ElevateWorkflowTask,
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	task revokeTask,
 ) revokeResult {
 	providerCall, err := t.config.GetProviderByName(task.ProviderName)
@@ -277,7 +278,7 @@ func (t *thandTask) executeRevokeParallel(
 			workflow.Go(ctx, func(wfCtx workflow.Context) {
 				resultCh.Send(wfCtx, indexedResult{
 					Index:  taskIndex,
-					Result: t.runRevokeTask(workflowTask, rt),
+					Result: t.runRevokeTask(newTemporalTaskView(workflowTask, wfCtx), rt),
 				})
 			})
 		}
