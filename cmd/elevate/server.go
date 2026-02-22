@@ -44,8 +44,11 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 
 		if err := s.handler.HandleConnection(ctx, conn); err != nil {
+			_ = conn.Close()
 			// Chunk 1: no logging/error policy yet.
 			continue
 		}
+
+		_ = conn.Close()
 	}
 }

@@ -3,10 +3,13 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/thand-io/agent/cmd/elevate/domain"
 )
+
+var ErrUnsupportedAction = errors.New("unsupported action")
 
 // Handler routes incoming request frames to action-specific handlers.
 type Handler struct {
@@ -27,8 +30,6 @@ func New(grantEngine GrantEngine, verifier SignatureVerifier, stateStore StateSt
 
 // HandleConnection is the per-connection router.
 func (h *Handler) HandleConnection(ctx context.Context, conn IPCConn) error {
-	defer conn.Close()
-
 	frameBytes, err := conn.ReadFrame(ctx)
 	if err != nil {
 		return fmt.Errorf("read frame: %w", err)
@@ -45,6 +46,6 @@ func (h *Handler) HandleConnection(ctx context.Context, conn IPCConn) error {
 	case "revoke":
 		return h.handleRevoke(ctx, conn, req)
 	default:
-		return fmt.Errorf("unsupported action: %s", req.Action)
+		return fmt.Errorf("%w: %s", ErrUnsupportedAction, req.Action)
 	}
 }

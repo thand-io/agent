@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/thand-io/agent/cmd/elevate/clock"
+	elevateconfig "github.com/thand-io/agent/cmd/elevate/config"
 	"github.com/thand-io/agent/cmd/elevate/grant"
 	"github.com/thand-io/agent/cmd/elevate/handler"
 	"github.com/thand-io/agent/cmd/elevate/ipc"
@@ -19,7 +20,11 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	deps := buildDependencies()
+	deps, err := buildDependencies()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to build dependencies: %v\n", err)
+		os.Exit(1)
+	}
 
 	server := NewServer(deps.ipc, deps.handler)
 	if err := server.Run(ctx); err != nil {
@@ -33,8 +38,17 @@ type dependencies struct {
 	handler *handler.Handler
 }
 
-func buildDependencies() *dependencies {
-	ipcServer := ipc.NewPlaceholderServer()
+func buildDependencies() (*dependencies, error) {
+	cfg, err := elevateconfig.LoadFromEnv()
+	if err != nil {
+		return nil, err
+	}
+
+	ipcServer, err := ipc.NewUnixServer(cfg.SocketPath)
+	if err != nil {
+		return nil, err
+	}
+
 	grantEngine := grant.NewPlaceholderEngine()
 	verifier := verify.NewPlaceholderVerifier()
 	stateStore := state.NewPlaceholderStore()
@@ -42,5 +56,5 @@ func buildDependencies() *dependencies {
 
 	router := handler.New(grantEngine, verifier, stateStore, clk)
 
-	return &dependencies{ipc: ipcServer, handler: router}
+	return &dependencies{ipc: ipcServer, handler: router}, nil
 }
