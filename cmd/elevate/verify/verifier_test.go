@@ -121,13 +121,15 @@ func TestWithTrustedKeysBase64RejectsInvalidKey(t *testing.T) {
 	}
 }
 
-func TestNewVerifierLoadsEmbeddedKeys(t *testing.T) {
-	v, err := NewVerifier()
+func TestNewVerifierWithTrustedKeys(t *testing.T) {
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		t.Fatalf("NewVerifier failed with embedded keys: %v", err)
+		t.Fatalf("GenerateKey failed: %v", err)
 	}
-
-	// Sanity check: verifier exists and unknown key path returns the expected sentinel.
+	v, err := NewVerifier(WithTrustedKeys(map[string]ed25519.PublicKey{"k": pub}))
+	if err != nil {
+		t.Fatalf("NewVerifier failed: %v", err)
+	}
 	if err := v.Verify("missing", []byte("p"), []byte("s")); !errors.Is(err, ErrUnknownKeyID) {
 		t.Fatalf("expected ErrUnknownKeyID, got: %v", err)
 	}

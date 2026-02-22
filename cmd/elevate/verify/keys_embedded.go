@@ -12,11 +12,12 @@ import (
 // Embedded key files are compile-time pinned key material.
 // Values are PEM-encoded PKIX Ed25519 public keys.
 //
-//go:embed keys/*.pem
+//go:embed keys
 var trustedKeyFiles embed.FS
+var trustedKeysFS fs.FS = trustedKeyFiles
 
 func loadEmbeddedTrustedKeys() (map[string]string, error) {
-	entries, err := fs.ReadDir(trustedKeyFiles, "keys")
+	entries, err := fs.ReadDir(trustedKeysFS, "keys")
 	if err != nil {
 		return nil, fmt.Errorf("read embedded keys directory: %w", err)
 	}
@@ -40,7 +41,7 @@ func loadEmbeddedTrustedKeys() (map[string]string, error) {
 			return nil, fmt.Errorf("duplicate embedded key id: %s", keyID)
 		}
 
-		raw, err := trustedKeyFiles.ReadFile(filepath.ToSlash(filepath.Join("keys", name)))
+		raw, err := fs.ReadFile(trustedKeysFS, filepath.ToSlash(filepath.Join("keys", name)))
 		if err != nil {
 			return nil, fmt.Errorf("read embedded trusted key file %s: %w", name, err)
 		}
@@ -50,10 +51,6 @@ func loadEmbeddedTrustedKeys() (map[string]string, error) {
 			return nil, errors.New("embedded trusted key file is empty for key id: " + keyID)
 		}
 		out[keyID] = keyText
-	}
-
-	if len(out) == 0 {
-		return nil, errors.New("no embedded trusted key files found")
 	}
 
 	return out, nil
