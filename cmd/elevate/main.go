@@ -50,7 +50,10 @@ func buildDependencies() (*dependencies, error) {
 	}
 
 	grantEngine := grant.NewPlaceholderEngine()
-	verifier := verify.NewPlaceholderVerifier()
+	verifier, err := verify.NewVerifier()
+	if err != nil {
+		return nil, err
+	}
 	stateStore := state.NewPlaceholderStore()
 	clk := clock.NewPlaceholderClock()
 

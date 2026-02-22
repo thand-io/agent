@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	defaultReadPollInterval   = 250 * time.Millisecond
-	defaultWritePollInterval  = 250 * time.Millisecond
+	defaultReadPollInterval  = 250 * time.Millisecond
+	defaultWritePollInterval = 250 * time.Millisecond
 )
 
 var (
