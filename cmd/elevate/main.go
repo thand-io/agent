@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/thand-io/agent/cmd/elevate/clock"
 	elevateconfig "github.com/thand-io/agent/cmd/elevate/config"
@@ -26,8 +27,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	server := NewServer(deps.ipc, deps.handler)
-	if err := server.Run(ctx); err != nil {
+	if err := run(ctx, deps); err != nil {
 		fmt.Fprintf(os.Stderr, "elevate server error: %v\n", err)
 		os.Exit(1)
 	}
@@ -36,6 +36,7 @@ func main() {
 type dependencies struct {
 	ipc     handler.IPCServer
 	handler *handler.Handler
+	cleanup *CleanupRunner
 }
 
 func buildDependencies() (*dependencies, error) {
@@ -61,10 +62,55 @@ func buildDependencies() (*dependencies, error) {
 	if err != nil {
 		return nil, err
 	}
-	stateStore := state.NewPlaceholderStore()
+	stateStore, err := state.NewFileStore(cfg.StatePath)
+	if err != nil {
+		return nil, err
+	}
 	clk := clock.NewPlaceholderClock()
 
 	router := handler.New(grantEngine, verifier, stateStore, clk)
+	cleanupRunner, err := NewCleanupRunner(stateStore, grantEngine, clk, cfg.CleanupInterval)
+	if err != nil {
+		return nil, err
+	}
 
-	return &dependencies{ipc: ipcServer, handler: router}, nil
+	return &dependencies{ipc: ipcServer, handler: router, cleanup: cleanupRunner}, nil
+}
+
+func run(ctx context.Context, deps *dependencies) error {
+	if deps == nil {
+		return fmt.Errorf("dependencies are required")
+	}
+	if deps.cleanup == nil {
+		return fmt.Errorf("cleanup runner is required")
+	}
+
+	server := NewServer(deps.ipc, deps.handler)
+
+	serverErr := make(chan error, 1)
+	go func() {
+		serverErr <- server.Run(ctx)
+	}()
+
+	cleanupErr := make(chan error, 1)
+	go func() {
+		cleanupErr <- deps.cleanup.Run(ctx)
+	}()
+
+	select {
+	case err := <-serverErr:
+		return err
+	case err := <-cleanupErr:
+		return err
+	case <-ctx.Done():
+		// Give goroutines a brief chance to observe cancellation and stop.
+		select {
+		case err := <-serverErr:
+			return err
+		case err := <-cleanupErr:
+			return err
+		case <-time.After(250 * time.Millisecond):
+			return nil
+		}
+	}
 }
