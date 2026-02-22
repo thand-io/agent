@@ -155,6 +155,12 @@ func (e *LinuxEngine) Grant(ctx context.Context, req domain.GrantRequest) (domai
 		return domain.GrantResult{}, fmt.Errorf("write sudoers temp file: %w", err)
 	}
 
+	// Validate before activation so an invalid rule never becomes live in sudoers.d.
+	if err := e.validateFile(ctx, tmpPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return domain.GrantResult{}, err
+	}
+
 	if err := os.Rename(tmpPath, sudoersPath); err != nil {
 		_ = os.Remove(tmpPath)
 		return domain.GrantResult{}, fmt.Errorf("activate sudoers file: %w", err)
@@ -163,11 +169,6 @@ func (e *LinuxEngine) Grant(ctx context.Context, req domain.GrantRequest) (domai
 	if err := os.Chmod(sudoersPath, sudoersFileMode); err != nil {
 		_ = os.Remove(sudoersPath)
 		return domain.GrantResult{}, fmt.Errorf("set sudoers permissions: %w", err)
-	}
-
-	if err := e.validateFile(ctx, sudoersPath); err != nil {
-		_ = os.Remove(sudoersPath)
-		return domain.GrantResult{}, err
 	}
 
 	return domain.GrantResult{
