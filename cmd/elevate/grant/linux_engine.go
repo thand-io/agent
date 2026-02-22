@@ -16,18 +16,12 @@ import (
 )
 
 const (
-	// DefaultSudoersDir is the default directory where grant files are written.
-	DefaultSudoersDir  = "/etc/sudoers.d"
-	// DefaultSudoersFile is the default sudoers file checked for #includedir.
-	DefaultSudoersFile = "/etc/sudoers"
-	// DefaultVisudoBin is the default visudo binary used for syntax validation.
-	DefaultVisudoBin   = "visudo"
-	sudoersFileMode    = 0o440
+	sudoersFileMode = 0o440
 )
 
 var (
 	// ErrInvalidGrantRequest indicates malformed or unsafe grant input.
-	ErrInvalidGrantRequest  = errors.New("invalid grant request")
+	ErrInvalidGrantRequest = errors.New("invalid grant request")
 	// ErrInvalidRevokeRequest indicates malformed or unsafe revoke input.
 	ErrInvalidRevokeRequest = errors.New("invalid revoke request")
 
@@ -37,20 +31,6 @@ var (
 
 // EngineOption configures a LinuxEngine instance.
 type EngineOption func(*LinuxEngine)
-
-// WithSudoersDir overrides where temporary sudoers entries are written.
-func WithSudoersDir(path string) EngineOption {
-	return func(e *LinuxEngine) {
-		e.sudoersDir = path
-	}
-}
-
-// WithVisudoBinary overrides the validation command binary name/path.
-func WithVisudoBinary(path string) EngineOption {
-	return func(e *LinuxEngine) {
-		e.visudoBin = path
-	}
-}
 
 // WithNow overrides the wall clock source.
 func WithNow(fn func() time.Time) EngineOption {
@@ -73,13 +53,6 @@ func WithWriteFile(fn func(name string, data []byte, perm os.FileMode) error) En
 	}
 }
 
-// WithSudoersFile overrides the base sudoers file path for include checks.
-func WithSudoersFile(path string) EngineOption {
-	return func(e *LinuxEngine) {
-		e.sudoersFile = path
-	}
-}
-
 // WithCheckAlreadyPrivileged provides baseline membership hook; persistence is in state layer.
 func WithCheckAlreadyPrivileged(fn func(context.Context, string) (bool, error)) EngineOption {
 	return func(e *LinuxEngine) {
@@ -99,12 +72,19 @@ type LinuxEngine struct {
 	checkAlreadyPrivileged func(context.Context, string) (bool, error)
 }
 
+// LinuxEngineConfig contains required Linux grant engine configuration.
+type LinuxEngineConfig struct {
+	SudoersDir  string
+	SudoersFile string
+	VisudoBin   string
+}
+
 // NewLinuxEngine constructs a Linux GrantEngine backed by sudoers.d files.
-func NewLinuxEngine(opts ...EngineOption) handler.GrantEngine {
+func NewLinuxEngine(cfg LinuxEngineConfig, opts ...EngineOption) (handler.GrantEngine, error) {
 	e := &LinuxEngine{
-		sudoersDir:  DefaultSudoersDir,
-		sudoersFile: DefaultSudoersFile,
-		visudoBin:   DefaultVisudoBin,
+		sudoersDir:  strings.TrimSpace(cfg.SudoersDir),
+		sudoersFile: strings.TrimSpace(cfg.SudoersFile),
+		visudoBin:   strings.TrimSpace(cfg.VisudoBin),
 		now:         func() time.Time { return time.Now().UTC() },
 		writeFile:   os.WriteFile,
 		checkAlreadyPrivileged: func(ctx context.Context, username string) (bool, error) {
@@ -117,6 +97,15 @@ func NewLinuxEngine(opts ...EngineOption) handler.GrantEngine {
 
 	for _, opt := range opts {
 		opt(e)
+	}
+	if e.sudoersDir == "" {
+		return nil, errors.New("sudoers dir is required")
+	}
+	if e.sudoersFile == "" {
+		return nil, errors.New("sudoers file is required")
+	}
+	if e.visudoBin == "" {
+		return nil, errors.New("visudo binary is required")
 	}
 
 	// Ensure validateFile uses configured visudo binary unless explicitly overridden.
@@ -135,7 +124,7 @@ func NewLinuxEngine(opts ...EngineOption) handler.GrantEngine {
 		}
 	}
 
-	return e
+	return e, nil
 }
 
 // Grant validates input, checks sudoers preconditions, writes a temporary sudoers

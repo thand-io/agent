@@ -17,9 +17,11 @@ func TestGrantWritesAndRevokesSudoersFile(t *testing.T) {
 	dir := t.TempDir()
 	sudoersFile := writeTempSudoersFile(t, "#includedir "+dir+"\n")
 
-	engine := NewLinuxEngine(
-		WithSudoersDir(dir),
-		WithSudoersFile(sudoersFile),
+	engine := mustNewEngine(t, LinuxEngineConfig{
+		SudoersDir:  dir,
+		SudoersFile: sudoersFile,
+		VisudoBin:   "visudo",
+	},
 		WithNow(func() time.Time { return now }),
 		WithValidateFile(func(ctx context.Context, path string) error {
 			_ = ctx
@@ -28,7 +30,7 @@ func TestGrantWritesAndRevokesSudoersFile(t *testing.T) {
 			}
 			return nil
 		}),
-	).(*LinuxEngine)
+	)
 
 	res, err := engine.Grant(context.Background(), domain.GrantRequest{
 		RequestID:       "abc-123",
@@ -68,15 +70,17 @@ func TestGrantWritesAndRevokesSudoersFile(t *testing.T) {
 func TestGrantValidationFailureRollsBackFile(t *testing.T) {
 	dir := t.TempDir()
 	sudoersFile := writeTempSudoersFile(t, "#includedir "+dir+"\n")
-	engine := NewLinuxEngine(
-		WithSudoersDir(dir),
-		WithSudoersFile(sudoersFile),
+	engine := mustNewEngine(t, LinuxEngineConfig{
+		SudoersDir:  dir,
+		SudoersFile: sudoersFile,
+		VisudoBin:   "visudo",
+	},
 		WithValidateFile(func(ctx context.Context, path string) error {
 			_ = ctx
 			_ = path
 			return errors.New("invalid sudoers")
 		}),
-	).(*LinuxEngine)
+	)
 
 	_, err := engine.Grant(context.Background(), domain.GrantRequest{
 		RequestID:       "bad",
@@ -93,7 +97,11 @@ func TestGrantValidationFailureRollsBackFile(t *testing.T) {
 }
 
 func TestGrantInvalidRequest(t *testing.T) {
-	engine := NewLinuxEngine().(*LinuxEngine)
+	engine := mustNewEngine(t, LinuxEngineConfig{
+		SudoersDir:  t.TempDir(),
+		SudoersFile: writeTempSudoersFile(t, "#includedir /tmp/unused\n"),
+		VisudoBin:   "visudo",
+	})
 
 	cases := []domain.GrantRequest{
 		{RequestID: "", Username: "alice", DurationSeconds: 10},
@@ -112,14 +120,22 @@ func TestGrantInvalidRequest(t *testing.T) {
 }
 
 func TestRevokeMissingIsIdempotent(t *testing.T) {
-	engine := NewLinuxEngine(WithSudoersDir(t.TempDir())).(*LinuxEngine)
+	engine := mustNewEngine(t, LinuxEngineConfig{
+		SudoersDir:  t.TempDir(),
+		SudoersFile: writeTempSudoersFile(t, "#includedir /tmp/unused\n"),
+		VisudoBin:   "visudo",
+	})
 	if err := engine.Revoke(context.Background(), domain.RevokeRequest{RequestID: "missing"}); err != nil {
 		t.Fatalf("expected nil on missing revoke, got %v", err)
 	}
 }
 
 func TestRevokeInvalidRequestID(t *testing.T) {
-	engine := NewLinuxEngine(WithSudoersDir(t.TempDir())).(*LinuxEngine)
+	engine := mustNewEngine(t, LinuxEngineConfig{
+		SudoersDir:  t.TempDir(),
+		SudoersFile: writeTempSudoersFile(t, "#includedir /tmp/unused\n"),
+		VisudoBin:   "visudo",
+	})
 	if err := engine.Revoke(context.Background(), domain.RevokeRequest{RequestID: "bad/id"}); !errors.Is(err, ErrInvalidRevokeRequest) {
 		t.Fatalf("expected ErrInvalidRevokeRequest, got %v", err)
 	}
@@ -128,16 +144,18 @@ func TestRevokeInvalidRequestID(t *testing.T) {
 func TestBaselinePrivilegeHook(t *testing.T) {
 	dir := t.TempDir()
 	sudoersFile := writeTempSudoersFile(t, "#includedir "+dir+"\n")
-	engine := NewLinuxEngine(
-		WithSudoersDir(dir),
-		WithSudoersFile(sudoersFile),
+	engine := mustNewEngine(t, LinuxEngineConfig{
+		SudoersDir:  dir,
+		SudoersFile: sudoersFile,
+		VisudoBin:   "visudo",
+	},
 		WithValidateFile(func(ctx context.Context, path string) error { _ = ctx; _ = path; return nil }),
 		WithCheckAlreadyPrivileged(func(ctx context.Context, username string) (bool, error) {
 			_ = ctx
 			_ = username
 			return true, nil
 		}),
-	).(*LinuxEngine)
+	)
 
 	res, err := engine.Grant(context.Background(), domain.GrantRequest{RequestID: "r1", Username: "alice", DurationSeconds: 30})
 	if err != nil {
@@ -151,10 +169,11 @@ func TestBaselinePrivilegeHook(t *testing.T) {
 func TestGrantFailsWhenSudoersDirMissing(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "missing")
 	sudoersFile := writeTempSudoersFile(t, "#includedir "+dir+"\n")
-	engine := NewLinuxEngine(
-		WithSudoersDir(dir),
-		WithSudoersFile(sudoersFile),
-	).(*LinuxEngine)
+	engine := mustNewEngine(t, LinuxEngineConfig{
+		SudoersDir:  dir,
+		SudoersFile: sudoersFile,
+		VisudoBin:   "visudo",
+	})
 
 	_, err := engine.Grant(context.Background(), domain.GrantRequest{
 		RequestID:       "r1",
@@ -169,10 +188,11 @@ func TestGrantFailsWhenSudoersDirMissing(t *testing.T) {
 func TestGrantFailsWhenSudoersMissingIncludedir(t *testing.T) {
 	dir := t.TempDir()
 	sudoersFile := writeTempSudoersFile(t, "#includedir /some/other/dir\n")
-	engine := NewLinuxEngine(
-		WithSudoersDir(dir),
-		WithSudoersFile(sudoersFile),
-	).(*LinuxEngine)
+	engine := mustNewEngine(t, LinuxEngineConfig{
+		SudoersDir:  dir,
+		SudoersFile: sudoersFile,
+		VisudoBin:   "visudo",
+	})
 
 	_, err := engine.Grant(context.Background(), domain.GrantRequest{
 		RequestID:       "r1",
@@ -191,4 +211,20 @@ func writeTempSudoersFile(t *testing.T, content string) string {
 		t.Fatalf("write temp sudoers file: %v", err)
 	}
 	return path
+}
+
+func mustNewEngine(t *testing.T, cfg LinuxEngineConfig, opts ...EngineOption) *LinuxEngine {
+	t.Helper()
+	engine, err := NewLinuxEngine(cfg, opts...)
+	if err != nil {
+		t.Fatalf("NewLinuxEngine failed: %v", err)
+	}
+	return engine.(*LinuxEngine)
+}
+
+func TestNewLinuxEngineRequiresConfigFields(t *testing.T) {
+	_, err := NewLinuxEngine(LinuxEngineConfig{})
+	if err == nil {
+		t.Fatal("expected error for empty config")
+	}
 }
