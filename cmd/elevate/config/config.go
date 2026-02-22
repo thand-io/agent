@@ -9,10 +9,16 @@ import (
 const (
 	EnvSocketPath     = "THAND_ELEVATE_SOCKET_PATH"
 	DefaultSocketPath = "/var/run/thand/elevate.sock"
+	EnvSudoersDir     = "THAND_ELEVATE_SUDOERS_DIR"
+	DefaultSudoersDir = "/etc/sudoers.d"
+	EnvVisudoBin      = "THAND_ELEVATE_VISUDO_BIN"
+	DefaultVisudoBin  = "visudo"
 )
 
 type Config struct {
 	SocketPath string
+	SudoersDir string
+	VisudoBin  string
 }
 
 func LoadFromEnv() (*Config, error) {
@@ -21,8 +27,20 @@ func LoadFromEnv() (*Config, error) {
 		socketPath = DefaultSocketPath
 	}
 
+	sudoersDir := strings.TrimSpace(os.Getenv(EnvSudoersDir))
+	if sudoersDir == "" {
+		sudoersDir = DefaultSudoersDir
+	}
+
+	visudoBin := strings.TrimSpace(os.Getenv(EnvVisudoBin))
+	if visudoBin == "" {
+		visudoBin = DefaultVisudoBin
+	}
+
 	cfg := &Config{
 		SocketPath: socketPath,
+		SudoersDir: sudoersDir,
+		VisudoBin:  visudoBin,
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -39,6 +57,12 @@ func (c *Config) Validate() error {
 
 	if strings.TrimSpace(c.SocketPath) == "" {
 		return fmt.Errorf("socket path is required")
+	}
+	if strings.TrimSpace(c.SudoersDir) == "" {
+		return fmt.Errorf("sudoers dir is required")
+	}
+	if strings.TrimSpace(c.VisudoBin) == "" {
+		return fmt.Errorf("visudo binary is required")
 	}
 
 	return nil

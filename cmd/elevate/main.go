@@ -49,7 +49,10 @@ func buildDependencies() (*dependencies, error) {
 		return nil, err
 	}
 
-	grantEngine := grant.NewPlaceholderEngine()
+	grantEngine := grant.NewLinuxEngine(
+		grant.WithSudoersDir(cfg.SudoersDir),
+		grant.WithVisudoBinary(cfg.VisudoBin),
+	)
 	verifier, err := verify.NewVerifier()
 	if err != nil {
 		return nil, err

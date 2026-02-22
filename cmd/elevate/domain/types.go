@@ -52,9 +52,10 @@ type RevokeRequest struct {
 }
 
 type GrantResult struct {
-	RequestID string
-	Username  string
-	Expiry    time.Time
+	RequestID            string
+	Username             string
+	Expiry               time.Time
+	WasAlreadyPrivileged bool
 }
 
 type GrantState struct {
