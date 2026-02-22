@@ -97,7 +97,7 @@ func TestVerifierVerify(t *testing.T) {
 }
 
 func TestMatchSignedPayload(t *testing.T) {
-	req := domain.RequestFrame{Action: "grant", WorkflowID: "wf", RequestID: "r", Username: "u", DurationSeconds: 123}
+	req := domain.RequestFrame{Action: domain.ActionGrant, WorkflowID: "wf", RequestID: "r", Username: "u", DurationSeconds: 123}
 	payload := SignedPayload{Nonce: "n", Action: "grant", WorkflowID: "wf", RequestID: "r", Username: "u", DurationSeconds: 123}
 
 	if err := MatchSignedPayload(req, payload, "n"); err != nil {

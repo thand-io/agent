@@ -10,9 +10,17 @@ const (
 	FrameTypeResult         = "result"
 )
 
+// Action is the requested elevation operation type.
+type Action string
+
+const (
+	ActionGrant  Action = "grant"
+	ActionRevoke Action = "revoke"
+)
+
 type RequestFrame struct {
 	Type            string `json:"type"`
-	Action          string `json:"action"`
+	Action          Action `json:"action"`
 	WorkflowID      string `json:"workflow_id"`
 	RequestID       string `json:"request_id"`
 	Username        string `json:"username"`

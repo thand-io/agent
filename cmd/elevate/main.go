@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,17 +19,18 @@ import (
 )
 
 func main() {
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	deps, err := buildDependencies()
+	deps, err := buildDependencies(logger)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to build dependencies: %v\n", err)
+		logger.Error("failed to build dependencies", "err", err)
 		os.Exit(1)
 	}
 
 	if err := run(ctx, deps); err != nil {
-		fmt.Fprintf(os.Stderr, "elevate server error: %v\n", err)
+		logger.Error("elevate server error", "err", err)
 		os.Exit(1)
 	}
 }
@@ -39,10 +41,18 @@ type dependencies struct {
 	cleanup *CleanupRunner
 }
 
-func buildDependencies() (*dependencies, error) {
+func buildDependencies(baseLogger *slog.Logger) (*dependencies, error) {
 	cfg, err := elevateconfig.LoadFromEnv()
 	if err != nil {
 		return nil, err
+	}
+	logLevel, err := elevateconfig.ParseLogLevel(cfg.LogLevel)
+	if err != nil {
+		return nil, err
+	}
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel}))
+	if baseLogger != nil {
+		baseLogger = logger
 	}
 
 	ipcServer, err := ipc.NewUnixServer(cfg.SocketPath)
@@ -68,7 +78,7 @@ func buildDependencies() (*dependencies, error) {
 	}
 	clk := clock.NewPlaceholderClock()
 
-	router := handler.New(grantEngine, verifier, stateStore, clk)
+	router := handler.New(grantEngine, verifier, stateStore, clk, handler.WithLogger(baseLogger))
 	cleanupRunner, err := NewCleanupRunner(stateStore, grantEngine, clk, cfg.CleanupInterval)
 	if err != nil {
 		return nil, err

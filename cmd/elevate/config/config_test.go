@@ -12,6 +12,7 @@ func TestLoadFromEnvUsesDefaultSocketPath(t *testing.T) {
 	t.Setenv(EnvVisudoBin, "")
 	t.Setenv(EnvStatePath, "")
 	t.Setenv(EnvCleanupInterval, "")
+	t.Setenv(EnvLogLevel, "")
 
 	cfg, err := LoadFromEnv()
 	if err != nil {
@@ -36,6 +37,9 @@ func TestLoadFromEnvUsesDefaultSocketPath(t *testing.T) {
 	if cfg.CleanupInterval != DefaultCleanup {
 		t.Fatalf("unexpected cleanup interval: got %s want %s", cfg.CleanupInterval, DefaultCleanup)
 	}
+	if cfg.LogLevel != DefaultLogLevel {
+		t.Fatalf("unexpected log level: got %q want %q", cfg.LogLevel, DefaultLogLevel)
+	}
 }
 
 func TestLoadFromEnvUsesConfiguredSocketPath(t *testing.T) {
@@ -45,12 +49,14 @@ func TestLoadFromEnvUsesConfiguredSocketPath(t *testing.T) {
 	wantVisudo := "/usr/local/bin/visudo"
 	wantStatePath := "/tmp/custom-state.json"
 	wantCleanup := "30s"
+	wantLogLevel := "warn"
 	t.Setenv(EnvSocketPath, wantSocket)
 	t.Setenv(EnvSudoersDir, wantSudoers)
 	t.Setenv(EnvSudoersFile, wantSudoersFile)
 	t.Setenv(EnvVisudoBin, wantVisudo)
 	t.Setenv(EnvStatePath, wantStatePath)
 	t.Setenv(EnvCleanupInterval, wantCleanup)
+	t.Setenv(EnvLogLevel, wantLogLevel)
 
 	cfg, err := LoadFromEnv()
 	if err != nil {
@@ -74,6 +80,9 @@ func TestLoadFromEnvUsesConfiguredSocketPath(t *testing.T) {
 	}
 	if cfg.CleanupInterval != 30*time.Second {
 		t.Fatalf("unexpected cleanup interval: got %s want %s", cfg.CleanupInterval, 30*time.Second)
+	}
+	if cfg.LogLevel != wantLogLevel {
+		t.Fatalf("unexpected log level: got %q want %q", cfg.LogLevel, wantLogLevel)
 	}
 }
 
@@ -165,5 +174,44 @@ func TestValidateRejectsNonPositiveCleanupInterval(t *testing.T) {
 	}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected validation error for cleanup interval")
+	}
+}
+
+func TestValidateRejectsInvalidLogLevel(t *testing.T) {
+	cfg := &Config{
+		SocketPath:      "/var/run/thand/elevate.sock",
+		SudoersDir:      "/etc/sudoers.d",
+		SudoersFile:     "/etc/sudoers",
+		VisudoBin:       "visudo",
+		StatePath:       "/var/lib/thand/elevate/state.json",
+		CleanupInterval: time.Minute,
+		LogLevel:        "verbose",
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected validation error for log level")
+	}
+}
+
+func TestParseLogLevel(t *testing.T) {
+	tests := []struct {
+		in      string
+		wantErr bool
+	}{
+		{in: "debug"},
+		{in: "info"},
+		{in: "warn"},
+		{in: "warning"},
+		{in: "error"},
+		{in: ""},
+		{in: "bad", wantErr: true},
+	}
+	for _, tc := range tests {
+		_, err := ParseLogLevel(tc.in)
+		if tc.wantErr && err == nil {
+			t.Fatalf("expected error for %q", tc.in)
+		}
+		if !tc.wantErr && err != nil {
+			t.Fatalf("unexpected error for %q: %v", tc.in, err)
+		}
 	}
 }

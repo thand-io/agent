@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -9,29 +10,33 @@ import (
 
 const (
 	// EnvSocketPath overrides the helper IPC socket path.
-	EnvSocketPath      = "THAND_ELEVATE_SOCKET_PATH"
+	EnvSocketPath = "THAND_ELEVATE_SOCKET_PATH"
 	// DefaultSocketPath is the default helper IPC socket path.
-	DefaultSocketPath  = "/var/run/thand/elevate.sock"
+	DefaultSocketPath = "/var/run/thand/elevate.sock"
 	// EnvSudoersDir overrides the sudoers include directory for grant files.
-	EnvSudoersDir      = "THAND_ELEVATE_SUDOERS_DIR"
+	EnvSudoersDir = "THAND_ELEVATE_SUDOERS_DIR"
 	// DefaultSudoersDir is the default sudoers include directory for grant files.
-	DefaultSudoersDir  = "/etc/sudoers.d"
+	DefaultSudoersDir = "/etc/sudoers.d"
 	// EnvSudoersFile overrides the base sudoers file used for #includedir checks.
-	EnvSudoersFile     = "THAND_ELEVATE_SUDOERS_FILE"
+	EnvSudoersFile = "THAND_ELEVATE_SUDOERS_FILE"
 	// DefaultSudoersFile is the default base sudoers file used for #includedir checks.
 	DefaultSudoersFile = "/etc/sudoers"
 	// EnvVisudoBin overrides the visudo binary path/name.
-	EnvVisudoBin       = "THAND_ELEVATE_VISUDO_BIN"
+	EnvVisudoBin = "THAND_ELEVATE_VISUDO_BIN"
 	// DefaultVisudoBin is the default visudo binary name.
-	DefaultVisudoBin   = "visudo"
+	DefaultVisudoBin = "visudo"
 	// EnvStatePath overrides the persisted grant state file path.
-	EnvStatePath       = "THAND_ELEVATE_STATE_PATH"
+	EnvStatePath = "THAND_ELEVATE_STATE_PATH"
 	// DefaultStatePath is the default persisted grant state file path.
-	DefaultStatePath   = "/var/lib/thand/elevate/state.json"
+	DefaultStatePath = "/var/lib/thand/elevate/state.json"
 	// EnvCleanupInterval overrides the periodic cleanup interval duration.
 	EnvCleanupInterval = "THAND_ELEVATE_CLEANUP_INTERVAL"
 	// DefaultCleanup is the default periodic cleanup interval.
-	DefaultCleanup     = 1 * time.Minute
+	DefaultCleanup = 1 * time.Minute
+	// EnvLogLevel overrides helper log level.
+	EnvLogLevel = "THAND_ELEVATE_LOG_LEVEL"
+	// DefaultLogLevel is the default helper log level.
+	DefaultLogLevel = "info"
 )
 
 // Config contains runtime configuration for the elevate helper.
@@ -43,6 +48,7 @@ type Config struct {
 	StatePath   string
 
 	CleanupInterval time.Duration
+	LogLevel        string
 }
 
 // LoadFromEnv loads helper configuration from environment variables with defaults.
@@ -80,6 +86,10 @@ func LoadFromEnv() (*Config, error) {
 		}
 		cleanupInterval = parsed
 	}
+	logLevel := strings.TrimSpace(os.Getenv(EnvLogLevel))
+	if logLevel == "" {
+		logLevel = DefaultLogLevel
+	}
 
 	cfg := &Config{
 		SocketPath:  socketPath,
@@ -89,6 +99,7 @@ func LoadFromEnv() (*Config, error) {
 		StatePath:   statePath,
 
 		CleanupInterval: cleanupInterval,
+		LogLevel:        logLevel,
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -122,6 +133,25 @@ func (c *Config) Validate() error {
 	if c.CleanupInterval <= 0 {
 		return fmt.Errorf("cleanup interval must be > 0")
 	}
+	if _, err := ParseLogLevel(c.LogLevel); err != nil {
+		return err
+	}
 
 	return nil
+}
+
+// ParseLogLevel converts textual configuration into an slog level.
+func ParseLogLevel(raw string) (slog.Level, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "debug":
+		return slog.LevelDebug, nil
+	case "", "info":
+		return slog.LevelInfo, nil
+	case "warn", "warning":
+		return slog.LevelWarn, nil
+	case "error":
+		return slog.LevelError, nil
+	default:
+		return 0, fmt.Errorf("invalid log level: %q", raw)
+	}
 }

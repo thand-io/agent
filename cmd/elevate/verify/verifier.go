@@ -136,7 +136,7 @@ func MatchSignedPayload(req domain.RequestFrame, payload SignedPayload, nonce st
 	if payload.Nonce != nonce {
 		return fmt.Errorf("%w: nonce mismatch", ErrPayloadMismatch)
 	}
-	if payload.Action != req.Action {
+	if payload.Action != string(req.Action) {
 		return fmt.Errorf("%w: action mismatch", ErrPayloadMismatch)
 	}
 	if payload.WorkflowID != req.WorkflowID {
