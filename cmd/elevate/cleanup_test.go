@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -76,11 +77,11 @@ func (g *stubGrantEngine) revokedCount() int {
 }
 
 type stubClock struct {
-	mono int64
+	mono atomic.Int64
 	wall time.Time
 }
 
-func (c *stubClock) NowMonoNS() int64      { return c.mono }
+func (c *stubClock) NowMonoNS() int64      { return c.mono.Load() }
 func (c *stubClock) NowWallUTC() time.Time { return c.wall }
 
 func TestIsExpiredMonotonicAndWallFallback(t *testing.T) {
@@ -151,9 +152,9 @@ func TestCleanupRunStartupSweep(t *testing.T) {
 	}
 	engine := &stubGrantEngine{}
 	clock := &stubClock{
-		mono: 2_000_000_000,
 		wall: time.Date(2026, 2, 22, 12, 0, 0, 0, time.UTC),
 	}
+	clock.mono.Store(2_000_000_000)
 
 	runner, err := NewCleanupRunner(store, engine, clock, 10*time.Millisecond)
 	if err != nil {
@@ -193,9 +194,9 @@ func TestCleanupRunPeriodicSweep(t *testing.T) {
 	}
 	engine := &stubGrantEngine{}
 	clock := &stubClock{
-		mono: 0,
 		wall: time.Date(2026, 2, 22, 12, 0, 0, 0, time.UTC),
 	}
+	clock.mono.Store(0)
 
 	runner, err := NewCleanupRunner(store, engine, clock, 10*time.Millisecond)
 	if err != nil {
@@ -211,7 +212,7 @@ func TestCleanupRunPeriodicSweep(t *testing.T) {
 	}()
 
 	time.Sleep(20 * time.Millisecond)
-	clock.mono = 2 * int64(time.Second)
+	clock.mono.Store(2 * int64(time.Second))
 	time.Sleep(20 * time.Millisecond)
 	cancel()
 
