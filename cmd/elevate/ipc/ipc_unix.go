@@ -19,11 +19,13 @@ import (
 const (
 	defaultReadPollInterval  = 250 * time.Millisecond
 	defaultWritePollInterval = 250 * time.Millisecond
+	defaultMaxFrameBytes     = 16 * 1024
 )
 
 var (
 	ErrSocketPathRequired = errors.New("unix socket path is required")
 	ErrServerNotStarted   = errors.New("unix server not started")
+	ErrFrameTooLarge      = errors.New("ipc frame too large")
 )
 
 type UnixServer struct {
@@ -31,6 +33,7 @@ type UnixServer struct {
 	dirPerm    os.FileMode
 	socketPerm os.FileMode
 	socketGID  int
+	maxFrame   int
 
 	listener unixListener
 
@@ -92,6 +95,11 @@ func WithSocketGID(gid int) Option {
 	return func(s *UnixServer) { s.socketGID = gid }
 }
 
+// WithMaxFrameBytes overrides the max permitted IPC frame size.
+func WithMaxFrameBytes(max int) Option {
+	return func(s *UnixServer) { s.maxFrame = max }
+}
+
 // WithNow overrides time source for testability.
 func WithNow(fn func() time.Time) Option {
 	return func(s *UnixServer) { s.now = fn }
@@ -112,6 +120,7 @@ func NewUnixServer(path string, opts ...Option) (handler.IPCServer, error) {
 		dirPerm:    0o750,
 		socketPerm: 0o660,
 		socketGID:  -1,
+		maxFrame:   defaultMaxFrameBytes,
 		mkdirAll:   os.MkdirAll,
 		lstat:      os.Lstat,
 		remove:     os.Remove,
@@ -119,11 +128,16 @@ func NewUnixServer(path string, opts ...Option) (handler.IPCServer, error) {
 		chmod:      os.Chmod,
 		chown:      os.Chown,
 		now:        time.Now,
-		newConn:    newUnixConn,
+	}
+	srv.newConn = func(conn *net.UnixConn) handler.IPCConn {
+		return newUnixConn(conn, srv.maxFrame)
 	}
 
 	for _, opt := range opts {
 		opt(srv)
+	}
+	if srv.maxFrame <= 0 {
+		return nil, fmt.Errorf("max frame bytes must be > 0")
 	}
 
 	return srv, nil
@@ -233,10 +247,10 @@ type unixConn struct {
 	reader *bufio.Reader
 }
 
-func newUnixConn(conn *net.UnixConn) handler.IPCConn {
+func newUnixConn(conn *net.UnixConn, maxFrame int) handler.IPCConn {
 	return &unixConn{
 		conn:   conn,
-		reader: bufio.NewReader(conn),
+		reader: bufio.NewReaderSize(conn, maxFrame+1),
 	}
 }
 
@@ -252,11 +266,14 @@ func (c *unixConn) ReadFrame(ctx context.Context) ([]byte, error) {
 			return nil, fmt.Errorf("set read deadline: %w", err)
 		}
 
-		line, err := c.reader.ReadBytes('\n')
+		line, err := c.reader.ReadSlice('\n')
 		if err == nil {
 			return normalizeReadFrame(line), nil
 		}
 
+		if errors.Is(err, bufio.ErrBufferFull) {
+			return nil, ErrFrameTooLarge
+		}
 		if isTimeoutErr(err) {
 			continue
 		}

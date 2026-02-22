@@ -99,6 +99,13 @@ func TestNewUnixServer(t *testing.T) {
 	}
 }
 
+func TestNewUnixServerRejectsInvalidMaxFrame(t *testing.T) {
+	_, err := NewUnixServer("/tmp/elevate.sock", WithMaxFrameBytes(0))
+	if err == nil {
+		t.Fatal("expected error for non-positive max frame size")
+	}
+}
+
 func TestRemoveStaleSocket(t *testing.T) {
 	tests := []struct {
 		name    string
