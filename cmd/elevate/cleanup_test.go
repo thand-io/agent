@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -156,7 +157,7 @@ func TestCleanupRunStartupSweep(t *testing.T) {
 	}
 	clock.mono.Store(2_000_000_000)
 
-	runner, err := NewCleanupRunner(store, engine, clock, 10*time.Millisecond)
+	runner, err := NewCleanupRunner(store, engine, clock, 10*time.Millisecond, slog.Default())
 	if err != nil {
 		t.Fatalf("NewCleanupRunner failed: %v", err)
 	}
@@ -198,7 +199,7 @@ func TestCleanupRunPeriodicSweep(t *testing.T) {
 	}
 	clock.mono.Store(0)
 
-	runner, err := NewCleanupRunner(store, engine, clock, 10*time.Millisecond)
+	runner, err := NewCleanupRunner(store, engine, clock, 10*time.Millisecond, slog.Default())
 	if err != nil {
 		t.Fatalf("NewCleanupRunner failed: %v", err)
 	}

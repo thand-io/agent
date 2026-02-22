@@ -94,15 +94,6 @@ func (h *Handler) HandleConnection(ctx context.Context, conn IPCConn) error {
 	}
 }
 
-func (h *Handler) logSuccess(action domain.Action, requestID string) {
-	h.logger.Info("elevate request handled",
-		"component", "elevate_handler",
-		"action", string(action),
-		"request_id", requestID,
-		"status", "ok",
-	)
-}
-
 func (h *Handler) logFailure(action domain.Action, requestID string, err *responseError) {
 	level := slog.LevelWarn
 	if err.Code == ErrorCodeInternal {

@@ -106,7 +106,7 @@ func buildDependencies(baseLogger *slog.Logger) (*dependencies, error) {
 		handler.WithLogger(logger),
 		handler.WithRequestTimeout(cfg.RequestTimeout),
 	)
-	cleanupRunner, err := NewCleanupRunner(stateStore, grantEngine, clk, cfg.CleanupInterval)
+	cleanupRunner, err := NewCleanupRunner(stateStore, grantEngine, clk, cfg.CleanupInterval, logger)
 	if err != nil {
 		return nil, err
 	}

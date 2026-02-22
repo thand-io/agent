@@ -49,6 +49,14 @@ func (h *Handler) handleGrant(ctx context.Context, conn IPCConn, req domain.Requ
 	if err := h.writeResult(ctx, conn, req, resultStatusOK, ""); err != nil {
 		return err
 	}
-	h.logSuccess(req.Action, req.RequestID)
+	h.logger.Info("access elevated for "+req.Username,
+		"component", "elevate_handler",
+		"action", string(req.Action),
+		"request_id", req.RequestID,
+		"workflow_id", req.WorkflowID,
+		"username", req.Username,
+		"duration_seconds", req.DurationSeconds,
+		"status", "ok",
+	)
 	return nil
 }
