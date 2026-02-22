@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -33,6 +34,12 @@ const (
 	EnvCleanupInterval = "THAND_ELEVATE_CLEANUP_INTERVAL"
 	// DefaultCleanup is the default periodic cleanup interval.
 	DefaultCleanup = 1 * time.Minute
+	// EnvRequestTimeout overrides per-request handler timeout duration.
+	EnvRequestTimeout = "THAND_ELEVATE_REQUEST_TIMEOUT"
+	// DefaultRequestTimeout is the default per-request handler timeout.
+	DefaultRequestTimeout = 30 * time.Second
+	// EnvSocketGID optionally sets Unix socket group ownership (root:<gid>).
+	EnvSocketGID = "THAND_ELEVATE_SOCKET_GID"
 	// EnvLogLevel overrides helper log level.
 	EnvLogLevel = "THAND_ELEVATE_LOG_LEVEL"
 	// DefaultLogLevel is the default helper log level.
@@ -48,6 +55,8 @@ type Config struct {
 	StatePath   string
 
 	CleanupInterval time.Duration
+	RequestTimeout  time.Duration
+	SocketGID       int
 	LogLevel        string
 }
 
@@ -86,6 +95,22 @@ func LoadFromEnv() (*Config, error) {
 		}
 		cleanupInterval = parsed
 	}
+	requestTimeout := DefaultRequestTimeout
+	if configured := strings.TrimSpace(os.Getenv(EnvRequestTimeout)); configured != "" {
+		parsed, err := time.ParseDuration(configured)
+		if err != nil {
+			return nil, fmt.Errorf("parse request timeout: %w", err)
+		}
+		requestTimeout = parsed
+	}
+	socketGID := -1
+	if configured := strings.TrimSpace(os.Getenv(EnvSocketGID)); configured != "" {
+		parsed, err := strconv.Atoi(configured)
+		if err != nil {
+			return nil, fmt.Errorf("parse socket gid: %w", err)
+		}
+		socketGID = parsed
+	}
 	logLevel := strings.TrimSpace(os.Getenv(EnvLogLevel))
 	if logLevel == "" {
 		logLevel = DefaultLogLevel
@@ -99,6 +124,8 @@ func LoadFromEnv() (*Config, error) {
 		StatePath:   statePath,
 
 		CleanupInterval: cleanupInterval,
+		RequestTimeout:  requestTimeout,
+		SocketGID:       socketGID,
 		LogLevel:        logLevel,
 	}
 
@@ -132,6 +159,12 @@ func (c *Config) Validate() error {
 	}
 	if c.CleanupInterval <= 0 {
 		return fmt.Errorf("cleanup interval must be > 0")
+	}
+	if c.RequestTimeout <= 0 {
+		return fmt.Errorf("request timeout must be > 0")
+	}
+	if c.SocketGID < -1 {
+		return fmt.Errorf("socket gid must be >= -1")
 	}
 	if _, err := ParseLogLevel(c.LogLevel); err != nil {
 		return err

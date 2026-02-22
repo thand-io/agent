@@ -251,6 +251,94 @@ func TestStartChmodFailureClosesListener(t *testing.T) {
 	}
 }
 
+func TestStartAppliesSocketGIDOwnership(t *testing.T) {
+	fl := &fakeListener{}
+	var chownCalls int
+	var sawDir bool
+	var sawSocket bool
+	socketPath := filepath.Join(t.TempDir(), "elevate.sock")
+
+	srv := mustUnixServer(t, socketPath,
+		WithSocketGID(1234),
+		WithListenUnix(func(network string, laddr *net.UnixAddr) (unixListener, error) {
+			_ = network
+			_ = laddr
+			return fl, nil
+		}),
+		WithChmod(func(path string, mode os.FileMode) error {
+			_ = path
+			_ = mode
+			return nil
+		}),
+		WithChown(func(name string, uid, gid int) error {
+			chownCalls++
+			if uid != 0 || gid != 1234 {
+				t.Fatalf("unexpected chown ownership uid=%d gid=%d", uid, gid)
+			}
+			if name == filepath.Dir(socketPath) {
+				sawDir = true
+			}
+			if name == socketPath {
+				sawSocket = true
+			}
+			return nil
+		}),
+	)
+
+	if err := srv.Start(context.Background()); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	if chownCalls != 2 || !sawDir || !sawSocket {
+		t.Fatalf("unexpected chown calls: count=%d dir=%v socket=%v", chownCalls, sawDir, sawSocket)
+	}
+}
+
+func TestStartSocketDirChownFailure(t *testing.T) {
+	socketPath := filepath.Join(t.TempDir(), "elevate.sock")
+	srv := mustUnixServer(t, socketPath,
+		WithSocketGID(1234),
+		WithChown(func(name string, uid, gid int) error {
+			_ = name
+			_ = uid
+			_ = gid
+			return errors.New("chown dir failed")
+		}),
+	)
+	if err := srv.Start(context.Background()); err == nil {
+		t.Fatal("expected Start to fail")
+	}
+}
+
+func TestStartSocketChownFailureClosesListener(t *testing.T) {
+	fl := &fakeListener{}
+	socketPath := filepath.Join(t.TempDir(), "elevate.sock")
+	srv := mustUnixServer(t, socketPath,
+		WithSocketGID(1234),
+		WithListenUnix(func(network string, laddr *net.UnixAddr) (unixListener, error) {
+			_ = network
+			_ = laddr
+			return fl, nil
+		}),
+		WithChown(func(name string, uid, gid int) error {
+			_ = uid
+			_ = gid
+			if name == socketPath {
+				return errors.New("chown socket failed")
+			}
+			return nil
+		}),
+	)
+	if err := srv.Start(context.Background()); err == nil {
+		t.Fatal("expected Start to fail")
+	}
+	if !fl.closed {
+		t.Fatal("expected listener to close on socket chown failure")
+	}
+	if srv.listener != nil {
+		t.Fatal("expected listener to be cleared on socket chown failure")
+	}
+}
+
 func TestCloseReturnsRemoveError(t *testing.T) {
 	srv := mustUnixServer(t, "/tmp/elevate.sock",
 		WithRemove(func(path string) error {

@@ -28,6 +28,19 @@ func main() {
 		logger.Error("failed to build dependencies", "err", err)
 		os.Exit(1)
 	}
+	if deps.logger != nil {
+		logger = deps.logger
+	}
+
+	logger.Info("elevate helper starting",
+		"component", "elevate_main",
+		"socket_path", deps.cfg.SocketPath,
+		"state_path", deps.cfg.StatePath,
+		"cleanup_interval", deps.cfg.CleanupInterval.String(),
+		"request_timeout", deps.cfg.RequestTimeout.String(),
+		"socket_gid", deps.cfg.SocketGID,
+		"log_level", deps.cfg.LogLevel,
+	)
 
 	if err := run(ctx, deps); err != nil {
 		logger.Error("elevate server error", "err", err)
@@ -39,6 +52,8 @@ type dependencies struct {
 	ipc     handler.IPCServer
 	handler *handler.Handler
 	cleanup *CleanupRunner
+	logger  *slog.Logger
+	cfg     *elevateconfig.Config
 }
 
 func buildDependencies(baseLogger *slog.Logger) (*dependencies, error) {
@@ -50,12 +65,17 @@ func buildDependencies(baseLogger *slog.Logger) (*dependencies, error) {
 	if err != nil {
 		return nil, err
 	}
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel}))
-	if baseLogger != nil {
-		baseLogger = logger
+	logger := baseLogger
+	if logger == nil {
+		logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	}
+	logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel}))
 
-	ipcServer, err := ipc.NewUnixServer(cfg.SocketPath)
+	ipcOpts := []ipc.Option{}
+	if cfg.SocketGID >= 0 {
+		ipcOpts = append(ipcOpts, ipc.WithSocketGID(cfg.SocketGID))
+	}
+	ipcServer, err := ipc.NewUnixServer(cfg.SocketPath, ipcOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -78,13 +98,26 @@ func buildDependencies(baseLogger *slog.Logger) (*dependencies, error) {
 	}
 	clk := clock.NewPlaceholderClock()
 
-	router := handler.New(grantEngine, verifier, stateStore, clk, handler.WithLogger(baseLogger))
+	router := handler.New(
+		grantEngine,
+		verifier,
+		stateStore,
+		clk,
+		handler.WithLogger(logger),
+		handler.WithRequestTimeout(cfg.RequestTimeout),
+	)
 	cleanupRunner, err := NewCleanupRunner(stateStore, grantEngine, clk, cfg.CleanupInterval)
 	if err != nil {
 		return nil, err
 	}
 
-	return &dependencies{ipc: ipcServer, handler: router, cleanup: cleanupRunner}, nil
+	return &dependencies{
+		ipc:     ipcServer,
+		handler: router,
+		cleanup: cleanupRunner,
+		logger:  logger,
+		cfg:     cfg,
+	}, nil
 }
 
 func run(ctx context.Context, deps *dependencies) error {

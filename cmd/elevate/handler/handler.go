@@ -40,6 +40,15 @@ func WithLogger(logger *slog.Logger) Option {
 	}
 }
 
+// WithRequestTimeout sets the per-connection request timeout.
+func WithRequestTimeout(timeout time.Duration) Option {
+	return func(h *Handler) {
+		if timeout > 0 {
+			h.requestTimeout = timeout
+		}
+	}
+}
+
 // New constructs a handler for elevate request processing.
 func New(grantEngine GrantEngine, verifier SignatureVerifier, stateStore StateStore, clock Clock, opts ...Option) *Handler {
 	h := &Handler{

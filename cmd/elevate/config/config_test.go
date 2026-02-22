@@ -12,6 +12,8 @@ func TestLoadFromEnvUsesDefaultSocketPath(t *testing.T) {
 	t.Setenv(EnvVisudoBin, "")
 	t.Setenv(EnvStatePath, "")
 	t.Setenv(EnvCleanupInterval, "")
+	t.Setenv(EnvRequestTimeout, "")
+	t.Setenv(EnvSocketGID, "")
 	t.Setenv(EnvLogLevel, "")
 
 	cfg, err := LoadFromEnv()
@@ -37,6 +39,12 @@ func TestLoadFromEnvUsesDefaultSocketPath(t *testing.T) {
 	if cfg.CleanupInterval != DefaultCleanup {
 		t.Fatalf("unexpected cleanup interval: got %s want %s", cfg.CleanupInterval, DefaultCleanup)
 	}
+	if cfg.RequestTimeout != DefaultRequestTimeout {
+		t.Fatalf("unexpected request timeout: got %s want %s", cfg.RequestTimeout, DefaultRequestTimeout)
+	}
+	if cfg.SocketGID != -1 {
+		t.Fatalf("unexpected socket gid: got %d want -1", cfg.SocketGID)
+	}
 	if cfg.LogLevel != DefaultLogLevel {
 		t.Fatalf("unexpected log level: got %q want %q", cfg.LogLevel, DefaultLogLevel)
 	}
@@ -49,6 +57,8 @@ func TestLoadFromEnvUsesConfiguredSocketPath(t *testing.T) {
 	wantVisudo := "/usr/local/bin/visudo"
 	wantStatePath := "/tmp/custom-state.json"
 	wantCleanup := "30s"
+	wantRequestTimeout := "5m"
+	wantSocketGID := "1000"
 	wantLogLevel := "warn"
 	t.Setenv(EnvSocketPath, wantSocket)
 	t.Setenv(EnvSudoersDir, wantSudoers)
@@ -56,6 +66,8 @@ func TestLoadFromEnvUsesConfiguredSocketPath(t *testing.T) {
 	t.Setenv(EnvVisudoBin, wantVisudo)
 	t.Setenv(EnvStatePath, wantStatePath)
 	t.Setenv(EnvCleanupInterval, wantCleanup)
+	t.Setenv(EnvRequestTimeout, wantRequestTimeout)
+	t.Setenv(EnvSocketGID, wantSocketGID)
 	t.Setenv(EnvLogLevel, wantLogLevel)
 
 	cfg, err := LoadFromEnv()
@@ -81,6 +93,12 @@ func TestLoadFromEnvUsesConfiguredSocketPath(t *testing.T) {
 	if cfg.CleanupInterval != 30*time.Second {
 		t.Fatalf("unexpected cleanup interval: got %s want %s", cfg.CleanupInterval, 30*time.Second)
 	}
+	if cfg.RequestTimeout != 5*time.Minute {
+		t.Fatalf("unexpected request timeout: got %s want %s", cfg.RequestTimeout, 5*time.Minute)
+	}
+	if cfg.SocketGID != 1000 {
+		t.Fatalf("unexpected socket gid: got %d want %d", cfg.SocketGID, 1000)
+	}
 	if cfg.LogLevel != wantLogLevel {
 		t.Fatalf("unexpected log level: got %q want %q", cfg.LogLevel, wantLogLevel)
 	}
@@ -90,6 +108,20 @@ func TestLoadFromEnvRejectsInvalidCleanupInterval(t *testing.T) {
 	t.Setenv(EnvCleanupInterval, "not-a-duration")
 	if _, err := LoadFromEnv(); err == nil {
 		t.Fatal("expected cleanup interval parse error")
+	}
+}
+
+func TestLoadFromEnvRejectsInvalidRequestTimeout(t *testing.T) {
+	t.Setenv(EnvRequestTimeout, "not-a-duration")
+	if _, err := LoadFromEnv(); err == nil {
+		t.Fatal("expected request timeout parse error")
+	}
+}
+
+func TestLoadFromEnvRejectsInvalidSocketGID(t *testing.T) {
+	t.Setenv(EnvSocketGID, "not-an-int")
+	if _, err := LoadFromEnv(); err == nil {
+		t.Fatal("expected socket gid parse error")
 	}
 }
 
@@ -174,6 +206,37 @@ func TestValidateRejectsNonPositiveCleanupInterval(t *testing.T) {
 	}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected validation error for cleanup interval")
+	}
+}
+
+func TestValidateRejectsNonPositiveRequestTimeout(t *testing.T) {
+	cfg := &Config{
+		SocketPath:      "/var/run/thand/elevate.sock",
+		SudoersDir:      "/etc/sudoers.d",
+		SudoersFile:     "/etc/sudoers",
+		VisudoBin:       "visudo",
+		StatePath:       "/var/lib/thand/elevate/state.json",
+		CleanupInterval: time.Minute,
+		RequestTimeout:  0,
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected validation error for request timeout")
+	}
+}
+
+func TestValidateRejectsInvalidSocketGID(t *testing.T) {
+	cfg := &Config{
+		SocketPath:      "/var/run/thand/elevate.sock",
+		SudoersDir:      "/etc/sudoers.d",
+		SudoersFile:     "/etc/sudoers",
+		VisudoBin:       "visudo",
+		StatePath:       "/var/lib/thand/elevate/state.json",
+		CleanupInterval: time.Minute,
+		RequestTimeout:  time.Minute,
+		SocketGID:       -2,
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected validation error for socket gid")
 	}
 }
 

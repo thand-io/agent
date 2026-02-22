@@ -30,6 +30,7 @@ type UnixServer struct {
 	path       string
 	dirPerm    os.FileMode
 	socketPerm os.FileMode
+	socketGID  int
 
 	listener unixListener
 
@@ -38,6 +39,7 @@ type UnixServer struct {
 	remove     func(name string) error
 	listenUnix func(network string, laddr *net.UnixAddr) (unixListener, error)
 	chmod      func(name string, mode os.FileMode) error
+	chown      func(name string, uid, gid int) error
 	now        func() time.Time
 	newConn    func(*net.UnixConn) handler.IPCConn
 }
@@ -80,6 +82,16 @@ func WithChmod(fn func(name string, mode os.FileMode) error) Option {
 	return func(s *UnixServer) { s.chmod = fn }
 }
 
+// WithChown overrides chown for testability.
+func WithChown(fn func(name string, uid, gid int) error) Option {
+	return func(s *UnixServer) { s.chown = fn }
+}
+
+// WithSocketGID sets socket and socket-dir group ownership to root:<gid>.
+func WithSocketGID(gid int) Option {
+	return func(s *UnixServer) { s.socketGID = gid }
+}
+
 // WithNow overrides time source for testability.
 func WithNow(fn func() time.Time) Option {
 	return func(s *UnixServer) { s.now = fn }
@@ -99,11 +111,13 @@ func NewUnixServer(path string, opts ...Option) (handler.IPCServer, error) {
 		path:       path,
 		dirPerm:    0o750,
 		socketPerm: 0o660,
+		socketGID:  -1,
 		mkdirAll:   os.MkdirAll,
 		lstat:      os.Lstat,
 		remove:     os.Remove,
 		listenUnix: func(network string, laddr *net.UnixAddr) (unixListener, error) { return net.ListenUnix(network, laddr) },
 		chmod:      os.Chmod,
+		chown:      os.Chown,
 		now:        time.Now,
 		newConn:    newUnixConn,
 	}
@@ -129,6 +143,11 @@ func (s *UnixServer) Start(ctx context.Context) error {
 	if err := s.mkdirAll(dir, s.dirPerm); err != nil {
 		return fmt.Errorf("create unix socket directory: %w", err)
 	}
+	if s.socketGID >= 0 {
+		if err := s.chown(dir, 0, s.socketGID); err != nil {
+			return fmt.Errorf("set unix socket directory ownership: %w", err)
+		}
+	}
 
 	if err := s.removeStaleSocket(s.path); err != nil {
 		return err
@@ -144,6 +163,13 @@ func (s *UnixServer) Start(ctx context.Context) error {
 		_ = s.listener.Close()
 		s.listener = nil
 		return fmt.Errorf("set unix socket permissions: %w", err)
+	}
+	if s.socketGID >= 0 {
+		if err := s.chown(s.path, 0, s.socketGID); err != nil {
+			_ = s.listener.Close()
+			s.listener = nil
+			return fmt.Errorf("set unix socket ownership: %w", err)
+		}
 	}
 
 	return nil
