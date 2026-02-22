@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -56,6 +57,12 @@ type dependencies struct {
 	cfg     *elevateconfig.Config
 }
 
+type platformDependencies struct {
+	ipc         handler.IPCServer
+	grantEngine handler.GrantEngine
+	clock       handler.Clock
+}
+
 func buildDependencies(baseLogger *slog.Logger) (*dependencies, error) {
 	cfg, err := elevateconfig.LoadFromEnv()
 	if err != nil {
@@ -71,6 +78,56 @@ func buildDependencies(baseLogger *slog.Logger) (*dependencies, error) {
 	}
 	logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel}))
 
+	platformDeps, err := buildPlatformDependencies(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	verifier, err := verify.NewVerifier()
+	if err != nil {
+		return nil, err
+	}
+	stateStore, err := state.NewFileStore(cfg.StatePath)
+	if err != nil {
+		return nil, err
+	}
+
+	router := handler.New(
+		platformDeps.grantEngine,
+		verifier,
+		stateStore,
+		platformDeps.clock,
+		handler.WithLogger(logger),
+		handler.WithRequestTimeout(cfg.RequestTimeout),
+	)
+	cleanupRunner, err := NewCleanupRunner(stateStore, platformDeps.grantEngine, platformDeps.clock, cfg.CleanupInterval, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	return &dependencies{
+		ipc:     platformDeps.ipc,
+		handler: router,
+		cleanup: cleanupRunner,
+		logger:  logger,
+		cfg:     cfg,
+	}, nil
+}
+
+func buildPlatformDependencies(cfg *elevateconfig.Config) (*platformDependencies, error) {
+	switch runtime.GOOS {
+	case "linux":
+		return buildLinuxPlatformDependencies(cfg)
+	case "darwin":
+		return nil, fmt.Errorf("unsupported operating system %q: darwin implementation not added yet", runtime.GOOS)
+	case "windows":
+		return nil, fmt.Errorf("unsupported operating system %q: windows implementation not added yet", runtime.GOOS)
+	default:
+		return nil, fmt.Errorf("unsupported operating system %q", runtime.GOOS)
+	}
+}
+
+func buildLinuxPlatformDependencies(cfg *elevateconfig.Config) (*platformDependencies, error) {
 	ipcOpts := []ipc.Option{}
 	if cfg.SocketGID >= 0 {
 		ipcOpts = append(ipcOpts, ipc.WithSocketGID(cfg.SocketGID))
@@ -88,35 +145,11 @@ func buildDependencies(baseLogger *slog.Logger) (*dependencies, error) {
 	if err != nil {
 		return nil, err
 	}
-	verifier, err := verify.NewVerifier()
-	if err != nil {
-		return nil, err
-	}
-	stateStore, err := state.NewFileStore(cfg.StatePath)
-	if err != nil {
-		return nil, err
-	}
-	clk := clock.NewPlaceholderClock()
 
-	router := handler.New(
-		grantEngine,
-		verifier,
-		stateStore,
-		clk,
-		handler.WithLogger(logger),
-		handler.WithRequestTimeout(cfg.RequestTimeout),
-	)
-	cleanupRunner, err := NewCleanupRunner(stateStore, grantEngine, clk, cfg.CleanupInterval, logger)
-	if err != nil {
-		return nil, err
-	}
-
-	return &dependencies{
-		ipc:     ipcServer,
-		handler: router,
-		cleanup: cleanupRunner,
-		logger:  logger,
-		cfg:     cfg,
+	return &platformDependencies{
+		ipc:         ipcServer,
+		grantEngine: grantEngine,
+		clock:       clock.NewLinuxClock(),
 	}, nil
 }
 
