@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strconv"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -12,8 +12,10 @@ import (
 const (
 	// EnvSocketPath overrides the helper IPC socket path.
 	EnvSocketPath = "THAND_ELEVATE_SOCKET_PATH"
-	// DefaultSocketPath is the default helper IPC socket path.
+	// DefaultSocketPath is the default helper IPC socket path on Unix platforms.
 	DefaultSocketPath = "/var/run/thand/elevate.sock"
+	// DefaultSocketPathWindows is the default helper IPC socket path on Windows.
+	DefaultSocketPathWindows = `C:\ProgramData\Thand\elevate.sock`
 	// EnvSudoersDir overrides the sudoers include directory for grant files.
 	EnvSudoersDir = "THAND_ELEVATE_SUDOERS_DIR"
 	// DefaultSudoersDir is the default sudoers include directory for grant files.
@@ -38,8 +40,10 @@ const (
 	EnvRequestTimeout = "THAND_ELEVATE_REQUEST_TIMEOUT"
 	// DefaultRequestTimeout is the default per-request handler timeout.
 	DefaultRequestTimeout = 30 * time.Second
-	// EnvSocketGID optionally sets Unix socket group ownership (root:<gid>).
-	EnvSocketGID = "THAND_ELEVATE_SOCKET_GID"
+	// EnvSocketUser optionally sets socket owner username.
+	EnvSocketUser = "THAND_ELEVATE_SOCKET_USER"
+	// EnvSocketGroup optionally sets socket group name.
+	EnvSocketGroup = "THAND_ELEVATE_SOCKET_GROUP"
 	// EnvLogLevel overrides helper log level.
 	EnvLogLevel = "THAND_ELEVATE_LOG_LEVEL"
 	// DefaultLogLevel is the default helper log level.
@@ -56,7 +60,8 @@ type Config struct {
 
 	CleanupInterval time.Duration
 	RequestTimeout  time.Duration
-	SocketGID       int
+	SocketUser      string
+	SocketGroup     string
 	LogLevel        string
 }
 
@@ -64,7 +69,7 @@ type Config struct {
 func LoadFromEnv() (*Config, error) {
 	socketPath := strings.TrimSpace(os.Getenv(EnvSocketPath))
 	if socketPath == "" {
-		socketPath = DefaultSocketPath
+		socketPath = defaultSocketPath()
 	}
 
 	sudoersDir := strings.TrimSpace(os.Getenv(EnvSudoersDir))
@@ -103,14 +108,8 @@ func LoadFromEnv() (*Config, error) {
 		}
 		requestTimeout = parsed
 	}
-	socketGID := -1
-	if configured := strings.TrimSpace(os.Getenv(EnvSocketGID)); configured != "" {
-		parsed, err := strconv.Atoi(configured)
-		if err != nil {
-			return nil, fmt.Errorf("parse socket gid: %w", err)
-		}
-		socketGID = parsed
-	}
+	socketUser := strings.TrimSpace(os.Getenv(EnvSocketUser))
+	socketGroup := strings.TrimSpace(os.Getenv(EnvSocketGroup))
 	logLevel := strings.TrimSpace(os.Getenv(EnvLogLevel))
 	if logLevel == "" {
 		logLevel = DefaultLogLevel
@@ -125,7 +124,8 @@ func LoadFromEnv() (*Config, error) {
 
 		CleanupInterval: cleanupInterval,
 		RequestTimeout:  requestTimeout,
-		SocketGID:       socketGID,
+		SocketUser:      socketUser,
+		SocketGroup:     socketGroup,
 		LogLevel:        logLevel,
 	}
 
@@ -134,6 +134,13 @@ func LoadFromEnv() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func defaultSocketPath() string {
+	if runtime.GOOS == "windows" {
+		return DefaultSocketPathWindows
+	}
+	return DefaultSocketPath
 }
 
 // Validate ensures required configuration fields are present and safe.
@@ -162,9 +169,6 @@ func (c *Config) Validate() error {
 	}
 	if c.RequestTimeout <= 0 {
 		return fmt.Errorf("request timeout must be > 0")
-	}
-	if c.SocketGID < -1 {
-		return fmt.Errorf("socket gid must be >= -1")
 	}
 	if _, err := ParseLogLevel(c.LogLevel); err != nil {
 		return err

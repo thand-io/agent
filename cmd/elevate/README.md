@@ -14,9 +14,9 @@ It accepts local IPC requests, verifies a challenge-response signature using pin
   - Builds dependencies.
   - Starts server + cleanup runner.
 - `ipc/`
-  - Unix socket transport (`linux`/`darwin` build tags).
+  - Unix socket transport (Linux/macOS/Windows).
   - Newline-delimited JSON framing.
-  - Socket permissions + optional socket group ownership (`THAND_ELEVATE_SOCKET_GID`).
+  - Socket permissions + optional socket owner/group (`THAND_ELEVATE_SOCKET_USER`, `THAND_ELEVATE_SOCKET_GROUP`).
 - `handler/`
   - Request router (`grant`/`revoke`).
   - Challenge/response signature verification flow.
@@ -41,7 +41,8 @@ It accepts local IPC requests, verifies a challenge-response signature using pin
 Environment variables:
 
 - `THAND_ELEVATE_SOCKET_PATH` (default: `/var/run/thand/elevate.sock`)
-- `THAND_ELEVATE_SOCKET_GID` (default: unset / `-1`; set group ownership to `root:<gid>`)
+- `THAND_ELEVATE_SOCKET_USER` (default: unset; set socket owner user by name)
+- `THAND_ELEVATE_SOCKET_GROUP` (default: unset; set socket group by name)
 - `THAND_ELEVATE_SUDOERS_DIR` (default: `/etc/sudoers.d`)
 - `THAND_ELEVATE_SUDOERS_FILE` (default: `/etc/sudoers`)
 - `THAND_ELEVATE_VISUDO_BIN` (default: `visudo`)
@@ -78,7 +79,8 @@ sudo chmod 755 /var/run/thand /var/lib/thand/elevate
 ```bash
 sudo env \
   THAND_ELEVATE_SOCKET_PATH=/var/run/thand/elevate.sock \
-  THAND_ELEVATE_SOCKET_GID="$(id -g tom)" \
+  THAND_ELEVATE_SOCKET_USER="tom" \
+  THAND_ELEVATE_SOCKET_GROUP="tom" \
   THAND_ELEVATE_SUDOERS_DIR=/etc/sudoers.d \
   THAND_ELEVATE_SUDOERS_FILE=/etc/sudoers \
   THAND_ELEVATE_VISUDO_BIN=visudo \

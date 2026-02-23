@@ -1,5 +1,3 @@
-//go:build linux || darwin
-
 package ipc
 
 import (
@@ -10,7 +8,11 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
+	osuser "os/user"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/thand-io/agent/cmd/elevate/handler"
@@ -32,7 +34,8 @@ type UnixServer struct {
 	path       string
 	dirPerm    os.FileMode
 	socketPerm os.FileMode
-	socketGID  int
+	socketUser string
+	socketGrp  string
 	maxFrame   int
 
 	listener unixListener
@@ -43,6 +46,9 @@ type UnixServer struct {
 	listenUnix func(network string, laddr *net.UnixAddr) (unixListener, error)
 	chmod      func(name string, mode os.FileMode) error
 	chown      func(name string, uid, gid int) error
+	lookupUser func(username string) (*osuser.User, error)
+	lookupGrp  func(groupname string) (*osuser.Group, error)
+	runCommand func(name string, args ...string) error
 	now        func() time.Time
 	newConn    func(*net.UnixConn) handler.IPCConn
 }
@@ -90,9 +96,24 @@ func WithChown(fn func(name string, uid, gid int) error) Option {
 	return func(s *UnixServer) { s.chown = fn }
 }
 
-// WithSocketGID sets socket and socket-dir group ownership to root:<gid>.
-func WithSocketGID(gid int) Option {
-	return func(s *UnixServer) { s.socketGID = gid }
+// WithSocketUser sets socket owner username.
+func WithSocketUser(username string) Option {
+	return func(s *UnixServer) { s.socketUser = strings.TrimSpace(username) }
+}
+
+// WithSocketGroup sets socket group name.
+func WithSocketGroup(group string) Option {
+	return func(s *UnixServer) { s.socketGrp = strings.TrimSpace(group) }
+}
+
+// WithLookupUser overrides username lookup for testability.
+func WithLookupUser(fn func(username string) (*osuser.User, error)) Option {
+	return func(s *UnixServer) { s.lookupUser = fn }
+}
+
+// WithLookupGroup overrides group lookup for testability.
+func WithLookupGroup(fn func(groupname string) (*osuser.Group, error)) Option {
+	return func(s *UnixServer) { s.lookupGrp = fn }
 }
 
 // WithMaxFrameBytes overrides the max permitted IPC frame size.
@@ -103,6 +124,11 @@ func WithMaxFrameBytes(max int) Option {
 // WithNow overrides time source for testability.
 func WithNow(fn func() time.Time) Option {
 	return func(s *UnixServer) { s.now = fn }
+}
+
+// WithRunCommand overrides external command execution for testability.
+func WithRunCommand(fn func(name string, args ...string) error) Option {
+	return func(s *UnixServer) { s.runCommand = fn }
 }
 
 // WithNewConn overrides IPC connection wrapper for testability.
@@ -119,7 +145,6 @@ func NewUnixServer(path string, opts ...Option) (handler.IPCServer, error) {
 		path:       path,
 		dirPerm:    0o750,
 		socketPerm: 0o660,
-		socketGID:  -1,
 		maxFrame:   defaultMaxFrameBytes,
 		mkdirAll:   os.MkdirAll,
 		lstat:      os.Lstat,
@@ -127,7 +152,13 @@ func NewUnixServer(path string, opts ...Option) (handler.IPCServer, error) {
 		listenUnix: func(network string, laddr *net.UnixAddr) (unixListener, error) { return net.ListenUnix(network, laddr) },
 		chmod:      os.Chmod,
 		chown:      os.Chown,
-		now:        time.Now,
+		lookupUser: osuser.Lookup,
+		lookupGrp:  osuser.LookupGroup,
+		runCommand: func(name string, args ...string) error {
+			cmd := exec.Command(name, args...)
+			return cmd.Run()
+		},
+		now: time.Now,
 	}
 	srv.newConn = func(conn *net.UnixConn) handler.IPCConn {
 		return newUnixConn(conn, srv.maxFrame)
@@ -157,10 +188,8 @@ func (s *UnixServer) Start(ctx context.Context) error {
 	if err := s.mkdirAll(dir, s.dirPerm); err != nil {
 		return fmt.Errorf("create unix socket directory: %w", err)
 	}
-	if s.socketGID >= 0 {
-		if err := s.chown(dir, 0, s.socketGID); err != nil {
-			return fmt.Errorf("set unix socket directory ownership: %w", err)
-		}
+	if err := s.configureSocketDirAccess(dir); err != nil {
+		return err
 	}
 
 	if err := s.removeStaleSocket(s.path); err != nil {
@@ -173,20 +202,54 @@ func (s *UnixServer) Start(ctx context.Context) error {
 		return fmt.Errorf("listen on unix socket: %w", err)
 	}
 
-	if err := s.chmod(s.path, s.socketPerm); err != nil {
+	if err := s.configureSocketFileAccess(s.path); err != nil {
 		_ = s.listener.Close()
 		s.listener = nil
-		return fmt.Errorf("set unix socket permissions: %w", err)
-	}
-	if s.socketGID >= 0 {
-		if err := s.chown(s.path, 0, s.socketGID); err != nil {
-			_ = s.listener.Close()
-			s.listener = nil
-			return fmt.Errorf("set unix socket ownership: %w", err)
-		}
+		return err
 	}
 
 	return nil
+}
+
+func (s *UnixServer) resolveSocketOwnership() (uid int, gid int, has bool, err error) {
+	if s.socketUser == "" && s.socketGrp == "" {
+		return -1, -1, false, nil
+	}
+
+	uid = -1
+	gid = -1
+	if s.socketGrp != "" {
+		group, lookupErr := s.lookupGrp(s.socketGrp)
+		if lookupErr != nil {
+			return -1, -1, false, fmt.Errorf("lookup socket group %q: %w", s.socketGrp, lookupErr)
+		}
+		parsedGID, parseErr := strconv.Atoi(group.Gid)
+		if parseErr != nil {
+			return -1, -1, false, fmt.Errorf("parse socket group id for %q: %w", s.socketGrp, parseErr)
+		}
+		gid = parsedGID
+	}
+
+	if s.socketUser != "" {
+		user, lookupErr := s.lookupUser(s.socketUser)
+		if lookupErr != nil {
+			return -1, -1, false, fmt.Errorf("lookup socket user %q: %w", s.socketUser, lookupErr)
+		}
+		parsedUID, parseErr := strconv.Atoi(user.Uid)
+		if parseErr != nil {
+			return -1, -1, false, fmt.Errorf("parse socket user id for %q: %w", s.socketUser, parseErr)
+		}
+		uid = parsedUID
+		if gid == -1 {
+			parsedGID, parseGIDErr := strconv.Atoi(user.Gid)
+			if parseGIDErr != nil {
+				return -1, -1, false, fmt.Errorf("parse primary group id for socket user %q: %w", s.socketUser, parseGIDErr)
+			}
+			gid = parsedGID
+		}
+	}
+
+	return uid, gid, true, nil
 }
 
 // Accept waits for a single client connection and returns it as an IPCConn.

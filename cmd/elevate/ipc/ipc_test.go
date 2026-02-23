@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net"
 	"os"
+	osuser "os/user"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -258,7 +259,7 @@ func TestStartChmodFailureClosesListener(t *testing.T) {
 	}
 }
 
-func TestStartAppliesSocketGIDOwnership(t *testing.T) {
+func TestStartAppliesSocketGroupOwnership(t *testing.T) {
 	fl := &fakeListener{}
 	var chownCalls int
 	var sawDir bool
@@ -266,7 +267,13 @@ func TestStartAppliesSocketGIDOwnership(t *testing.T) {
 	socketPath := filepath.Join(t.TempDir(), "elevate.sock")
 
 	srv := mustUnixServer(t, socketPath,
-		WithSocketGID(1234),
+		WithSocketGroup("thand"),
+		WithLookupGroup(func(groupname string) (*osuser.Group, error) {
+			if groupname != "thand" {
+				t.Fatalf("unexpected group lookup: %s", groupname)
+			}
+			return &osuser.Group{Name: "thand", Gid: "1234"}, nil
+		}),
 		WithListenUnix(func(network string, laddr *net.UnixAddr) (unixListener, error) {
 			_ = network
 			_ = laddr
@@ -279,7 +286,7 @@ func TestStartAppliesSocketGIDOwnership(t *testing.T) {
 		}),
 		WithChown(func(name string, uid, gid int) error {
 			chownCalls++
-			if uid != 0 || gid != 1234 {
+			if uid != -1 || gid != 1234 {
 				t.Fatalf("unexpected chown ownership uid=%d gid=%d", uid, gid)
 			}
 			if name == filepath.Dir(socketPath) {
@@ -303,7 +310,11 @@ func TestStartAppliesSocketGIDOwnership(t *testing.T) {
 func TestStartSocketDirChownFailure(t *testing.T) {
 	socketPath := filepath.Join(t.TempDir(), "elevate.sock")
 	srv := mustUnixServer(t, socketPath,
-		WithSocketGID(1234),
+		WithSocketGroup("thand"),
+		WithLookupGroup(func(groupname string) (*osuser.Group, error) {
+			_ = groupname
+			return &osuser.Group{Name: "thand", Gid: "1234"}, nil
+		}),
 		WithChown(func(name string, uid, gid int) error {
 			_ = name
 			_ = uid
@@ -320,7 +331,11 @@ func TestStartSocketChownFailureClosesListener(t *testing.T) {
 	fl := &fakeListener{}
 	socketPath := filepath.Join(t.TempDir(), "elevate.sock")
 	srv := mustUnixServer(t, socketPath,
-		WithSocketGID(1234),
+		WithSocketGroup("thand"),
+		WithLookupGroup(func(groupname string) (*osuser.Group, error) {
+			_ = groupname
+			return &osuser.Group{Name: "thand", Gid: "1234"}, nil
+		}),
 		WithListenUnix(func(network string, laddr *net.UnixAddr) (unixListener, error) {
 			_ = network
 			_ = laddr
