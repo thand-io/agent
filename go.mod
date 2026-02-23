@@ -63,7 +63,7 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/nexus-rpc/sdk-go v0.5.1
 	github.com/okta/okta-sdk-golang/v2 v2.20.0
-	github.com/posthog/posthog-go v1.9.0
+	github.com/posthog/posthog-go v1.10.0
 	github.com/senseyeio/duration v0.0.0-20180430131211-7c2a214ada46
 	github.com/serverlessworkflow/sdk-go/v3 v3.2.0
 	github.com/simpleforce/simpleforce v0.0.0-20220429021116-acf4ac67ef68
