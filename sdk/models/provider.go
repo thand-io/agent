@@ -45,3 +45,61 @@ type ProviderResponse = internal.ProviderResponse
 
 // ProviderCapabilities defines the capabilities supported by a provider.
 type ProviderCapabilities = internal.ProviderCapabilities
+
+// ProviderWebhook defines the interface for providers that can handle webhook events.
+type ProviderWebhook = internal.ProviderWebhook
+
+// ProviderTenants defines the interface for providers that manage multi-tenancy.
+type ProviderTenants = internal.ProviderTenants
+
+// ProviderTenant represents a tenant within a provider (e.g. an AWS account or GCP project).
+type ProviderTenant = internal.ProviderTenant
+
+// WebhookRequest is the request type passed to ProviderWebhook.HandleWebhook.
+type WebhookRequest = internal.WebhookRequest
+
+// AuthorizeUser is the request passed to ProviderAuthorizor.AuthorizeSession and CreateSession.
+type AuthorizeUser = internal.AuthorizeUser
+
+// AuthorizeSessionResponse contains the redirect URL returned by ProviderAuthorizor.AuthorizeSession.
+type AuthorizeSessionResponse = internal.AuthorizeSessionResponse
+
+// AuthorizeRoleRequest is the request passed to ProviderRoleBasedAccessControl.AuthorizeRole.
+type AuthorizeRoleRequest = internal.AuthorizeRoleRequest
+
+// AuthorizeRoleResponse is returned by ProviderRoleBasedAccessControl.AuthorizeRole.
+type AuthorizeRoleResponse = internal.AuthorizeRoleResponse
+
+// NotificationRequest is the payload passed to ProviderNotifier.SendNotification.
+type NotificationRequest = internal.NotificationRequest
+
+// SynchronizeRequest is passed to Provider.Synchronize.
+type SynchronizeRequest = internal.SynchronizeRequest
+
+// SynchronizeRolesRequest / Response are used by ProviderRoleBasedAccessControl.SynchronizeRoles.
+type SynchronizeRolesRequest = internal.SynchronizeRolesRequest
+type SynchronizeRolesResponse = internal.SynchronizeRolesResponse
+
+// SynchronizePermissionsRequest / Response are used by ProviderRoleBasedAccessControl.SynchronizePermissions.
+type SynchronizePermissionsRequest = internal.SynchronizePermissionsRequest
+type SynchronizePermissionsResponse = internal.SynchronizePermissionsResponse
+
+// SynchronizeResourcesRequest / Response are used by ProviderRoleBasedAccessControl.SynchronizeResources.
+type SynchronizeResourcesRequest = internal.SynchronizeResourcesRequest
+type SynchronizeResourcesResponse = internal.SynchronizeResourcesResponse
+
+// SynchronizeIdentitiesRequest / Response are used by ProviderIdentities.SynchronizeIdentities.
+type SynchronizeIdentitiesRequest = internal.SynchronizeIdentitiesRequest
+type SynchronizeIdentitiesResponse = internal.SynchronizeIdentitiesResponse
+
+// SynchronizeUsersRequest / Response are used by ProviderIdentities.SynchronizeUsers.
+type SynchronizeUsersRequest = internal.SynchronizeUsersRequest
+type SynchronizeUsersResponse = internal.SynchronizeUsersResponse
+
+// SynchronizeGroupsRequest / Response are used by ProviderIdentities.SynchronizeGroups.
+type SynchronizeGroupsRequest = internal.SynchronizeGroupsRequest
+type SynchronizeGroupsResponse = internal.SynchronizeGroupsResponse
+
+// SynchronizeTenantsRequest / Response are used by ProviderTenants.SynchronizeTenants.
+type SynchronizeTenantsRequest = internal.SynchronizeTenantsRequest
+type SynchronizeTenantsResponse = internal.SynchronizeTenantsResponse

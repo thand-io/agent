@@ -11,7 +11,7 @@ import (
 // Construct it with NewApiService and inject it wherever elevation logic is needed.
 type Service struct {
 	cfg       models.ConfigImpl
-	workflows *manager.ThandWorkflowManager
+	workflows manager.ThandWorkflowBroker
 }
 
 // NewApiService creates a Service.

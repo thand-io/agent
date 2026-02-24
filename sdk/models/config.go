@@ -49,3 +49,9 @@ type APIConfig = internal.APIConfig
 // RateLimitConfig defines rate limiting settings for API endpoints,
 // including request limits, time windows, and throttling behavior.
 type RateLimitConfig = internal.RateLimitConfig
+
+// ConfigImpl is the interface that must be implemented to provide the agent SDK
+// with environment, service, provider, role, workflow, and URL resolution. External
+// callers (e.g. the platform server) implement this interface to drive the
+// transport-agnostic API layer (sdk/api).
+type ConfigImpl = internal.ConfigImpl

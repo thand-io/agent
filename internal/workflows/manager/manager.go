@@ -28,6 +28,20 @@ import (
 	"go.temporal.io/sdk/worker"
 )
 
+// ThandWorkflowBroker is the minimal interface that Service requires from the
+// underlying workflow engine. The concrete implementation is
+// *manager.ThandWorkflowManager; the interface exists so tests can supply a
+// lightweight double without spinning up a real Temporal connection.
+type ThandWorkflowBroker interface {
+	// CreateElevationWorkflow starts a new elevation workflow and returns the
+	// initial task descriptor.
+	CreateElevationWorkflow(ctx context.Context, request models.ElevateRequest) (*models.WorkflowRequest, error)
+
+	// ResumeWorkflow continues a paused workflow task.
+	// Returns nil, nil when the task no longer exists or has already completed.
+	ResumeWorkflow(workflow *models.ElevateWorkflowTask) (*models.ElevateWorkflowTask, error)
+}
+
 // WorkflowManager manages workflow lifecycle and execution using the official SDK
 type ThandWorkflowManager struct {
 	config          models.ConfigImpl
