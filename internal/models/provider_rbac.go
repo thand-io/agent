@@ -472,6 +472,13 @@ func expandPermissionsWildcard(providerPermissions []SearchResult[ProviderPermis
 	return expandedPermissions, nil
 }
 
+// ValidatePermissionsPublic is the exported counterpart of validatePermissions,
+// intended for use in external test packages (e.g. integration tests that need
+// to import both models and a provider package without creating a cycle).
+func ValidatePermissionsPublic(providerPermissions []SearchResult[ProviderPermission], statements RoleStatements) (RoleStatements, error) {
+	return validatePermissions(providerPermissions, statements)
+}
+
 /*
 k8s:pods:get,list,watch
 */
