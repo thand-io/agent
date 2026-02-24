@@ -6,8 +6,8 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
-func (b *gcpProvider) RegisterActivities(temporalClient models.TemporalImpl) error {
-	return models.RegisterActivities(temporalClient, models.NewProviderActivities(b))
+func (b *gcpProvider) RegisterActivities() any {
+	return &gcpProviderActivities{provider: b}
 }
 
 // GCP uses static roles and permissions so we don't need to fetch them.

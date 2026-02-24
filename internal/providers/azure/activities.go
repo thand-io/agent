@@ -6,8 +6,8 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
-func (b *azureProvider) RegisterActivities(temporalClient models.TemporalImpl) error {
-	return models.RegisterActivities(temporalClient, models.NewProviderActivities(b))
+func (b *azureProvider) RegisterActivities() any {
+	return &azureProviderActivities{provider: b}
 }
 
 // Azure uses static roles and permissions so we don't need to fetch them.

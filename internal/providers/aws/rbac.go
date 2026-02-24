@@ -6,11 +6,12 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 // Authorize grants access for a user to a role
 func (p *awsProvider) AuthorizeRole(
-	ctx context.Context,
+	taskSupport sdkWorkflowsModel.WorkflowTaskSupport,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
 
@@ -39,15 +40,15 @@ func (p *awsProvider) AuthorizeRole(
 	useIdentityCenter := p.shouldUseIdentityCenter(req.GetUser())
 
 	if useIdentityCenter {
-		return p.authorizeRoleIdentityCenter(ctx, req, targetAccountID)
+		return p.authorizeRoleIdentityCenter(taskSupport, req, targetAccountID)
 	} else {
-		return p.authorizeRoleTraditionalIAM(ctx, req, targetAccountID)
+		return p.authorizeRoleTraditionalIAM(taskSupport, req, targetAccountID)
 	}
 }
 
 // Revoke removes access for a user from a role
 func (p *awsProvider) RevokeRole(
-	ctx context.Context,
+	taskSupport sdkWorkflowsModel.WorkflowTaskSupport,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
 	// Check for nil inputs
@@ -70,13 +71,13 @@ func (p *awsProvider) RevokeRole(
 	useIdentityCenter := p.shouldUseIdentityCenter(user)
 
 	if useIdentityCenter {
-		err := p.revokeRoleIdentityCenter(ctx, req, targetAccountID)
+		err := p.revokeRoleIdentityCenter(taskSupport, req, targetAccountID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to revoke Identity Center role: %w", err)
 		}
 		return nil, nil
 	} else {
-		return p.revokeRoleTraditionalIAM(ctx, user, role)
+		return p.revokeRoleTraditionalIAM(taskSupport, user, role)
 	}
 }
 

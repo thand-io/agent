@@ -14,6 +14,11 @@ import (
 
 var GithubProviderName = "github"
 
+const (
+	AuthorizeResourceActivityName = "AuthorizeResource"
+	RevokeResourceActivityName    = "RevokeResource"
+)
+
 // githubProvider implements the ProviderImpl interface for GitHub
 type githubProvider struct {
 	*models.BaseProvider

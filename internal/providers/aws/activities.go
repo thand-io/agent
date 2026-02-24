@@ -6,8 +6,8 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
-func (b *awsProvider) RegisterActivities(temporalClient models.TemporalImpl) error {
-	return models.RegisterActivities(temporalClient, models.NewProviderActivities(b))
+func (b *awsProvider) RegisterActivities() any {
+	return &awsProviderActivities{provider: b}
 }
 
 // Aws uses static roles and permissions so we don't need to fetch them.

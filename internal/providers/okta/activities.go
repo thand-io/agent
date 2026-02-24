@@ -6,11 +6,11 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
-func (b *oktaProvider) RegisterActivities(temporalClient models.TemporalImpl) error {
-	return models.RegisterActivities(temporalClient, models.NewProviderActivities(b))
+func (b *oktaProvider) RegisterActivities() any {
+	return &oktaProviderActivities{provider: b}
 }
 
-// GitHub uses static roles and permissions so we don't need to fetch them.
+// Okta uses static roles and permissions so we don't need to fetch them.
 // Instead we will just return these in the synchronize call.
 func (p *oktaProvider) Synchronize(
 	ctx context.Context,

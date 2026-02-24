@@ -175,8 +175,8 @@ func (l *TestCaseLoader) substituteVariables(content []byte) []byte {
 func (l *TestCaseLoader) CreateConfigFromTestCase(tc *TestCase) (*config.Config, error) {
 	cfg := config.DefaultConfig()
 
-	// Set mode to Agent so providers are initialized locally (not via proxy)
-	cfg.SetMode(config.ModeAgent)
+	// Set mode to Server so providers are initialized locally (not via proxy)
+	cfg.SetMode(config.ModeServer)
 
 	// Set up roles first (before providers in case providers need them)
 	cfg.Roles.Definitions = tc.Roles

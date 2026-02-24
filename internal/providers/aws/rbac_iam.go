@@ -4,17 +4,22 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/iam/types"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
+	sdkWorkflowsRunner "github.com/thand-io/agent/sdk/workflows/runner"
+	"go.temporal.io/sdk/workflow"
 )
 
-// authorizeRoleTraditionalIAM handles role authorization for traditional IAM users
+// authorizeRoleTraditionalIAM handles role authorization for traditional IAM users.
+// Each sub-step is dispatched as a Temporal activity when a workflow context is
+// present, or executed inline otherwise. The exec* helpers encapsulate that branching.
 func (p *awsProvider) authorizeRoleTraditionalIAM(
-	ctx context.Context,
+	task models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
 	targetAccountID string,
 ) (*models.AuthorizeRoleResponse, error) {
@@ -22,46 +27,53 @@ func (p *awsProvider) authorizeRoleTraditionalIAM(
 	user := req.GetUser()
 	role := req.GetRole()
 
-	// Check if the role exists
-	existingRole, err := p.getRole(ctx, user, role)
+	// Step 1 — get or create the IAM role
+	roleResp, err := p.execGetOrCreateIAMRole(task, &GetOrCreateIAMRoleRequest{
+		User:            user,
+		Role:            role,
+		TargetAccountID: targetAccountID,
+	})
 	if err != nil {
-		// If role doesn't exist, create it
-		existingRole, err = p.createRole(ctx, user, role, targetAccountID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create role: %w", err)
-		}
+		return nil, fmt.Errorf("failed to get or create IAM role: %w", err)
 	}
 
-	// Attach policies to the role using permissions (handles backward compatibility)
+	// Step 2 — attach permissions (only if defined)
 	if len(role.Permissions.Allow) > 0 || len(role.Permissions.Deny) > 0 {
-		err = p.attachPoliciesToRole(ctx, existingRole.RoleName, role.Permissions)
-		if err != nil {
+		if err := p.execAttachPoliciesToIAMRole(task, &AttachPoliciesToIAMRoleRequest{
+			RoleName:    roleResp.RoleName,
+			Permissions: role.Permissions,
+		}); err != nil {
 			return nil, fmt.Errorf("failed to attach policies to role: %w", err)
 		}
 	}
 
-	// Bind the user to the role (assuming user will assume this role)
-	err = p.bindUserToRole(ctx, user, existingRole.RoleName, targetAccountID)
-	if err != nil {
+	// Step 3 — bind the user to the role
+	if err := p.execBindUserToIAMRole(task, &BindUserToIAMRoleRequest{
+		User:            user,
+		RoleName:        roleResp.RoleName,
+		TargetAccountID: targetAccountID,
+	}); err != nil {
 		return nil, fmt.Errorf("failed to bind user to role: %w", err)
 	}
 
 	return nil, nil
 }
 
-// revokeRoleTraditionalIAM handles role revocation for traditional IAM users
-func (p *awsProvider) revokeRoleTraditionalIAM(ctx context.Context, user *models.User, role *models.Role) (*models.RevokeRoleResponse, error) {
+// revokeRoleTraditionalIAM handles role revocation for traditional IAM users.
+// Uses GetIAMRole (read-only) to prevent silently re-creating a deleted role.
+func (p *awsProvider) revokeRoleTraditionalIAM(task models.ProviderContext, user *models.User, role *models.Role) (*models.RevokeRoleResponse, error) {
 
-	// Check if the role exists
-	existingRole, err := p.getRole(ctx, user, role)
+	// Step 1 — resolve the existing role; fail fast if not found, never create
+	roleResp, err := p.execGetIAMRole(task, &GetIAMRoleRequest{Role: role})
 	if err != nil {
-		// If role doesn't exist, nothing to revoke
 		return nil, fmt.Errorf("role not found: %w", err)
 	}
 
-	// Unbind the user from the role by resetting the assume role policy to deny access
-	err = p.unbindUserFromRole(ctx, user, existingRole.RoleName)
-	if err != nil {
+	// Step 2 — remove the user from the assume-role policy
+	if err := p.execUnbindUserFromIAMRole(task, &UnbindUserFromIAMRoleRequest{
+		User:     user,
+		RoleName: roleResp.RoleName,
+	}); err != nil {
 		return nil, fmt.Errorf("failed to unbind user from role: %w", err)
 	}
 
@@ -119,7 +131,7 @@ func (p *awsProvider) createRole(ctx context.Context, user *models.User, role *m
 }
 
 // attachPoliciesToRole creates and attaches an inline policy with the specified permissions
-func (p *awsProvider) attachPoliciesToRole(ctx context.Context, roleName *string, permissions models.RolePermissions) error {
+func (p *awsProvider) attachPoliciesToRole(ctx context.Context, roleName string, permissions models.RolePermissions) error {
 	if len(permissions.Allow) == 0 && len(permissions.Deny) == 0 {
 		return nil // No permissions to attach
 	}
@@ -137,10 +149,9 @@ func (p *awsProvider) attachPoliciesToRole(ctx context.Context, roleName *string
 		return fmt.Errorf("failed to marshal policy document: %w", err)
 	}
 
-	// Create an inline policy for the role
-	policyName := fmt.Sprintf("thand-%s-policy", common.ConvertToSnakeCase(*roleName))
+	policyName := fmt.Sprintf("thand-%s-policy", common.ConvertToSnakeCase(roleName))
 	input := &iam.PutRolePolicyInput{
-		RoleName:       roleName,
+		RoleName:       aws.String(roleName),
 		PolicyName:     aws.String(policyName),
 		PolicyDocument: aws.String(string(policyDocumentJSON)),
 	}
@@ -154,19 +165,13 @@ func (p *awsProvider) attachPoliciesToRole(ctx context.Context, roleName *string
 }
 
 // bindUserToRole creates or updates the assume role policy to allow the user to assume the role
-func (p *awsProvider) bindUserToRole(ctx context.Context, user *models.User, roleName *string, targetAccountID string) error {
-	// Create a basic assume role policy that allows the user to assume the role
-	var assumeRolePolicy PolicyDocument
-
-	// Determine the username to use for the IAM user ARN
+func (p *awsProvider) bindUserToRole(ctx context.Context, user *models.User, roleName string, targetAccountID string) error {
 	username := p.getUsernameForIAM(user)
-
 	if len(username) == 0 {
 		return fmt.Errorf("failed to determine username for user")
 	}
 
-	// Create policy allowing specific user with proper account ID
-	assumeRolePolicy = PolicyDocument{
+	assumeRolePolicy := PolicyDocument{
 		Version: "2012-10-17",
 		Statement: []Statement{
 			{
@@ -184,13 +189,10 @@ func (p *awsProvider) bindUserToRole(ctx context.Context, user *models.User, rol
 		return fmt.Errorf("failed to marshal assume role policy: %w", err)
 	}
 
-	// Update the role's assume role policy
-	updateInput := &iam.UpdateAssumeRolePolicyInput{
-		RoleName:       roleName,
+	_, err = p.service.UpdateAssumeRolePolicy(ctx, &iam.UpdateAssumeRolePolicyInput{
+		RoleName:       aws.String(roleName),
 		PolicyDocument: aws.String(string(assumeRolePolicyJSON)),
-	}
-
-	_, err = p.service.UpdateAssumeRolePolicy(ctx, updateInput)
+	})
 	if err != nil {
 		return fmt.Errorf("failed to update assume role policy: %w", err)
 	}
@@ -199,16 +201,14 @@ func (p *awsProvider) bindUserToRole(ctx context.Context, user *models.User, rol
 }
 
 // unbindUserFromRole removes the user from the assume role policy
-func (p *awsProvider) unbindUserFromRole(ctx context.Context, user *models.User, roleName *string) error {
-	// Use the cached account ID
+func (p *awsProvider) unbindUserFromRole(ctx context.Context, user *models.User, roleName string) error {
 	accountID := p.GetAccountID()
 
-	// Get current assume role policy
 	roleOutput, err := p.service.GetRole(ctx, &iam.GetRoleInput{
-		RoleName: roleName,
+		RoleName: aws.String(roleName),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to get role %s: %w", *roleName, err)
+		return fmt.Errorf("failed to get role %s: %w", roleName, err)
 	}
 
 	// Parse the current policy document
@@ -269,11 +269,11 @@ func (p *awsProvider) unbindUserFromRole(ctx context.Context, user *models.User,
 	}
 
 	_, err = p.service.UpdateAssumeRolePolicy(ctx, &iam.UpdateAssumeRolePolicyInput{
-		RoleName:       roleName,
+		RoleName:       aws.String(roleName),
 		PolicyDocument: aws.String(string(newPolicyJSON)),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to update assume role policy for role %s: %w", *roleName, err)
+		return fmt.Errorf("failed to update assume role policy for role %s: %w", roleName, err)
 	}
 
 	return nil
@@ -282,16 +282,127 @@ func (p *awsProvider) unbindUserFromRole(ctx context.Context, user *models.User,
 // getUsernameForIAM determines the appropriate username for AWS IAM user ARN
 // Priority: Username field > email prefix > empty string (fallback to account root)
 func (p *awsProvider) getUsernameForIAM(user *models.User) string {
-	// First priority: use the Username field if available
 	if len(user.Username) > 0 {
 		return user.Username
 	}
-
-	// Second priority: extract from email if available
 	if len(user.Email) > 0 {
 		return common.ExtractUsernameFromEmail(user.Email)
 	}
-
-	// No valid username found - caller should fallback to account root
 	return ""
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IAM operation wrappers
+//
+// Each wrapper handles the Temporal/direct branching identically to the SSO
+// exec* helpers in rbac_sso.go. The Temporal path dispatches an activity;
+// the direct path calls the private method inline.
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (p *awsProvider) execGetOrCreateIAMRole(
+	task models.ProviderContext,
+	req *GetOrCreateIAMRoleRequest,
+) (*GetOrCreateIAMRoleResponse, error) {
+	if task.HasTemporalContext() {
+		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
+			TaskQueue:           task.GetTaskQueue(),
+			StartToCloseTimeout: 2 * time.Minute,
+			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+		})
+		var resp GetOrCreateIAMRoleResponse
+		if err := workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), GetOrCreateIAMRoleActivityName), req).Get(wfCtx, &resp); err != nil {
+			return nil, err
+		}
+		return &resp, nil
+	}
+	existingRole, err := p.getRole(task.GetContext(), req.User, req.Role)
+	if err != nil {
+		existingRole, err = p.createRole(task.GetContext(), req.User, req.Role, req.TargetAccountID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get or create IAM role: %w", err)
+		}
+	}
+	resp := &GetOrCreateIAMRoleResponse{}
+	if existingRole.RoleName != nil {
+		resp.RoleName = *existingRole.RoleName
+	}
+	if existingRole.Arn != nil {
+		resp.RoleArn = *existingRole.Arn
+	}
+	return resp, nil
+}
+
+func (p *awsProvider) execGetIAMRole(
+	task models.ProviderContext,
+	req *GetIAMRoleRequest,
+) (*GetIAMRoleResponse, error) {
+	if task.HasTemporalContext() {
+		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
+			TaskQueue:           task.GetTaskQueue(),
+			StartToCloseTimeout: 30 * time.Second,
+			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+		})
+		var resp GetIAMRoleResponse
+		if err := workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), GetIAMRoleActivityName), req).Get(wfCtx, &resp); err != nil {
+			return nil, err
+		}
+		return &resp, nil
+	}
+	rawRole, err := p.getRole(task.GetContext(), nil, req.Role)
+	if err != nil {
+		return nil, fmt.Errorf("IAM role not found: %w", err)
+	}
+	resp := &GetIAMRoleResponse{}
+	if rawRole.RoleName != nil {
+		resp.RoleName = *rawRole.RoleName
+	}
+	if rawRole.Arn != nil {
+		resp.RoleArn = *rawRole.Arn
+	}
+	return resp, nil
+}
+
+func (p *awsProvider) execAttachPoliciesToIAMRole(
+	task models.ProviderContext,
+	req *AttachPoliciesToIAMRoleRequest,
+) error {
+	if task.HasTemporalContext() {
+		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
+			TaskQueue:           task.GetTaskQueue(),
+			StartToCloseTimeout: 2 * time.Minute,
+			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+		})
+		return workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), AttachPoliciesToIAMRoleActivityName), req).Get(wfCtx, nil)
+	}
+	return p.attachPoliciesToRole(task.GetContext(), req.RoleName, req.Permissions)
+}
+
+func (p *awsProvider) execBindUserToIAMRole(
+	task models.ProviderContext,
+	req *BindUserToIAMRoleRequest,
+) error {
+	if task.HasTemporalContext() {
+		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
+			TaskQueue:           task.GetTaskQueue(),
+			StartToCloseTimeout: 2 * time.Minute,
+			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+		})
+		return workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), BindUserToIAMRoleActivityName), req).Get(wfCtx, nil)
+	}
+	return p.bindUserToRole(task.GetContext(), req.User, req.RoleName, req.TargetAccountID)
+}
+
+func (p *awsProvider) execUnbindUserFromIAMRole(
+	task models.ProviderContext,
+	req *UnbindUserFromIAMRoleRequest,
+) error {
+	if task.HasTemporalContext() {
+		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
+			TaskQueue:           task.GetTaskQueue(),
+			StartToCloseTimeout: 2 * time.Minute,
+			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+		})
+		return workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), UnbindUserFromIAMRoleActivityName), req).Get(wfCtx, nil)
+	}
+	return p.unbindUserFromRole(task.GetContext(), req.User, req.RoleName)
 }

@@ -9,8 +9,6 @@ import (
 type azureData struct {
 	permissions []models.ProviderPermission
 	roles       []models.ProviderRole
-
-	indexReady chan struct{}
 }
 
 var (
@@ -21,9 +19,7 @@ var (
 
 func getSharedData() (*azureData, error) {
 	sharedDataOnce.Do(func() {
-		sharedData = &azureData{
-			indexReady: make(chan struct{}),
-		}
+		sharedData = &azureData{}
 		var err error
 
 		sharedData.permissions, err = loadPermissions()

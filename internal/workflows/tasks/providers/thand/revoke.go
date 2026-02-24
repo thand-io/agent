@@ -12,7 +12,6 @@ import (
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
-	sdkWorkflowsRunner "github.com/thand-io/agent/sdk/workflows/runner"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
@@ -65,14 +64,6 @@ type revokeTask struct {
 	Identity          string
 	RevokeReq         models.RevokeRoleRequest
 	AuthorizeResponse *models.AuthorizeRoleResponse
-}
-
-// temporalRevokeResult represents the result of a revocation operation for temporal communication
-type temporalRevokeResult struct {
-	Index    int
-	Identity string
-	Output   any
-	Err      error
 }
 
 func (t *thandTask) executeRevocationTask(
@@ -187,11 +178,7 @@ func (t *thandTask) executeRevocationTask(
 
 	var revokeResults []revokeResult
 
-	if workflowTask.HasTemporalContext() {
-		revokeResults, err = t.executeTemporalRevokeParallel(workflowTask, taskName, call, revokeTasks)
-	} else {
-		revokeResults, err = t.executeGoRevokeParallel(t.config, workflowTask, revokeTasks)
-	}
+	revokeResults, err = t.executeRevokeParallel(workflowTask, revokeTasks)
 
 	if err != nil {
 		return nil, err
@@ -244,116 +231,69 @@ func (t *thandTask) executeRevocationTask(
 	return &modelOutput, nil
 }
 
-// executeTemporalRevokeParallel executes revocation tasks in parallel using Temporal
-func (t *thandTask) executeTemporalRevokeParallel(
+// runRevokeTask executes a single revocation task and returns its result.
+func (t *thandTask) runRevokeTask(
 	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
-	taskName string,
-	call *taskModel.ThandTask,
-	revokeTasks []revokeTask,
-) ([]revokeResult, error) {
-
-	temporalContext := workflowTask.GetTemporalContext()
-
-	ao := workflow.ActivityOptions{
-		TaskQueue:           workflowTask.GetTaskQueue(),
-		StartToCloseTimeout: 10 * time.Minute,
-		RetryPolicy:         sdkWorkflowsRunner.CriticalPathRetryPolicy,
-	}
-	aoctx := workflow.WithActivityOptions(temporalContext, ao)
-
-	// Create channel and results slice
-	results := make([]revokeResult, len(revokeTasks))
-	resultCh := workflow.NewChannel(temporalContext)
-
-	// Start all tasks in parallel using workflow.Go
-	for i, task := range revokeTasks {
-		taskIndex := i
-		revokeTask := task
-
-		workflow.Go(temporalContext, func(ctx workflow.Context) {
-			var revokeOut any
-
-			thandRevokeReq := thandFunction.ThandRevokeRequest{
-				Provider:          revokeTask.ProviderName,
-				RevokeRoleRequest: revokeTask.RevokeReq,
-			}
-
-			err := workflow.ExecuteActivity(
-				aoctx,
-				thandFunction.ThandRevokeFunction,
-				workflowTask,
-				taskName,
-				call,
-				thandRevokeReq,
-			).Get(ctx, &revokeOut)
-
-			if err != nil {
-				logrus.WithError(err).
-					Errorln("Revocation activity failed")
-			}
-
-			// Send result through channel
-			resultCh.Send(ctx, temporalRevokeResult{
-				Index:    taskIndex,
-				Identity: revokeTask.Identity,
-				Output:   revokeOut,
-				Err:      err,
-			})
-		})
-	}
-
-	// Collect all results
-	for range revokeTasks {
-		var result temporalRevokeResult
-		resultCh.Receive(temporalContext, &result)
-		results[result.Index] = revokeResult{
-			Identity: result.Identity,
-			Output:   result.Output,
-			Error:    result.Err,
+	task revokeTask,
+) revokeResult {
+	providerCall, err := t.config.GetProviderByName(task.ProviderName)
+	if err != nil {
+		return revokeResult{
+			Identity: task.Identity,
+			Error:    fmt.Errorf("failed to get provider: %w", err),
 		}
 	}
-
-	return results, nil
+	revokeOut, err := providerCall.RevokeRole(workflowTask, &task.RevokeReq)
+	return revokeResult{
+		Identity: task.Identity,
+		Output:   revokeOut,
+		Error:    err,
+	}
 }
 
-// executeGoRevokeParallel executes revocation tasks in parallel using Go routines and WaitGroup
-func (t *thandTask) executeGoRevokeParallel(
-	config models.ConfigImpl,
-	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
+// executeRevokeParallel runs all revocation tasks concurrently. It uses Temporal
+// goroutines when a Temporal context is present, and standard goroutines otherwise.
+func (t *thandTask) executeRevokeParallel(
+	workflowTask *models.ElevateWorkflowTask,
 	revokeTasks []revokeTask,
 ) ([]revokeResult, error) {
 
 	results := make([]revokeResult, len(revokeTasks))
-	var wg sync.WaitGroup
 
-	for i, task := range revokeTasks {
-		wg.Add(1)
-		go func(index int, revokeTask revokeTask) {
-			defer wg.Done()
+	if workflowTask.HasTemporalContext() {
+		type indexedResult struct {
+			Index  int
+			Result revokeResult
+		}
+		ctx := workflowTask.GetTemporalContext()
+		resultCh := workflow.NewChannel(ctx)
 
-			providerCall, err := config.GetProviderByName(revokeTask.ProviderName)
-			if err != nil {
-				results[index] = revokeResult{
-					Identity: revokeTask.Identity,
-					Output:   nil,
-					Error:    fmt.Errorf("failed to get provider: %w", err),
-				}
-				return
-			}
+		for i, task := range revokeTasks {
+			taskIndex, rt := i, task
+			workflow.Go(ctx, func(wfCtx workflow.Context) {
+				resultCh.Send(wfCtx, indexedResult{
+					Index:  taskIndex,
+					Result: t.runRevokeTask(newTemporalTaskView(workflowTask, wfCtx), rt),
+				})
+			})
+		}
 
-			revokeOut, err := providerCall.RevokeRole(
-				workflowTask.GetContext(), &revokeTask.RevokeReq,
-			)
-
-			results[index] = revokeResult{
-				Identity: revokeTask.Identity,
-				Output:   revokeOut,
-				Error:    err,
-			}
-		}(i, task)
+		for range revokeTasks {
+			var r indexedResult
+			resultCh.Receive(ctx, &r)
+			results[r.Index] = r.Result
+		}
+	} else {
+		var wg sync.WaitGroup
+		for i, task := range revokeTasks {
+			wg.Add(1)
+			go func(index int, rt revokeTask) {
+				defer wg.Done()
+				results[index] = t.runRevokeTask(workflowTask, rt)
+			}(i, task)
+		}
+		wg.Wait()
 	}
-
-	wg.Wait()
 
 	return results, nil
 }

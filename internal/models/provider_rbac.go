@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/blevesearch/bleve/v2"
 	"github.com/sirupsen/logrus"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 type AuthorizeRoleRequest struct {
@@ -137,6 +139,12 @@ func (r SynchronizeIdentitiesResponse) GetPagination() *PaginationOptions  { ret
 func (r *SynchronizeTenantsRequest) SetPagination(p *PaginationOptions) { r.Pagination = p }
 func (r SynchronizeTenantsResponse) GetPagination() *PaginationOptions  { return r.Pagination }
 
+// ProviderContext is the execution context passed to provider RBAC operations.
+// It is an alias for WorkflowTaskSupport so providers receive both the plain
+// Go context and, when inside a Temporal workflow coroutine, the workflow.Context
+// needed to schedule sub-activities with proper retries.
+type ProviderContext = sdkWorkflowsModel.WorkflowTaskSupport
+
 // ProviderRoleBasedAccessControl defines the interface for providers that support RBAC
 type ProviderRoleBasedAccessControl interface {
 
@@ -177,7 +185,7 @@ type ProviderRoleBasedAccessControl interface {
 
 	// Authorize a role for a user (Bind a user to a role)
 	AuthorizeRole(
-		ctx context.Context,
+		taskSupport sdkWorkflowsModel.WorkflowTaskSupport,
 		req *AuthorizeRoleRequest,
 	) (
 		*AuthorizeRoleResponse, // Return any custom metadata the provider wants to store
@@ -186,7 +194,7 @@ type ProviderRoleBasedAccessControl interface {
 
 	// Revoke a role from a user
 	RevokeRole(
-		ctx context.Context,
+		taskSupport sdkWorkflowsModel.WorkflowTaskSupport,
 		req *RevokeRoleRequest, // Any metadata returned from AuthorizeRole
 	) (*RevokeRoleResponse, error)
 
@@ -199,7 +207,7 @@ type ProviderRoleBasedAccessControl interface {
 }
 
 func (p *BaseProvider) AuthorizeRole(
-	ctx context.Context,
+	taskSupport sdkWorkflowsModel.WorkflowTaskSupport,
 	req *AuthorizeRoleRequest,
 ) (*AuthorizeRoleResponse, error) {
 	// Default implementation does nothing
@@ -207,7 +215,7 @@ func (p *BaseProvider) AuthorizeRole(
 }
 
 func (p *BaseProvider) RevokeRole(
-	ctx context.Context,
+	taskSupport sdkWorkflowsModel.WorkflowTaskSupport,
 	req *RevokeRoleRequest,
 ) (*RevokeRoleResponse, error) {
 	// Default implementation does nothing
@@ -403,12 +411,19 @@ func validatePermissions(providerPermissions []SearchResult[ProviderPermission],
 
 		for _, perm := range stmt.Operations {
 
-			if strings.HasSuffix(perm, ":*") || strings.HasSuffix(perm, ".*") {
-				// Permission ends with a wildcard. Lets expand this
-				// out to include all permissions. As some IAMs do not
-				// support wildcarding.
-				validatedOperations = append(validatedOperations,
-					expandPermissionsWildcard(providerPermissions, perm)...)
+			if strings.Contains(perm, "*") {
+				// Permission contains a wildcard. Expand it against the provider
+				// permission list using glob matching so that all delimiter styles
+				// are handled: Azure (/), GCP (.), AWS/k8s (:), and mid-path
+				// wildcards such as Microsoft.Compute/*/read.
+				expanded, err := expandPermissionsWildcard(providerPermissions, perm)
+				if err != nil {
+					return nil, err
+				}
+				if len(expanded) == 0 {
+					return nil, fmt.Errorf("the wildcard permission: %s matched no permissions", perm)
+				}
+				validatedOperations = append(validatedOperations, expanded...)
 
 			} else if permission := getCondensedActions(perm); permission != nil {
 
@@ -440,23 +455,28 @@ func validatePermissions(providerPermissions []SearchResult[ProviderPermission],
 	return validatedStatements, nil
 }
 
-func expandPermissionsWildcard(providerPermissions []SearchResult[ProviderPermission], permission string) []string {
-
-	if strings.HasSuffix(permission, ":*") {
-		permission = strings.TrimSuffix(permission, ":*")
-	} else if strings.HasSuffix(permission, ".*") {
-		permission = strings.TrimSuffix(permission, ".*")
-	}
+func expandPermissionsWildcard(providerPermissions []SearchResult[ProviderPermission], permission string) ([]string, error) {
 
 	expandedPermissions := []string{}
 
 	for _, providerPerm := range providerPermissions {
-		if strings.HasPrefix(providerPerm.Result.Name, permission) {
+		matched, err := path.Match(permission, providerPerm.Result.Name)
+		if err != nil {
+			return nil, fmt.Errorf("invalid wildcard pattern %q: %w", permission, err)
+		}
+		if matched {
 			expandedPermissions = append(expandedPermissions, providerPerm.Result.Name)
 		}
 	}
 
-	return expandedPermissions
+	return expandedPermissions, nil
+}
+
+// ValidatePermissionsPublic is the exported counterpart of validatePermissions,
+// intended for use in external test packages (e.g. integration tests that need
+// to import both models and a provider package without creating a cycle).
+func ValidatePermissionsPublic(providerPermissions []SearchResult[ProviderPermission], statements RoleStatements) (RoleStatements, error) {
+	return validatePermissions(providerPermissions, statements)
 }
 
 /*

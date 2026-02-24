@@ -47,7 +47,7 @@ func (p *oauth2Provider) RenewSession(ctx context.Context, session *models.Sessi
 
 // Authorize grants access for a user to a role
 func (p *oauth2Provider) AuthorizeRole(
-	ctx context.Context,
+	task models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
 	if !req.IsValid() {
@@ -60,7 +60,7 @@ func (p *oauth2Provider) AuthorizeRole(
 
 // Revoke removes access for a user from a role
 func (p *oauth2Provider) RevokeRole(
-	ctx context.Context,
+	task models.ProviderContext,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
 	// TODO: Implement OAuth2 revocation logic

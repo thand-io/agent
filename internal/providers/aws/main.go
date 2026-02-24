@@ -28,6 +28,27 @@ const (
 	awsProviderDeleteRoleAssignmentBackoffLimit    = 15
 )
 
+const (
+	// SSO / Identity Center activity names
+	GetIdentityCenterInstanceActivityName           = "GetIdentityCenterInstance"
+	FindOrCreatePermissionSetActivityName           = "FindOrCreatePermissionSet"
+	FindIdentityCenterUserActivityName              = "FindIdentityCenterUser"
+	CreateAccountAssignmentActivityName             = "CreateAccountAssignment"
+	FindPermissionSetByNameActivityName             = "FindPermissionSetByName"
+	DeleteAccountAssignmentActivityName             = "DeleteAccountAssignment"
+	CheckAssignmentDeletionStatusActivityName       = "CheckAssignmentDeletionStatus"
+	CleanupPermissionSetActivityName                = "CleanupPermissionSet"
+	ProvisionPermissionSetActivityName              = "ProvisionPermissionSet"
+	CheckPermissionSetProvisioningStatusActivityName = "CheckPermissionSetProvisioningStatus"
+
+	// IAM activity names
+	GetOrCreateIAMRoleActivityName    = "GetOrCreateIAMRole"
+	GetIAMRoleActivityName            = "GetIAMRole"
+	AttachPoliciesToIAMRoleActivityName = "AttachPoliciesToIAMRole"
+	BindUserToIAMRoleActivityName      = "BindUserToIAMRole"
+	UnbindUserFromIAMRoleActivityName  = "UnbindUserFromIAMRole"
+)
+
 // awsProvider implements the ProviderImpl interface for AWS
 type awsProvider struct {
 	*models.BaseProvider

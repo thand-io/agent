@@ -10,6 +10,11 @@ import (
 
 const TerraformProviderName = "terraform"
 
+const (
+	AddTeamAccessActivityName    = "AddTeamAccess"
+	RemoveTeamAccessActivityName = "RemoveTeamAccess"
+)
+
 // terraformProvider implements the ProviderImpl interface for Terraform
 type terraformProvider struct {
 	*models.BaseProvider

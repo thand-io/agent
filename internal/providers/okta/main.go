@@ -13,6 +13,17 @@ import (
 
 const OktaProviderName = "okta"
 
+const (
+	FindOktaUserActivityName                    = "FindOktaUser"
+	OktaAddGroupTargetsActivityName             = "OktaAddGroupTargets"
+	OktaAssignInheritedRolesActivityName        = "OktaAssignInheritedRoles"
+	OktaCreateAndAssignCustomRoleActivityName   = "OktaCreateAndAssignCustomRole"
+	OktaAssignApplicationTargetsActivityName    = "OktaAssignApplicationTargets"
+	OktaRevokeRolesActivityName                 = "OktaRevokeRoles"
+	OktaRevokeGroupsActivityName                = "OktaRevokeGroups"
+	OktaRevokeResourcesActivityName             = "OktaRevokeResources"
+)
+
 // oktaProvider implements the ProviderImpl interface for Okta
 type oktaProvider struct {
 	*models.BaseProvider
