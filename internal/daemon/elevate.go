@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,12 +12,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/serverlessworkflow/sdk-go/v3/impl/ctx"
+	swfCtx "github.com/serverlessworkflow/sdk-go/v3/impl/ctx"
 	"github.com/sirupsen/logrus"
+	internalapi "github.com/thand-io/agent/internal/api"
 	"github.com/thand-io/agent/internal/daemon/elevate/llm"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/workflows/manager"
-	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
 // getElevate handles GET /api/v1/elevate?role=admin&target=server&reason=maintenance
@@ -247,20 +248,6 @@ func (s *Server) elevate(c *gin.Context, request models.ElevateRequest) {
 	// Increment elevate requests counter
 	atomic.AddInt64(&s.ElevateRequests, 1)
 
-	ctx := context.Background()
-
-	// If we have a web session and one hasn't been set then
-	// lets attach a user session to the request.
-	if !s.Config.IsServer() {
-		s.getErrorPage(c, http.StatusBadRequest, "Cannot process elevation request")
-		return
-	}
-
-	if len(request.Workflow) == 0 {
-		s.getErrorPage(c, http.StatusBadRequest, "No workflow specified for elevation request")
-		return
-	}
-
 	authProvider, foundUser, err := s.getUserFromElevationRequest(c, request)
 
 	if err != nil {
@@ -270,25 +257,13 @@ func (s *Server) elevate(c *gin.Context, request models.ElevateRequest) {
 		return
 	}
 
-	if foundUser != nil {
-
-		exportableSession := &models.ExportableSession{
-			Session:  foundUser,
-			Provider: authProvider,
-		}
-
-		request.Session = exportableSession.ToLocalSession(
-			s.Config.GetServices().GetEncryption())
-
-		// If no identities were set then use the users email
-		// Self elevate
-		if len(request.Identities) == 0 && foundUser.User != nil && len(foundUser.User.Email) > 0 {
-			request.Identities = []string{foundUser.User.Email}
-		}
+	input := internalapi.ElevationInput{
+		Request:      request,
+		User:         foundUser,
+		AuthProvider: authProvider,
 	}
 
-	workflowTask, err := s.Workflows.CreateElevationWorkflow(ctx, request)
-
+	result, err := s.API.Elevate(c.Request.Context(), input)
 	if err != nil {
 		s.getErrorPage(c, http.StatusBadRequest, "Failed to execute workflow", err)
 		return
@@ -322,7 +297,7 @@ func (s *Server) elevate(c *gin.Context, request models.ElevateRequest) {
 
 	// We now redirect the user to the next workflow step.
 	c.Redirect(http.StatusTemporaryRedirect,
-		workflowTask.GetRedirectURL(),
+		result.GetRedirectURL(),
 	)
 }
 
@@ -507,7 +482,6 @@ func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.ElevateWorkflow
 		return
 	}
 
-	// Get user context
 	// TODO: Validate the provider that we're using?
 	_, foundSession, err := s.getSession(c)
 
@@ -527,48 +501,29 @@ func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.ElevateWorkflow
 		return
 	}
 
-	// Lets check if the workflow has a cloudevent input to process
-	event := workflow.GetInputAsCloudEvent()
-
-	if event != nil {
-
-		// Extensions only support basic types so we need to set the user identity as a string
-		event.SetExtension(sdkConstants.VarsContextUser, foundSession.User.GetIdentity())
-
-		if len(event.FieldErrors) > 0 {
-			logrus.WithField("errors", event.FieldErrors).
-				Error("failed to set user extension on cloudevent")
-			s.getErrorPage(c, http.StatusBadRequest, "Failed to set user extension on cloudevent")
-			return
-		}
-
-		workflow.SetInput(event)
+	input := internalapi.ResumeInput{
+		Workflow: workflow,
+		User:     foundSession.User,
 	}
 
-	// Provide no input to resume the workflow as it'll use the saved state
-	// inputs are only for signals
-	workflowTask, err := s.Workflows.ResumeWorkflow(
-		workflow,
-	)
-
+	result, err := s.API.Resume(c.Request.Context(), input)
 	if err != nil {
-		s.getErrorPage(c, http.StatusBadRequest, "Failed to resume workflow", err)
-		return
-	}
-
-	if workflowTask == nil {
-		s.getErrorPage(c, http.StatusNotFound, "Workflow not found or already completed", err)
+		if errors.Is(err, internalapi.ErrWorkflowNotFound) {
+			s.getErrorPage(c, http.StatusNotFound, "Workflow not found or already completed")
+		} else {
+			s.getErrorPage(c, http.StatusBadRequest, "Failed to resume workflow", err)
+		}
 		return
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"task_name": workflowTask.GetTaskReference(),
-	}).Info("Workflow is still running, redirecting to resume")
+		"workflow_id": result.GetWorkflowID(),
+	}).Info("Workflow resume complete, returning result to caller")
 
-	if workflowTask.GetStatus() == ctx.RunningStatus {
+	if result.GetStatus() == swfCtx.RunningStatus {
 
 		c.Redirect(http.StatusTemporaryRedirect,
-			s.Config.GetResumeCallbackUrl(workflowTask),
+			s.Config.GetResumeCallbackUrl(result),
 		)
 
 	} else if s.canAcceptHtml(c) {
@@ -580,9 +535,9 @@ func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.ElevateWorkflow
 			TemplateData: s.GetTemplateData(c),
 			ExecutionStatePageResponse: ExecutionStatePageResponse{
 				Execution: &models.WorkflowExecutionInfo{
-					WorkflowID: workflowTask.GetWorkflowID(),
+					WorkflowID: result.GetWorkflowID(),
 				},
-				Workflow: workflowTask.GetWorkflowDef(),
+				Workflow: result.GetWorkflowDef(),
 			},
 		}
 
@@ -591,9 +546,9 @@ func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.ElevateWorkflow
 	} else {
 
 		c.JSON(http.StatusOK, models.ElevateResponse{
-			WorkflowId: workflowTask.GetWorkflowID(),
-			Status:     workflowTask.GetStatus(),
-			Output:     workflowTask.GetOutputAsMap(),
+			WorkflowId: result.GetWorkflowID(),
+			Status:     result.GetStatus(),
+			Output:     result.GetOutputAsMap(),
 		})
 	}
 }

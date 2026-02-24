@@ -611,7 +611,9 @@ func convertBlockElement(elem slack.BlockElement) *FormElement {
 		formElem.Style = string(e.Style)
 
 	case *slack.ImageBlockElement:
-		formElem.ImageURL = e.ImageURL
+		if e.ImageURL != nil {
+			formElem.ImageURL = *e.ImageURL
+		}
 		formElem.AltText = e.AltText
 
 	case *slack.OverflowBlockElement:
@@ -635,9 +637,13 @@ func convertMixedElement(elem slack.MixedElement) *FormElement {
 			Text: convertTextBlockObject(e),
 		}
 	case *slack.ImageBlockElement:
+		var imageURL string
+		if e.ImageURL != nil {
+			imageURL = *e.ImageURL
+		}
 		return &FormElement{
 			Type:     string(e.Type),
-			ImageURL: e.ImageURL,
+			ImageURL: imageURL,
 			AltText:  e.AltText,
 		}
 	}
