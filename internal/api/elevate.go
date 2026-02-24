@@ -91,6 +91,10 @@ func (s *Service) Resume(ctx context.Context, input ResumeInput) (*models.Elevat
 
 	workflow := input.Workflow
 
+	if workflow == nil {
+		return nil, errors.New("resume: workflow task must not be nil")
+	}
+
 	// Attach the authenticated user identity to any pending CloudEvent signal.
 	if input.User != nil {
 		event := workflow.GetInputAsCloudEvent()

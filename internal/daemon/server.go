@@ -73,13 +73,20 @@ func NewServer(cfg *config.Config) *Server {
 	tmpl, err := template.New("").Funcs(funcMap).ParseFS(staticFiles, "static/*.html")
 	if err != nil {
 		logrus.WithError(err).Fatal("Failed to parse templates")
+		return nil
+	}
+
+	apiService, err := api.NewApiService(cfg)
+	if err != nil {
+		logrus.WithError(err).Fatal("Failed to create API service")
+		return nil
 	}
 
 	// Create a new server instance with the provided configuration
 	server := &Server{
 		Config:         cfg,
 		TemplateEngine: tmpl,
-		API:            api.NewApiService(cfg),
+		API:            apiService,
 		StartTime:      time.Now().UTC(),
 	}
 
