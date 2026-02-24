@@ -310,7 +310,7 @@ func (p *awsProvider) execGetOrCreateIAMRole(
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
 		var resp GetOrCreateIAMRoleResponse
-		if err := workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), "GetOrCreateIAMRole"), req).Get(wfCtx, &resp); err != nil {
+		if err := workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), GetOrCreateIAMRoleActivityName), req).Get(wfCtx, &resp); err != nil {
 			return nil, err
 		}
 		return &resp, nil
@@ -343,7 +343,7 @@ func (p *awsProvider) execGetIAMRole(
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
 		var resp GetIAMRoleResponse
-		if err := workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), "GetIAMRole"), req).Get(wfCtx, &resp); err != nil {
+		if err := workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), GetIAMRoleActivityName), req).Get(wfCtx, &resp); err != nil {
 			return nil, err
 		}
 		return &resp, nil
@@ -372,7 +372,7 @@ func (p *awsProvider) execAttachPoliciesToIAMRole(
 			StartToCloseTimeout: 2 * time.Minute,
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
-		return workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), "AttachPoliciesToIAMRole"), req).Get(wfCtx, nil)
+		return workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), AttachPoliciesToIAMRoleActivityName), req).Get(wfCtx, nil)
 	}
 	return p.attachPoliciesToRole(task.GetContext(), req.RoleName, req.Permissions)
 }
@@ -387,7 +387,7 @@ func (p *awsProvider) execBindUserToIAMRole(
 			StartToCloseTimeout: 2 * time.Minute,
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
-		return workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), "BindUserToIAMRole"), req).Get(wfCtx, nil)
+		return workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), BindUserToIAMRoleActivityName), req).Get(wfCtx, nil)
 	}
 	return p.bindUserToRole(task.GetContext(), req.User, req.RoleName, req.TargetAccountID)
 }
@@ -402,7 +402,7 @@ func (p *awsProvider) execUnbindUserFromIAMRole(
 			StartToCloseTimeout: 2 * time.Minute,
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
-		return workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), "UnbindUserFromIAMRole"), req).Get(wfCtx, nil)
+		return workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), UnbindUserFromIAMRoleActivityName), req).Get(wfCtx, nil)
 	}
 	return p.unbindUserFromRole(task.GetContext(), req.User, req.RoleName)
 }

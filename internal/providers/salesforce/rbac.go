@@ -266,7 +266,7 @@ func (p *salesForceProvider) authorizeRoleTemporal(
 	var profileResp GetSalesforceRoleProfileResponse
 	if err := workflow.ExecuteActivity(
 		wfCtx,
-		models.CreateTemporalProviderWorkflowName(identifier, "GetSalesforceRoleProfile"),
+		models.CreateTemporalProviderWorkflowName(identifier, GetSalesforceRoleProfileActivityName),
 		&GetSalesforceRoleProfileRequest{RoleInherits: role.Inherits[0]},
 	).Get(wfCtx, &profileResp); err != nil {
 		return nil, fmt.Errorf("GetSalesforceRoleProfile activity failed: %w", err)
@@ -276,7 +276,7 @@ func (p *salesForceProvider) authorizeRoleTemporal(
 	var userResp FindOrCreateSalesforceUserResponse
 	if err := workflow.ExecuteActivity(
 		wfCtx,
-		models.CreateTemporalProviderWorkflowName(identifier, "FindOrCreateSalesforceUser"),
+		models.CreateTemporalProviderWorkflowName(identifier, FindOrCreateSalesforceUserActivityName),
 		&FindOrCreateSalesforceUserRequest{
 			User:      user,
 			ProfileID: profileResp.ProfileID,
@@ -289,7 +289,7 @@ func (p *salesForceProvider) authorizeRoleTemporal(
 	if userResp.CurrentProfileID != profileResp.ProfileID {
 		if err := workflow.ExecuteActivity(
 			wfCtx,
-			models.CreateTemporalProviderWorkflowName(identifier, "UpdateSalesforceUserProfile"),
+			models.CreateTemporalProviderWorkflowName(identifier, UpdateSalesforceUserProfileActivityName),
 			&UpdateSalesforceUserProfileRequest{
 				SalesforceUserID: userResp.SalesforceUserID,
 				ProfileID:        profileResp.ProfileID,
@@ -333,7 +333,7 @@ func (p *salesForceProvider) revokeRoleTemporal(
 	var userResp FindSalesforceUserResponse
 	if err := workflow.ExecuteActivity(
 		wfCtx,
-		models.CreateTemporalProviderWorkflowName(identifier, "FindSalesforceUser"),
+		models.CreateTemporalProviderWorkflowName(identifier, FindSalesforceUserActivityName),
 		&FindSalesforceUserRequest{UserEmail: user.Email},
 	).Get(wfCtx, &userResp); err != nil {
 		return nil, fmt.Errorf("FindSalesforceUser activity failed: %w", err)
@@ -342,7 +342,7 @@ func (p *salesForceProvider) revokeRoleTemporal(
 	// Step 2 — revert the user's profile
 	if err := workflow.ExecuteActivity(
 		wfCtx,
-		models.CreateTemporalProviderWorkflowName(identifier, "RevertSalesforceUserProfile"),
+		models.CreateTemporalProviderWorkflowName(identifier, RevertSalesforceUserProfileActivityName),
 		&RevertSalesforceUserProfileRequest{
 			SalesforceUserID: userResp.SalesforceUserID,
 			CurrentProfileID: userResp.CurrentProfileID,

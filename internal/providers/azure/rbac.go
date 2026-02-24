@@ -137,7 +137,7 @@ func (p *azureProvider) authorizeRoleTemporal(
 	var roleDefResp GetOrCreateRoleDefinitionResponse
 	if err := workflow.ExecuteActivity(
 		wfCtx,
-		models.CreateTemporalProviderWorkflowName(identifier, "GetOrCreateRoleDefinition"),
+		models.CreateTemporalProviderWorkflowName(identifier, GetOrCreateRoleDefinitionActivityName),
 		&GetOrCreateRoleDefinitionRequest{
 			RoleName:    role.Name,
 			Description: role.Description,
@@ -151,7 +151,7 @@ func (p *azureProvider) authorizeRoleTemporal(
 	var assignResp CreateRoleAssignmentResponse
 	if err := workflow.ExecuteActivity(
 		wfCtx,
-		models.CreateTemporalProviderWorkflowName(identifier, "CreateRoleAssignment"),
+		models.CreateTemporalProviderWorkflowName(identifier, CreateRoleAssignmentActivityName),
 		&CreateRoleAssignmentRequest{
 			User:             user,
 			RoleDefinitionID: roleDefResp.RoleDefinitionID,
@@ -212,7 +212,7 @@ func (p *azureProvider) revokeRoleTemporal(
 	var roleDefResp GetRoleDefinitionResponse
 	if err := workflow.ExecuteActivity(
 		wfCtx,
-		models.CreateTemporalProviderWorkflowName(identifier, "GetRoleDefinition"),
+		models.CreateTemporalProviderWorkflowName(identifier, GetRoleDefinitionActivityName),
 		&GetRoleDefinitionRequest{RoleName: role.Name},
 	).Get(wfCtx, &roleDefResp); err != nil {
 		return nil, fmt.Errorf("GetRoleDefinition activity failed: %w", err)
@@ -221,7 +221,7 @@ func (p *azureProvider) revokeRoleTemporal(
 	// Step 2 — DeleteRoleAssignment
 	if err := workflow.ExecuteActivity(
 		wfCtx,
-		models.CreateTemporalProviderWorkflowName(identifier, "DeleteRoleAssignment"),
+		models.CreateTemporalProviderWorkflowName(identifier, DeleteRoleAssignmentActivityName),
 		&DeleteRoleAssignmentRequest{
 			User:             user,
 			RoleDefinitionID: roleDefResp.RoleDefinitionID,

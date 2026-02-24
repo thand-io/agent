@@ -176,7 +176,7 @@ func (l *TestCaseLoader) CreateConfigFromTestCase(tc *TestCase) (*config.Config,
 	cfg := config.DefaultConfig()
 
 	// Set mode to Agent so providers are initialized locally (not via proxy)
-	cfg.SetMode(config.ModeAgent)
+	cfg.SetMode(config.ModeServer)
 
 	// Set up roles first (before providers in case providers need them)
 	cfg.Roles.Definitions = tc.Roles

@@ -90,7 +90,7 @@ func Synchronize(
 
 	}
 
-	if temporalService != nil {
+	if temporalService != nil && temporalService.HasClient() {
 
 		temporalClient := temporalService.GetClient()
 

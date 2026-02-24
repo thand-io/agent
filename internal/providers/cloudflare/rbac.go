@@ -235,7 +235,7 @@ func (p *cloudflareProvider) authorizeRoleTemporal(
 	var resp AuthorizeAccountMemberResponse
 	if err := workflow.ExecuteActivity(
 		wfCtx,
-		models.CreateTemporalProviderWorkflowName(identifier, "AuthorizeAccountMember"),
+		models.CreateTemporalProviderWorkflowName(identifier, AuthorizeAccountMemberActivityName),
 		&AuthorizeAccountMemberRequest{
 			User: req.GetUser(),
 			Role: req.GetRole(),
@@ -279,7 +279,7 @@ func (p *cloudflareProvider) revokeRoleTemporal(
 
 	if err := workflow.ExecuteActivity(
 		wfCtx,
-		models.CreateTemporalProviderWorkflowName(identifier, "RevokeAccountMember"),
+		models.CreateTemporalProviderWorkflowName(identifier, RevokeAccountMemberActivityName),
 		&RevokeAccountMemberRequest{
 			UserEmail: user.Email,
 			MemberID:  memberID,

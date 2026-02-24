@@ -448,7 +448,7 @@ func (p *oktaProvider) authorizeRoleTemporal(
 	var userResp FindOktaUserResponse
 	if err := workflow.ExecuteActivity(
 		wfCtx,
-		models.CreateTemporalProviderWorkflowName(identifier, "FindOktaUser"),
+		models.CreateTemporalProviderWorkflowName(identifier, FindOktaUserActivityName),
 		&FindOktaUserRequest{UserEmail: user.Email},
 	).Get(wfCtx, &userResp); err != nil {
 		return nil, fmt.Errorf("FindOktaUser activity failed: %w", err)
@@ -460,7 +460,7 @@ func (p *oktaProvider) authorizeRoleTemporal(
 	var groupResp OktaAddGroupTargetsResponse
 	if err := workflow.ExecuteActivity(
 		wfCtx,
-		models.CreateTemporalProviderWorkflowName(identifier, "OktaAddGroupTargets"),
+		models.CreateTemporalProviderWorkflowName(identifier, OktaAddGroupTargetsActivityName),
 		&OktaAddGroupTargetsRequest{
 			OktaUserID: userResp.OktaUserID,
 			UserEmail:  user.Email,
@@ -476,7 +476,7 @@ func (p *oktaProvider) authorizeRoleTemporal(
 		var rolesResp OktaAssignInheritedRolesResponse
 		if err := workflow.ExecuteActivity(
 			wfCtx,
-			models.CreateTemporalProviderWorkflowName(identifier, "OktaAssignInheritedRoles"),
+			models.CreateTemporalProviderWorkflowName(identifier, OktaAssignInheritedRolesActivityName),
 			&OktaAssignInheritedRolesRequest{
 				OktaUserID: userResp.OktaUserID,
 				UserEmail:  user.Email,
@@ -493,7 +493,7 @@ func (p *oktaProvider) authorizeRoleTemporal(
 		var customResp OktaCreateAndAssignCustomRoleResponse
 		if err := workflow.ExecuteActivity(
 			wfCtx,
-			models.CreateTemporalProviderWorkflowName(identifier, "OktaCreateAndAssignCustomRole"),
+			models.CreateTemporalProviderWorkflowName(identifier, OktaCreateAndAssignCustomRoleActivityName),
 			&OktaCreateAndAssignCustomRoleRequest{
 				OktaUserID: userResp.OktaUserID,
 				Role:       role,
@@ -508,7 +508,7 @@ func (p *oktaProvider) authorizeRoleTemporal(
 	var appResp OktaAssignApplicationTargetsResponse
 	if err := workflow.ExecuteActivity(
 		wfCtx,
-		models.CreateTemporalProviderWorkflowName(identifier, "OktaAssignApplicationTargets"),
+		models.CreateTemporalProviderWorkflowName(identifier, OktaAssignApplicationTargetsActivityName),
 		&OktaAssignApplicationTargetsRequest{
 			OktaUserID: userResp.OktaUserID,
 			UserEmail:  user.Email,
@@ -547,7 +547,7 @@ func (p *oktaProvider) revokeRoleTemporal(
 	var userResp FindOktaUserResponse
 	if err := workflow.ExecuteActivity(
 		wfCtx,
-		models.CreateTemporalProviderWorkflowName(identifier, "FindOktaUser"),
+		models.CreateTemporalProviderWorkflowName(identifier, FindOktaUserActivityName),
 		&FindOktaUserRequest{UserEmail: user.Email},
 	).Get(wfCtx, &userResp); err != nil {
 		return nil, fmt.Errorf("FindOktaUser activity failed: %w", err)
@@ -562,7 +562,7 @@ func (p *oktaProvider) revokeRoleTemporal(
 	if len(metadata.Roles) > 0 {
 		if err := workflow.ExecuteActivity(
 			wfCtx,
-			models.CreateTemporalProviderWorkflowName(identifier, "OktaRevokeRoles"),
+			models.CreateTemporalProviderWorkflowName(identifier, OktaRevokeRolesActivityName),
 			&OktaRevokeRolesRequest{
 				OktaUserID: userResp.OktaUserID,
 				UserEmail:  user.Email,
@@ -584,7 +584,7 @@ func (p *oktaProvider) revokeRoleTemporal(
 	if len(metadata.Groups) > 0 {
 		if err := workflow.ExecuteActivity(
 			wfCtx,
-			models.CreateTemporalProviderWorkflowName(identifier, "OktaRevokeGroups"),
+			models.CreateTemporalProviderWorkflowName(identifier, OktaRevokeGroupsActivityName),
 			&OktaRevokeGroupsRequest{
 				OktaUserID: userResp.OktaUserID,
 				UserEmail:  user.Email,
@@ -606,7 +606,7 @@ func (p *oktaProvider) revokeRoleTemporal(
 	if len(metadata.Resources) > 0 {
 		if err := workflow.ExecuteActivity(
 			wfCtx,
-			models.CreateTemporalProviderWorkflowName(identifier, "OktaRevokeResources"),
+			models.CreateTemporalProviderWorkflowName(identifier, OktaRevokeResourcesActivityName),
 			&OktaRevokeResourcesRequest{
 				OktaUserID:  userResp.OktaUserID,
 				UserEmail:   user.Email,

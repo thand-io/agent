@@ -13,6 +13,14 @@ import (
 
 const SalesforceProviderName = "salesforce"
 
+const (
+	GetSalesforceRoleProfileActivityName     = "GetSalesforceRoleProfile"
+	FindOrCreateSalesforceUserActivityName   = "FindOrCreateSalesforceUser"
+	UpdateSalesforceUserProfileActivityName  = "UpdateSalesforceUserProfile"
+	FindSalesforceUserActivityName           = "FindSalesforceUser"
+	RevertSalesforceUserProfileActivityName  = "RevertSalesforceUserProfile"
+)
+
 // salesForceProvider implements the ProviderImpl interface for Salesforce
 type salesForceProvider struct {
 	*models.BaseProvider

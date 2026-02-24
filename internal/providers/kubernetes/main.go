@@ -17,6 +17,13 @@ import (
 
 const KubernetesProviderName = "kubernetes"
 
+const (
+	AuthorizeClusterRoleActivityName    = "AuthorizeClusterRole"
+	AuthorizeNamespacedRoleActivityName = "AuthorizeNamespacedRole"
+	RevokeClusterRoleActivityName       = "RevokeClusterRole"
+	RevokeNamespacedRoleActivityName    = "RevokeNamespacedRole"
+)
+
 // kubernetesProvider implements the ProviderImpl interface for Kubernetes
 type kubernetesProvider struct {
 	*models.BaseProvider

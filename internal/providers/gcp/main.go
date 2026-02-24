@@ -23,6 +23,13 @@ import (
 
 const GcpProviderName = "gcp"
 
+const (
+	BindUserToPredefinedRoleActivityName      = "BindUserToPredefinedRole"
+	GetOrCreateAndBindCustomRoleActivityName  = "GetOrCreateAndBindCustomRole"
+	UnbindUserFromPredefinedRoleActivityName  = "UnbindUserFromPredefinedRole"
+	UnbindAndDeleteCustomRoleActivityName     = "UnbindAndDeleteCustomRole"
+)
+
 var DefaultStage = "GA"
 
 // gcpProvider implements the ProviderImpl interface for GCP

@@ -145,7 +145,7 @@ func (p *terraformProvider) authorizeRoleTemporal(
 	for _, wsID := range workspaceIDs {
 		if err := workflow.ExecuteActivity(
 			wfCtx,
-			models.CreateTemporalProviderWorkflowName(identifier, "AddTeamAccess"),
+			models.CreateTemporalProviderWorkflowName(identifier, AddTeamAccessActivityName),
 			&AddTeamAccessRequest{
 				User:        user,
 				RoleName:    role.Name,
@@ -187,7 +187,7 @@ func (p *terraformProvider) revokeRoleTemporal(
 	for _, wsID := range workspaceIDs {
 		if err := workflow.ExecuteActivity(
 			wfCtx,
-			models.CreateTemporalProviderWorkflowName(identifier, "RemoveTeamAccess"),
+			models.CreateTemporalProviderWorkflowName(identifier, RemoveTeamAccessActivityName),
 			&RemoveTeamAccessRequest{
 				UserID:      user.ID,
 				WorkspaceID: wsID,

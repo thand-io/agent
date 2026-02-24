@@ -17,6 +17,13 @@ import (
 
 const AzureProviderName = "azure"
 
+const (
+	GetOrCreateRoleDefinitionActivityName = "GetOrCreateRoleDefinition"
+	CreateRoleAssignmentActivityName      = "CreateRoleAssignment"
+	GetRoleDefinitionActivityName         = "GetRoleDefinition"
+	DeleteRoleAssignmentActivityName      = "DeleteRoleAssignment"
+)
+
 // UseLatestVersion is the version string passed to Azure Key Vault APIs when the
 // latest active version of a secret or key should be used. An empty string is
 // the documented convention in the Azure SDK to request the latest version.

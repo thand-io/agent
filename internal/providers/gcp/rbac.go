@@ -319,7 +319,7 @@ func (p *gcpProvider) authorizeRoleTemporal(
 		var resp BindUserToPredefinedRoleResponse
 		if err := workflow.ExecuteActivity(
 			wfCtx,
-			models.CreateTemporalProviderWorkflowName(identifier, "BindUserToPredefinedRole"),
+			models.CreateTemporalProviderWorkflowName(identifier, BindUserToPredefinedRoleActivityName),
 			&BindUserToPredefinedRoleRequest{
 				ProjectID:     projectID,
 				User:          user,
@@ -335,7 +335,7 @@ func (p *gcpProvider) authorizeRoleTemporal(
 		var resp GetOrCreateAndBindCustomRoleResponse
 		if err := workflow.ExecuteActivity(
 			wfCtx,
-			models.CreateTemporalProviderWorkflowName(identifier, "GetOrCreateAndBindCustomRole"),
+			models.CreateTemporalProviderWorkflowName(identifier, GetOrCreateAndBindCustomRoleActivityName),
 			&GetOrCreateAndBindCustomRoleRequest{
 				ProjectID:   projectID,
 				User:        user,
@@ -382,7 +382,7 @@ func (p *gcpProvider) revokeRoleTemporal(
 		if strings.HasPrefix(roleName, "roles/") {
 			if err := workflow.ExecuteActivity(
 				wfCtx,
-				models.CreateTemporalProviderWorkflowName(identifier, "UnbindUserFromPredefinedRole"),
+				models.CreateTemporalProviderWorkflowName(identifier, UnbindUserFromPredefinedRoleActivityName),
 				&UnbindUserFromPredefinedRoleRequest{
 					ProjectID: projectID,
 					User:      user,
@@ -394,7 +394,7 @@ func (p *gcpProvider) revokeRoleTemporal(
 		} else {
 			if err := workflow.ExecuteActivity(
 				wfCtx,
-				models.CreateTemporalProviderWorkflowName(identifier, "UnbindAndDeleteCustomRole"),
+				models.CreateTemporalProviderWorkflowName(identifier, UnbindAndDeleteCustomRoleActivityName),
 				&UnbindAndDeleteCustomRoleRequest{
 					ProjectID: projectID,
 					User:      user,

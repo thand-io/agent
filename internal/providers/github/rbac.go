@@ -112,7 +112,7 @@ func (p *githubProvider) authorizeRoleTemporal(
 		for _, target := range stmt.Targets {
 			if err := workflow.ExecuteActivity(
 				wfCtx,
-				models.CreateTemporalProviderWorkflowName(identifier, "AuthorizeResource"),
+				models.CreateTemporalProviderWorkflowName(identifier, AuthorizeResourceActivityName),
 				&AuthorizeResourceRequest{
 					Username: user.Name,
 					Resource: target,
@@ -151,7 +151,7 @@ func (p *githubProvider) revokeRoleTemporal(
 		for _, target := range stmt.Targets {
 			if err := workflow.ExecuteActivity(
 				wfCtx,
-				models.CreateTemporalProviderWorkflowName(identifier, "RevokeResource"),
+				models.CreateTemporalProviderWorkflowName(identifier, RevokeResourceActivityName),
 				&RevokeResourceRequest{
 					Username: user.Name,
 					Resource: target,
