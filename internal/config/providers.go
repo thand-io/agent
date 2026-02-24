@@ -2,7 +2,6 @@ package config
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/providers"
 	providerSdk "github.com/thand-io/agent/sdk/providers"
+	"go.temporal.io/sdk/workflow"
 
 	// Load modules
 	_ "github.com/thand-io/agent/internal/providers/aws"
@@ -213,6 +213,8 @@ func (c *Config) InitializeProviders() error {
 			continue
 		}
 
+		providerResult := result.provider
+
 		// Check for capabilities for RBAC and Identities
 		if result.provider.HasAnyCapability(
 			models.ProviderCapabilityIdentities,
@@ -235,19 +237,52 @@ func (c *Config) InitializeProviders() error {
 
 					temporalService := c.GetServices().GetTemporal()
 
-					// Register all provider workflows and activities
-					err := result.provider.RegisterWorkflows(temporalService)
-					if err != nil && !errors.Is(err, models.ErrNotImplemented) {
-						logrus.WithError(err).Errorln("Failed to register workflows for provider:", result.key)
+					worker := temporalService.GetWorker()
+
+					if worker == nil {
+						logrus.Errorln("Temporal client is configured but worker is nil, cannot register workflows/activities for provider", result.key)
 						continue
 					}
 
-					err = result.provider.RegisterActivities(temporalService)
-					if err != nil && !errors.Is(err, models.ErrNotImplemented) {
-						logrus.WithError(err).Errorln("Failed to register activities for provider:", result.key)
+					// Register the provider Synchronize workflow. This updates roles, permissions,
+					// resources and identities for RBAC. We register this on the provider itself since it's a core part of the provider's functionality, but we register all other workflows and activities separately to allow providers to opt out of Temporal if they want.
+					worker.RegisterWorkflowWithOptions(
+						models.ProviderSynchronizeWorkflow,
+						workflow.RegisterOptions{
+							Name: models.CreateTemporalProviderWorkflowName(
+								providerResult.GetIdentifier(),
+								models.TemporalSynchronizeWorkflowName),
+							VersioningBehavior: workflow.VersioningBehaviorPinned,
+						},
+					)
+
+					// Register all custom provider workflows
+					workflowsRegistry := providerResult.RegisterWorkflows()
+					if workflowsRegistry != nil {
+						logrus.Infoln("Registering Temporal workflows for provider", result.key)
+						worker.RegisterWorkflow(workflowsRegistry)
+					}
+
+					// Register default provider activities
+					err := models.RegisterProviderActivities(temporalService, providerResult)
+					if err != nil {
+						logrus.WithError(err).Errorln("Failed to register default activities for provider:", result.key)
 						continue
 					}
 
+					customActivities := providerResult.RegisterActivities()
+					if customActivities != nil {
+						// Now register any custom activities defined by the provider
+						err = models.RegisterActivities(
+							temporalService,
+							providerResult.GetIdentifier(),
+							customActivities,
+						)
+						if err != nil {
+							logrus.WithError(err).Errorln("Failed to register custom activities for provider:", result.key)
+							continue
+						}
+					}
 				}
 
 				logrus.Infoln("Synchronizing provider", result.key)

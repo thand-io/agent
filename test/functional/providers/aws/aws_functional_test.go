@@ -15,6 +15,9 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/localstack"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	"github.com/serverlessworkflow/sdk-go/v3/model"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
+
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/providers"
 	_ "github.com/thand-io/agent/internal/providers/aws" // Import to register the provider
@@ -28,6 +31,11 @@ func TestAWSProviderFunctional(t *testing.T) {
 	// Set a reasonable timeout for the entire test to prevent hanging
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
+
+	// Create a WorkflowTaskSupport wrapping the test context
+	taskSupport, err := sdkWorkflowsModel.NewWorkflowContext(&model.Workflow{})
+	require.NoError(t, err)
+	taskSupport.SetInternalContext(ctx)
 
 	// Start LocalStack container
 	localstackContainer, err := localstack.Run(ctx,
@@ -219,7 +227,7 @@ func TestAWSProviderFunctional(t *testing.T) {
 
 		// Test role creation and authorization
 		t.Run("Authorize Role", func(t *testing.T) {
-			metadata, err := providerImpl.AuthorizeRole(ctx, &models.AuthorizeRoleRequest{
+			metadata, err := providerImpl.AuthorizeRole(taskSupport, &models.AuthorizeRoleRequest{
 				RoleRequest: &models.RoleRequest{
 					User:     testUser,
 					Role:     testRole,
@@ -250,7 +258,7 @@ func TestAWSProviderFunctional(t *testing.T) {
 		t.Run("Revoke Role", func(t *testing.T) {
 			metadata := map[string]any{}
 
-			revocationMetadata, err := providerImpl.RevokeRole(ctx,
+			revocationMetadata, err := providerImpl.RevokeRole(taskSupport,
 				&models.RevokeRoleRequest{
 					RoleRequest: &models.RoleRequest{
 						User: testUser,
@@ -291,7 +299,7 @@ func TestAWSProviderFunctional(t *testing.T) {
 		require.NoError(t, err)
 
 		// Test with nil user - should return an error, not panic
-		_, err = providerImpl.AuthorizeRole(ctx, &models.AuthorizeRoleRequest{
+		_, err = providerImpl.AuthorizeRole(taskSupport, &models.AuthorizeRoleRequest{
 			RoleRequest: &models.RoleRequest{
 				User:     nil,
 				Role:     testRole,
@@ -309,7 +317,7 @@ func TestAWSProviderFunctional(t *testing.T) {
 		require.NoError(t, err)
 
 		// Test with nil role - should return an error, not panic
-		_, err = providerImpl.AuthorizeRole(ctx, &models.AuthorizeRoleRequest{
+		_, err = providerImpl.AuthorizeRole(taskSupport, &models.AuthorizeRoleRequest{
 			RoleRequest: &models.RoleRequest{
 				User:     testUser,
 				Role:     nil,

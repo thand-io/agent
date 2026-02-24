@@ -103,3 +103,9 @@ type SynchronizeGroupsResponse = internal.SynchronizeGroupsResponse
 // SynchronizeTenantsRequest / Response are used by ProviderTenants.SynchronizeTenants.
 type SynchronizeTenantsRequest = internal.SynchronizeTenantsRequest
 type SynchronizeTenantsResponse = internal.SynchronizeTenantsResponse
+
+// RevokeRoleRequest is the request passed to ProviderRoleBasedAccessControl.RevokeRole.
+type RevokeRoleRequest = internal.RevokeRoleRequest
+
+// RevokeRoleResponse is returned by ProviderRoleBasedAccessControl.RevokeRole.
+type RevokeRoleResponse = internal.RevokeRoleResponse

@@ -16,11 +16,19 @@ import (
 	"github.com/thand-io/agent/internal/providers"
 
 	"google.golang.org/api/cloudresourcemanager/v1"
+	crmv3 "google.golang.org/api/cloudresourcemanager/v3"
 	iam "google.golang.org/api/iam/v1"
 	"google.golang.org/api/option"
 )
 
 const GcpProviderName = "gcp"
+
+const (
+	BindUserToPredefinedRoleActivityName      = "BindUserToPredefinedRole"
+	GetOrCreateAndBindCustomRoleActivityName  = "GetOrCreateAndBindCustomRole"
+	UnbindUserFromPredefinedRoleActivityName  = "UnbindUserFromPredefinedRole"
+	UnbindAndDeleteCustomRoleActivityName     = "UnbindAndDeleteCustomRole"
+)
 
 var DefaultStage = "GA"
 
@@ -28,9 +36,11 @@ var DefaultStage = "GA"
 type gcpProvider struct {
 	*models.BaseProvider
 
-	client    *GcpConfigurationProvider
-	iamClient *iam.Service
-	crmClient *cloudresourcemanager.Service
+	client              *GcpConfigurationProvider
+	iamClient           *iam.Service
+	crmClient           *cloudresourcemanager.Service
+	crmV3Client         *crmv3.Service
+	allowPrimitiveRoles bool
 }
 
 func (p *gcpProvider) Initialize(identifier string, provider models.ProviderConfig) error {
@@ -66,6 +76,15 @@ func (p *gcpProvider) Initialize(identifier string, provider models.ProviderConf
 		return fmt.Errorf("failed to create Resource Manager client: %w", err)
 	}
 	p.crmClient = crmService
+
+	crmV3Service, err := crmv3.NewService(ctx, clientOptions...)
+	if err != nil {
+		return fmt.Errorf("failed to create Resource Manager v3 client: %w", err)
+	}
+	p.crmV3Client = crmV3Service
+
+	allowPrimitive, _ := gcpConfig.GetBool("allow_primitive_roles")
+	p.allowPrimitiveRoles = allowPrimitive
 
 	return nil
 }

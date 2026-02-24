@@ -9,8 +9,10 @@ import (
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
+	sdkWorkflowsRunner "github.com/thand-io/agent/sdk/workflows/runner"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 )
 
 const CloudflareAllow = "allow"
@@ -22,9 +24,13 @@ const resourceTypeAccountRBAC = "account"
 // AuthorizeRole grants access for a user to a role in Cloudflare
 // Supports both account-wide roles and resource-scoped policies
 func (p *cloudflareProvider) AuthorizeRole(
-	ctx context.Context,
+	task models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
+	if task.HasTemporalContext() {
+		return p.authorizeRoleTemporal(task.GetTemporalContext(), task.GetTaskQueue(), req)
+	}
+	ctx := task.GetContext()
 
 	// Check for nil inputs
 	if !req.IsValid() {
@@ -139,9 +145,13 @@ func (p *cloudflareProvider) AuthorizeRole(
 // RevokeRole removes access for a user from a role in Cloudflare
 // Handles both account-wide roles and resource-scoped policies
 func (p *cloudflareProvider) RevokeRole(
-	ctx context.Context,
+	task models.ProviderContext,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
+	if task.HasTemporalContext() {
+		return p.revokeRoleTemporal(task.GetTemporalContext(), task.GetTaskQueue(), req)
+	}
+	ctx := task.GetContext()
 
 	// Check for nil inputs
 	if !req.IsValid() {
@@ -200,6 +210,83 @@ func (p *cloudflareProvider) RevokeRole(
 		"role":      role.Name,
 		"member_id": memberID,
 	}).Info("Successfully revoked Cloudflare role")
+
+	return &models.RevokeRoleResponse{}, nil
+}
+
+// authorizeRoleTemporal sequences Cloudflare role authorization as a single retryable activity.
+func (p *cloudflareProvider) authorizeRoleTemporal(
+	wfCtx workflow.Context,
+	taskQueue string,
+	req *models.AuthorizeRoleRequest,
+) (*models.AuthorizeRoleResponse, error) {
+	if !req.IsValid() {
+		return nil, fmt.Errorf("user and role must be provided to authorize Cloudflare role")
+	}
+
+	identifier := p.GetIdentifier()
+	ao := workflow.ActivityOptions{
+		TaskQueue:           taskQueue,
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+	}
+	wfCtx = workflow.WithActivityOptions(wfCtx, ao)
+
+	var resp AuthorizeAccountMemberResponse
+	if err := workflow.ExecuteActivity(
+		wfCtx,
+		models.CreateTemporalProviderWorkflowName(identifier, AuthorizeAccountMemberActivityName),
+		&AuthorizeAccountMemberRequest{
+			User: req.GetUser(),
+			Role: req.GetRole(),
+		},
+	).Get(wfCtx, &resp); err != nil {
+		return nil, fmt.Errorf("AuthorizeAccountMember activity failed: %w", err)
+	}
+
+	return &models.AuthorizeRoleResponse{
+		Metadata: map[string]any{
+			"member_id": resp.MemberID,
+			"status":    resp.Status,
+			"updated":   resp.Updated,
+		},
+	}, nil
+}
+
+// revokeRoleTemporal sequences Cloudflare role revocation as a single retryable activity.
+func (p *cloudflareProvider) revokeRoleTemporal(
+	wfCtx workflow.Context,
+	taskQueue string,
+	req *models.RevokeRoleRequest,
+) (*models.RevokeRoleResponse, error) {
+	if !req.IsValid() {
+		return nil, fmt.Errorf("user and role must be provided to revoke Cloudflare role")
+	}
+
+	identifier := p.GetIdentifier()
+	ao := workflow.ActivityOptions{
+		TaskQueue:           taskQueue,
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+	}
+	wfCtx = workflow.WithActivityOptions(wfCtx, ao)
+
+	user := req.GetUser()
+	var memberID string
+	if req.AuthorizeRoleResponse != nil && req.AuthorizeRoleResponse.Metadata != nil {
+		memberID, _ = req.AuthorizeRoleResponse.Metadata["member_id"].(string)
+	}
+
+	if err := workflow.ExecuteActivity(
+		wfCtx,
+		models.CreateTemporalProviderWorkflowName(identifier, RevokeAccountMemberActivityName),
+		&RevokeAccountMemberRequest{
+			UserEmail: user.Email,
+			MemberID:  memberID,
+		},
+	).Get(wfCtx, nil); err != nil {
+		return nil, fmt.Errorf("RevokeAccountMember activity failed: %w", err)
+	}
 
 	return &models.RevokeRoleResponse{}, nil
 }

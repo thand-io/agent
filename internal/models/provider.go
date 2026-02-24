@@ -112,8 +112,8 @@ type Provider interface {
 	Synchronize(ctx context.Context, temporalClient TemporalImpl, req *SynchronizeRequest) error
 
 	// Temporal
-	RegisterWorkflows(temporalClient TemporalImpl) error
-	RegisterActivities(temporalClient TemporalImpl) error
+	RegisterWorkflows() any
+	RegisterActivities() any
 
 	GetCapabilities() *ProviderCapabilities
 	HasCapability(capability ProviderCapability) bool

@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -15,47 +16,115 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssoadmin/types"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
+	sdkWorkflowsRunner "github.com/thand-io/agent/sdk/workflows/runner"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 )
 
-// authorizeRoleIdentityCenter handles role authorization for Identity Center users
+// authorizeRoleIdentityCenter handles role authorization for Identity Center users.
+// Each step is dispatched as a Temporal activity when a workflow context is present,
+// or executed inline otherwise. The exec* helpers encapsulate that branching.
 func (p *awsProvider) authorizeRoleIdentityCenter(
-	ctx context.Context,
+	task models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
 	targetAccountID string,
 ) (*models.AuthorizeRoleResponse, error) {
 
-	user := req.GetUser()
-	role := req.GetRole()
-
-	// 1. Find the Identity Center instance
-	instanceArn, identityStoreId, err := p.getIdentityCenterInstance(ctx)
+	// Step 1 — resolve the Identity Center instance
+	instanceResp, err := p.execGetIdentityCenterInstance(task, &GetIdentityCenterInstanceRequest{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to find Identity Center instance: %w", err)
 	}
 
-	// 2. Find or create a Permission Set based on the role
-	permissionSetArn, err := p.findOrCreatePermissionSet(ctx, instanceArn, role)
+	// Step 2 — find or create the permission set for the role
+	psResp, err := p.execFindOrCreatePermissionSet(task, &FindOrCreatePermissionSetRequest{
+		InstanceArn: instanceResp.InstanceArn,
+		Role:        req.GetRole(),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to find or create permission set: %w", err)
 	}
 
-	// 3. Find the user in Identity Center by email
-	principalId, err := p.findIdentityCenterUser(ctx, identityStoreId, user.Email)
+	// Step 2.5 — provision permission set to propagate any policy changes to all accounts.
+	// AWS requires ProvisionPermissionSet after PutInlinePolicyToPermissionSet or
+	// AttachManagedPolicyToPermissionSet, otherwise updates silently don't propagate.
+	psProvisionResp, err := p.execProvisionPermissionSet(task, &ProvisionPermissionSetRequest{
+		InstanceArn:      instanceResp.InstanceArn,
+		PermissionSetArn: psResp.PermissionSetArn,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to provision permission set: %w", err)
+	}
+	// Poll until provisioning completes. Check first (may already be done for new sets
+	// with no prior accounts), then sleep-and-retry if still in progress.
+	provCheckReq := &CheckPermissionSetProvisioningStatusRequest{
+		InstanceArn: instanceResp.InstanceArn,
+		RequestId:   psProvisionResp.RequestId,
+	}
+	provFirstCheck, err := p.execCheckPermissionSetProvisioningStatus(task, provCheckReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check permission set provisioning status: %w", err)
+	}
+	if !provFirstCheck.Succeeded {
+		if task.HasTemporalContext() {
+			for {
+				if err := workflow.Sleep(task.GetTemporalContext(), awsProviderDeleteRoleAssignmentBackoffDuration); err != nil {
+					return nil, fmt.Errorf("workflow sleep cancelled while waiting for permission set provisioning: %w", err)
+				}
+				provCheckResp, err := p.execCheckPermissionSetProvisioningStatus(task, provCheckReq)
+				if err != nil {
+					return nil, err
+				}
+				if provCheckResp.Succeeded {
+					break
+				}
+			}
+		} else {
+			provisioned := false
+			for iter := 0; iter < awsProviderDeleteRoleAssignmentBackoffLimit; iter++ {
+				if err := task.GetContext().Err(); err != nil {
+					return nil, fmt.Errorf("context cancelled while waiting for permission set provisioning: %w", err)
+				}
+				time.Sleep(awsProviderDeleteRoleAssignmentBackoffDuration)
+				provCheckResp, err := p.execCheckPermissionSetProvisioningStatus(task, provCheckReq)
+				if err != nil {
+					return nil, err
+				}
+				if provCheckResp.Succeeded {
+					provisioned = true
+					break
+				}
+			}
+			if !provisioned {
+				return nil, fmt.Errorf("timed out waiting for permission set %s to provision", psResp.PermissionSetArn)
+			}
+		}
+	}
+
+	// Step 3 — find the user in Identity Center
+	userResp, err := p.execFindIdentityCenterUser(task, &FindIdentityCenterUserRequest{
+		IdentityStoreId: instanceResp.IdentityStoreId,
+		Email:           req.GetUser().Email,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to find user in Identity Center: %w", err)
 	}
 
-	// 4. Create an Account Assignment
-	err = p.createAccountAssignment(ctx, instanceArn, permissionSetArn, principalId, targetAccountID)
-	if err != nil {
+	// Step 4 — create the account assignment
+	if err := p.execCreateAccountAssignment(task, &CreateAccountAssignmentRequest{
+		InstanceArn:      instanceResp.InstanceArn,
+		PermissionSetArn: psResp.PermissionSetArn,
+		PrincipalId:      userResp.PrincipalId,
+		TargetAccountID:  targetAccountID,
+	}); err != nil {
 		return nil, fmt.Errorf("failed to create account assignment: %w", err)
 	}
 
 	return &models.AuthorizeRoleResponse{
 		Metadata: map[string]any{
-			"instanceArn":      instanceArn,
-			"permissionSetArn": permissionSetArn,
-			"principalId":      principalId,
+			"instanceArn":      instanceResp.InstanceArn,
+			"permissionSetArn": psResp.PermissionSetArn,
+			"principalId":      userResp.PrincipalId,
 			"accountId":        targetAccountID,
 		},
 	}, nil
@@ -150,7 +219,7 @@ func (p *awsProvider) findOrCreatePermissionSet(ctx context.Context, instanceArn
 		InstanceArn:     aws.String(instanceArn),
 		Name:            aws.String(permissionSetName),
 		Description:     aws.String(role.Description),
-		SessionDuration: aws.String("PT8H"), // 8 hours
+		SessionDuration: aws.String(p.GetConfig().GetStringWithDefault("session_duration", "PT8H")),
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to create permission set: %w", err)
@@ -323,45 +392,55 @@ func (p *awsProvider) attachPolicyToPermissionSet(ctx context.Context, instanceA
 	return nil
 }
 
-// isManagedPolicyAttached checks if a managed policy is already attached to a permission set
+// isManagedPolicyAttached checks if a managed policy is already attached to a permission set.
+// Paginates through all attached policies to handle sets with more than one page.
 func (p *awsProvider) isManagedPolicyAttached(ctx context.Context, instanceArn, permissionSetArn, policyArn string) (bool, error) {
-	// List managed policies attached to the permission set
-	resp, err := p.ssoAdminService.ListManagedPoliciesInPermissionSet(ctx, &ssoadmin.ListManagedPoliciesInPermissionSetInput{
-		InstanceArn:      aws.String(instanceArn),
-		PermissionSetArn: aws.String(permissionSetArn),
-	})
-	if err != nil {
-		return false, fmt.Errorf("failed to list managed policies in permission set: %w", err)
-	}
-
-	// Check if the policy ARN is in the list
-	for _, attachedPolicy := range resp.AttachedManagedPolicies {
-		if attachedPolicy.Arn != nil && *attachedPolicy.Arn == policyArn {
-			return true, nil
+	var nextToken *string
+	for {
+		resp, err := p.ssoAdminService.ListManagedPoliciesInPermissionSet(ctx, &ssoadmin.ListManagedPoliciesInPermissionSetInput{
+			InstanceArn:      aws.String(instanceArn),
+			PermissionSetArn: aws.String(permissionSetArn),
+			NextToken:        nextToken,
+		})
+		if err != nil {
+			return false, fmt.Errorf("failed to list managed policies in permission set: %w", err)
 		}
+		for _, ap := range resp.AttachedManagedPolicies {
+			if ap.Arn != nil && *ap.Arn == policyArn {
+				return true, nil
+			}
+		}
+		if resp.NextToken == nil {
+			break
+		}
+		nextToken = resp.NextToken
 	}
-
 	return false, nil
 }
 
-// isCustomerManagedPolicyAttached checks if a customer managed policy is already attached to a permission set
+// isCustomerManagedPolicyAttached checks if a customer managed policy is already attached to a permission set.
+// Paginates through all references to handle sets with more than one page.
 func (p *awsProvider) isCustomerManagedPolicyAttached(ctx context.Context, instanceArn, permissionSetArn, policyName string) (bool, error) {
-	// List customer managed policies attached to the permission set
-	resp, err := p.ssoAdminService.ListCustomerManagedPolicyReferencesInPermissionSet(ctx, &ssoadmin.ListCustomerManagedPolicyReferencesInPermissionSetInput{
-		InstanceArn:      aws.String(instanceArn),
-		PermissionSetArn: aws.String(permissionSetArn),
-	})
-	if err != nil {
-		return false, fmt.Errorf("failed to list customer managed policies in permission set: %w", err)
-	}
-
-	// Check if the policy name is in the list
-	for _, attachedPolicy := range resp.CustomerManagedPolicyReferences {
-		if attachedPolicy.Name != nil && *attachedPolicy.Name == policyName {
-			return true, nil
+	var nextToken *string
+	for {
+		resp, err := p.ssoAdminService.ListCustomerManagedPolicyReferencesInPermissionSet(ctx, &ssoadmin.ListCustomerManagedPolicyReferencesInPermissionSetInput{
+			InstanceArn:      aws.String(instanceArn),
+			PermissionSetArn: aws.String(permissionSetArn),
+			NextToken:        nextToken,
+		})
+		if err != nil {
+			return false, fmt.Errorf("failed to list customer managed policies in permission set: %w", err)
 		}
+		for _, ap := range resp.CustomerManagedPolicyReferences {
+			if ap.Name != nil && *ap.Name == policyName {
+				return true, nil
+			}
+		}
+		if resp.NextToken == nil {
+			break
+		}
+		nextToken = resp.NextToken
 	}
-
 	return false, nil
 }
 
@@ -423,8 +502,9 @@ func (p *awsProvider) createAccountAssignment(ctx context.Context, instanceArn, 
 	})
 
 	if err != nil {
-		// Check if assignment already exists
-		if strings.Contains(err.Error(), "ConflictException") {
+		// Conflict = assignment already exists; treat as success (idempotent).
+		var conflictErr *types.ConflictException
+		if errors.As(err, &conflictErr) {
 			logrus.WithFields(logrus.Fields{
 				"principalId":      principalId,
 				"targetAccountID":  targetAccountID,
@@ -453,50 +533,133 @@ func (p *awsProvider) createAccountAssignment(ctx context.Context, instanceArn, 
 }
 
 // revokeRoleIdentityCenter removes role authorization for Identity Center users.
-// It deletes the account assignment and cleans up the permission set if no longer in use.
-// Operations are idempotent — already-deleted resources are treated as success.
-func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, req *models.RevokeRoleRequest, targetAccountID string) error {
+// Each step is dispatched as a Temporal activity when a workflow context is present,
+// or executed inline otherwise. The backoff polling loop sleeps via workflow.Sleep
+// on the Temporal path (deterministic, replay-safe) and time.Sleep otherwise.
+func (p *awsProvider) revokeRoleIdentityCenter(task models.ProviderContext, req *models.RevokeRoleRequest, targetAccountID string) error {
+
 	user := req.GetUser()
 	role := req.GetRole()
 
-	// 1. Find the Identity Center instance
-	instanceArn, identityStoreId, err := p.getIdentityCenterInstance(ctx)
+	// Step 1 — resolve the Identity Center instance
+	instanceResp, err := p.execGetIdentityCenterInstance(task, &GetIdentityCenterInstanceRequest{})
 	if err != nil {
 		return fmt.Errorf("failed to find Identity Center instance: %w", err)
 	}
 
-	// 2. Find the Permission Set - try to use stored ARN from authorization metadata first
-	var permissionSetArn string
+	// Step 2 — resolve the permission set ARN (stored metadata or name-based lookup)
+	var storedPermissionSetArn string
 	if req.AuthorizeRoleResponse != nil && req.AuthorizeRoleResponse.Metadata != nil {
-		if arn, ok := req.AuthorizeRoleResponse.Metadata["permissionSetArn"].(string); ok && len(arn) > 0 {
-			permissionSetArn = arn
+		if v, ok := req.AuthorizeRoleResponse.Metadata["permissionSetArn"].(string); ok && len(v) > 0 {
+			storedPermissionSetArn = v
 			logrus.WithFields(logrus.Fields{
-				"permissionSetArn": arn,
+				"permissionSetArn": storedPermissionSetArn,
 				"principalId":      user.Email,
 				"accountId":        targetAccountID,
 			}).Info("Using stored permission set ARN from authorization metadata")
 		}
 	}
-
-	// Fallback to lookup by name if no metadata available (for legacy grants)
-	if len(permissionSetArn) == 0 {
+	if len(storedPermissionSetArn) == 0 {
 		logrus.WithFields(logrus.Fields{
 			"roleName":  role.GetIdentifier(),
 			"accountId": targetAccountID,
 		}).Warn("No permission set ARN in metadata, falling back to name-based lookup")
-		permissionSetArn, err = p.findPermissionSetByName(ctx, instanceArn, role.GetIdentifier())
-		if err != nil {
-			return fmt.Errorf("failed to find permission set: %w in region: %s", err, p.GetRegion())
-		}
+	}
+	psResp, err := p.execFindPermissionSetByName(task, &FindPermissionSetByNameRequest{
+		InstanceArn:      instanceResp.InstanceArn,
+		PermissionSetArn: storedPermissionSetArn,
+		RoleName:         role.GetIdentifier(),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to find permission set: %w in region: %s", err, p.GetRegion())
 	}
 
-	// 3. Find the user in Identity Center
-	principalId, err := p.findIdentityCenterUser(ctx, identityStoreId, user.Email)
+	// Step 3 — find the user in Identity Center
+	userResp, err := p.execFindIdentityCenterUser(task, &FindIdentityCenterUserRequest{
+		IdentityStoreId: instanceResp.IdentityStoreId,
+		Email:           user.Email,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to find user in Identity Center: %w", err)
 	}
 
-	// 4. Delete the Account Assignment
+	// Step 4 — delete the account assignment
+	deleteResp, err := p.execDeleteAccountAssignment(task, &DeleteAccountAssignmentRequest{
+		InstanceArn:      instanceResp.InstanceArn,
+		PermissionSetArn: psResp.PermissionSetArn,
+		PrincipalId:      userResp.PrincipalId,
+		TargetAccountID:  targetAccountID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete account assignment: %w", err)
+	}
+
+	cleanupReq := &CleanupPermissionSetRequest{
+		InstanceArn:      instanceResp.InstanceArn,
+		PermissionSetArn: psResp.PermissionSetArn,
+	}
+	if deleteResp.RequestId == "" {
+		// Already revoked (idempotent); skip polling but still attempt cleanup.
+		p.execCleanupPermissionSet(task, cleanupReq)
+		return nil
+	}
+
+	// Step 5 — poll for deletion confirmation.
+	// Temporal path: loop indefinitely — workflow.Sleep is replay-safe and the
+	// workflow's own execution timeout is the natural bound. No iteration limit needed.
+	// Direct path: bounded by awsProviderDeleteRoleAssignmentBackoffLimit.
+	checkReq := &CheckAssignmentDeletionStatusRequest{
+		InstanceArn:     instanceResp.InstanceArn,
+		RequestId:       deleteResp.RequestId,
+		PrincipalId:     userResp.PrincipalId,
+		TargetAccountID: targetAccountID,
+	}
+
+	if task.HasTemporalContext() {
+		for {
+			if err := workflow.Sleep(task.GetTemporalContext(), awsProviderDeleteRoleAssignmentBackoffDuration); err != nil {
+				return fmt.Errorf("workflow sleep cancelled while waiting for account assignment deletion: %w", err)
+			}
+			checkResp, err := p.execCheckAssignmentDeletionStatus(task, checkReq)
+			if err != nil {
+				return err
+			}
+			if checkResp.Succeeded {
+				p.execCleanupPermissionSet(task, cleanupReq)
+				return nil
+			}
+		}
+	}
+
+	for iter := 0; iter < awsProviderDeleteRoleAssignmentBackoffLimit; iter++ {
+		if err := task.GetContext().Err(); err != nil {
+			return fmt.Errorf("context cancelled while waiting for account assignment deletion: %w", err)
+		}
+		time.Sleep(awsProviderDeleteRoleAssignmentBackoffDuration)
+		checkResp, err := p.execCheckAssignmentDeletionStatus(task, checkReq)
+		if err != nil {
+			return err
+		}
+		if checkResp.Succeeded {
+			p.execCleanupPermissionSet(task, cleanupReq)
+			return nil
+		}
+	}
+
+	return fmt.Errorf(
+		"timed out waiting for account assignment deletion for principalId %s in account %s",
+		userResp.PrincipalId,
+		targetAccountID,
+	)
+}
+
+// deleteAccountAssignment calls the AWS DeleteAccountAssignment API.
+// Returns (requestId, nil) on success, ("", nil) if already deleted (idempotent),
+// or ("", error) on unexpected failure.
+func (p *awsProvider) deleteAccountAssignment(
+	ctx context.Context,
+	instanceArn, permissionSetArn, principalId, targetAccountID string,
+) (string, error) {
 	deleteOutput, err := p.ssoAdminService.DeleteAccountAssignment(ctx, &ssoadmin.DeleteAccountAssignmentInput{
 		InstanceArn:      aws.String(instanceArn),
 		PermissionSetArn: aws.String(permissionSetArn),
@@ -507,102 +670,81 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx context.Context, req *models.
 	})
 
 	if err != nil {
-		// Treat "not found" errors as success - already revoked (idempotent)
-		if strings.Contains(err.Error(), "ResourceNotFoundException") ||
-			strings.Contains(err.Error(), "NotFoundException") {
+		// Not found = already deleted; treat as success (idempotent).
+		var notFoundErr *types.ResourceNotFoundException
+		if errors.As(err, &notFoundErr) {
 			logrus.WithFields(logrus.Fields{
 				"permissionSetArn": permissionSetArn,
 				"principalId":      principalId,
 				"accountId":        targetAccountID,
 			}).Info("Account assignment not found - already revoked or never existed, treating as success")
-			// Still attempt to clean up the permission set
-			p.tryCleanupPermissionSet(ctx, instanceArn, permissionSetArn)
-			return nil
+			return "", nil
 		}
-		return fmt.Errorf("failed to delete account assignment: %w", err)
+		return "", fmt.Errorf("failed to delete account assignment: %w", err)
 	}
 
-	// 5. Lastly, poll to verify deletion
-	var deleteOutputRequestId *string
-	if deleteOutput != nil && deleteOutput.AccountAssignmentDeletionStatus != nil && deleteOutput.AccountAssignmentDeletionStatus.RequestId != nil {
-		deleteOutputRequestId = deleteOutput.AccountAssignmentDeletionStatus.RequestId
+	if deleteOutput == nil ||
+		deleteOutput.AccountAssignmentDeletionStatus == nil ||
+		deleteOutput.AccountAssignmentDeletionStatus.RequestId == nil {
+		return "", fmt.Errorf("account assignment deletion request ID is nil")
 	}
 
-	if deleteOutputRequestId == nil {
-		return fmt.Errorf("account assignment deletion request ID is nil")
+	return *deleteOutput.AccountAssignmentDeletionStatus.RequestId, nil
+}
+
+// checkAssignmentDeletionStatus describes the deletion status for a single iteration.
+// Returns (true, nil) on Succeeded, (false, nil) on InProgress, and (false, err)
+// on Failed or unexpected status.
+func (p *awsProvider) checkAssignmentDeletionStatus(
+	ctx context.Context,
+	instanceArn, requestId, principalId, targetAccountID string,
+) (bool, error) {
+	statusOutput, err := p.ssoAdminService.DescribeAccountAssignmentDeletionStatus(
+		ctx, &ssoadmin.DescribeAccountAssignmentDeletionStatusInput{
+			InstanceArn:                        aws.String(instanceArn),
+			AccountAssignmentDeletionRequestId: aws.String(requestId),
+		})
+	if err != nil {
+		return false, fmt.Errorf("failed to describe account assignment deletion status: %w", err)
 	}
 
-	// poll to verify deletion
-	backoffDuration := awsProviderDeleteRoleAssignmentBackoffDuration
-	backoffLimit := awsProviderDeleteRoleAssignmentBackoffLimit
-	iter := 0
-	for {
-		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("context cancelled while waiting for account assignment deletion: %w", err)
+	var statusOutputPrincipalId, statusOutputFailureReason, statusOutputStatus string
+	if statusOutput != nil && statusOutput.AccountAssignmentDeletionStatus != nil {
+		if statusOutput.AccountAssignmentDeletionStatus.PrincipalId != nil {
+			statusOutputPrincipalId = *statusOutput.AccountAssignmentDeletionStatus.PrincipalId
 		}
-		if iter >= backoffLimit {
-			return fmt.Errorf(
-				"timed out waiting for account assignment deletion for principalId %s in account %s",
-				principalId,
-				targetAccountID,
-			)
+		if statusOutput.AccountAssignmentDeletionStatus.FailureReason != nil {
+			statusOutputFailureReason = *statusOutput.AccountAssignmentDeletionStatus.FailureReason
 		}
-		iter++
-		time.Sleep(backoffDuration)
-		statusOutput, err := p.ssoAdminService.DescribeAccountAssignmentDeletionStatus(
-			ctx, &ssoadmin.DescribeAccountAssignmentDeletionStatusInput{
-				InstanceArn:                        aws.String(instanceArn),
-				AccountAssignmentDeletionRequestId: deleteOutputRequestId,
-			})
-		if err != nil {
-			return fmt.Errorf("failed to describe account assignment deletion status: %w", err)
-		}
+		statusOutputStatus = string(statusOutput.AccountAssignmentDeletionStatus.Status)
+	}
 
-		var statusOutputPrincipalId, statusOutputFailureReason, statusOutputStatus string
-		if statusOutput != nil && statusOutput.AccountAssignmentDeletionStatus != nil {
-			if statusOutput.AccountAssignmentDeletionStatus.PrincipalId != nil {
-				statusOutputPrincipalId = *statusOutput.AccountAssignmentDeletionStatus.PrincipalId
-			}
-			if statusOutput.AccountAssignmentDeletionStatus.FailureReason != nil {
-				statusOutputFailureReason = *statusOutput.AccountAssignmentDeletionStatus.FailureReason
-			}
-			statusOutputStatus = string(statusOutput.AccountAssignmentDeletionStatus.Status)
-
-		}
-
-		switch statusOutputStatus {
-		case string(types.StatusValuesFailed):
-			logrus.WithFields(logrus.Fields{
-				"principalId":     statusOutputPrincipalId,
-				"targetAccountID": targetAccountID,
-				"failureReason":   statusOutputFailureReason,
-			}).Errorf(
-				"account assignment deletion failed for principalId %s in account %s",
-				statusOutputPrincipalId,
-				targetAccountID,
-			)
-			return fmt.Errorf(
-				"account assignment deletion failed for principalId %s in account %s",
-				statusOutputPrincipalId,
-				targetAccountID,
-			)
-
-		case string(types.StatusValuesInProgress):
-			continue
-
-		case string(types.StatusValuesSucceeded):
-			logrus.WithFields(logrus.Fields{
-				"principalId":     statusOutputPrincipalId,
-				"targetAccountID": targetAccountID,
-			}).Info("Account assignment deletion succeeded")
-
-			// 6. Clean up the permission set if no longer in use across the organization
-			p.tryCleanupPermissionSet(ctx, instanceArn, permissionSetArn)
-
-			return nil
-		default:
-			return fmt.Errorf("unknown status value %s", statusOutputStatus)
-		}
+	switch statusOutputStatus {
+	case string(types.StatusValuesFailed):
+		logrus.WithFields(logrus.Fields{
+			"principalId":     statusOutputPrincipalId,
+			"targetAccountID": targetAccountID,
+			"failureReason":   statusOutputFailureReason,
+		}).Errorf(
+			"account assignment deletion failed for principalId %s in account %s",
+			statusOutputPrincipalId,
+			targetAccountID,
+		)
+		return false, fmt.Errorf(
+			"account assignment deletion failed for principalId %s in account %s",
+			statusOutputPrincipalId,
+			targetAccountID,
+		)
+	case string(types.StatusValuesInProgress):
+		return false, nil
+	case string(types.StatusValuesSucceeded):
+		logrus.WithFields(logrus.Fields{
+			"principalId":     statusOutputPrincipalId,
+			"targetAccountID": targetAccountID,
+		}).Info("Account assignment deletion succeeded")
+		return true, nil
+	default:
+		return false, fmt.Errorf("unknown status value %s", statusOutputStatus)
 	}
 }
 
@@ -645,9 +787,9 @@ func (p *awsProvider) cleanupPermissionSetIfUnused(ctx context.Context, instance
 		PermissionSetArn: aws.String(permissionSetArn),
 	})
 	if err != nil {
-		// Check if it's already deleted
-		if strings.Contains(err.Error(), "ResourceNotFoundException") ||
-			strings.Contains(err.Error(), "NotFoundException") {
+		// Already deleted — treat as success.
+		var notFoundErr *types.ResourceNotFoundException
+		if errors.As(err, &notFoundErr) {
 			logrus.WithFields(logrus.Fields{
 				"permissionSetArn": permissionSetArn,
 			}).Info("Permission set already deleted")
@@ -681,6 +823,55 @@ func (p *awsProvider) isPermissionSetInUse(ctx context.Context, instanceArn, per
 	}
 
 	return len(resp.AccountIds) > 0, nil
+}
+
+// provisionPermissionSet calls ProvisionPermissionSet with TargetType=ALL_PROVISIONED_ACCOUNTS
+// to push any policy changes to every account the set is assigned to.
+// Returns the async request ID used to poll provisioning status.
+func (p *awsProvider) provisionPermissionSet(ctx context.Context, instanceArn, permissionSetArn string) (string, error) {
+	resp, err := p.ssoAdminService.ProvisionPermissionSet(ctx, &ssoadmin.ProvisionPermissionSetInput{
+		InstanceArn:      aws.String(instanceArn),
+		PermissionSetArn: aws.String(permissionSetArn),
+		TargetType:       types.ProvisionTargetTypeAllProvisionedAccounts,
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to provision permission set: %w", err)
+	}
+	if resp.PermissionSetProvisioningStatus == nil || resp.PermissionSetProvisioningStatus.RequestId == nil {
+		return "", fmt.Errorf("permission set provisioning response missing request ID")
+	}
+	return *resp.PermissionSetProvisioningStatus.RequestId, nil
+}
+
+// checkPermissionSetProvisioningStatus performs a single poll of the provisioning
+// status. Returns (true, nil) on Succeeded, (false, nil) on InProgress, (false, err) on Failed.
+func (p *awsProvider) checkPermissionSetProvisioningStatus(ctx context.Context, instanceArn, requestId string) (bool, error) {
+	resp, err := p.ssoAdminService.DescribePermissionSetProvisioningStatus(ctx, &ssoadmin.DescribePermissionSetProvisioningStatusInput{
+		InstanceArn:                     aws.String(instanceArn),
+		ProvisionPermissionSetRequestId: aws.String(requestId),
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to describe permission set provisioning status: %w", err)
+	}
+	if resp.PermissionSetProvisioningStatus == nil {
+		return false, fmt.Errorf("permission set provisioning status response is nil")
+	}
+
+	status := string(resp.PermissionSetProvisioningStatus.Status)
+	switch status {
+	case string(types.StatusValuesFailed):
+		reason := ""
+		if resp.PermissionSetProvisioningStatus.FailureReason != nil {
+			reason = *resp.PermissionSetProvisioningStatus.FailureReason
+		}
+		return false, fmt.Errorf("permission set provisioning failed: %s", reason)
+	case string(types.StatusValuesInProgress):
+		return false, nil
+	case string(types.StatusValuesSucceeded):
+		return true, nil
+	default:
+		return false, fmt.Errorf("unknown permission set provisioning status: %s", status)
+	}
 }
 
 // findPermissionSetByName finds a permission set by name using paginated search.
@@ -730,4 +921,236 @@ func (p *awsProvider) findPermissionSetByName(ctx context.Context, instanceArn, 
 		searchedCount,
 		instanceArn,
 	)
+}
+
+// ───────────────────────────────────────────────────────────────────────────────
+// Operation wrappers
+//
+// Each wrapper performs one AWS SSO operation. When a Temporal workflow context
+// is present it dispatches the operation as an activity (deterministic, retryable,
+// observable in the Temporal UI). Otherwise it executes the AWS call inline in
+// the current goroutine. Both paths share the same request/response structs so
+// there is no logic duplication between the two execution modes.
+// ───────────────────────────────────────────────────────────────────────────────
+
+func (p *awsProvider) execGetIdentityCenterInstance(
+	task models.ProviderContext,
+	req *GetIdentityCenterInstanceRequest,
+) (*GetIdentityCenterInstanceResponse, error) {
+	if task.HasTemporalContext() {
+		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
+			TaskQueue:           task.GetTaskQueue(),
+			StartToCloseTimeout: 30 * time.Second,
+			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+		})
+		var resp GetIdentityCenterInstanceResponse
+		if err := workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), GetIdentityCenterInstanceActivityName), req).Get(wfCtx, &resp); err != nil {
+			return nil, err
+		}
+		return &resp, nil
+	}
+	instanceArn, identityStoreId, err := p.getIdentityCenterInstance(task.GetContext())
+	if err != nil {
+		return nil, err
+	}
+	return &GetIdentityCenterInstanceResponse{InstanceArn: instanceArn, IdentityStoreId: identityStoreId}, nil
+}
+
+func (p *awsProvider) execFindOrCreatePermissionSet(
+	task models.ProviderContext,
+	req *FindOrCreatePermissionSetRequest,
+) (*FindOrCreatePermissionSetResponse, error) {
+	if task.HasTemporalContext() {
+		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
+			TaskQueue:           task.GetTaskQueue(),
+			StartToCloseTimeout: 2 * time.Minute,
+			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+		})
+		var resp FindOrCreatePermissionSetResponse
+		if err := workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), FindOrCreatePermissionSetActivityName), req).Get(wfCtx, &resp); err != nil {
+			return nil, err
+		}
+		return &resp, nil
+	}
+	arn, err := p.findOrCreatePermissionSet(task.GetContext(), req.InstanceArn, req.Role)
+	if err != nil {
+		return nil, err
+	}
+	return &FindOrCreatePermissionSetResponse{PermissionSetArn: arn}, nil
+}
+
+func (p *awsProvider) execFindIdentityCenterUser(
+	task models.ProviderContext,
+	req *FindIdentityCenterUserRequest,
+) (*FindIdentityCenterUserResponse, error) {
+	if task.HasTemporalContext() {
+		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
+			TaskQueue:           task.GetTaskQueue(),
+			StartToCloseTimeout: 30 * time.Second,
+			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+		})
+		var resp FindIdentityCenterUserResponse
+		if err := workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), FindIdentityCenterUserActivityName), req).Get(wfCtx, &resp); err != nil {
+			return nil, err
+		}
+		return &resp, nil
+	}
+	principalId, err := p.findIdentityCenterUser(task.GetContext(), req.IdentityStoreId, req.Email)
+	if err != nil {
+		return nil, err
+	}
+	return &FindIdentityCenterUserResponse{PrincipalId: principalId}, nil
+}
+
+func (p *awsProvider) execCreateAccountAssignment(
+	task models.ProviderContext,
+	req *CreateAccountAssignmentRequest,
+) error {
+	if task.HasTemporalContext() {
+		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
+			TaskQueue:           task.GetTaskQueue(),
+			StartToCloseTimeout: 2 * time.Minute,
+			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+		})
+		return workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), CreateAccountAssignmentActivityName), req).Get(wfCtx, nil)
+	}
+	return p.createAccountAssignment(task.GetContext(), req.InstanceArn, req.PermissionSetArn, req.PrincipalId, req.TargetAccountID)
+}
+
+func (p *awsProvider) execFindPermissionSetByName(
+	task models.ProviderContext,
+	req *FindPermissionSetByNameRequest,
+) (*FindPermissionSetByNameResponse, error) {
+	if task.HasTemporalContext() {
+		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
+			TaskQueue:           task.GetTaskQueue(),
+			StartToCloseTimeout: 30 * time.Second,
+			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+		})
+		var resp FindPermissionSetByNameResponse
+		if err := workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), FindPermissionSetByNameActivityName), req).Get(wfCtx, &resp); err != nil {
+			return nil, err
+		}
+		return &resp, nil
+	}
+	// Direct path: short-circuit if the ARN is already known
+	if len(req.PermissionSetArn) > 0 {
+		return &FindPermissionSetByNameResponse{PermissionSetArn: req.PermissionSetArn}, nil
+	}
+	arn, err := p.findPermissionSetByName(task.GetContext(), req.InstanceArn, req.RoleName)
+	if err != nil {
+		return nil, err
+	}
+	return &FindPermissionSetByNameResponse{PermissionSetArn: arn}, nil
+}
+
+func (p *awsProvider) execDeleteAccountAssignment(
+	task models.ProviderContext,
+	req *DeleteAccountAssignmentRequest,
+) (*DeleteAccountAssignmentResponse, error) {
+	if task.HasTemporalContext() {
+		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
+			TaskQueue:           task.GetTaskQueue(),
+			StartToCloseTimeout: 2 * time.Minute,
+			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+		})
+		var resp DeleteAccountAssignmentResponse
+		if err := workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), DeleteAccountAssignmentActivityName), req).Get(wfCtx, &resp); err != nil {
+			return nil, err
+		}
+		return &resp, nil
+	}
+	requestId, err := p.deleteAccountAssignment(task.GetContext(), req.InstanceArn, req.PermissionSetArn, req.PrincipalId, req.TargetAccountID)
+	if err != nil {
+		return nil, err
+	}
+	return &DeleteAccountAssignmentResponse{RequestId: requestId}, nil
+}
+
+func (p *awsProvider) execCheckAssignmentDeletionStatus(
+	task models.ProviderContext,
+	req *CheckAssignmentDeletionStatusRequest,
+) (*CheckAssignmentDeletionStatusResponse, error) {
+	if task.HasTemporalContext() {
+		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
+			TaskQueue:           task.GetTaskQueue(),
+			StartToCloseTimeout: 30 * time.Second,
+			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+		})
+		var resp CheckAssignmentDeletionStatusResponse
+		if err := workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), CheckAssignmentDeletionStatusActivityName), req).Get(wfCtx, &resp); err != nil {
+			return nil, err
+		}
+		return &resp, nil
+	}
+	succeeded, err := p.checkAssignmentDeletionStatus(task.GetContext(), req.InstanceArn, req.RequestId, req.PrincipalId, req.TargetAccountID)
+	if err != nil {
+		return nil, err
+	}
+	return &CheckAssignmentDeletionStatusResponse{Succeeded: succeeded}, nil
+}
+
+// execCleanupPermissionSet attempts to clean up a permission set. Non-fatal on
+// both paths — errors are swallowed and logged so a cleanup failure never
+// blocks the primary revocation result.
+func (p *awsProvider) execCleanupPermissionSet(
+	task models.ProviderContext,
+	req *CleanupPermissionSetRequest,
+) {
+	if task.HasTemporalContext() {
+		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
+			TaskQueue:           task.GetTaskQueue(),
+			StartToCloseTimeout: 1 * time.Minute,
+			RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 1},
+		})
+		_ = workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), CleanupPermissionSetActivityName), req).Get(wfCtx, nil)
+		return
+	}
+	p.tryCleanupPermissionSet(task.GetContext(), req.InstanceArn, req.PermissionSetArn)
+}
+
+func (p *awsProvider) execProvisionPermissionSet(
+	task models.ProviderContext,
+	req *ProvisionPermissionSetRequest,
+) (*ProvisionPermissionSetResponse, error) {
+	if task.HasTemporalContext() {
+		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
+			TaskQueue:           task.GetTaskQueue(),
+			StartToCloseTimeout: 30 * time.Second,
+			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+		})
+		var resp ProvisionPermissionSetResponse
+		if err := workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), ProvisionPermissionSetActivityName), req).Get(wfCtx, &resp); err != nil {
+			return nil, err
+		}
+		return &resp, nil
+	}
+	requestId, err := p.provisionPermissionSet(task.GetContext(), req.InstanceArn, req.PermissionSetArn)
+	if err != nil {
+		return nil, err
+	}
+	return &ProvisionPermissionSetResponse{RequestId: requestId}, nil
+}
+
+func (p *awsProvider) execCheckPermissionSetProvisioningStatus(
+	task models.ProviderContext,
+	req *CheckPermissionSetProvisioningStatusRequest,
+) (*CheckPermissionSetProvisioningStatusResponse, error) {
+	if task.HasTemporalContext() {
+		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
+			TaskQueue:           task.GetTaskQueue(),
+			StartToCloseTimeout: 30 * time.Second,
+			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+		})
+		var resp CheckPermissionSetProvisioningStatusResponse
+		if err := workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), CheckPermissionSetProvisioningStatusActivityName), req).Get(wfCtx, &resp); err != nil {
+			return nil, err
+		}
+		return &resp, nil
+	}
+	succeeded, err := p.checkPermissionSetProvisioningStatus(task.GetContext(), req.InstanceArn, req.RequestId)
+	if err != nil {
+		return nil, err
+	}
+	return &CheckPermissionSetProvisioningStatusResponse{Succeeded: succeeded}, nil
 }
