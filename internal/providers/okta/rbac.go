@@ -296,7 +296,7 @@ func (p *oktaProvider) RevokeRole(
 		if err := p.revokeRoles(ctx, metadata.Roles, oktaUser.Id, user.Email); err != nil {
 			return nil, temporal.NewApplicationErrorWithOptions(
 				"Failed to revoke roles from user",
-				"OktaRolesRevokationError",
+				"OktaRolesRevocationError",
 				temporal.ApplicationErrorOptions{
 					NextRetryDelay: 3 * time.Second,
 					Cause:          err,
@@ -571,7 +571,7 @@ func (p *oktaProvider) revokeRoleTemporal(
 		).Get(wfCtx, nil); err != nil {
 			return nil, temporal.NewApplicationErrorWithOptions(
 				"Failed to revoke roles from user",
-				"OktaRolesRevokationError",
+				"OktaRolesRevocationError",
 				temporal.ApplicationErrorOptions{
 					NextRetryDelay: 3 * time.Second,
 					Cause:          err,

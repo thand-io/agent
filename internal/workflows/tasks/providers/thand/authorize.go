@@ -48,11 +48,6 @@ func (v *temporalTaskView) WithTemporalContext(ctx workflow.Context) sdkWorkflow
 	return &temporalTaskView{WorkflowTaskSupport: v.WorkflowTaskSupport, temporalCtx: ctx}
 }
 
-type ThandAuthorizeRequest struct {
-	Provider string `json:"provider"` // Provider to use for authorization
-	models.AuthorizeRoleRequest
-}
-
 type AuthorizeTask struct {
 	Revocation string                                   `json:"revocation"` // This is the state to request the revocation
 	Notifiers  map[string]thandFunction.NotifierRequest `json:"notifiers"`  // Notifier configurations for sending authorization notifications
@@ -112,7 +107,6 @@ type authTask struct {
 	ProviderName string
 	Identity     string
 	AuthRequest  models.AuthorizeRoleRequest
-	ThandAuthReq ThandAuthorizeRequest
 }
 
 // executeAuthorization performs the main authorization workflow
@@ -213,16 +207,10 @@ func (t *thandTask) executeAuthorization(
 					"role":        elevateRequest.Role.Name,
 				}).Debug("authorize.go: Creating AuthorizeRoleRequest with Tenant")
 
-				thandAuthReq := ThandAuthorizeRequest{
-					AuthorizeRoleRequest: authReq,
-					Provider:             providerName,
-				}
-
 				authTasks = append(authTasks, authTask{
 					ProviderName: providerName,
 					Identity:     identityId,
 					AuthRequest:  authReq,
-					ThandAuthReq: thandAuthReq,
 				})
 
 				log.WithFields(logrus.Fields{

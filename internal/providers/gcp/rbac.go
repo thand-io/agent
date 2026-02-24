@@ -63,6 +63,9 @@ func (p *gcpProvider) AuthorizeRole(
 
 	config := p.GetConfig()
 	projectId := p.GetProjectId()
+	if len(req.Tenant) > 0 {
+		projectId = req.Tenant
+	}
 	stage := config.GetStringWithDefault("stage", "GA")
 
 	var assignedRoles []string
@@ -182,6 +185,9 @@ func (p *gcpProvider) RevokeRole(
 	ctx := task.GetContext()
 	user := req.GetUser()
 	projectId := p.GetProjectId()
+	if len(req.Tenant) > 0 {
+		projectId = req.Tenant
+	}
 
 	if req.AuthorizeRoleResponse == nil {
 		return nil, fmt.Errorf("no authorize role response found for revocation")
@@ -307,6 +313,9 @@ func (p *gcpProvider) authorizeRoleTemporal(
 	user := req.GetUser()
 	role := req.GetRole()
 	projectID := p.GetProjectId()
+	if len(req.Tenant) > 0 {
+		projectID = req.Tenant
+	}
 	stage := p.GetConfig().GetStringWithDefault("stage", "GA")
 
 	if len(role.Inherits) == 0 && len(role.Permissions.Allow) == 0 {
@@ -373,6 +382,9 @@ func (p *gcpProvider) revokeRoleTemporal(
 
 	user := req.GetUser()
 	projectID := p.GetProjectId()
+	if len(req.Tenant) > 0 {
+		projectID = req.Tenant
+	}
 
 	if req.AuthorizeRoleResponse == nil || len(req.AuthorizeRoleResponse.Roles) == 0 {
 		return nil, fmt.Errorf("no roles found in authorization response for revocation")

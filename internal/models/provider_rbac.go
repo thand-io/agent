@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path"
 	"slices"
 	"strings"
 	"time"
@@ -410,12 +411,19 @@ func validatePermissions(providerPermissions []SearchResult[ProviderPermission],
 
 		for _, perm := range stmt.Operations {
 
-			if strings.HasSuffix(perm, ":*") || strings.HasSuffix(perm, ".*") {
-				// Permission ends with a wildcard. Lets expand this
-				// out to include all permissions. As some IAMs do not
-				// support wildcarding.
-				validatedOperations = append(validatedOperations,
-					expandPermissionsWildcard(providerPermissions, perm)...)
+			if strings.Contains(perm, "*") {
+				// Permission contains a wildcard. Expand it against the provider
+				// permission list using glob matching so that all delimiter styles
+				// are handled: Azure (/), GCP (.), AWS/k8s (:), and mid-path
+				// wildcards such as Microsoft.Compute/*/read.
+				expanded, err := expandPermissionsWildcard(providerPermissions, perm)
+				if err != nil {
+					return nil, err
+				}
+				if len(expanded) == 0 {
+					return nil, fmt.Errorf("the wildcard permission: %s matched no permissions", perm)
+				}
+				validatedOperations = append(validatedOperations, expanded...)
 
 			} else if permission := getCondensedActions(perm); permission != nil {
 
@@ -447,23 +455,21 @@ func validatePermissions(providerPermissions []SearchResult[ProviderPermission],
 	return validatedStatements, nil
 }
 
-func expandPermissionsWildcard(providerPermissions []SearchResult[ProviderPermission], permission string) []string {
-
-	if strings.HasSuffix(permission, ":*") {
-		permission = strings.TrimSuffix(permission, ":*")
-	} else if strings.HasSuffix(permission, ".*") {
-		permission = strings.TrimSuffix(permission, ".*")
-	}
+func expandPermissionsWildcard(providerPermissions []SearchResult[ProviderPermission], permission string) ([]string, error) {
 
 	expandedPermissions := []string{}
 
 	for _, providerPerm := range providerPermissions {
-		if strings.HasPrefix(providerPerm.Result.Name, permission) {
+		matched, err := path.Match(permission, providerPerm.Result.Name)
+		if err != nil {
+			return nil, fmt.Errorf("invalid wildcard pattern %q: %w", permission, err)
+		}
+		if matched {
 			expandedPermissions = append(expandedPermissions, providerPerm.Result.Name)
 		}
 	}
 
-	return expandedPermissions
+	return expandedPermissions, nil
 }
 
 /*

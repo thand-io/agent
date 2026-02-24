@@ -18,11 +18,6 @@ import (
 
 const ThandRevokeTask = "revoke"
 
-type ThandRevokeRequest struct {
-	Provider string `json:"provider"` // Provider to use for revocation
-	models.RevokeRoleRequest
-}
-
 type RevokeTask struct {
 	Notifiers map[string]thandFunction.NotifierRequest `json:"notifiers"` // Notifier configurations for sending revocation notifications
 }

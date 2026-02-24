@@ -77,7 +77,7 @@ type FormElement struct {
 	IsDecimalAllowed bool                `json:"is_decimal_allowed,omitempty"`
 	MinValue         string              `json:"min_value,omitempty"`
 	MaxValue         string              `json:"max_value,omitempty"`
-	ImageURL         string              `json:"image_url,omitempty"`
+	ImageURL         *string              `json:"image_url,omitempty"`
 	AltText          string              `json:"alt_text,omitempty"`
 	Text             *FormTextObject     `json:"text,omitempty"`
 	URL              string              `json:"url,omitempty"`

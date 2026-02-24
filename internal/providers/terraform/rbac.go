@@ -142,8 +142,10 @@ func (p *terraformProvider) authorizeRoleTemporal(
 		return nil, fmt.Errorf("no workspace IDs found in role.Permissions.Allow[].Targets")
 	}
 
-	for _, wsID := range workspaceIDs {
-		if err := workflow.ExecuteActivity(
+	// Launch all activities concurrently.
+	futures := make([]workflow.Future, len(workspaceIDs))
+	for i, wsID := range workspaceIDs {
+		futures[i] = workflow.ExecuteActivity(
 			wfCtx,
 			models.CreateTemporalProviderWorkflowName(identifier, AddTeamAccessActivityName),
 			&AddTeamAccessRequest{
@@ -151,8 +153,13 @@ func (p *terraformProvider) authorizeRoleTemporal(
 				RoleName:    role.Name,
 				WorkspaceID: wsID,
 			},
-		).Get(wfCtx, nil); err != nil {
-			return nil, fmt.Errorf("AddTeamAccess activity failed for workspace %s: %w", wsID, err)
+		)
+	}
+
+	// Wait for all activities to complete.
+	for i, f := range futures {
+		if err := f.Get(wfCtx, nil); err != nil {
+			return nil, fmt.Errorf("AddTeamAccess activity failed for workspace %s: %w", workspaceIDs[i], err)
 		}
 	}
 
@@ -184,16 +191,23 @@ func (p *terraformProvider) revokeRoleTemporal(
 		return nil, fmt.Errorf("no workspace IDs found in role.Permissions.Allow[].Targets")
 	}
 
-	for _, wsID := range workspaceIDs {
-		if err := workflow.ExecuteActivity(
+	// Launch all activities concurrently.
+	futures := make([]workflow.Future, len(workspaceIDs))
+	for i, wsID := range workspaceIDs {
+		futures[i] = workflow.ExecuteActivity(
 			wfCtx,
 			models.CreateTemporalProviderWorkflowName(identifier, RemoveTeamAccessActivityName),
 			&RemoveTeamAccessRequest{
 				UserID:      user.ID,
 				WorkspaceID: wsID,
 			},
-		).Get(wfCtx, nil); err != nil {
-			return nil, fmt.Errorf("RemoveTeamAccess activity failed for workspace %s: %w", wsID, err)
+		)
+	}
+
+	// Wait for all activities to complete.
+	for i, f := range futures {
+		if err := f.Get(wfCtx, nil); err != nil {
+			return nil, fmt.Errorf("RemoveTeamAccess activity failed for workspace %s: %w", workspaceIDs[i], err)
 		}
 	}
 

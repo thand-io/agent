@@ -10,11 +10,18 @@ import (
 )
 
 // RegisterProviderActivities is the single entry point for activity registration.
-// It gates generic Synchronize* activities on provider capability, then delegates
+// It gates generic Synchronize* activities on provider capability and is called
+// automatically by config/providers.go — implementers do not call it directly.
 //
-//	func (b *myProvider) RegisterActivities(c models.TemporalImpl) error {
-//	    return models.RegisterProviderActivities(c, b)
+// To expose additional, provider-specific activities, override RegisterActivities
+// on your provider struct to return a populated activities struct (or nil to skip):
+//
+//	func (p *myProvider) RegisterActivities() any {
+//	    return &myProviderActivities{provider: p}
 //	}
+//
+// The returned value is passed to models.RegisterActivities, which registers it
+// with the Temporal worker under the provider's identifier namespace.
 func RegisterProviderActivities(temporalClient TemporalImpl, provider Provider) error {
 	if temporalClient == nil {
 		return ErrNotImplemented
