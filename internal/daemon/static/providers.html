@@ -12,7 +12,7 @@
                         <tr>
                             <th>Name</th>
                             <th>Provider Type</th>
-                            <th style="width: 360px;">Actions</th>
+                            <th style="width: 420px;">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -29,9 +29,18 @@
                                 <span class="badge badge-secondary">{{$provider.Result.Provider}}</span>
                             </td>
                             <td>
-                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$provider.Result.Identifier}}/identities" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">View Identities</a>
-                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$provider.Result.Identifier}}/roles" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">View Roles</a>
-                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$provider.Result.Identifier}}/permissions" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">View Permissions</a>
+                                {{if or (and $provider.Result.Capabilities.Identities $provider.Result.Capabilities.Identities.Enabled) (and $provider.Result.Capabilities.Users $provider.Result.Capabilities.Users.Enabled) (and $provider.Result.Capabilities.Groups $provider.Result.Capabilities.Groups.Enabled)}}
+                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$provider.Result.Identifier}}/identities" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">Identities</a>
+                                {{end}}
+                                {{if and $provider.Result.Capabilities.Roles $provider.Result.Capabilities.Roles.Enabled}}
+                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$provider.Result.Identifier}}/roles" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">Roles</a>
+                                {{end}}
+                                {{if and $provider.Result.Capabilities.Permissions $provider.Result.Capabilities.Permissions.Enabled}}
+                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$provider.Result.Identifier}}/permissions" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">Permissions</a>
+                                {{end}}
+                                {{if and $provider.Result.Capabilities.Tenants $provider.Result.Capabilities.Tenants.Enabled}}
+                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$provider.Result.Identifier}}/tenants" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">Tenants</a>
+                                {{end}}
                             </td>
                         </tr>
                         {{else}}

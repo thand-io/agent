@@ -17,10 +17,21 @@ func (p *oktaProvider) Synchronize(
 	temporalService models.TemporalImpl,
 	req *models.SynchronizeRequest,
 ) error {
+	return PreSynchronizeActivities(ctx, temporalService, p, req)
+}
 
-	// Before we kick off the synchronize lets update the static roles and permissions
+func PreSynchronizeActivities(
+	ctx context.Context,
+	temporalService models.TemporalImpl,
+	provider models.Provider,
+	req *models.SynchronizeRequest,
+) error {
+	p := provider.(*oktaProvider)
 
-	p.SetPermissions(p.getStaticPermissions())
+	// Load static roles first so they are available before the PreSync job runs
+	provider.SetRoles(p.getStaticRoles())
+	provider.SetPermissions(p.getStaticPermissions())
 
-	return models.Synchronize(ctx, temporalService, p, req)
+	// Carry on with the normal synchronization flow, which will run the PreSync job and then the main Sync job
+	return models.Synchronize(ctx, temporalService, provider, req)
 }

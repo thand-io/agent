@@ -60,11 +60,24 @@ func (s *Server) getProviderIdentities(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, models.ProviderIdentitiesResponse{
+	response := models.ProviderIdentitiesResponse{
 		Version:    "1.0",
 		Provider:   providerName,
 		Identities: identities,
-	})
+	}
+
+	if s.canAcceptHtml(c) {
+		data := struct {
+			TemplateData TemplateData
+			Response     models.ProviderIdentitiesResponse
+		}{
+			TemplateData: s.GetTemplateData(c),
+			Response:     response,
+		}
+		s.renderHtml(c, "provider_identities.html", data)
+	} else {
+		c.JSON(http.StatusOK, response)
+	}
 }
 
 // getProviderRoles lists roles available in a provider
@@ -118,11 +131,24 @@ func (s *Server) getProviderRoles(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, models.ProviderRolesResponse{
+	response := models.ProviderRolesResponse{
 		Version:  "1.0",
 		Provider: providerName,
 		Roles:    roles,
-	})
+	}
+
+	if s.canAcceptHtml(c) {
+		data := struct {
+			TemplateData TemplateData
+			Response     models.ProviderRolesResponse
+		}{
+			TemplateData: s.GetTemplateData(c),
+			Response:     response,
+		}
+		s.renderHtml(c, "provider_roles.html", data)
+	} else {
+		c.JSON(http.StatusOK, response)
+	}
 }
 
 // getProviderByName retrieves a provider by name
@@ -209,11 +235,24 @@ func (s *Server) getProviderPermissions(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, models.ProviderPermissionsResponse{
+	response := models.ProviderPermissionsResponse{
 		Version:     "1.0",
 		Provider:    providerName,
 		Permissions: permissions,
-	})
+	}
+
+	if s.canAcceptHtml(c) {
+		data := struct {
+			TemplateData TemplateData
+			Response     models.ProviderPermissionsResponse
+		}{
+			TemplateData: s.GetTemplateData(c),
+			Response:     response,
+		}
+		s.renderHtml(c, "provider_permissions.html", data)
+	} else {
+		c.JSON(http.StatusOK, response)
+	}
 }
 
 // getProviderResources lists resources available in a provider
@@ -333,11 +372,24 @@ func (s *Server) getProviderTenants(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, models.ProviderTenantsResponse{
+	response := models.ProviderTenantsResponse{
 		Version:  "1.0",
 		Provider: providerName,
 		Tenants:  tenants,
-	})
+	}
+
+	if s.canAcceptHtml(c) {
+		data := struct {
+			TemplateData TemplateData
+			Response     models.ProviderTenantsResponse
+		}{
+			TemplateData: s.GetTemplateData(c),
+			Response:     response,
+		}
+		s.renderHtml(c, "provider_tenants.html", data)
+	} else {
+		c.JSON(http.StatusOK, response)
+	}
 }
 
 func (s *Server) getAuthProvidersAsProviderResponse(authenticatedUser *models.Session) []models.SearchResult[models.ProviderResponse] {

@@ -319,8 +319,10 @@ func (t *thandTask) runAuthTask(
 			task.ProviderName, models.TemporalAuthorizeRoleWorkflowName)
 
 		childOpts := workflow.ChildWorkflowOptions{
-			WorkflowID: task.AuthRequest.GetRole().GetIdentifier(),
-			TaskQueue:  workflowTask.GetTaskQueue(),
+			WorkflowID: fmt.Sprintf("%s_%s",
+				workflowTask.GetWorkflowID(),
+				task.AuthRequest.GetRole().GetIdentifier()),
+			TaskQueue: workflowTask.GetTaskQueue(),
 		}
 		ctx = workflow.WithChildOptions(ctx, childOpts)
 

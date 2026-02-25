@@ -248,8 +248,10 @@ func (t *thandTask) runRevokeTask(
 			task.ProviderName, models.TemporalRevokeRoleWorkflowName)
 
 		childOpts := workflow.ChildWorkflowOptions{
-			WorkflowID: task.RevokeReq.GetRole().GetIdentifier(),
-			TaskQueue:  workflowTask.GetTaskQueue(),
+			WorkflowID: fmt.Sprintf("%s_%s",
+				workflowTask.GetWorkflowID(),
+				task.RevokeReq.GetRole().GetIdentifier()),
+			TaskQueue: workflowTask.GetTaskQueue(),
 		}
 		ctx = workflow.WithChildOptions(ctx, childOpts)
 

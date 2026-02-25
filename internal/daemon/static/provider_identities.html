@@ -1,0 +1,57 @@
+{{template "header" .TemplateData}}
+    <main>
+        <div class="container" style="width: 100%;">
+            <div class="page-header">
+                <h1>Identities</h1>
+                <p>Identities available in the <strong>{{.Response.Provider}}</strong> provider.</p>
+            </div>
+            <div class="table-container">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Label</th>
+                            <th>ID</th>
+                            <th>Type</th>
+                            <th>Tenant</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range $i := .Response.Identities}}
+                        {{$identity := $i.Result}}
+                        <tr style="position: relative;">
+                            <td style="position: relative;">
+                                <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background-color: hsl(var(--status-active)); border-radius: 0.25rem 0 0 0.25rem;"></div>
+                                <strong>{{$identity.Label}}</strong>
+                            </td>
+                            <td><code style="font-size: 0.8rem;">{{$identity.ID}}</code></td>
+                            <td>
+                                {{if $identity.User}}
+                                    <span class="badge badge-secondary">User</span>
+                                {{else if $identity.Group}}
+                                    <span class="badge badge-secondary">Group</span>
+                                {{else}}
+                                    <span class="text-muted">—</span>
+                                {{end}}
+                            </td>
+                            <td>
+                                {{if $identity.Tenant}}
+                                    <span class="badge badge-secondary">{{$identity.Tenant}}</span>
+                                {{else}}
+                                    <span class="text-muted">—</span>
+                                {{end}}
+                            </td>
+                        </tr>
+                        {{else}}
+                        <tr>
+                            <td colspan="4" class="text-muted" style="text-align: center; padding: 2rem;">No identities found.</td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+            <div class="button-group" style="margin-top: 2rem;">
+                <a href="{{$.TemplateData.Config.ApiBasePath}}/providers" class="button button-secondary">← Back to Providers</a>
+            </div>
+        </div>
+    </main>
+{{template "footer" .TemplateData}}

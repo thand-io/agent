@@ -1,0 +1,42 @@
+{{template "header" .TemplateData}}
+    <main>
+        <div class="container" style="width: 100%;">
+            <div class="page-header">
+                <h1>Permissions</h1>
+                <p>Permissions available in the <strong>{{.Response.Provider}}</strong> provider.</p>
+            </div>
+            <div class="table-container">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>ID</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range $p := .Response.Permissions}}
+                        {{$perm := $p.Result}}
+                        <tr style="position: relative;">
+                            <td style="position: relative;">
+                                <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background-color: hsl(var(--status-active)); border-radius: 0.25rem 0 0 0.25rem;"></div>
+                                <strong>{{if $perm.Title}}{{$perm.Title}}{{else}}{{$perm.Name}}{{end}}</strong>
+                                {{if $perm.Description}}
+                                    <div style="font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin-top: 0.25rem;">{{$perm.Description}}</div>
+                                {{end}}
+                            </td>
+                            <td><code style="font-size: 0.8rem;">{{$perm.ID}}</code></td>
+                        </tr>
+                        {{else}}
+                        <tr>
+                            <td colspan="2" class="text-muted" style="text-align: center; padding: 2rem;">No permissions found.</td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+            <div class="button-group" style="margin-top: 2rem;">
+                <a href="{{$.TemplateData.Config.ApiBasePath}}/providers" class="button button-secondary">← Back to Providers</a>
+            </div>
+        </div>
+    </main>
+{{template "footer" .TemplateData}}
