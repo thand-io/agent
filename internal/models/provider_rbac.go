@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -409,9 +410,15 @@ func validatePermissions(providerPermissions []SearchResult[ProviderPermission],
 
 		validatedOperations := []string{}
 
+		// Track original wildcard patterns so we can condense back after
+		// validation.  Without this, "ec2:*" would remain expanded into
+		// ~500 individual permissions in the validated output.
+		originalWildcards := []string{}
+
 		for _, perm := range stmt.Operations {
 
 			if strings.Contains(perm, "*") {
+				originalWildcards = append(originalWildcards, perm)
 				// Permission contains a wildcard. Expand it against the provider
 				// permission list using glob matching so that all delimiter styles
 				// are handled: Azure (/), GCP (.), AWS/k8s (:), and mid-path
@@ -425,13 +432,14 @@ func validatePermissions(providerPermissions []SearchResult[ProviderPermission],
 				}
 				validatedOperations = append(validatedOperations, expanded...)
 
-			} else if permission := getCondensedActions(perm); permission != nil {
+			} else if strings.Contains(perm, ":") {
 
-				// If the last part is delimited by comma, e.g., k8s:pods:get,list,watch
-				// lets use a more complex parsing with regex and then expand those
-				// into individual permissions
-				validatedOperations = append(validatedOperations, permission...)
-				// We have a match, now expand it
+				// If the permission contains a colon, it may use a condensed
+				// format like k8s:pods:get,list,watch — expand those into
+				// individual permissions. Single-action permissions (ec2:Describe
+				// Instances) are returned as-is.
+				expanded := ExpandCondensedActions(perm)
+				validatedOperations = append(validatedOperations, expanded...)
 
 			} else if !slices.ContainsFunc(providerPermissions, func(p SearchResult[ProviderPermission]) bool {
 				found := strings.Compare(p.Result.Name, perm) == 0
@@ -443,6 +451,11 @@ func validatePermissions(providerPermissions []SearchResult[ProviderPermission],
 				return nil, fmt.Errorf("the requested permission: %s was not found", perm)
 			}
 		}
+
+		// Condense validated operations back to their original wildcard
+		// patterns.  This only restores wildcards that appeared in the
+		// input — it never discovers new ones.
+		validatedOperations = condenseToOriginalWildcards(validatedOperations, originalWildcards)
 
 		// Create validated statement with expanded operations
 		validatedStatements = append(validatedStatements, Statement{
@@ -479,35 +492,49 @@ func ValidatePermissionsPublic(providerPermissions []SearchResult[ProviderPermis
 	return validatePermissions(providerPermissions, statements)
 }
 
-/*
-k8s:pods:get,list,watch
-*/
-func getCondensedActions(permission string) []string {
-
-	// split on the last colon
-	idx := strings.LastIndex(permission, ":")
-
-	if idx == -1 {
-		return nil
+// condenseToOriginalWildcards replaces individually-expanded permissions with
+// their original wildcard patterns when every permission the wildcard matched
+// is still present in operations.  It only restores wildcards that appeared in
+// the original input — it never discovers new wildcard groupings.
+func condenseToOriginalWildcards(operations []string, originalWildcards []string) []string {
+	if len(originalWildcards) == 0 {
+		return operations
 	}
 
-	resource := permission[:idx]
-	actions := permission[idx+1:]
-
-	// Check if the second part contains a comma
-	actionParts := strings.Split(actions, ",")
-
-	if len(actionParts) == 0 {
-		return nil
+	// Build a set of current operations for efficient lookup.
+	opSet := make(map[string]bool, len(operations))
+	for _, op := range operations {
+		opSet[op] = true
 	}
 
-	permissions := []string{}
-
-	for _, action := range actionParts {
-		permissions = append(permissions, fmt.Sprintf("%s:%s", resource, action))
+	for _, wildcard := range originalWildcards {
+		// Collect every individual permission that this wildcard covers.
+		var covered []string
+		for op := range opSet {
+			matched, err := path.Match(wildcard, op)
+			if err != nil {
+				continue
+			}
+			if matched {
+				covered = append(covered, op)
+			}
+		}
+		if len(covered) > 0 {
+			// Remove the individual permissions and add back the wildcard.
+			for _, op := range covered {
+				delete(opSet, op)
+			}
+			opSet[wildcard] = true
+		}
 	}
 
-	return permissions
+	// Convert back to a sorted slice.
+	result := make([]string, 0, len(opSet))
+	for op := range opSet {
+		result = append(result, op)
+	}
+	sort.Strings(result)
+	return result
 }
 
 func (p *BaseProvider) buildPermissionIndices() error {
