@@ -113,8 +113,7 @@ func ProviderSynchronizeWorkflow(ctx workflow.Context, syncReq SynchronizeReques
 	}
 
 	log := workflow.GetLogger(ctx)
-	log.Info("Starting synchronization workflow for provider: ",
-		syncReq.ProviderIdentifier)
+	log.Info("Starting synchronization workflow", "provider", syncReq.ProviderIdentifier)
 
 	errChan := workflow.NewChannel(ctx)
 	syncCount := 0
@@ -234,7 +233,7 @@ func ProviderSynchronizeWorkflow(ctx workflow.Context, syncReq SynchronizeReques
 
 	if len(errs) > 0 {
 		// Log errors but return what we have
-		log.Error("Synchronization workflow encountered errors: ", errs)
+		log.Error("Synchronization workflow encountered errors", "errors", errs)
 		return nil, fmt.Errorf("synchronization failed: %v", errs)
 	}
 
@@ -253,7 +252,7 @@ func CreateProviderAuthorizeRoleWorkflow(provider Provider) func(workflow.Contex
 		}
 
 		log := workflow.GetLogger(ctx)
-		log.Info("Starting authorize role workflow for provider", req.ProviderIdentifier)
+		log.Info("Starting authorize role workflow", "provider", req.ProviderIdentifier)
 
 		// Build a WorkflowTaskSupport with the child workflow's context so the
 		// provider's AuthorizeRole can dispatch activities, use workflow.Go, etc.
@@ -273,7 +272,7 @@ func CreateProviderRevokeRoleWorkflow(provider Provider) func(workflow.Context, 
 		}
 
 		log := workflow.GetLogger(ctx)
-		log.Info("Starting revoke role workflow for provider", req.ProviderIdentifier)
+		log.Info("Starting revoke role workflow", "provider", req.ProviderIdentifier)
 
 		taskSupport := &sdkWorkflowsModel.WorkflowTask{}
 		taskSupport.WithTemporalContext(ctx)
