@@ -626,6 +626,7 @@ func (s *Server) apiConfigurationHandler(c *gin.Context) {
 	workflows := []string{}  // TODO: populate workflows list
 	activities := []string{} // TODO: populate activities list
 
+	// For agent / client we show the local server for discvoery.
 	baseUrl := s.Config.GetLocalServerUrl()
 
 	if s.Config.IsServer() {
@@ -638,6 +639,8 @@ func (s *Server) apiConfigurationHandler(c *gin.Context) {
 		capabilities["llm"] = services.HasLargeLanguageModel()
 		capabilities["storage"] = services.HasStorage()
 
+		// However, for server we show the login server as the main
+		// entry point for clients to connect to
 		baseUrl = s.Config.GetLoginServerUrl()
 	}
 
