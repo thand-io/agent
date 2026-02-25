@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/thand-io/agent/internal/common"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
@@ -31,6 +32,11 @@ type SynchronizeRequest struct {
 type SynchronizeResponse struct {
 	// Everything will be updated using local activities,
 	// so we can just return an empty response for now
+}
+
+// BaseProvider provides a base implementation of the ProviderImpl interface
+func (b *BaseProvider) RegisterWorkflows() any {
+	return nil
 }
 
 func CreateTemporalWorkflowIdentifier(workflowName string) string {
@@ -233,4 +239,45 @@ func ProviderSynchronizeWorkflow(ctx workflow.Context, syncReq SynchronizeReques
 	}
 
 	return &SynchronizeResponse{}, nil
+}
+
+// CreateProviderAuthorizeRoleWorkflow returns a workflow function that captures the
+// live provider instance via closure. The child workflow receives the Temporal
+// workflow.Context, constructs a WorkflowTaskSupport with it, and delegates to
+// provider.AuthorizeRole — allowing the provider to dispatch activities, use
+// workflow.Go, and manage state just as it does in the primary workflow.
+func CreateProviderAuthorizeRoleWorkflow(provider Provider) func(workflow.Context, AuthorizeRoleRequest) (*AuthorizeRoleResponse, error) {
+	return func(ctx workflow.Context, req AuthorizeRoleRequest) (*AuthorizeRoleResponse, error) {
+		if len(req.ProviderIdentifier) == 0 {
+			return nil, fmt.Errorf("provider identifier is required")
+		}
+
+		log := workflow.GetLogger(ctx)
+		log.Info("Starting authorize role workflow for provider", req.ProviderIdentifier)
+
+		// Build a WorkflowTaskSupport with the child workflow's context so the
+		// provider's AuthorizeRole can dispatch activities, use workflow.Go, etc.
+		taskSupport := &sdkWorkflowsModel.WorkflowTask{}
+		taskSupport.WithTemporalContext(ctx)
+
+		return provider.AuthorizeRole(taskSupport, &req)
+	}
+}
+
+// CreateProviderRevokeRoleWorkflow returns a workflow function that captures the
+// live provider instance via closure for revocation operations.
+func CreateProviderRevokeRoleWorkflow(provider Provider) func(workflow.Context, RevokeRoleRequest) (*RevokeRoleResponse, error) {
+	return func(ctx workflow.Context, req RevokeRoleRequest) (*RevokeRoleResponse, error) {
+		if len(req.ProviderIdentifier) == 0 {
+			return nil, fmt.Errorf("provider identifier is required")
+		}
+
+		log := workflow.GetLogger(ctx)
+		log.Info("Starting revoke role workflow for provider", req.ProviderIdentifier)
+
+		taskSupport := &sdkWorkflowsModel.WorkflowTask{}
+		taskSupport.WithTemporalContext(ctx)
+
+		return provider.RevokeRole(taskSupport, &req)
+	}
 }

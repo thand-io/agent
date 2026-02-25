@@ -16,6 +16,7 @@ import (
 
 type AuthorizeRoleRequest struct {
 	*RoleRequest
+	ProviderIdentifier string `json:"provider_identifier,omitempty"` // Provider identifier for routing to the correct agent
 }
 
 type AuthorizeRoleResponse struct {
@@ -30,6 +31,7 @@ type AuthorizeRoleResponse struct {
 type RevokeRoleRequest struct {
 	*RoleRequest
 	AuthorizeRoleResponse *AuthorizeRoleResponse `json:"response,omitempty"`
+	ProviderIdentifier    string                 `json:"provider_identifier,omitempty"` // Provider identifier for routing to the correct agent
 }
 
 type RevokeRoleResponse struct {

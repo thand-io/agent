@@ -12,6 +12,8 @@ import (
 )
 
 const TemporalSynchronizeWorkflowName = "synchronize"
+const TemporalAuthorizeRoleWorkflowName = "authorize-role"
+const TemporalRevokeRoleWorkflowName = "revoke-role"
 const TemporalPatchProviderUpstreamActivityName = "patch-provider-upstream"
 
 func CreateTemporalProviderWorkflowIdentifier(identifier, base string) string {
@@ -20,11 +22,6 @@ func CreateTemporalProviderWorkflowIdentifier(identifier, base string) string {
 
 func CreateTemporalProviderWorkflowName(identifier, base string) string {
 	return strings.ToLower(fmt.Sprintf("%s-%s", identifier, base))
-}
-
-// BaseProvider provides a base implementation of the ProviderImpl interface
-func (b *BaseProvider) RegisterWorkflows() any {
-	return nil
 }
 
 // RegisterActivitiesForStruct registers all public methods of an arbitrary struct as Temporal

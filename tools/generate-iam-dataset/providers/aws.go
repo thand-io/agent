@@ -3,6 +3,7 @@ package providers
 import (
 	"encoding/json"
 	"os"
+	"strings"
 
 	md "github.com/JohannesKaufmann/html-to-markdown"
 	flatbuffers "github.com/google/flatbuffers/go"
@@ -43,7 +44,16 @@ func generateAWSPermissions() error {
 
 	// Create permissions
 	var permissions []flatbuffers.UOffsetT
-	for name, description := range docs {
+	for rawName, description := range docs {
+		// Convert EC2.AllocateAddress → ec2:AllocateAddress (lowercase service prefix, colon separator)
+		colonIdx := strings.Index(rawName, ".")
+		var name string
+		if colonIdx >= 0 {
+			name = strings.ToLower(rawName[:colonIdx]) + ":" + rawName[colonIdx+1:]
+		} else {
+			name = rawName
+		}
+
 		// Convert HTML description to markdown
 		markdownDesc, err := converter.ConvertString(description)
 		if err != nil {

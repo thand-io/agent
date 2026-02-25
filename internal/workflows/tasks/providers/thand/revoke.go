@@ -232,10 +232,50 @@ func (t *thandTask) executeRevocationTask(
 }
 
 // runRevokeTask executes a single revocation task and returns its result.
+// When a Temporal context is available, it dispatches a child workflow to the
+// agent that has the provider registered (routed via TaskQueue = ProviderName).
+// Otherwise it falls back to local provider execution.
 func (t *thandTask) runRevokeTask(
 	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	task revokeTask,
 ) revokeResult {
+
+	// Temporal path: dispatch a child workflow to the agent with this provider
+	if workflowTask.HasTemporalContext() {
+		ctx := workflowTask.GetTemporalContext()
+
+		wfName := models.CreateTemporalProviderWorkflowName(
+			task.ProviderName, models.TemporalRevokeRoleWorkflowName)
+
+		childOpts := workflow.ChildWorkflowOptions{
+			WorkflowID: fmt.Sprintf(
+				"%s-%s",
+				workflowTask.GetWorkflowID(),
+				wfName,
+			),
+			TaskQueue: workflowTask.GetTaskQueue(),
+		}
+		ctx = workflow.WithChildOptions(ctx, childOpts)
+
+		req := task.RevokeReq
+		req.ProviderIdentifier = task.ProviderName
+
+		var resp models.RevokeRoleResponse
+		err := workflow.ExecuteChildWorkflow(ctx, wfName, req).Get(ctx, &resp)
+		if err != nil {
+			return revokeResult{
+				Identity: task.Identity,
+				Error:    err,
+			}
+		}
+		return revokeResult{
+			Identity: task.Identity,
+			Output:   &resp,
+			Error:    nil,
+		}
+	}
+
+	// Non-Temporal fallback: execute locally
 	providerCall, err := t.config.GetProviderByName(task.ProviderName)
 	if err != nil {
 		return revokeResult{
