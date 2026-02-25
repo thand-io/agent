@@ -146,6 +146,10 @@ For synchronizable capabilities (Roles, Permissions, Resources, Identities, User
 - **synchronizable** (bool): Whether the agent should periodically synchronize data for this capability.
 - **interval** (int): Synchronization interval in minutes. Default is typically 360 minutes (6 hours).
 
+For Permissions specifically:
+
+- **supports_wildcards** (bool): Whether the provider's API natively supports wildcard permission patterns. When `true`, wildcard patterns in role definitions are validated and kept in condensed form. When `false` (the default), wildcards are expanded to individual permissions during validation. This is configured per provider and typically does not need to be overridden — AWS, Azure, and Kubernetes set this to `true`; GCP and Okta leave it as `false`.
+
 For other capabilities (Authorizer, Notifier, Provisioning):
 
 - **enabled** (bool): Whether the capability is active.

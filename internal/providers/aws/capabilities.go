@@ -11,8 +11,11 @@ var AwsCapabilities = models.NewProviderCapabilities().
 		Synchronizable: false, // roles are statically defined by AWS
 	}).
 	WithPermissionsConfiguration(models.PermissionsConfiguration{
-		Enabled:        true,
-		Synchronizable: false, // permissions are derived from AWS IAM roles
+		SynchronizableConfiguration: models.SynchronizableConfiguration{
+			Enabled:        true,
+			Synchronizable: false, // permissions are derived from AWS IAM roles
+		},
+		SupportsWildcards: true, // AWS IAM natively accepts wildcards like ec2:*
 	}).
 	WithDefaultProvisioningConfiguration().
 	WithDefaultTenantsConfiguration()

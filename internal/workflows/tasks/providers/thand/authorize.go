@@ -302,11 +302,51 @@ func (t *thandTask) executeAuthorization(
 	return modelOutput, nil
 }
 
-// runAuthTask executes a single authorization task and returns its result.
+// When a Temporal context is available, it dispatches a child workflow using
+// the parent workflow's task queue (typically the agent identity), assuming
+// the provider is registered on that worker. Otherwise it falls back to local
+// provider execution.
 func (t *thandTask) runAuthTask(
 	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	task authTask,
 ) authResult {
+
+	// Temporal path: dispatch a child workflow to the agent with this provider
+	if workflowTask.HasTemporalContext() {
+		ctx := workflowTask.GetTemporalContext()
+
+		wfName := models.CreateTemporalProviderWorkflowName(
+			task.ProviderName, models.TemporalAuthorizeRoleWorkflowName)
+
+		childOpts := workflow.ChildWorkflowOptions{
+			WorkflowID: fmt.Sprintf("%s_%s",
+				workflowTask.GetWorkflowID(),
+				task.AuthRequest.GetRole().GetIdentifier()),
+			TaskQueue: workflowTask.GetTaskQueue(),
+		}
+		ctx = workflow.WithChildOptions(ctx, childOpts)
+
+		req := task.AuthRequest
+		req.ProviderIdentifier = task.ProviderName
+
+		var resp models.AuthorizeRoleResponse
+		err := workflow.ExecuteChildWorkflow(ctx, wfName, req).Get(ctx, &resp)
+		if err != nil {
+			return authResult{
+				Identity:    task.Identity,
+				AuthRequest: &task.AuthRequest,
+				Error:       err,
+			}
+		}
+		return authResult{
+			Identity:     task.Identity,
+			AuthRequest:  &task.AuthRequest,
+			AuthResponse: &resp,
+			Error:        nil,
+		}
+	}
+
+	// Non-Temporal fallback: execute locally
 	providerCall, err := t.config.GetProviderByName(task.ProviderName)
 	if err != nil {
 		return authResult{

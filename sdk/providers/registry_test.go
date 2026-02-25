@@ -232,7 +232,7 @@ func TestGetProviderInfo(t *testing.T) {
 	caps := &models.ProviderCapabilities{
 		Identities:   models.NewSynchronizableCapability(),
 		Roles:        models.NewSynchronizableCapability(),
-		Permissions:  models.NewSynchronizableCapability(),
+		Permissions:  &models.PermissionsConfiguration{},
 		Authorizer:   models.NewCapability(),
 		Notifier:     nil,
 		Provisioning: nil,
@@ -281,7 +281,7 @@ func TestGetAllProviderInfo(t *testing.T) {
 	}
 	caps3 := &models.ProviderCapabilities{
 		Roles:       models.NewSynchronizableCapability(),
-		Permissions: models.NewSynchronizableCapability(),
+		Permissions: &models.PermissionsConfiguration{},
 	}
 
 	providers.Register("all-info-1", NewMockProvider("all-info-1", caps1), caps1, &MockSchema{})
@@ -329,7 +329,7 @@ func TestSDKRegistryIntegration(t *testing.T) {
 	caps := &models.ProviderCapabilities{
 		Identities:   models.NewSynchronizableCapability(),
 		Roles:        models.NewSynchronizableCapability(),
-		Permissions:  models.NewSynchronizableCapability(),
+		Permissions:  &models.PermissionsConfiguration{},
 		Authorizer:   models.NewCapability(),
 		Notifier:     models.NewCapability(),
 		Provisioning: nil,

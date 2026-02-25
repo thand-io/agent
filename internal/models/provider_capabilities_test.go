@@ -349,7 +349,9 @@ func TestBaseProvider_CapabilityConfigurationOverrides(t *testing.T) {
 		caps := &models.ProviderCapabilities{
 			Roles: nil,
 			Permissions: &models.PermissionsConfiguration{
-				Enabled: true,
+				SynchronizableConfiguration: models.SynchronizableConfiguration{
+					Enabled: true,
+				},
 			},
 		}
 		p := models.NewBaseProvider(

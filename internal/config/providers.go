@@ -216,7 +216,7 @@ func (c *Config) InitializeProviders() error {
 		providerResult := result.provider
 
 		// Check for capabilities for RBAC and Identities
-		if result.provider.HasAnyCapability(
+		if providerResult.HasAnyCapability(
 			models.ProviderCapabilityIdentities,
 			models.ProviderCapabilityUsers,
 			models.ProviderCapabilityGroups,
@@ -244,17 +244,64 @@ func (c *Config) InitializeProviders() error {
 						continue
 					}
 
+					syncWorkflowName := models.CreateTemporalProviderWorkflowName(
+						providerResult.GetIdentifier(),
+						models.TemporalSynchronizeWorkflowName,
+					)
+
+					logrus.WithFields(logrus.Fields{
+						"workflow": syncWorkflowName,
+					}).Infoln("Registering provider synchronize workflow with name", syncWorkflowName)
+
 					// Register the provider Synchronize workflow. This updates roles, permissions,
 					// resources and identities for RBAC. We register this on the provider itself since it's a core part of the provider's functionality, but we register all other workflows and activities separately to allow providers to opt out of Temporal if they want.
 					worker.RegisterWorkflowWithOptions(
 						models.ProviderSynchronizeWorkflow,
 						workflow.RegisterOptions{
-							Name: models.CreateTemporalProviderWorkflowName(
-								providerResult.GetIdentifier(),
-								models.TemporalSynchronizeWorkflowName),
+							Name:               syncWorkflowName,
 							VersioningBehavior: workflow.VersioningBehaviorPinned,
 						},
 					)
+
+					if providerResult.HasCapability(models.ProviderCapabilityProvisioning) {
+
+						authWorkflowName := models.CreateTemporalProviderWorkflowName(
+							providerResult.GetIdentifier(),
+							models.TemporalAuthorizeRoleWorkflowName)
+
+						logrus.WithFields(logrus.Fields{
+							"workflow": authWorkflowName,
+						}).Infoln("Registering provider authorize role workflow with name", authWorkflowName)
+
+						// Register the provider-specific authorize and revoke role workflows.
+						// These are closure-based: they capture the live provider instance so the
+						// child workflow can call provider.AuthorizeRole / RevokeRole with a
+						// full workflow.Context, allowing providers to dispatch activities,
+						// use workflow.Go, etc.
+						worker.RegisterWorkflowWithOptions(
+							models.CreateProviderAuthorizeRoleWorkflow(providerResult),
+							workflow.RegisterOptions{
+								Name:               authWorkflowName,
+								VersioningBehavior: workflow.VersioningBehaviorPinned,
+							},
+						)
+
+						revokeWorkflowName := models.CreateTemporalProviderWorkflowName(
+							providerResult.GetIdentifier(),
+							models.TemporalRevokeRoleWorkflowName)
+
+						logrus.WithFields(logrus.Fields{
+							"workflow": revokeWorkflowName,
+						}).Infoln("Registering provider revoke role workflow with name", revokeWorkflowName)
+
+						worker.RegisterWorkflowWithOptions(
+							models.CreateProviderRevokeRoleWorkflow(providerResult),
+							workflow.RegisterOptions{
+								Name:               revokeWorkflowName,
+								VersioningBehavior: workflow.VersioningBehaviorPinned,
+							},
+						)
+					}
 
 					// Register all custom provider workflows
 					workflowsRegistry := providerResult.RegisterWorkflows()

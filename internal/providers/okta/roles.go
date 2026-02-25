@@ -72,6 +72,17 @@ var oktaPredefinedRoles = map[string]models.ProviderRole{
 	},
 }
 
+func (p *oktaProvider) getStaticRoles() []models.ProviderRole {
+	var roles []models.ProviderRole
+	for _, role := range oktaPredefinedRoles {
+		roles = append(roles, role)
+	}
+	logrus.WithFields(logrus.Fields{
+		"roles": len(roles),
+	}).Debug("Loaded Okta standard roles")
+	return roles
+}
+
 // Also load in user groups as these can have roles assigned too
 
 func (p *oktaProvider) SynchronizeRoles(ctx context.Context, req *models.SynchronizeRolesRequest) (*models.SynchronizeRolesResponse, error) {
@@ -81,18 +92,7 @@ func (p *oktaProvider) SynchronizeRoles(ctx context.Context, req *models.Synchro
 		logrus.Debugf("Loaded Okta roles in %s", elapsed)
 	}()
 
-	var roles []models.ProviderRole
-
-	// Load predefined standard roles
-	// These are Okta's built-in administrator roles that are consistent across all Okta orgs
-	// Reference: https://help.okta.com/en-us/content/topics/security/administrators-admin-comparison.htm
-	for _, role := range oktaPredefinedRoles {
-		roles = append(roles, role)
-	}
-
-	logrus.WithFields(logrus.Fields{
-		"roles": len(roles),
-	}).Debug("Loaded Okta standard roles")
+	roles := p.getStaticRoles()
 
 	return &models.SynchronizeRolesResponse{
 		Roles: roles,

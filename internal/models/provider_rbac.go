@@ -17,6 +17,7 @@ import (
 
 type AuthorizeRoleRequest struct {
 	*RoleRequest
+	ProviderIdentifier string `json:"provider_identifier,omitempty"` // Provider identifier for routing to the correct agent
 }
 
 type AuthorizeRoleResponse struct {
@@ -31,6 +32,7 @@ type AuthorizeRoleResponse struct {
 type RevokeRoleRequest struct {
 	*RoleRequest
 	AuthorizeRoleResponse *AuthorizeRoleResponse `json:"response,omitempty"`
+	ProviderIdentifier    string                 `json:"provider_identifier,omitempty"` // Provider identifier for routing to the correct agent
 }
 
 type RevokeRoleResponse struct {
@@ -377,23 +379,31 @@ func validateRolePermissions(provider Provider, role *Role) error {
 		return nil
 	}
 
-	return validateRolePermissionLists(role, providerPermissions)
+	// Determine whether this provider's API accepts wildcard patterns.
+	supportsWildcards := false
+	if caps := provider.GetCapabilities(); caps != nil && caps.Permissions != nil {
+		supportsWildcards = caps.Permissions.SupportsWildcards
+	}
+
+	return validateRolePermissionLists(role, providerPermissions, supportsWildcards)
 }
 
-// validateRolePermissionLists validates both allow and deny permission lists
-func validateRolePermissionLists(role *Role, providerPermissions []SearchResult[ProviderPermission]) error {
+// validateRolePermissionLists validates both allow and deny permission lists.
+// When supportsWildcards is true, validated wildcards are condensed back to
+// their original patterns; otherwise they remain fully expanded.
+func validateRolePermissionLists(role *Role, providerPermissions []SearchResult[ProviderPermission], supportsWildcards bool) error {
 	if role == nil {
 		return fmt.Errorf("role is nil")
 	}
 
 	var err error
 
-	role.Permissions.Allow, err = validatePermissions(providerPermissions, role.Permissions.Allow)
+	role.Permissions.Allow, err = validatePermissions(providerPermissions, role.Permissions.Allow, supportsWildcards)
 	if err != nil {
 		return err
 	}
 
-	role.Permissions.Deny, err = validatePermissions(providerPermissions, role.Permissions.Deny)
+	role.Permissions.Deny, err = validatePermissions(providerPermissions, role.Permissions.Deny, supportsWildcards)
 	if err != nil {
 		return err
 	}
@@ -401,7 +411,7 @@ func validateRolePermissionLists(role *Role, providerPermissions []SearchResult[
 	return nil
 }
 
-func validatePermissions(providerPermissions []SearchResult[ProviderPermission], statements RoleStatements) (RoleStatements, error) {
+func validatePermissions(providerPermissions []SearchResult[ProviderPermission], statements RoleStatements, supportsWildcards bool) (RoleStatements, error) {
 
 	validatedStatements := RoleStatements{}
 
@@ -460,9 +470,12 @@ func validatePermissions(providerPermissions []SearchResult[ProviderPermission],
 		}
 
 		// Condense validated operations back to their original wildcard
-		// patterns.  This only restores wildcards that appeared in the
-		// input — it never discovers new ones.
-		validatedOperations = condenseToOriginalWildcards(validatedOperations, originalWildcards)
+		// patterns when the provider's API supports them.  For providers
+		// that do not (e.g. GCP, Okta), leave the expanded list so the
+		// individual permissions are sent to the cloud API.
+		if supportsWildcards {
+			validatedOperations = condenseToOriginalWildcards(validatedOperations, originalWildcards)
+		}
 
 		// Create validated statement with expanded operations
 		validatedStatements = append(validatedStatements, Statement{
@@ -495,8 +508,10 @@ func expandPermissionsWildcard(providerPermissions []SearchResult[ProviderPermis
 // ValidatePermissionsPublic is the exported counterpart of validatePermissions,
 // intended for use in external test packages (e.g. integration tests that need
 // to import both models and a provider package without creating a cycle).
-func ValidatePermissionsPublic(providerPermissions []SearchResult[ProviderPermission], statements RoleStatements) (RoleStatements, error) {
-	return validatePermissions(providerPermissions, statements)
+// supportsWildcards controls whether validated wildcards are condensed back to
+// their original patterns (true for AWS/Azure) or left expanded (false for GCP/Okta).
+func ValidatePermissionsPublic(providerPermissions []SearchResult[ProviderPermission], statements RoleStatements, supportsWildcards bool) (RoleStatements, error) {
+	return validatePermissions(providerPermissions, statements, supportsWildcards)
 }
 
 // condenseToOriginalWildcards replaces individually-expanded permissions with

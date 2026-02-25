@@ -550,27 +550,41 @@ This allows you to build restrictive roles that inherit permissive ones, or perm
 
 ### Wildcard Permissions
 
-Support for wildcard patterns varies by provider. Wildcards automatically subsume more specific permissions:
+You can use wildcard patterns (glob syntax using `*`) in role permission definitions for any provider. However, the way wildcards are handled depends on whether the provider's API natively supports wildcard permissions:
+
+| Provider    | Supports Wildcards | Behavior                                                    |
+|-------------|:------------------:|-------------------------------------------------------------|
+| AWS         | ✅                 | Wildcards kept in condensed form after validation           |
+| Azure       | ✅                 | Wildcards kept in condensed form after validation           |
+| Kubernetes  | ✅                 | Wildcards kept in condensed form after validation           |
+| GCP         | ❌                 | Wildcards expanded to individual permissions automatically  |
+| Okta        | ❌                 | Wildcards expanded to individual permissions automatically  |
+
+- **Providers that support wildcards** (AWS, Azure, Kubernetes): Wildcard patterns are validated by expanding them against the provider's known permission set, then re-condensed back to their original wildcard form in the final output. Invalid wildcards that match no known permissions produce a validation error.
+- **Providers that do not support wildcards** (GCP, Okta): Wildcard patterns are expanded to the full list of matching individual permissions during validation. The expanded permissions are kept as-is in the final output because the provider's API requires explicit permission names.
 
 ```yaml
 permissions:
   allow:
     - operations:
-        # AWS wildcards
+        # AWS wildcards (kept as wildcards)
         - "ec2:*"                    # All EC2 actions
         - "s3:*Object*"              # All object-related S3 actions
-        
-        # Kubernetes wildcards  
+
+        # Kubernetes wildcards (kept as wildcards)
         - "k8s:*:*"                  # All Kubernetes actions
         - "k8s:pods:*"               # All pod actions
-        
-        # Azure wildcards
+
+        # Azure wildcards (kept as wildcards)
         - "Microsoft.Compute/*"      # All compute actions
+
+        # GCP wildcards (expanded to individual permissions)
+        - "compute.instances.*"      # Expanded to compute.instances.get, etc.
 ```
 
 #### Wildcard Subsumption
 
-When wildcards are present, more specific permissions under that wildcard are automatically removed (subsumed):
+For providers that support wildcards, more specific permissions under a wildcard are automatically removed (subsumed):
 
 ```yaml
 permissions:
@@ -586,7 +600,7 @@ permissions:
 ```
 
 {: .note}
-A wildcard does NOT subsume itself. For example, `ec2:*` is kept even when other `ec2:*` wildcards exist. Only more specific permissions (like `ec2:DescribeInstances`) are subsumed.
+A wildcard does NOT subsume itself. For example, `ec2:*` is kept even when other `ec2:*` wildcards exist. Only more specific permissions (like `ec2:DescribeInstances`) are subsumed. Subsumption only applies to providers where `supports_wildcards` is `true`.
 
 ---
 

@@ -44,14 +44,14 @@ func generateAWSPermissions() error {
 
 	// Create permissions
 	var permissions []flatbuffers.UOffsetT
-	for name, description := range docs {
-		// Convert docs.json format "EC2.DescribeInstances" to the AWS IAM
-		// action format "ec2:DescribeInstances" used in role configs.
-		//   1. Split on the first "." to get service and action.
-		//   2. Lowercase the service prefix.
-		//   3. Join with ":".
-		if idx := strings.Index(name, "."); idx > 0 {
-			name = strings.ToLower(name[:idx]) + ":" + name[idx+1:]
+	for rawName, description := range docs {
+		// Convert EC2.AllocateAddress → ec2:AllocateAddress (lowercase service prefix, colon separator)
+		colonIdx := strings.Index(rawName, ".")
+		var name string
+		if colonIdx >= 0 {
+			name = strings.ToLower(rawName[:colonIdx]) + ":" + rawName[colonIdx+1:]
+		} else {
+			name = rawName
 		}
 
 		// Convert HTML description to markdown

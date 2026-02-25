@@ -11,7 +11,10 @@ var OktaCapabilities = models.NewProviderCapabilities().
 	}).
 	WithDefaultResourcesConfiguration().
 	WithPermissionsConfiguration(models.PermissionsConfiguration{
-		Enabled:        true,
-		Synchronizable: false,
+		SynchronizableConfiguration: models.SynchronizableConfiguration{
+			Enabled:        true,
+			Synchronizable: false,
+		},
+		// SupportsWildcards defaults to false — Okta requires exact permission names
 	}).
 	WithDefaultProvisioningConfiguration()

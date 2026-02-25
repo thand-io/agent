@@ -410,7 +410,7 @@ func TestValidatePermissions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := validatePermissions(tt.perms, tt.statements)
+			got, err := validatePermissions(tt.perms, tt.statements, true)
 			if tt.wantErrMsg != "" {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.wantErrMsg)
@@ -458,7 +458,7 @@ func TestValidatePermissionsAzureYamlRoleIntegration(t *testing.T) {
 		"Microsoft.Compute/disks/*",
 	)
 
-	got, err := validatePermissions(perms, allow)
+	got, err := validatePermissions(perms, allow, true)
 	require.NoError(t, err, "azure_admin allow list should validate without error")
 
 	allOps := ops(got)
@@ -579,7 +579,90 @@ func TestValidatePermissionsRoundTrip(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := validatePermissions(allPerms, stmtOps(tt.input...))
+			got, err := validatePermissions(allPerms, stmtOps(tt.input...), true)
+			require.NoError(t, err)
+			gotOps := ops(got)
+			sort.Strings(tt.wantOps)
+			assert.Equal(t, tt.wantOps, gotOps)
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// supportsWildcards=false: wildcards stay expanded (GCP/Okta behavior)
+// ---------------------------------------------------------------------------
+
+func TestValidatePermissionsNoWildcardSupport(t *testing.T) {
+	gcpPerms := makePerms(
+		"compute.instances.get",
+		"compute.instances.list",
+		"compute.instances.start",
+		"compute.instances.stop",
+		"storage.buckets.list",
+		"storage.buckets.create",
+		"iam.serviceAccounts.get",
+		"iam.serviceAccounts.actAs",
+	)
+
+	awsPerms := makePerms(
+		"ec2:DescribeInstances",
+		"ec2:StartInstances",
+		"ec2:StopInstances",
+		"s3:GetObject",
+		"s3:PutObject",
+	)
+
+	tests := []struct {
+		name    string
+		perms   []SearchResult[ProviderPermission]
+		input   []string
+		wantOps []string
+	}{
+		{
+			name:  "gcp: compute.instances.* stays expanded",
+			perms: gcpPerms,
+			input: []string{"compute.instances.*"},
+			wantOps: []string{
+				"compute.instances.get",
+				"compute.instances.list",
+				"compute.instances.start",
+				"compute.instances.stop",
+			},
+		},
+		{
+			name:  "gcp: multiple wildcards stay expanded",
+			perms: gcpPerms,
+			input: []string{"compute.instances.*", "storage.buckets.*"},
+			wantOps: []string{
+				"compute.instances.get",
+				"compute.instances.list",
+				"compute.instances.start",
+				"compute.instances.stop",
+				"storage.buckets.create",
+				"storage.buckets.list",
+			},
+		},
+		{
+			name:  "aws: ec2:* stays expanded when provider does not support wildcards",
+			perms: awsPerms,
+			input: []string{"ec2:*"},
+			wantOps: []string{
+				"ec2:DescribeInstances",
+				"ec2:StartInstances",
+				"ec2:StopInstances",
+			},
+		},
+		{
+			name:    "exact permission unaffected by supportsWildcards flag",
+			perms:   gcpPerms,
+			input:   []string{"compute.instances.get"},
+			wantOps: []string{"compute.instances.get"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := validatePermissions(tt.perms, stmtOps(tt.input...), false)
 			require.NoError(t, err)
 			gotOps := ops(got)
 			sort.Strings(tt.wantOps)
