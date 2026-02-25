@@ -405,6 +405,12 @@ func validatePermissions(providerPermissions []SearchResult[ProviderPermission],
 
 	validatedStatements := RoleStatements{}
 
+	// Build a set of all known provider permissions once for O(1) lookups.
+	providerPermSet := make(map[string]bool, len(providerPermissions))
+	for _, p := range providerPermissions {
+		providerPermSet[p.Result.Name] = true
+	}
+
 	// Validate each statement
 	for _, stmt := range statements {
 
@@ -436,19 +442,20 @@ func validatePermissions(providerPermissions []SearchResult[ProviderPermission],
 
 				// If the permission contains a colon, it may use a condensed
 				// format like k8s:pods:get,list,watch — expand those into
-				// individual permissions. Single-action permissions (ec2:Describe
-				// Instances) are returned as-is.
+				// individual permissions.  Each expanded permission is validated
+				// against the provider permission set.
 				expanded := ExpandCondensedActions(perm)
+				for _, ep := range expanded {
+					if !providerPermSet[ep] {
+						return nil, fmt.Errorf("the requested permission: %s was not found", ep)
+					}
+				}
 				validatedOperations = append(validatedOperations, expanded...)
 
-			} else if !slices.ContainsFunc(providerPermissions, func(p SearchResult[ProviderPermission]) bool {
-				found := strings.Compare(p.Result.Name, perm) == 0
-				if found {
-					validatedOperations = append(validatedOperations, p.Result.Name)
-				}
-				return found
-			}) {
+			} else if !providerPermSet[perm] {
 				return nil, fmt.Errorf("the requested permission: %s was not found", perm)
+			} else {
+				validatedOperations = append(validatedOperations, perm)
 			}
 		}
 
@@ -493,9 +500,11 @@ func ValidatePermissionsPublic(providerPermissions []SearchResult[ProviderPermis
 }
 
 // condenseToOriginalWildcards replaces individually-expanded permissions with
-// their original wildcard patterns when every permission the wildcard matched
-// is still present in operations.  It only restores wildcards that appeared in
-// the original input — it never discovers new wildcard groupings.
+// their original wildcard patterns.  Any permission in operations that matches
+// an original wildcard (via path.Match) is removed and the wildcard is added
+// back in its place — even if some expansions were removed during validation.
+// It only restores wildcards that appeared in the original input; it never
+// discovers new wildcard groupings.
 func condenseToOriginalWildcards(operations []string, originalWildcards []string) []string {
 	if len(originalWildcards) == 0 {
 		return operations

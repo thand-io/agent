@@ -350,14 +350,12 @@ func TestValidatePermissions(t *testing.T) {
 			wantOps:    []string{"ec2:DescribeInstances"},
 		},
 		{
-			name:  "aws: unknown exact permission passes through via getCondensedActions (pre-existing behaviour)",
+			name:  "aws: unknown colon-style permission returns error",
 			perms: awsPerms,
-			// getCondensedActions splits on the last colon and returns the permission
-			// verbatim when there is no comma – so colon-style perms bypass the
-			// exact-match check and are never rejected.  This is pre-existing behaviour
-			// that is out of scope for the wildcard fix.
+			// Previously colon-style perms bypassed the existence check.
+			// Now each expanded permission is validated against the provider set.
 			statements: stmtOps("lambda:InvokeFunction"),
-			wantOps:    []string{"lambda:InvokeFunction"},
+			wantErrMsg: "the requested permission: lambda:InvokeFunction was not found",
 		},
 		// ── GCP ──────────────────────────────────────────────────────────────
 		{
@@ -388,6 +386,25 @@ func TestValidatePermissions(t *testing.T) {
 			perms:      k8sPerms,
 			statements: stmtOps("k8s:*:*"),
 			wantOps:    []string{"k8s:*:*"},
+		},
+		// ── Colon-style permission validation ────────────────────────────────
+		{
+			name:       "aws: typo in single colon-style perm returns error",
+			perms:      awsPerms,
+			statements: stmtOps("ec2:TypoAction"),
+			wantErrMsg: "the requested permission: ec2:TypoAction was not found",
+		},
+		{
+			name:       "k8s: condensed with one invalid verb returns error",
+			perms:      k8sPerms,
+			statements: stmtOps("k8s:pods:get,list,delete"),
+			wantErrMsg: "the requested permission: k8s:pods:delete was not found",
+		},
+		{
+			name:       "aws: nonexistent service prefix returns error",
+			perms:      awsPerms,
+			statements: stmtOps("fake:DoSomething"),
+			wantErrMsg: "the requested permission: fake:DoSomething was not found",
 		},
 	}
 
