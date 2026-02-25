@@ -31,6 +31,7 @@ type ConfigImpl interface {
 
 	// Roles
 	GetCompositeRole(identity *Identity, baseRole *Role) (*Role, error)
+	GetCompositeRoleForWorkflow(identity *Identity, workflow *ElevateWorkflowTask) (*Role, error)
 
 	// Identities
 	GetIdentity(byEmail string) (*Identity, error)

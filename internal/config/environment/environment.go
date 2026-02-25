@@ -236,6 +236,11 @@ func isAWS() bool {
 		return true
 	}
 
+	// AWS ECS / Fargate
+	if len(os.Getenv("ECS_CONTAINER_METADATA_URI")) > 0 || len(os.Getenv("ECS_CONTAINER_METADATA_URI_V4")) > 0 {
+		return true
+	}
+
 	// Check AWS metadata service
 	// return checkAWSMetadata()
 	return false
@@ -289,7 +294,7 @@ func isKubernetes() bool {
 
 // checkAWSMetadata attempts to contact AWS metadata service
 func checkAWSMetadata() bool {
-	client := resty.New().SetTimeout(2 * time.Second)
+	client := resty.New().SetTimeout(1 * time.Second)
 	resp, err := client.R().Get("http://169.254.169.254/latest/meta-data/")
 	if err != nil {
 		return false

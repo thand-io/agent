@@ -4,7 +4,6 @@ package models_test
 
 import (
 	"sort"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -32,76 +31,43 @@ func azureProviderPerms(t *testing.T) []models.SearchResult[models.ProviderPermi
 }
 
 // TestAzureYamlPatternsAgainstRealDataset runs every permission pattern from
-// config/roles/azure.yaml against the real Azure IAM dataset (loaded via the
-// same provider shared-data singleton used at runtime) and asserts that each
-// wildcard expands to at least one real permission.
+// config/roles/azure.yaml against the real Azure IAM dataset and asserts that
+// each wildcard:
+//  1. Does not error (proving at least one real permission matched)
+//  2. Gets condensed back to the original wildcard pattern (round-trip)
 func TestAzureYamlPatternsAgainstRealDataset(t *testing.T) {
 	perms := azureProviderPerms(t)
 
-	patterns := []struct {
-		pattern  string
-		mustHave []string // spot-checks that must appear in the expansion
-	}{
-		{
-			pattern:  "Microsoft.Compute/*/read",
-			mustHave: []string{"Microsoft.Compute/availabilitySets/read", "Microsoft.Compute/virtualMachines/read", "Microsoft.Compute/disks/read"},
-		},
-		{
-			pattern:  "Microsoft.Compute/availabilitySets/*",
-			mustHave: []string{"Microsoft.Compute/availabilitySets/read", "Microsoft.Compute/availabilitySets/write", "Microsoft.Compute/availabilitySets/delete"},
-		},
-		{
-			pattern:  "Microsoft.Compute/proximityPlacementGroups/*",
-			mustHave: []string{"Microsoft.Compute/proximityPlacementGroups/read"},
-		},
-		{
-			pattern:  "Microsoft.Compute/virtualMachines/*",
-			mustHave: []string{"Microsoft.Compute/virtualMachines/read", "Microsoft.Compute/virtualMachines/write", "Microsoft.Compute/virtualMachines/delete"},
-		},
-		{
-			pattern:  "Microsoft.Compute/disks/*",
-			mustHave: []string{"Microsoft.Compute/disks/read", "Microsoft.Compute/disks/write"},
-		},
+	patterns := []string{
+		"Microsoft.Compute/*/read",
+		"Microsoft.Compute/availabilitySets/*",
+		"Microsoft.Compute/proximityPlacementGroups/*",
+		"Microsoft.Compute/virtualMachines/*",
+		"Microsoft.Compute/disks/*",
 	}
 
-	for _, tt := range patterns {
-		t.Run(tt.pattern, func(t *testing.T) {
-			stmt := models.RoleStatements{{Operations: []string{tt.pattern}}}
+	for _, pattern := range patterns {
+		t.Run(pattern, func(t *testing.T) {
+			stmt := models.RoleStatements{{Operations: []string{pattern}}}
 			got, err := models.ValidatePermissionsPublic(perms, stmt)
-			require.NoError(t, err, "pattern %q should not error against real Azure data", tt.pattern)
+			require.NoError(t, err, "pattern %q should not error against real Azure data", pattern)
 
-			var expanded []string
+			var resultOps []string
 			for _, s := range got {
-				expanded = append(expanded, s.Operations...)
-			}
-			sort.Strings(expanded)
-
-			assert.NotEmpty(t, expanded, "pattern %q matched no real Azure permissions", tt.pattern)
-
-			for _, perm := range expanded {
-				assert.True(t,
-					strings.HasPrefix(perm, "Microsoft.Compute/"),
-					"unexpected permission %q returned for pattern %q", perm, tt.pattern,
-				)
+				resultOps = append(resultOps, s.Operations...)
 			}
 
-			for _, want := range tt.mustHave {
-				assert.Contains(t, expanded, want,
-					"pattern %q should have expanded to include %q", tt.pattern, want,
-				)
-			}
+			// The wildcard should be condensed back to itself.
+			assert.Contains(t, resultOps, pattern,
+				"pattern %q should round-trip back to itself after validation", pattern,
+			)
 		})
 	}
 
-	// Full round-trip: the complete azure_admin allow list must expand
-	// without error against real data.
-	t.Run("full azure_admin allow list validates without error", func(t *testing.T) {
-		allPatterns := make([]string, 0, len(patterns))
-		for _, p := range patterns {
-			allPatterns = append(allPatterns, p.pattern)
-		}
-
-		allow := models.RoleStatements{{Operations: allPatterns}}
+	// Full round-trip: the complete allow list must validate and condense
+	// back to the original wildcard patterns.
+	t.Run("full azure_admin allow list round-trips", func(t *testing.T) {
+		allow := models.RoleStatements{{Operations: patterns}}
 		got, err := models.ValidatePermissionsPublic(perms, allow)
 		require.NoError(t, err)
 
@@ -112,20 +78,9 @@ func TestAzureYamlPatternsAgainstRealDataset(t *testing.T) {
 		sort.Strings(allOps)
 		assert.NotEmpty(t, allOps)
 
-		// Spot-checks across all patterns
-		checks := []string{
-			"Microsoft.Compute/availabilitySets/read",
-			"Microsoft.Compute/availabilitySets/write",
-			"Microsoft.Compute/availabilitySets/delete",
-			"Microsoft.Compute/virtualMachines/read",
-			"Microsoft.Compute/virtualMachines/write",
-			"Microsoft.Compute/virtualMachines/delete",
-			"Microsoft.Compute/disks/read",
-			"Microsoft.Compute/disks/write",
-			"Microsoft.Compute/proximityPlacementGroups/read",
-		}
-		for _, want := range checks {
-			assert.Contains(t, allOps, want)
+		// Every original wildcard pattern should be present in the output.
+		for _, p := range patterns {
+			assert.Contains(t, allOps, p)
 		}
 	})
 }

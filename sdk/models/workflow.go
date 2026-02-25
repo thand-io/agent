@@ -18,3 +18,13 @@ type WorkflowResponse = internal.WorkflowResponse
 
 // WorkflowDefinitions is an alias for the internal WorkflowDefinitions type.
 type WorkflowDefinitions = internal.WorkflowDefinitions
+
+// ElevateWorkflowTask is the in-flight state of an elevation workflow, carrying
+// the workflow DSL, context, session, and approval status. Pass it between the
+// Elevate and Resume calls on sdk/api.Service.
+type ElevateWorkflowTask = internal.ElevateWorkflowTask
+
+// WorkflowRequest is returned by sdk/api.Service.Elevate. It contains the
+// workflow task and the next URL for the client to follow (auth redirect or
+// resume callback).
+type WorkflowRequest = internal.WorkflowRequest
