@@ -628,7 +628,11 @@ func (s *Server) apiConfigurationHandler(c *gin.Context) {
 	workflows := []string{}  // TODO: populate workflows list
 	activities := []string{} // TODO: populate activities list
 
+	// For agent / client we show the local server for discvoery.
+	baseUrl := s.Config.GetLocalServerUrl()
+
 	if s.Config.IsServer() {
+
 		services := s.Config.GetServices()
 		capabilities["temporal"] = services.HasTemporal()
 		capabilities["vault"] = services.HasVault()
@@ -636,6 +640,10 @@ func (s *Server) apiConfigurationHandler(c *gin.Context) {
 		capabilities["scheduler"] = services.HasScheduler()
 		capabilities["llm"] = services.HasLargeLanguageModel()
 		capabilities["storage"] = services.HasStorage()
+
+		// However, for server we show the login server as the main
+		// entry point for clients to connect to
+		baseUrl = s.Config.GetLoginServerUrl()
 	}
 
 	response := gin.H{
@@ -645,18 +653,18 @@ func (s *Server) apiConfigurationHandler(c *gin.Context) {
 		"version":     s.GetVersion(),
 
 		// Endpoints
-		"baseUrl":     s.Config.GetLocalServerUrl(),
+		"baseUrl":     baseUrl,
 		"apiBasePath": s.Config.GetApiBasePath(),
 		//"hostname":    s.Config.Environment.Hostname,
 		//"port":        s.Config.Server.Port,
 
 		// Authentication
-		"authEndpoint": s.Config.GetLocalServerUrl() + "/auth",
+		"authEndpoint": baseUrl + "/auth",
 		"authMethods":  []string{"session", "bearer"},
 
 		// Documentation
-		"docsUrl":     s.Config.GetLocalServerUrl() + "/swagger/index.html",
-		"openApiSpec": s.Config.GetLocalServerUrl() + "/swagger/doc.json",
+		"docsUrl":     baseUrl + "/swagger/index.html",
+		"openApiSpec": baseUrl + "/swagger/doc.json",
 
 		// Capabilities
 		"workflows":    workflows,
