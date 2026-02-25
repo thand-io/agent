@@ -18,9 +18,16 @@ access to specific resources with defined roles and durations.
  4. The response / status of the workflow workflow is returned to the user in the CLI.
 */
 var accessCmd = &cobra.Command{
-	Use:     "access",
-	Short:   "Request access to a specific resource",
-	Long:    `Request access to a specific resource with role and duration`,
+	Use:   "access",
+	Short: "Request access to a specific resource",
+	Long: `Request access to a specific resource with role and duration.
+
+Required flags: --provider, --role, --duration, --reason
+
+Examples:
+  agent request access --provider snowflake-prod --role analyst --duration 4h --reason "quarterly analysis"
+  agent request access -p aws-prod -o admin -d 1h -e "incident response" -t 123456789012
+  agent request access -p gcp-prod -o readonly -d 2h -e "debugging" -w custom-workflow -a okta`,
 	PreRunE: preRunClientConfigWithSessionE, // load agent
 	Run: func(cmd *cobra.Command, args []string) {
 		// TODO: use resource, permissions later to let users request specific permissions

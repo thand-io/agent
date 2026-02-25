@@ -335,7 +335,25 @@ func (c *Config) discoverServerApiUrl(
 
 	if len(discoveryCheckResponse.BaseUrl) > 0 {
 		logrus.Debugf("Discovered login server base URL: %s", discoveryCheckResponse.BaseUrl)
-		loginServer = strings.TrimSuffix(discoveryCheckResponse.BaseUrl, "/")
+
+		// Validate that the discovered baseUrl host matches the server we queried.
+		// This guards against a misconfigured server returning localhost or an
+		// internal address instead of its public URL.
+		discoveredUrl, err := url.Parse(discoveryCheckResponse.BaseUrl)
+		originalUrl, err2 := url.Parse(loginServer)
+		if err != nil || err2 != nil {
+			logrus.Warnf(
+				"Failed to parse discovered baseUrl (%s) or login server (%s), ignoring discovered baseUrl",
+				discoveryCheckResponse.BaseUrl, loginServer,
+			)
+		} else if discoveredUrl.Hostname() != originalUrl.Hostname() {
+			logrus.Warnf(
+				"Discovered baseUrl host (%s) does not match queried server host (%s), ignoring discovered baseUrl",
+				discoveryCheckResponse.BaseUrl, loginServer,
+			)
+		} else {
+			loginServer = strings.TrimSuffix(discoveryCheckResponse.BaseUrl, "/")
+		}
 	}
 
 	trimPath := strings.TrimSuffix(strings.TrimPrefix(discoveryCheckResponse.ApiBasePath, "/"), "/")

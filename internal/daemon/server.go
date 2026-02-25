@@ -636,6 +636,12 @@ func (s *Server) apiConfigurationHandler(c *gin.Context) {
 		capabilities["storage"] = services.HasStorage()
 	}
 
+	// Use the externally-reachable base URL when running as a server.
+	// GetLocalServerUrl() returns http://localhost:<port> which is only
+	// correct for local/agent mode. In server mode we need the public URL
+	// that clients will use to reach us.
+	baseUrl := s.advertisedBaseURL(c)
+
 	response := gin.H{
 		// Service Identity
 		"serviceName": "Thand " + serviceType,
@@ -643,18 +649,16 @@ func (s *Server) apiConfigurationHandler(c *gin.Context) {
 		"version":     s.GetVersion(),
 
 		// Endpoints
-		"baseUrl":     s.Config.GetLocalServerUrl(),
+		"baseUrl":     baseUrl,
 		"apiBasePath": s.Config.GetApiBasePath(),
-		//"hostname":    s.Config.Environment.Hostname,
-		//"port":        s.Config.Server.Port,
 
 		// Authentication
-		"authEndpoint": s.Config.GetLocalServerUrl() + "/auth",
+		"authEndpoint": baseUrl + "/auth",
 		"authMethods":  []string{"session", "bearer"},
 
 		// Documentation
-		"docsUrl":     s.Config.GetLocalServerUrl() + "/swagger/index.html",
-		"openApiSpec": s.Config.GetLocalServerUrl() + "/swagger/doc.json",
+		"docsUrl":     baseUrl + "/swagger/index.html",
+		"openApiSpec": baseUrl + "/swagger/doc.json",
 
 		// Capabilities
 		"workflows":    workflows,
@@ -670,6 +674,17 @@ func (s *Server) apiConfigurationHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+// advertisedBaseURL returns the externally-reachable base URL for this server.
+// In server mode it uses the configured login endpoint (THAND_LOGIN_ENDPOINT),
+// which is always set for deployed servers. In agent/client mode it returns the
+// local listener URL.
+func (s *Server) advertisedBaseURL(_ *gin.Context) string {
+	if s.Config.IsServer() {
+		return strings.TrimSuffix(s.Config.GetLoginServerUrl(), "/")
+	}
+	return s.Config.GetLocalServerUrl()
 }
 
 // readyHandler handles the readiness check endpoint
