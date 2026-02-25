@@ -77,7 +77,7 @@ type FormElement struct {
 	IsDecimalAllowed bool                `json:"is_decimal_allowed,omitempty"`
 	MinValue         string              `json:"min_value,omitempty"`
 	MaxValue         string              `json:"max_value,omitempty"`
-	ImageURL         *string              `json:"image_url,omitempty"`
+	ImageURL         string              `json:"image_url,omitempty"`
 	AltText          string              `json:"alt_text,omitempty"`
 	Text             *FormTextObject     `json:"text,omitempty"`
 	URL              string              `json:"url,omitempty"`
@@ -611,7 +611,9 @@ func convertBlockElement(elem slack.BlockElement) *FormElement {
 		formElem.Style = string(e.Style)
 
 	case *slack.ImageBlockElement:
-		formElem.ImageURL = e.ImageURL
+		if e.ImageURL != nil {
+			formElem.ImageURL = *e.ImageURL
+		}
 		formElem.AltText = e.AltText
 
 	case *slack.OverflowBlockElement:
@@ -635,9 +637,13 @@ func convertMixedElement(elem slack.MixedElement) *FormElement {
 			Text: convertTextBlockObject(e),
 		}
 	case *slack.ImageBlockElement:
+		var imageURL string
+		if e.ImageURL != nil {
+			imageURL = *e.ImageURL
+		}
 		return &FormElement{
 			Type:     string(e.Type),
-			ImageURL: e.ImageURL,
+			ImageURL: imageURL,
 			AltText:  e.AltText,
 		}
 	}

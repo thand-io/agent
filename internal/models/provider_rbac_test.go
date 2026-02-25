@@ -289,43 +289,27 @@ func TestValidatePermissions(t *testing.T) {
 	}{
 		// ── Azure: mid-path wildcard ─────────────────────────────────────────
 		{
-			name:       "azure: Microsoft.Compute/*/read expands correctly",
+			name:       "azure: Microsoft.Compute/*/read condensed back to wildcard",
 			perms:      azurePerms,
 			statements: stmtOps("Microsoft.Compute/*/read"),
-			wantOps: []string{
-				"Microsoft.Compute/availabilitySets/read",
-				"Microsoft.Compute/disks/read",
-				"Microsoft.Compute/proximityPlacementGroups/read",
-				"Microsoft.Compute/virtualMachines/read",
-			},
+			wantOps:    []string{"Microsoft.Compute/*/read"},
 		},
 		{
-			name:       "azure: availabilitySets/* expands correctly",
+			name:       "azure: availabilitySets/* condensed back to wildcard",
 			perms:      azurePerms,
 			statements: stmtOps("Microsoft.Compute/availabilitySets/*"),
-			wantOps: []string{
-				"Microsoft.Compute/availabilitySets/delete",
-				"Microsoft.Compute/availabilitySets/read",
-				"Microsoft.Compute/availabilitySets/write",
-			},
+			wantOps:    []string{"Microsoft.Compute/availabilitySets/*"},
 		},
 		{
-			name:  "azure: multiple wildcard patterns expand and merge",
+			name:  "azure: multiple wildcard patterns condensed back",
 			perms: azurePerms,
 			statements: stmtOps(
 				"Microsoft.Compute/*/read",
 				"Microsoft.Compute/availabilitySets/*",
 			),
 			wantOps: []string{
-				// */read
-				"Microsoft.Compute/availabilitySets/read",
-				"Microsoft.Compute/disks/read",
-				"Microsoft.Compute/proximityPlacementGroups/read",
-				"Microsoft.Compute/virtualMachines/read",
-				// availabilitySets/*
-				"Microsoft.Compute/availabilitySets/delete",
-				"Microsoft.Compute/availabilitySets/read",
-				"Microsoft.Compute/availabilitySets/write",
+				"Microsoft.Compute/*/read",
+				"Microsoft.Compute/availabilitySets/*",
 			},
 		},
 		{
@@ -348,24 +332,16 @@ func TestValidatePermissions(t *testing.T) {
 		},
 		// ── AWS ──────────────────────────────────────────────────────────────
 		{
-			name:       "aws: ec2:* expands all ec2 (regression guard)",
+			name:       "aws: ec2:* condensed back to wildcard (round-trip)",
 			perms:      awsPerms,
 			statements: stmtOps("ec2:*"),
-			wantOps: []string{
-				"ec2:DescribeInstances",
-				"ec2:StartInstances",
-				"ec2:StopInstances",
-			},
+			wantOps:    []string{"ec2:*"},
 		},
 		{
-			name:       "aws: s3:* expands all s3 (regression guard)",
+			name:       "aws: s3:* condensed back to wildcard (round-trip)",
 			perms:      awsPerms,
 			statements: stmtOps("s3:*"),
-			wantOps: []string{
-				"s3:GetObject",
-				"s3:ListBuckets",
-				"s3:PutObject",
-			},
+			wantOps:    []string{"s3:*"},
 		},
 		{
 			name:       "aws: exact permission passes through",
@@ -374,34 +350,25 @@ func TestValidatePermissions(t *testing.T) {
 			wantOps:    []string{"ec2:DescribeInstances"},
 		},
 		{
-			name:  "aws: unknown exact permission passes through via getCondensedActions (pre-existing behaviour)",
+			name:  "aws: unknown colon-style permission returns error",
 			perms: awsPerms,
-			// getCondensedActions splits on the last colon and returns the permission
-			// verbatim when there is no comma – so colon-style perms bypass the
-			// exact-match check and are never rejected.  This is pre-existing behaviour
-			// that is out of scope for the wildcard fix.
+			// Previously colon-style perms bypassed the existence check.
+			// Now each expanded permission is validated against the provider set.
 			statements: stmtOps("lambda:InvokeFunction"),
-			wantOps:    []string{"lambda:InvokeFunction"},
+			wantErrMsg: "the requested permission: lambda:InvokeFunction was not found",
 		},
 		// ── GCP ──────────────────────────────────────────────────────────────
 		{
-			name:       "gcp: compute.instances.* expands (regression guard)",
+			name:       "gcp: compute.instances.* condensed back to wildcard",
 			perms:      gcpPerms,
 			statements: stmtOps("compute.instances.*"),
-			wantOps: []string{
-				"compute.instances.get",
-				"compute.instances.list",
-			},
+			wantOps:    []string{"compute.instances.*"},
 		},
 		{
-			name:       "gcp: iam.* expands multi-part names",
+			name:       "gcp: iam.* condensed back to wildcard",
 			perms:      gcpPerms,
 			statements: stmtOps("iam.*"),
-			wantOps: []string{
-				"iam.roles.create",
-				"iam.serviceAccounts.actAs",
-				"iam.serviceAccounts.get",
-			},
+			wantOps:    []string{"iam.*"},
 		},
 		// ── k8s condensed actions ────────────────────────────────────────────
 		{
@@ -415,16 +382,29 @@ func TestValidatePermissions(t *testing.T) {
 			},
 		},
 		{
-			name:       "k8s: wildcard k8s:*:* expands all k8s permissions",
+			name:       "k8s: wildcard k8s:*:* condensed back to wildcard",
 			perms:      k8sPerms,
 			statements: stmtOps("k8s:*:*"),
-			wantOps: []string{
-				"k8s:pods:get",
-				"k8s:pods:list",
-				"k8s:pods:watch",
-				"k8s:services:get",
-				"k8s:services:list",
-			},
+			wantOps:    []string{"k8s:*:*"},
+		},
+		// ── Colon-style permission validation ────────────────────────────────
+		{
+			name:       "aws: typo in single colon-style perm returns error",
+			perms:      awsPerms,
+			statements: stmtOps("ec2:TypoAction"),
+			wantErrMsg: "the requested permission: ec2:TypoAction was not found",
+		},
+		{
+			name:       "k8s: condensed with one invalid verb returns error",
+			perms:      k8sPerms,
+			statements: stmtOps("k8s:pods:get,list,delete"),
+			wantErrMsg: "the requested permission: k8s:pods:delete was not found",
+		},
+		{
+			name:       "aws: nonexistent service prefix returns error",
+			perms:      awsPerms,
+			statements: stmtOps("fake:DoSomething"),
+			wantErrMsg: "the requested permission: fake:DoSomething was not found",
 		},
 	}
 
@@ -482,15 +462,128 @@ func TestValidatePermissionsAzureYamlRoleIntegration(t *testing.T) {
 	require.NoError(t, err, "azure_admin allow list should validate without error")
 
 	allOps := ops(got)
-	// Every */read pattern must have hit at least the four resource types present
-	assert.Contains(t, allOps, "Microsoft.Compute/availabilitySets/read")
-	assert.Contains(t, allOps, "Microsoft.Compute/proximityPlacementGroups/read")
-	assert.Contains(t, allOps, "Microsoft.Compute/virtualMachines/read")
-	assert.Contains(t, allOps, "Microsoft.Compute/disks/read")
-	// virtualMachines/* must not leave out write/delete
-	assert.Contains(t, allOps, "Microsoft.Compute/virtualMachines/write")
-	assert.Contains(t, allOps, "Microsoft.Compute/virtualMachines/delete")
+	// After condensation, original wildcard patterns should be restored.
+	assert.Contains(t, allOps, "Microsoft.Compute/*/read")
+	assert.Contains(t, allOps, "Microsoft.Compute/availabilitySets/*")
+	assert.Contains(t, allOps, "Microsoft.Compute/proximityPlacementGroups/*")
+	assert.Contains(t, allOps, "Microsoft.Compute/virtualMachines/*")
+	assert.Contains(t, allOps, "Microsoft.Compute/disks/*")
 	// virtualMachines/start/action must NOT be included by virtualMachines/* because
 	// path.Match(*) does not cross the / separator
 	assert.NotContains(t, allOps, "Microsoft.Compute/virtualMachines/start/action")
+}
+
+// ---------------------------------------------------------------------------
+// condenseToOriginalWildcards (unit)
+// ---------------------------------------------------------------------------
+
+func TestCondenseToOriginalWildcards(t *testing.T) {
+	tests := []struct {
+		name      string
+		ops       []string
+		wildcards []string
+		want      []string
+	}{
+		{
+			name:      "no wildcards — passthrough",
+			ops:       []string{"ec2:DescribeInstances", "ec2:StartInstances"},
+			wildcards: nil,
+			want:      []string{"ec2:DescribeInstances", "ec2:StartInstances"},
+		},
+		{
+			name:      "single wildcard restores all covered perms",
+			ops:       []string{"ec2:DescribeInstances", "ec2:StartInstances", "ec2:StopInstances"},
+			wildcards: []string{"ec2:*"},
+			want:      []string{"ec2:*"},
+		},
+		{
+			name:      "wildcard and non-matching perm coexist",
+			ops:       []string{"ec2:DescribeInstances", "s3:GetObject"},
+			wildcards: []string{"ec2:*"},
+			want:      []string{"ec2:*", "s3:GetObject"},
+		},
+		{
+			name: "overlapping wildcards processed in order",
+			ops: []string{
+				"Microsoft.Compute/availabilitySets/read",
+				"Microsoft.Compute/availabilitySets/write",
+				"Microsoft.Compute/disks/read",
+			},
+			wildcards: []string{
+				"Microsoft.Compute/*/read",
+				"Microsoft.Compute/availabilitySets/*",
+			},
+			want: []string{
+				"Microsoft.Compute/*/read",
+				"Microsoft.Compute/availabilitySets/*",
+			},
+		},
+		{
+			name:      "empty operations",
+			ops:       []string{},
+			wildcards: []string{"ec2:*"},
+			want:      []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := condenseToOriginalWildcards(tt.ops, tt.wildcards)
+			sort.Strings(tt.want)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Round-trip: wildcard + exact mixed
+// ---------------------------------------------------------------------------
+
+func TestValidatePermissionsRoundTrip(t *testing.T) {
+	allPerms := makePerms(
+		"ec2:DescribeInstances",
+		"ec2:StartInstances",
+		"ec2:StopInstances",
+		"s3:GetObject",
+		"s3:PutObject",
+		"s3:ListBuckets",
+		"rds:DescribeDBInstances",
+	)
+
+	tests := []struct {
+		name    string
+		input   []string
+		wantOps []string
+	}{
+		{
+			name:    "wildcard + exact: ec2:* and s3:GetObject",
+			input:   []string{"ec2:*", "s3:GetObject"},
+			wantOps: []string{"ec2:*", "s3:GetObject"},
+		},
+		{
+			name:    "multiple wildcards: ec2:* and s3:*",
+			input:   []string{"ec2:*", "s3:*"},
+			wantOps: []string{"ec2:*", "s3:*"},
+		},
+		{
+			name:    "single wildcard with suffix: ec2:Describe*",
+			input:   []string{"ec2:Describe*"},
+			wantOps: []string{"ec2:Describe*"},
+		},
+		{
+			name:    "all perms via top-level wildcard pattern",
+			input:   []string{"*"},
+			wantOps: []string{"*"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := validatePermissions(allPerms, stmtOps(tt.input...))
+			require.NoError(t, err)
+			gotOps := ops(got)
+			sort.Strings(tt.wantOps)
+			assert.Equal(t, tt.wantOps, gotOps)
+		})
+	}
 }

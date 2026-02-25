@@ -37,6 +37,7 @@ import (
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	_ "github.com/thand-io/agent/docs" // Import generated swagger docs
+	"github.com/thand-io/agent/internal/api"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
@@ -49,13 +50,6 @@ import (
 var staticFiles embed.FS
 
 func NewServer(cfg *config.Config) *Server {
-
-	workflows, err := manager.NewThandWorkflowManager(cfg)
-
-	if err != nil {
-		logrus.WithError(err).Fatal("Failed to create workflow manager")
-		return nil
-	}
 
 	// Create template functions
 	funcMap := template.FuncMap{
@@ -79,13 +73,20 @@ func NewServer(cfg *config.Config) *Server {
 	tmpl, err := template.New("").Funcs(funcMap).ParseFS(staticFiles, "static/*.html")
 	if err != nil {
 		logrus.WithError(err).Fatal("Failed to parse templates")
+		return nil
+	}
+
+	apiService, err := api.NewApiService(cfg)
+	if err != nil {
+		logrus.WithError(err).Fatal("Failed to create API service")
+		return nil
 	}
 
 	// Create a new server instance with the provided configuration
 	server := &Server{
 		Config:         cfg,
 		TemplateEngine: tmpl,
-		Workflows:      workflows,
+		API:            apiService,
 		StartTime:      time.Now().UTC(),
 	}
 
@@ -98,6 +99,7 @@ type Server struct {
 	TemplateEngine  *template.Template
 	StartTime       time.Time
 	Workflows       *manager.ThandWorkflowManager
+	API             *api.Service
 	TotalRequests   int64
 	ElevateRequests int64
 	server          *http.Server
@@ -626,6 +628,7 @@ func (s *Server) apiConfigurationHandler(c *gin.Context) {
 	workflows := []string{}  // TODO: populate workflows list
 	activities := []string{} // TODO: populate activities list
 
+	// For agent / client we show the local server for discvoery.
 	baseUrl := s.Config.GetLocalServerUrl()
 
 	if s.Config.IsServer() {
@@ -638,6 +641,8 @@ func (s *Server) apiConfigurationHandler(c *gin.Context) {
 		capabilities["llm"] = services.HasLargeLanguageModel()
 		capabilities["storage"] = services.HasStorage()
 
+		// However, for server we show the login server as the main
+		// entry point for clients to connect to
 		baseUrl = s.Config.GetLoginServerUrl()
 	}
 

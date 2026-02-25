@@ -22,9 +22,6 @@ import (
 
 // Hard limits for roles configuration to prevent resource exhaustion
 const (
-	// MaxPermissions is the maximum number of permissions (allow + deny) per role
-	MaxPermissions = 500
-
 	// MaxResources is the maximum number of resources (allow + deny) per role
 	MaxResources = 100
 
@@ -52,8 +49,8 @@ const (
 func validateRoleLimits(roleKey string, role *models.Role) error {
 	// Check permissions limit
 	permCount := len(role.Permissions.Allow) + len(role.Permissions.Deny)
-	if permCount > MaxPermissions {
-		return fmt.Errorf("role '%s' exceeds maximum permissions limit: %d > %d", roleKey, permCount, MaxPermissions)
+	if permCount > models.MaxPermissions {
+		return fmt.Errorf("role '%s' exceeds maximum permissions limit: %d > %d", roleKey, permCount, models.MaxPermissions)
 	}
 
 	// Check scopes limit
@@ -852,7 +849,7 @@ func normalizeStatements(stmts models.RoleStatements) (map[string]map[string]boo
 
 		// Statements WITHOUT conditions are normalized (existing logic)
 		for _, op := range stmt.Operations {
-			for _, expandedOp := range expandCondensedActions(op) {
+			for _, expandedOp := range models.ExpandCondensedActions(op) {
 				if result[expandedOp] == nil {
 					result[expandedOp] = make(map[string]bool)
 				}
@@ -986,7 +983,7 @@ func rebuildStatementsFromNormalized(normalized map[string]map[string]bool, pres
 
 		// Build statements, one per unique target set
 		for targetKey, ops := range targetGroupToOps {
-			condensedOps := condenseActions(ops)
+			condensedOps := models.CondenseActions(ops)
 			targets := targetGroupToTargets[targetKey]
 
 			// Filter out empty string marker (means "all targets")
@@ -1027,13 +1024,13 @@ func (c *Config) mergePermissionsWithConflictResolution(composite *models.Role, 
 	parentAllowWildcards := make(map[string]bool)
 	parentDenyWildcards := make(map[string]bool)
 	for op := range parentAllowNorm {
-		if strings.HasSuffix(op, ":*") {
-			parentAllowWildcards[strings.TrimSuffix(op, ":*")] = true
+		if before, ok := strings.CutSuffix(op, ":*"); ok {
+			parentAllowWildcards[before] = true
 		}
 	}
 	for op := range parentDenyNorm {
-		if strings.HasSuffix(op, ":*") {
-			parentDenyWildcards[strings.TrimSuffix(op, ":*")] = true
+		if before, ok := strings.CutSuffix(op, ":*"); ok {
+			parentDenyWildcards[before] = true
 		}
 	}
 
@@ -1067,8 +1064,8 @@ func (c *Config) mergePermissionsWithConflictResolution(composite *models.Role, 
 	for op, targets := range parentAllowNorm {
 		delete(finalDenyNorm, op) // Remove from deny if child denied it
 		// Also remove child denies subsumed by this parent allow wildcard
-		if strings.HasSuffix(op, ":*") {
-			prefix := strings.TrimSuffix(op, ":*")
+		if before, ok := strings.CutSuffix(op, ":*"); ok {
+			prefix := before
 			for childOp := range finalDenyNorm {
 				if strings.HasPrefix(childOp, prefix+":") && childOp != op {
 					delete(finalDenyNorm, childOp)
@@ -1088,8 +1085,8 @@ func (c *Config) mergePermissionsWithConflictResolution(composite *models.Role, 
 	for op, targets := range parentDenyNorm {
 		delete(finalAllowNorm, op) // Remove from allow if child allowed it
 		// Also remove child allows subsumed by this parent deny wildcard
-		if strings.HasSuffix(op, ":*") {
-			prefix := strings.TrimSuffix(op, ":*")
+		if before, ok := strings.CutSuffix(op, ":*"); ok {
+			prefix := before
 			for childOp := range finalAllowNorm {
 				if strings.HasPrefix(childOp, prefix+":") && childOp != op {
 					delete(finalAllowNorm, childOp)
@@ -1260,139 +1257,16 @@ func (c *Config) filterByProvider(items []string, allowedProviders []string) []s
 	return result
 }
 
-// isCondensablePermission returns true if the permission can be condensed with others.
-// GCP-style permissions (with dots in the action part) are not condensable.
-func isCondensablePermission(permission string) bool {
-	idx := strings.LastIndex(permission, ":")
-	if idx == -1 {
-		return false
-	}
-	// If last segment contains a dot, it's a GCP-style permission (not condensable)
-	return !strings.Contains(permission[idx+1:], ".")
-}
-
-// expandCondensedActions expands "k8s:pods:get,list" into ["k8s:pods:get", "k8s:pods:list"].
-// GCP-style permissions are returned as-is.
-func expandCondensedActions(permission string) []string {
-	if !isCondensablePermission(permission) {
-		return []string{permission}
-	}
-
-	idx := strings.LastIndex(permission, ":")
-	if idx == -1 || !strings.Contains(permission[idx+1:], ",") {
-		return []string{permission}
-	}
-
-	resource := permission[:idx]
-	actions := strings.Split(permission[idx+1:], ",")
-	result := make([]string, 0, len(actions))
-
-	for _, action := range actions {
-		action = strings.TrimSpace(action)
-		if len(action) != 0 {
-			result = append(result, resource+":"+action)
-		}
-	}
-	return result
-}
-
-// condenseActions groups permissions by resource and condenses their actions.
-// Handles wildcards: "ec2:*" subsumes "ec2:DescribeInstances".
-//
-// Algorithm:
-//  1. Separate atomic (non-condensable like GCP) from condensable permissions
-//  2. Track wildcard permissions to subsume specific ones
-//  3. Group condensable permissions by resource
-//  4. Merge and sort actions for each resource
-//  5. Filter out permissions subsumed by wildcards
-func condenseActions(permissions []string) []string {
-	if len(permissions) == 0 {
-		return nil
-	}
-
-	// Enforce upper bound to prevent resource exhaustion
-	if len(permissions) > MaxPermissions {
-		logrus.Errorf("condenseActions: permissions slice length %d exceeds maximum %d; returning nil",
-			len(permissions), MaxPermissions)
-		return nil
-	}
-
-	// Pre-allocate with reasonable capacity
-	atomic := make([]string, 0, len(permissions)/2)           // Non-condensable permissions
-	byResource := make(map[string][]string, len(permissions)) // resource -> actions
-	wildcards := make(map[string]bool, len(permissions)/4)    // Tracks wildcard prefixes
-
-	for _, perm := range permissions {
-		if strings.HasSuffix(perm, ":*") {
-			wildcards[strings.TrimSuffix(perm, ":*")] = true
-		}
-
-		if !isCondensablePermission(perm) {
-			atomic = append(atomic, perm)
-			continue
-		}
-
-		idx := strings.LastIndex(perm, ":")
-		resource, action := perm[:idx], perm[idx+1:]
-		byResource[resource] = append(byResource[resource], action)
-	}
-
-	// Filter out items subsumed by wildcards
-	result := make([]string, 0, len(atomic)+len(byResource))
-
-	for _, perm := range atomic {
-		if !isSubsumedByWildcard(perm, wildcards) {
-			result = append(result, perm)
-		}
-	}
-
-	for resource, actions := range byResource {
-		// Check if this resource has a wildcard - if so, only output the wildcard
-		if slices.Contains(actions, "*") {
-			result = append(result, resource+":*")
-			continue
-		}
-
-		// Check if this resource is subsumed by a DIFFERENT wildcard
-		// (A wildcard shouldn't subsume itself)
-		isSubsumed := false
-		for prefix := range wildcards {
-			// Skip if this is the same resource (self-subsumption)
-			if prefix == resource {
-				continue
-			}
-			// Check if resource is under a wildcard prefix
-			if strings.HasPrefix(resource, prefix+":") {
-				isSubsumed = true
-				break
-			}
-		}
-
-		if isSubsumed {
-			continue
-		}
-
-		if len(actions) == 1 {
-			result = append(result, resource+":"+actions[0])
-		} else {
-			sort.Strings(actions)
-			result = append(result, resource+":"+strings.Join(actions, ","))
-		}
-	}
-
-	sort.Strings(result)
-	return result
-}
-
-// isSubsumedByWildcard checks if an item is covered by a wildcard.
-func isSubsumedByWildcard(item string, wildcards map[string]bool) bool {
-	for prefix := range wildcards {
-		if strings.HasPrefix(item, prefix+":") && item != prefix+":*" {
-			return true
-		}
-	}
-	return false
-}
+// Convenience aliases for moved functions. The canonical implementations
+// now live in the models package (condense.go) so they can be shared by
+// both the config layer (role composition) and the provider RBAC layer
+// (permission validation).
+var (
+	condenseActions         = models.CondenseActions
+	expandCondensedActions  = models.ExpandCondensedActions
+	isCondensablePermission = models.IsCondensablePermission
+	isSubsumedByWildcard    = models.IsSubsumedByWildcard
+)
 
 // mapKeys returns the keys of a map as a sorted slice.
 // Returns nil for empty or nil maps.

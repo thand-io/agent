@@ -1,10 +1,6 @@
-// External test package so we can import internal/providers/aws without
-// creating a circular dependency (aws already imports models).
 package models_test
 
 import (
-	"sort"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,9 +9,9 @@ import (
 	"github.com/thand-io/agent/internal/providers/aws"
 )
 
-// awsProviderPerms loads the AWS permission list via the provider's shared
-// data singleton (same path used at runtime) and wraps it into the
-// SearchResult slice expected by ValidatePermissionsPublic.
+// awsProviderPerms loads the AWS permission list via the provider's
+// shared data singleton and wraps it into the SearchResult slice
+// expected by ValidatePermissionsPublic.
 func awsProviderPerms(t *testing.T) []models.SearchResult[models.ProviderPermission] {
 	t.Helper()
 	permissions, err := aws.GetPermissions()
@@ -31,105 +27,73 @@ func awsProviderPerms(t *testing.T) []models.SearchResult[models.ProviderPermiss
 	return results
 }
 
-// TestAWSYamlPatternsAgainstRealDataset runs every wildcard pattern from
-// config/roles/aws.yaml against the real AWS IAM dataset and asserts that
-// each pattern expands to at least one real permission.
-func TestAWSYamlPatternsAgainstRealDataset(t *testing.T) {
+// TestAWSWildcardRoundTrip verifies that broad wildcards like "ec2:*"
+// expand against the real IAM dataset and then condense back to the
+// original wildcard pattern — never leaving hundreds of individual
+// permissions behind.
+func TestAWSWildcardRoundTrip(t *testing.T) {
 	perms := awsProviderPerms(t)
 
-	patterns := []struct {
-		pattern  string
-		prefix   string   // expected service prefix on all results
-		mustHave []string // spot-checks that must appear in the expansion
-	}{
-		{
-			pattern: "ec2:*",
-			prefix:  "ec2:",
-			mustHave: []string{
-				"ec2:DescribeInstances",
-				"ec2:RunInstances",
-				"ec2:AllocateAddress",
-			},
-		},
-		{
-			pattern: "s3:*",
-			prefix:  "s3:",
-			mustHave: []string{
-				"s3:GetObject",
-				"s3:PutObject",
-				"s3:ListBuckets",
-			},
-		},
-		{
-			pattern: "rds:*",
-			prefix:  "rds:",
-			mustHave: []string{
-				"rds:DescribeCertificates",
-				"rds:DescribeDBClusterSnapshots",
-				"rds:DescribeValidDBInstanceModifications",
-			},
-		},
+	wildcards := []string{
+		"ec2:*",
+		"s3:*",
+		"rds:*",
+		"iam:*",
 	}
 
-	for _, tt := range patterns {
-		t.Run(tt.pattern, func(t *testing.T) {
-			stmt := models.RoleStatements{{Operations: []string{tt.pattern}}}
+	for _, wc := range wildcards {
+		t.Run(wc, func(t *testing.T) {
+			stmt := models.RoleStatements{{Operations: []string{wc}}}
 			got, err := models.ValidatePermissionsPublic(perms, stmt)
-			require.NoError(t, err, "pattern %q should not error against real AWS data", tt.pattern)
+			require.NoError(t, err, "%q should not error against real AWS data", wc)
 
-			var expanded []string
+			var resultOps []string
 			for _, s := range got {
-				expanded = append(expanded, s.Operations...)
-			}
-			sort.Strings(expanded)
-
-			assert.NotEmpty(t, expanded, "pattern %q matched no real AWS permissions", tt.pattern)
-
-			for _, perm := range expanded {
-				assert.True(t,
-					strings.HasPrefix(perm, tt.prefix),
-					"unexpected permission %q returned for pattern %q", perm, tt.pattern,
-				)
+				resultOps = append(resultOps, s.Operations...)
 			}
 
-			for _, want := range tt.mustHave {
-				assert.Contains(t, expanded, want,
-					"pattern %q should have expanded to include %q", tt.pattern, want,
-				)
-			}
+			// The wildcard should condense back to exactly one entry: itself.
+			assert.Equal(t, []string{wc}, resultOps,
+				"%q should round-trip to itself, not %d individual permissions", wc, len(resultOps),
+			)
 		})
 	}
 
-	// Full round-trip: the combined aws_admin allow list must expand
-	// without error against real data.
-	t.Run("full aws_admin allow list validates without error", func(t *testing.T) {
-		allPatterns := make([]string, 0, len(patterns))
-		for _, p := range patterns {
-			allPatterns = append(allPatterns, p.pattern)
-		}
-
-		allow := models.RoleStatements{{Operations: allPatterns}}
-		got, err := models.ValidatePermissionsPublic(perms, allow)
+	// Mixed wildcards + exact
+	t.Run("mixed ec2:* with s3:GetObject", func(t *testing.T) {
+		stmt := models.RoleStatements{{Operations: []string{"ec2:*", "s3:GetObject"}}}
+		got, err := models.ValidatePermissionsPublic(perms, stmt)
 		require.NoError(t, err)
 
-		var allOps []string
+		var resultOps []string
 		for _, s := range got {
-			allOps = append(allOps, s.Operations...)
+			resultOps = append(resultOps, s.Operations...)
 		}
-		sort.Strings(allOps)
-		assert.NotEmpty(t, allOps)
 
-		// Spot-checks across all three services
-		checks := []string{
-			"ec2:DescribeInstances",
-			"ec2:RunInstances",
-			"s3:GetObject",
-			"s3:PutObject",
-			"s3:ListBuckets",
-			"rds:DescribeCertificates",
+		assert.Contains(t, resultOps, "ec2:*")
+		assert.Contains(t, resultOps, "s3:GetObject")
+		assert.LessOrEqual(t, len(resultOps), 3,
+			"expected at most 3 operations (ec2:* + s3:GetObject + maybe another), got %d", len(resultOps))
+	})
+
+	// Exact permission validated against real dataset
+	t.Run("exact ec2:DescribeInstances passes", func(t *testing.T) {
+		stmt := models.RoleStatements{{Operations: []string{"ec2:DescribeInstances"}}}
+		got, err := models.ValidatePermissionsPublic(perms, stmt)
+		require.NoError(t, err)
+
+		var resultOps []string
+		for _, s := range got {
+			resultOps = append(resultOps, s.Operations...)
 		}
-		for _, want := range checks {
-			assert.Contains(t, allOps, want)
-		}
+		assert.Equal(t, []string{"ec2:DescribeInstances"}, resultOps)
+	})
+
+	// Typo rejected against real dataset
+	t.Run("typo ec2:DescirbeInstances rejected", func(t *testing.T) {
+		stmt := models.RoleStatements{{Operations: []string{"ec2:DescirbeInstances"}}}
+		_, err := models.ValidatePermissionsPublic(perms, stmt)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "was not found")
 	})
 }

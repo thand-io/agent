@@ -302,10 +302,10 @@ func (t *thandTask) executeAuthorization(
 	return modelOutput, nil
 }
 
-// runAuthTask executes a single authorization task and returns its result.
-// When a Temporal context is available, it dispatches a child workflow to the
-// agent that has the provider registered (routed via TaskQueue = ProviderName).
-// Otherwise it falls back to local provider execution.
+// When a Temporal context is available, it dispatches a child workflow using
+// the parent workflow's task queue (typically the agent identity), assuming
+// the provider is registered on that worker. Otherwise it falls back to local
+// provider execution.
 func (t *thandTask) runAuthTask(
 	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	task authTask,

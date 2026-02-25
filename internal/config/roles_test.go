@@ -3282,3 +3282,700 @@ func TestGetCompositeRoleForIdentity_DifferentIdentitiesDifferentIdentifiers(t *
 	assert.True(t, result1.Composite, "Result1 should be composite")
 	assert.True(t, result2.Composite, "Result2 should be composite")
 }
+
+// =============================================================================
+// WILDCARD + DENY + SCOPE INHERITANCE RESOLUTION TESTS
+// =============================================================================
+
+// TestWildcardDenyInheritanceResolution verifies that wildcard permissions
+// interact correctly with deny lists during role inheritance, and that scopes
+// gate which inherited roles are included.
+func TestWildcardDenyInheritanceResolution(t *testing.T) {
+
+	// ── ec2:* allow with inherited deny of a specific action ─────────────
+	// Scenario: child has the broad ec2:* allow; parent narrows it by adding
+	// a specific deny.  Parent deny does NOT wildcard-subsume ec2:* (it is
+	// a specific action, not a wildcard), so both survive.
+	t.Run("parent deny ec2:DescribeInstances narrows inherited ec2:*", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"ec2-full": {
+				Name: "EC2 Full Access",
+				Permissions: models.RolePermissions{
+					Allow: stmts("ec2:*"),
+				},
+				Enabled: true,
+			},
+			"ec2-restricted": {
+				Name:     "EC2 Restricted",
+				Inherits: []string{"ec2-full"},
+				Permissions: models.RolePermissions{
+					Deny: stmts("ec2:DescribeInstances"),
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+		identity := &models.Identity{ID: "u1", User: &models.User{Username: "alice"}}
+
+		result, err := config.GetCompositeRoleByName(identity, "ec2-restricted")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		// ec2:* from child stays in allow (parent deny is specific, not wildcard)
+		assert.Contains(t, allowOps, "ec2:*", "inherited wildcard should stay in allow")
+		// Parent deny ec2:DescribeInstances should be in deny
+		assert.Contains(t, denyOps, "ec2:DescribeInstances",
+			"parent deny should narrow the inherited wildcard")
+	})
+
+	// ── Parent deny wildcard overrides child allow specifics ─────────────
+	t.Run("parent deny ec2:* overrides child allow ec2 specifics", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"ec2-reader": {
+				Name: "EC2 Reader",
+				Permissions: models.RolePermissions{
+					Allow: stmts("ec2:DescribeInstances", "ec2:StartInstances", "ec2:StopInstances"),
+				},
+				Enabled: true,
+			},
+			"ec2-lockdown": {
+				Name:     "EC2 Lockdown",
+				Inherits: []string{"ec2-reader"},
+				Permissions: models.RolePermissions{
+					Deny: stmts("ec2:*"), // Parent deny wildcard wipes all child ec2 allows
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+		identity := &models.Identity{ID: "u1", User: &models.User{Username: "bob"}}
+
+		result, err := config.GetCompositeRoleByName(identity, "ec2-lockdown")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		// All ec2 specifics from child should be removed from allow
+		assert.NotContains(t, allowOps, "ec2:DescribeInstances")
+		assert.NotContains(t, allowOps, "ec2:StartInstances")
+		assert.NotContains(t, allowOps, "ec2:StopInstances")
+		// Deny wildcard should be present
+		assert.Contains(t, denyOps, "ec2:*")
+	})
+
+	// ── Parent allow wildcard overrides child deny specifics ─────────────
+	t.Run("parent allow s3:* overrides child deny s3 specifics", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"s3-restrictive": {
+				Name: "S3 Restrictive",
+				Permissions: models.RolePermissions{
+					Allow: stmts("s3:GetObject"),
+					Deny:  stmts("s3:PutObject", "s3:DeleteObject"),
+				},
+				Enabled: true,
+			},
+			"s3-full-access": {
+				Name:     "S3 Full Access",
+				Inherits: []string{"s3-restrictive"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("s3:*"), // Should override child's specific denies
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+		identity := &models.Identity{ID: "u1", User: &models.User{Username: "carol"}}
+
+		result, err := config.GetCompositeRoleByName(identity, "s3-full-access")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		// Parent allow s3:* should be present
+		assert.Contains(t, allowOps, "s3:*")
+		// Child deny specifics should be overridden by parent's wildcard allow
+		assert.NotContains(t, denyOps, "s3:PutObject", "parent allow s3:* should override child deny")
+		assert.NotContains(t, denyOps, "s3:DeleteObject", "parent allow s3:* should override child deny")
+	})
+
+	// ── Mixed services: wildcard + deny only affects matching service ────
+	t.Run("ec2:* allow with s3 deny does not cross service boundaries", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"s3-deny": {
+				Name: "S3 Deny",
+				Permissions: models.RolePermissions{
+					Deny: stmts("s3:DeleteObject"),
+				},
+				Enabled: true,
+			},
+			"ec2-full": {
+				Name:     "EC2 Full",
+				Inherits: []string{"s3-deny"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("ec2:*", "s3:GetObject"),
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+		identity := &models.Identity{ID: "u1", User: &models.User{Username: "dave"}}
+
+		result, err := config.GetCompositeRoleByName(identity, "ec2-full")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		assert.Contains(t, allowOps, "ec2:*", "ec2 wildcard should be present")
+		assert.Contains(t, allowOps, "s3:GetObject", "s3:GetObject should be present")
+		assert.Contains(t, denyOps, "s3:DeleteObject", "s3 deny should NOT be affected by ec2:*")
+	})
+
+	// ── Multi-level: grandchild allow, child deny specific, parent wildcard ──
+	t.Run("three-level: grandchild allow, child deny specific, parent wildcard allow", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"grandchild": {
+				Name: "Grandchild",
+				Permissions: models.RolePermissions{
+					Allow: stmts("ec2:DescribeInstances", "ec2:StartInstances", "s3:GetObject"),
+				},
+				Enabled: true,
+			},
+			"child": {
+				Name:     "Child",
+				Inherits: []string{"grandchild"},
+				Permissions: models.RolePermissions{
+					Deny: stmts("ec2:StartInstances"), // Deny grandchild's ec2:StartInstances
+				},
+				Enabled: true,
+			},
+			"parent": {
+				Name:     "Parent",
+				Inherits: []string{"child"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("ec2:*"), // Wildcard overrides child's deny
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+		identity := &models.Identity{ID: "u1", User: &models.User{Username: "eve"}}
+
+		result, err := config.GetCompositeRoleByName(identity, "parent")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		// Parent ec2:* in allow should override child's ec2:StartInstances deny
+		assert.Contains(t, allowOps, "ec2:*")
+		assert.NotContains(t, denyOps, "ec2:StartInstances",
+			"parent allow ec2:* should override child's specific deny")
+		// s3:GetObject from grandchild should still be present (unaffected)
+		assert.Contains(t, allowOps, "s3:GetObject")
+	})
+
+	// ── Scope-gated inheritance: deny scope blocks entire inherited role ──
+	t.Run("scope deny blocks wildcard role from being inherited", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"privileged": {
+				Name: "Privileged",
+				Permissions: models.RolePermissions{
+					Allow: stmts("ec2:*", "s3:*", "rds:*"),
+				},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"admins"},
+					},
+					Deny: models.ScopeIdentities{
+						Groups: []string{"restricted-admins"},
+					},
+				},
+				Enabled: true,
+			},
+			"standard": {
+				Name:     "Standard",
+				Inherits: []string{"privileged"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("ec2:DescribeInstances"),
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+
+		// User in admins AND restricted-admins — deny takes precedence
+		identity := &models.Identity{
+			ID: "u1",
+			User: &models.User{
+				Username: "restricted-admin",
+				Email:    "ra@corp.com",
+				Groups:   []string{"admins", "restricted-admins"},
+			},
+		}
+
+		result, err := config.GetCompositeRoleByName(identity, "standard")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+
+		// Only standard's own permissions should be present
+		assert.Contains(t, allowOps, "ec2:DescribeInstances")
+		// Privileged role's wildcards should NOT be inherited
+		assert.NotContains(t, allowOps, "ec2:*", "scope-denied role should not be inherited")
+		assert.NotContains(t, allowOps, "s3:*", "scope-denied role should not be inherited")
+		assert.NotContains(t, allowOps, "rds:*", "scope-denied role should not be inherited")
+	})
+
+	// ── Scoped user DOES inherit wildcard role ──────────────────────────
+	t.Run("scope allow grants wildcard role inheritance", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"privileged": {
+				Name: "Privileged",
+				Permissions: models.RolePermissions{
+					Allow: stmts("ec2:*", "s3:*"),
+				},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"admins"},
+					},
+				},
+				Enabled: true,
+			},
+			"standard-plus": {
+				Name:     "Standard Plus",
+				Inherits: []string{"privileged"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("rds:DescribeDBInstances"),
+					Deny:  stmts("ec2:TerminateInstances"),
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+
+		identity := &models.Identity{
+			ID: "u1",
+			User: &models.User{
+				Username: "admin1",
+				Email:    "admin1@corp.com",
+				Groups:   []string{"admins"},
+			},
+		}
+
+		result, err := config.GetCompositeRoleByName(identity, "standard-plus")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		// Should inherit privileged wildcards
+		assert.Contains(t, allowOps, "ec2:*", "scoped user should inherit ec2:*")
+		assert.Contains(t, allowOps, "s3:*", "scoped user should inherit s3:*")
+		assert.Contains(t, allowOps, "rds:DescribeDBInstances")
+		// Parent deny should be preserved
+		assert.Contains(t, denyOps, "ec2:TerminateInstances")
+	})
+
+	// ── Multi-level: scopes + wildcard deny + specific allow ────────────
+	t.Run("multi-level with scopes and wildcard deny", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"base-ec2": {
+				Name: "Base EC2",
+				Permissions: models.RolePermissions{
+					Allow: stmts("ec2:DescribeInstances", "ec2:StartInstances", "ec2:StopInstances"),
+				},
+				Enabled: true,
+			},
+			"devops": {
+				Name:     "DevOps",
+				Inherits: []string{"base-ec2"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("s3:*"),
+					Deny:  stmts("ec2:StopInstances"),
+				},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"devops", "engineering"},
+					},
+				},
+				Enabled: true,
+			},
+			"team-lead": {
+				Name:     "Team Lead",
+				Inherits: []string{"devops"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("rds:*"),
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+
+		// User in devops group — should inherit devops role
+		identity := &models.Identity{
+			ID: "u1",
+			User: &models.User{
+				Username: "lead1",
+				Email:    "lead1@corp.com",
+				Groups:   []string{"devops"},
+			},
+		}
+
+		result, err := config.GetCompositeRoleByName(identity, "team-lead")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		// Operations may come back in condensed form (ec2:DescribeInstances,StartInstances).
+		// Expand them so we can check by individual action.
+		var expandedAllow, expandedDeny []string
+		for _, op := range allowOps {
+			expandedAllow = append(expandedAllow, models.ExpandCondensedActions(op)...)
+		}
+		for _, op := range denyOps {
+			expandedDeny = append(expandedDeny, models.ExpandCondensedActions(op)...)
+		}
+
+		// rds:* from team-lead (parent)
+		assert.Contains(t, expandedAllow, "rds:*")
+		// s3:* from devops (inherited)
+		assert.Contains(t, expandedAllow, "s3:*")
+		// ec2 specifics from base-ec2 (grandchild), minus ec2:StopInstances denied by devops
+		assert.Contains(t, expandedAllow, "ec2:DescribeInstances")
+		assert.Contains(t, expandedAllow, "ec2:StartInstances")
+		assert.Contains(t, expandedDeny, "ec2:StopInstances")
+		assert.NotContains(t, expandedAllow, "ec2:StopInstances", "devops deny should block grandchild allow")
+	})
+
+	// ── Same service: deny specific + allow wildcard within one role ─────
+	t.Run("single role with ec2:* allow and ec2:TerminateInstances deny", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"ec2-safe": {
+				Name: "EC2 Safe",
+				Permissions: models.RolePermissions{
+					Allow: stmts("ec2:*"),
+					Deny:  stmts("ec2:TerminateInstances"),
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+		identity := &models.Identity{ID: "u1", User: &models.User{Username: "user1"}}
+
+		result, err := config.GetCompositeRoleByName(identity, "ec2-safe")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		// Within a single role, same-op in both allow and deny removes from BOTH
+		// But ec2:* and ec2:TerminateInstances are different operations,
+		// so both should survive conflict resolution.
+		assert.Contains(t, allowOps, "ec2:*", "wildcard should remain in allow")
+		assert.Contains(t, denyOps, "ec2:TerminateInstances", "specific deny should remain")
+	})
+
+	// ── Condensed actions with deny ──────────────────────────────────────
+	t.Run("condensed k8s actions with deny on specific verb", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"k8s-base": {
+				Name: "K8s Base",
+				Permissions: models.RolePermissions{
+					Allow: stmts("k8s:pods:get,list,watch"),
+					Deny:  stmts("k8s:pods:delete"),
+				},
+				Enabled: true,
+			},
+			"k8s-admin": {
+				Name:     "K8s Admin",
+				Inherits: []string{"k8s-base"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("k8s:deployments:get,list,create,delete"),
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+		identity := &models.Identity{ID: "u1", User: &models.User{Username: "k8suser"}}
+
+		result, err := config.GetCompositeRoleByName(identity, "k8s-admin")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		// Expand condensed results for individual checks
+		var expandedAllow, expandedDeny []string
+		for _, op := range allowOps {
+			expandedAllow = append(expandedAllow, models.ExpandCondensedActions(op)...)
+		}
+		for _, op := range denyOps {
+			expandedDeny = append(expandedDeny, models.ExpandCondensedActions(op)...)
+		}
+
+		// Condensed actions should be expanded during normalization, then re-condensed
+		assert.Contains(t, expandedAllow, "k8s:pods:get")
+		assert.Contains(t, expandedAllow, "k8s:pods:list")
+		assert.Contains(t, expandedAllow, "k8s:pods:watch")
+		assert.Contains(t, expandedDeny, "k8s:pods:delete")
+		assert.NotContains(t, expandedAllow, "k8s:pods:delete", "denied verb must not appear in allow")
+
+		// Deployment permissions from parent
+		assert.Contains(t, expandedAllow, "k8s:deployments:get")
+		assert.Contains(t, expandedAllow, "k8s:deployments:list")
+		assert.Contains(t, expandedAllow, "k8s:deployments:create")
+		assert.Contains(t, expandedAllow, "k8s:deployments:delete")
+	})
+
+	// ── Azure-style wildcards + deny with scopes ─────────────────────────
+	t.Run("Azure wildcards with deny and scope filtering", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"azure-compute-reader": {
+				Name: "Azure Compute Reader",
+				Permissions: models.RolePermissions{
+					Allow: stmts("Microsoft.Compute/*/read"),
+				},
+				Enabled: true,
+			},
+			"azure-restricted": {
+				Name:     "Azure Restricted",
+				Inherits: []string{"azure-compute-reader"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("Microsoft.Storage/storageAccounts/read"),
+					Deny:  stmts("Microsoft.Compute/virtualMachines/read"),
+				},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Domains: []string{"corp.com"},
+					},
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+
+		// User from corp.com — should inherit
+		identity := &models.Identity{
+			ID: "u1",
+			User: &models.User{
+				Username: "azureuser",
+				Email:    "user@corp.com",
+			},
+		}
+
+		result, err := config.GetCompositeRoleByName(identity, "azure-restricted")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		// Inherited compute reader wildcard should be in allow
+		assert.Contains(t, allowOps, "Microsoft.Compute/*/read")
+		// Storage read from parent
+		assert.Contains(t, allowOps, "Microsoft.Storage/storageAccounts/read")
+		// Specific deny should override the wildcard match for this one resource
+		assert.Contains(t, denyOps, "Microsoft.Compute/virtualMachines/read")
+	})
+
+	// ── Azure: user NOT in allowed domain is blocked ─────────────────────
+	t.Run("Azure scope deny blocks inheritance for out-of-domain user", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"azure-compute-reader": {
+				Name: "Azure Compute Reader",
+				Permissions: models.RolePermissions{
+					Allow: stmts("Microsoft.Compute/*/read"),
+				},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Domains: []string{"corp.com"},
+					},
+				},
+				Enabled: true,
+			},
+			"azure-base": {
+				Name:     "Azure Base",
+				Inherits: []string{"azure-compute-reader"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("Microsoft.Storage/storageAccounts/read"),
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+
+		// User NOT from corp.com — should NOT inherit compute reader
+		identity := &models.Identity{
+			ID: "u1",
+			User: &models.User{
+				Username: "outsider",
+				Email:    "user@external.com",
+			},
+		}
+
+		result, err := config.GetCompositeRoleByName(identity, "azure-base")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+
+		assert.Contains(t, allowOps, "Microsoft.Storage/storageAccounts/read")
+		assert.NotContains(t, allowOps, "Microsoft.Compute/*/read",
+			"scoped role should not be inherited by out-of-domain user")
+	})
+
+	// ── Double wildcard in different services: parent allow wildcard
+	// subsumes inherited specific denies under the same service ─────────
+	t.Run("parent wildcard allow subsumes inherited specific denies", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"deny-layer": {
+				Name: "Deny Layer",
+				Permissions: models.RolePermissions{
+					Deny: stmts("ec2:TerminateInstances", "s3:DeleteObject"),
+				},
+				Enabled: true,
+			},
+			"full-access": {
+				Name:     "Full Access",
+				Inherits: []string{"deny-layer"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("ec2:*", "s3:*", "rds:*"),
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+		identity := &models.Identity{ID: "u1", User: &models.User{Username: "user1"}}
+
+		result, err := config.GetCompositeRoleByName(identity, "full-access")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		// All three wildcards should still be in allow
+		assert.Contains(t, allowOps, "ec2:*")
+		assert.Contains(t, allowOps, "s3:*")
+		assert.Contains(t, allowOps, "rds:*")
+		// Parent allow wildcards SUBSUME child deny specifics under the same
+		// service prefix, so deny list should be empty.
+		assert.Empty(t, denyOps,
+			"parent allow wildcard should override inherited specific denies")
+	})
+
+	// ── Reverse direction: parent deny specific, child allow wildcard ───
+	// This is the user's core scenario: inherit ec2:*, then deny one action.
+	t.Run("parent deny specific narrows inherited wildcard allow", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"broad-access": {
+				Name: "Broad Access",
+				Permissions: models.RolePermissions{
+					Allow: stmts("ec2:*", "s3:*"),
+				},
+				Enabled: true,
+			},
+			"narrowed": {
+				Name:     "Narrowed",
+				Inherits: []string{"broad-access"},
+				Permissions: models.RolePermissions{
+					Deny: stmts("ec2:TerminateInstances", "s3:DeleteObject"),
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+		identity := &models.Identity{ID: "u1", User: &models.User{Username: "user1"}}
+
+		result, err := config.GetCompositeRoleByName(identity, "narrowed")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		// Inherited wildcards stay in allow (parent deny is specific, not wildcard)
+		assert.Contains(t, allowOps, "ec2:*")
+		assert.Contains(t, allowOps, "s3:*")
+		// Parent deny specifics survive alongside the wildcard
+		assert.Contains(t, denyOps, "ec2:TerminateInstances")
+		assert.Contains(t, denyOps, "s3:DeleteObject")
+	})
+
+	// ── GCP-style permissions with deny and scope ────────────────────────
+	t.Run("GCP-style permissions with deny and scope gating", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"gcp-viewer": {
+				Name: "GCP Viewer",
+				Permissions: models.RolePermissions{
+					Allow: stmts(
+						"compute.instances.get",
+						"compute.instances.list",
+						"storage.buckets.get",
+						"storage.buckets.list",
+					),
+				},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"gcp-users"},
+					},
+				},
+				Enabled: true,
+			},
+			"gcp-ops": {
+				Name:     "GCP Ops",
+				Inherits: []string{"gcp-viewer"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("compute.instances.start", "compute.instances.stop"),
+					Deny:  stmts("storage.buckets.list"), // Override inherited allow
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+
+		identity := &models.Identity{
+			ID: "u1",
+			User: &models.User{
+				Username: "gcpops",
+				Email:    "ops@corp.com",
+				Groups:   []string{"gcp-users"},
+			},
+		}
+
+		result, err := config.GetCompositeRoleByName(identity, "gcp-ops")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		// Inherited compute permissions
+		assert.Contains(t, allowOps, "compute.instances.get")
+		assert.Contains(t, allowOps, "compute.instances.list")
+		// Parent's own allow
+		assert.Contains(t, allowOps, "compute.instances.start")
+		assert.Contains(t, allowOps, "compute.instances.stop")
+		// Inherited storage.buckets.get
+		assert.Contains(t, allowOps, "storage.buckets.get")
+		// Parent deny overrides inherited allow
+		assert.Contains(t, denyOps, "storage.buckets.list")
+		assert.NotContains(t, allowOps, "storage.buckets.list")
+	})
+}

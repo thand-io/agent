@@ -10,7 +10,6 @@ import (
 	swctx "github.com/serverlessworkflow/sdk-go/v3/impl/ctx"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
-	"github.com/thand-io/agent/internal/config"
 	models "github.com/thand-io/agent/internal/models"
 	workflowConfig "github.com/thand-io/agent/internal/workflows/config"
 	providerAws "github.com/thand-io/agent/internal/workflows/functions/providers/aws"
@@ -29,14 +28,28 @@ import (
 	"go.temporal.io/sdk/worker"
 )
 
+// ThandWorkflowBroker is the minimal interface that Service requires from the
+// underlying workflow engine. The concrete implementation is
+// *manager.ThandWorkflowManager; the interface exists so tests can supply a
+// lightweight double without spinning up a real Temporal connection.
+type ThandWorkflowBroker interface {
+	// CreateElevationWorkflow starts a new elevation workflow and returns the
+	// initial task descriptor.
+	CreateElevationWorkflow(ctx context.Context, request models.ElevateRequest) (*models.WorkflowRequest, error)
+
+	// ResumeWorkflow continues a paused workflow task.
+	// Returns nil, nil when the task no longer exists or has already completed.
+	ResumeWorkflow(workflow *models.ElevateWorkflowTask) (*models.ElevateWorkflowTask, error)
+}
+
 // WorkflowManager manages workflow lifecycle and execution using the official SDK
 type ThandWorkflowManager struct {
-	config          *config.Config
+	config          models.ConfigImpl
 	workflowManager *workflowSdk.WorkflowManager
 }
 
 // NewWorkflowManager creates a new workflow manager
-func NewThandWorkflowManager(cfg *config.Config) (*ThandWorkflowManager, error) {
+func NewThandWorkflowManager(cfg models.ConfigImpl) (*ThandWorkflowManager, error) {
 
 	workflowConfig := workflowConfig.NewThandWorkflowConfig(cfg)
 
@@ -87,7 +100,7 @@ func (m *ThandWorkflowManager) GetWorkflowManager() *workflowSdk.WorkflowManager
 	return m.workflowManager
 }
 
-func (m *ThandWorkflowManager) GetThandConfig() *config.Config {
+func (m *ThandWorkflowManager) GetThandConfig() models.ConfigImpl {
 	return m.config
 }
 
