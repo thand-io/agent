@@ -150,6 +150,10 @@ func setupHomeConfigPath(v *viper.Viper) error {
 	sessionPath := filepath.Join(usr.HomeDir, ".config", "thand")
 	v.AddConfigPath(sessionPath)
 
+	// Also check $HOME/.thand (documented default in CLI help text)
+	dotThandPath := filepath.Join(usr.HomeDir, ".thand")
+	v.AddConfigPath(dotThandPath)
+
 	// Check if the folder exists and create it if it does not exist
 	if _, err := os.Stat(sessionPath); os.IsNotExist(err) {
 		if err := os.MkdirAll(sessionPath, os.ModePerm); err != nil {

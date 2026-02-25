@@ -30,9 +30,19 @@ access you need and requests it on your behalf.
 4. The response/status of the workflow workflow is returned to the user in the CLI.
 */
 var requestCmd = &cobra.Command{
-	Use:     "request",
-	Short:   "Request access to resources",
-	Long:    `Request just-in-time access to cloud infrastructure or SaaS applications`,
+	Use:   "request",
+	Short: "Request access to resources",
+	Long: `Request just-in-time access to cloud infrastructure or SaaS applications.
+
+There are two ways to request access:
+
+  AI-assisted (natural language):
+    agent request "I need analyst access to snowflake-prod for 4 hours"
+
+  Explicit (with flags via the 'access' subcommand):
+    agent request access --provider snowflake-prod --role analyst --duration 4h --reason "analysis"
+
+Run 'agent request access --help' to see all available flags for explicit requests.`,
 	PreRunE: preRunClientConfigWithSessionE,
 	Run: func(cmd *cobra.Command, args []string) {
 

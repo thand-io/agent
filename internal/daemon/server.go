@@ -636,6 +636,12 @@ func (s *Server) apiConfigurationHandler(c *gin.Context) {
 		capabilities["storage"] = services.HasStorage()
 	}
 
+	// Use the externally-reachable base URL when running as a server.
+	// GetLocalServerUrl() returns http://localhost:<port> which is only
+	// correct for local/agent mode. In server mode we need the public URL
+	// that clients will use to reach us.
+	baseUrl := s.advertisedBaseURL(c)
+
 	response := gin.H{
 		// Service Identity
 		"serviceName": "Thand " + serviceType,
@@ -643,18 +649,16 @@ func (s *Server) apiConfigurationHandler(c *gin.Context) {
 		"version":     s.GetVersion(),
 
 		// Endpoints
-		"baseUrl":     s.Config.GetLocalServerUrl(),
+		"baseUrl":     baseUrl,
 		"apiBasePath": s.Config.GetApiBasePath(),
-		//"hostname":    s.Config.Environment.Hostname,
-		//"port":        s.Config.Server.Port,
 
 		// Authentication
-		"authEndpoint": s.Config.GetLocalServerUrl() + "/auth",
+		"authEndpoint": baseUrl + "/auth",
 		"authMethods":  []string{"session", "bearer"},
 
 		// Documentation
-		"docsUrl":     s.Config.GetLocalServerUrl() + "/swagger/index.html",
-		"openApiSpec": s.Config.GetLocalServerUrl() + "/swagger/doc.json",
+		"docsUrl":     baseUrl + "/swagger/index.html",
+		"openApiSpec": baseUrl + "/swagger/doc.json",
 
 		// Capabilities
 		"workflows":    workflows,
@@ -670,6 +674,30 @@ func (s *Server) apiConfigurationHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+// advertisedBaseURL returns the externally-reachable base URL for this server.
+// In server mode it prefers the configured login endpoint, falling back to
+// X-Forwarded-* headers (set by Cloud Run / load balancers), and finally the
+// request Host header. In agent/client mode it returns the local listener URL.
+func (s *Server) advertisedBaseURL(c *gin.Context) string {
+	if s.Config.IsServer() {
+		// Prefer the configured login endpoint (THAND_LOGIN_ENDPOINT)
+		if u := strings.TrimSuffix(s.Config.GetLoginServerUrl(), "/"); u != "" {
+			return u
+		}
+		// Fallback: derive from reverse-proxy headers
+		proto := c.GetHeader("X-Forwarded-Proto")
+		if proto == "" {
+			proto = "http"
+		}
+		host := c.GetHeader("X-Forwarded-Host")
+		if host == "" {
+			host = c.Request.Host
+		}
+		return fmt.Sprintf("%s://%s", proto, host)
+	}
+	return s.Config.GetLocalServerUrl()
 }
 
 // readyHandler handles the readiness check endpoint
