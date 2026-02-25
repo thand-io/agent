@@ -44,7 +44,7 @@ func TestAWSWildcardRoundTrip(t *testing.T) {
 	for _, wc := range wildcards {
 		t.Run(wc, func(t *testing.T) {
 			stmt := models.RoleStatements{{Operations: []string{wc}}}
-			got, err := models.ValidatePermissionsPublic(perms, stmt)
+			got, err := models.ValidatePermissionsPublic(perms, stmt, true)
 			require.NoError(t, err, "%q should not error against real AWS data", wc)
 
 			var resultOps []string
@@ -62,7 +62,7 @@ func TestAWSWildcardRoundTrip(t *testing.T) {
 	// Mixed wildcards + exact
 	t.Run("mixed ec2:* with s3:GetObject", func(t *testing.T) {
 		stmt := models.RoleStatements{{Operations: []string{"ec2:*", "s3:GetObject"}}}
-		got, err := models.ValidatePermissionsPublic(perms, stmt)
+		got, err := models.ValidatePermissionsPublic(perms, stmt, true)
 		require.NoError(t, err)
 
 		var resultOps []string
@@ -79,7 +79,7 @@ func TestAWSWildcardRoundTrip(t *testing.T) {
 	// Exact permission validated against real dataset
 	t.Run("exact ec2:DescribeInstances passes", func(t *testing.T) {
 		stmt := models.RoleStatements{{Operations: []string{"ec2:DescribeInstances"}}}
-		got, err := models.ValidatePermissionsPublic(perms, stmt)
+		got, err := models.ValidatePermissionsPublic(perms, stmt, true)
 		require.NoError(t, err)
 
 		var resultOps []string
@@ -92,7 +92,7 @@ func TestAWSWildcardRoundTrip(t *testing.T) {
 	// Typo rejected against real dataset
 	t.Run("typo ec2:DescirbeInstances rejected", func(t *testing.T) {
 		stmt := models.RoleStatements{{Operations: []string{"ec2:DescirbeInstances"}}}
-		_, err := models.ValidatePermissionsPublic(perms, stmt)
+		_, err := models.ValidatePermissionsPublic(perms, stmt, true)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "was not found")
 	})

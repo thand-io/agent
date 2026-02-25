@@ -8,13 +8,11 @@ import (
 
 type ProviderCapability string
 
-
 var IdentityCapabilities = []ProviderCapability{
 	ProviderCapabilityIdentities,
 	ProviderCapabilityGroups,
 	ProviderCapabilityUsers,
 }
-
 
 const (
 	// Identity synchronization capabilities
@@ -41,7 +39,20 @@ const (
 )
 
 type RolesConfiguration = SynchronizableConfiguration
-type PermissionsConfiguration = SynchronizableConfiguration
+
+// PermissionsConfiguration extends SynchronizableConfiguration with
+// permission-specific settings such as whether the provider's cloud API
+// natively accepts wildcard permission patterns (e.g. "ec2:*").
+type PermissionsConfiguration struct {
+	SynchronizableConfiguration `json:",inline"`
+
+	// SupportsWildcards indicates whether the provider's API accepts wildcard
+	// permission patterns (e.g. "ec2:*", "Microsoft.Compute/*/read").
+	// When false (the default), wildcards are expanded to individual
+	// permissions before being sent to the provider.
+	SupportsWildcards bool `json:"supports_wildcards,omitempty"`
+}
+
 type ResourcesConfiguration = SynchronizableConfiguration
 type IdentitiesConfiguration = SynchronizableConfiguration
 type UsersConfiguration = SynchronizableConfiguration
@@ -162,7 +173,9 @@ func (pc *ProviderCapabilities) WithDefaultRolesConfiguration() *ProviderCapabil
 }
 
 func (pc *ProviderCapabilities) WithDefaultPermissionsConfiguration() *ProviderCapabilities {
-	pc.Permissions = NewSynchronizableCapability()
+	pc.Permissions = &PermissionsConfiguration{
+		SynchronizableConfiguration: *NewSynchronizableCapability(),
+	}
 	return pc
 }
 

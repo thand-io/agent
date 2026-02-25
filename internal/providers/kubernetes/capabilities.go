@@ -3,5 +3,8 @@ package kubernetes
 import "github.com/thand-io/agent/internal/models"
 
 var KubernetesCapabilities = models.NewProviderCapabilities().
-	WithDefaultPermissionsConfiguration().
+	WithPermissionsConfiguration(models.PermissionsConfiguration{
+		SynchronizableConfiguration: *models.NewSynchronizableCapability(),
+		SupportsWildcards:           true, // Kubernetes RBAC natively accepts * in verbs/resources
+	}).
 	WithDefaultProvisioningConfiguration()

@@ -49,7 +49,7 @@ func TestAzureYamlPatternsAgainstRealDataset(t *testing.T) {
 	for _, pattern := range patterns {
 		t.Run(pattern, func(t *testing.T) {
 			stmt := models.RoleStatements{{Operations: []string{pattern}}}
-			got, err := models.ValidatePermissionsPublic(perms, stmt)
+			got, err := models.ValidatePermissionsPublic(perms, stmt, true)
 			require.NoError(t, err, "pattern %q should not error against real Azure data", pattern)
 
 			var resultOps []string
@@ -68,7 +68,7 @@ func TestAzureYamlPatternsAgainstRealDataset(t *testing.T) {
 	// back to the original wildcard patterns.
 	t.Run("full azure_admin allow list round-trips", func(t *testing.T) {
 		allow := models.RoleStatements{{Operations: patterns}}
-		got, err := models.ValidatePermissionsPublic(perms, allow)
+		got, err := models.ValidatePermissionsPublic(perms, allow, true)
 		require.NoError(t, err)
 
 		var allOps []string

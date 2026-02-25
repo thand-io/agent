@@ -28,10 +28,10 @@ func gcpProviderPerms(t *testing.T) []models.SearchResult[models.ProviderPermiss
 	return results
 }
 
-// TestGCPWildcardRoundTrip verifies that GCP-style dot-separated wildcards
-// like "compute.instances.*" expand against the real IAM dataset and then
-// condense back to the original wildcard pattern.
-func TestGCPWildcardRoundTrip(t *testing.T) {
+// TestGCPWildcardExpansion verifies that GCP-style dot-separated wildcards
+// like "compute.instances.*" expand against the real IAM dataset and remain
+// expanded (not condensed) because GCP does not support wildcards at its API.
+func TestGCPWildcardExpansion(t *testing.T) {
 	perms := gcpProviderPerms(t)
 
 	wildcards := []string{
@@ -43,7 +43,7 @@ func TestGCPWildcardRoundTrip(t *testing.T) {
 	for _, wc := range wildcards {
 		t.Run(wc, func(t *testing.T) {
 			stmt := models.RoleStatements{{Operations: []string{wc}}}
-			got, err := models.ValidatePermissionsPublic(perms, stmt)
+			got, err := models.ValidatePermissionsPublic(perms, stmt, false)
 			require.NoError(t, err, "%q should not error against real GCP data", wc)
 
 			var resultOps []string
@@ -51,17 +51,19 @@ func TestGCPWildcardRoundTrip(t *testing.T) {
 				resultOps = append(resultOps, s.Operations...)
 			}
 
-			// The wildcard should condense back to exactly one entry: itself.
-			assert.Equal(t, []string{wc}, resultOps,
-				"%q should round-trip to itself, not %d individual permissions", wc, len(resultOps),
-			)
+			// With supportsWildcards=false, the wildcard must NOT appear in
+			// the output — only individual expanded permissions.
+			assert.NotContains(t, resultOps, wc,
+				"%q should be expanded, not condensed back", wc)
+			assert.Greater(t, len(resultOps), 1,
+				"%q should expand to multiple individual permissions", wc)
 		})
 	}
 }
 
 // TestGCPYamlPatternsAgainstRealDataset runs the permission patterns from
 // config/roles/gcp.yaml against the real GCP IAM dataset and asserts that
-// each wildcard round-trips and the full allow list validates cleanly.
+// wildcards are expanded (not condensed) since GCP requires exact names.
 func TestGCPYamlPatternsAgainstRealDataset(t *testing.T) {
 	perms := gcpProviderPerms(t)
 
@@ -75,7 +77,7 @@ func TestGCPYamlPatternsAgainstRealDataset(t *testing.T) {
 	for _, pattern := range patterns {
 		t.Run(pattern, func(t *testing.T) {
 			stmt := models.RoleStatements{{Operations: []string{pattern}}}
-			got, err := models.ValidatePermissionsPublic(perms, stmt)
+			got, err := models.ValidatePermissionsPublic(perms, stmt, false)
 			require.NoError(t, err, "pattern %q should not error against real GCP data", pattern)
 
 			var resultOps []string
@@ -83,17 +85,19 @@ func TestGCPYamlPatternsAgainstRealDataset(t *testing.T) {
 				resultOps = append(resultOps, s.Operations...)
 			}
 
-			assert.Contains(t, resultOps, pattern,
-				"pattern %q should round-trip back to itself after validation", pattern,
-			)
+			// Wildcards must NOT survive — they should be expanded.
+			assert.NotContains(t, resultOps, pattern,
+				"pattern %q should be expanded, not condensed", pattern)
+			assert.Greater(t, len(resultOps), 0,
+				"pattern %q should expand to at least one permission", pattern)
 		})
 	}
 
-	// Full round-trip: the complete allow list must validate and condense
-	// back to the original wildcard patterns.
-	t.Run("full gcp_admin allow list round-trips", func(t *testing.T) {
+	// Full expansion: the complete allow list must validate and expand
+	// all wildcards into individual permissions.
+	t.Run("full gcp_admin allow list expands all wildcards", func(t *testing.T) {
 		allow := models.RoleStatements{{Operations: patterns}}
-		got, err := models.ValidatePermissionsPublic(perms, allow)
+		got, err := models.ValidatePermissionsPublic(perms, allow, false)
 		require.NoError(t, err)
 
 		var allOps []string
@@ -103,8 +107,10 @@ func TestGCPYamlPatternsAgainstRealDataset(t *testing.T) {
 		sort.Strings(allOps)
 		assert.NotEmpty(t, allOps)
 
+		// No wildcard patterns should remain.
 		for _, p := range patterns {
-			assert.Contains(t, allOps, p)
+			assert.NotContains(t, allOps, p,
+				"wildcard %q should have been expanded", p)
 		}
 	})
 }
@@ -118,7 +124,7 @@ func TestGCPExactPermissionValidation(t *testing.T) {
 	// goes through the else branch).
 	t.Run("exact compute.instances.get passes", func(t *testing.T) {
 		stmt := models.RoleStatements{{Operations: []string{"compute.instances.get"}}}
-		got, err := models.ValidatePermissionsPublic(perms, stmt)
+		got, err := models.ValidatePermissionsPublic(perms, stmt, false)
 		require.NoError(t, err)
 
 		var resultOps []string
@@ -131,7 +137,7 @@ func TestGCPExactPermissionValidation(t *testing.T) {
 	// Typo rejected
 	t.Run("typo compute.instances.gett rejected", func(t *testing.T) {
 		stmt := models.RoleStatements{{Operations: []string{"compute.instances.gett"}}}
-		_, err := models.ValidatePermissionsPublic(perms, stmt)
+		_, err := models.ValidatePermissionsPublic(perms, stmt, false)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "was not found")
 	})
@@ -139,7 +145,7 @@ func TestGCPExactPermissionValidation(t *testing.T) {
 	// Nonexistent service
 	t.Run("nonexistent service rejected", func(t *testing.T) {
 		stmt := models.RoleStatements{{Operations: []string{"fakeservice.things.read"}}}
-		_, err := models.ValidatePermissionsPublic(perms, stmt)
+		_, err := models.ValidatePermissionsPublic(perms, stmt, false)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "was not found")
 	})
