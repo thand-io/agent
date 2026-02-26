@@ -12,7 +12,6 @@ import (
 
 	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/search"
-	"github.com/google/uuid"
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
@@ -462,12 +461,9 @@ func (c *Config) GetCompositeRoleForWorkflow(
 		roleIdentifier, identity, baseRole, providers...)
 
 	if err != nil {
+		logrus.WithError(err).Errorf("Failed to resolve composite role for workflow '%s'", workflow.GetWorkflowID())
 		return nil, err
 	}
-
-	// Generate a deterministic UUID from the roleIdentifier string so the
-	// composite role can be uniquely identified and cached.
-	derivedRole.UUID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(roleIdentifier))
 
 	return derivedRole, nil
 }
@@ -496,12 +492,20 @@ func (c *Config) GetCompositeRoleForIdentity(
 	}
 
 	// Combine all components to create a unique identifier
-	roleIdentifier := fmt.Sprintf("%s:%s:%s:%s", baseRole.Identifier, versionStr, baseRole.Name, userIdentity)
+	roleIdentifier := fmt.Sprintf("%s:%s:%s:%s",
+		baseRole.Identifier,
+		versionStr,
+		baseRole.Name,
+		userIdentity)
 
-	derivedRole, err := c.getCompositeRoleForIdentity(roleIdentifier, identity, baseRole, providers...)
+	derivedRole, err := c.getCompositeRoleForIdentity(
+		roleIdentifier, identity, baseRole, providers...)
+
 	if err != nil {
+		logrus.WithError(err).Errorf("Failed to resolve composite role for identity '%s'", userIdentity)
 		return nil, err
 	}
+
 	return derivedRole, nil
 }
 
@@ -520,13 +524,13 @@ func (c *Config) getCompositeRoleForIdentity(
 	}
 
 	// Update identifier to make it unique for this composite role instance
-	resolvedRole.Identifier = roleIdentifier
+	resolvedRole.SetUniquIdentifierFromString(roleIdentifier)
 
 	// Log the identifier change for debugging
 	logrus.WithFields(logrus.Fields{
 		"role":                baseRole.Name,
 		"original_identifier": baseRole.Identifier,
-		"new_identifier":      resolvedRole.Identifier,
+		"new_identifier":      resolvedRole.GetUniqueIdentifier(),
 	}).Debugln("Marked role as composite and updated identifier")
 
 	return resolvedRole, nil
@@ -614,6 +618,7 @@ func (c *Config) resolveCompositeRole(
 	if numInherits == 0 {
 		// No inheritance to process, just resolve conflicts and return
 		c.resolvePermissionConflicts(&compositeRole)
+		c.expandPermissionsForProviders(&compositeRole, providers)
 		return &models.CompositeRole{Role: compositeRole, Providers: baseRole.Providers}, nil
 	}
 
@@ -698,6 +703,7 @@ func (c *Config) resolveCompositeRole(
 
 	compositeRole.Inherits = remainingInherits
 	c.resolvePermissionConflicts(&compositeRole)
+	c.expandPermissionsForProviders(&compositeRole, providers)
 
 	// Validate composite role limits after merging
 	if err := validateRoleLimits(compositeRole.Name, &compositeRole); err != nil {
@@ -709,6 +715,22 @@ func (c *Config) resolveCompositeRole(
 		Providers: baseRole.Providers,
 		Composite: hasThandRoleInheritance,
 	}, nil
+}
+
+// expandPermissionsForProviders validates and expands wildcard permissions in a role
+// for each provider. For providers where SupportsWildcards is false (e.g. GCP, Okta),
+// wildcards like "bigquery.datasets.*" are expanded into their individual concrete
+// permissions so they can be sent to the cloud API. For providers where
+// SupportsWildcards is true (e.g. AWS, Azure), the original wildcard patterns are
+// preserved. This hooks into the end of permission resolution, alongside the existing
+// condensation step, so it runs naturally as part of role assembly.
+func (c *Config) expandPermissionsForProviders(role *models.Role, providers []models.Provider) {
+	for _, provider := range providers {
+		if err := models.ValidateRolePermissions(provider, role); err != nil {
+			logrus.WithError(err).WithField("provider", provider.GetIdentifier()).
+				Warn("Failed to expand permissions for provider during role resolution")
+		}
+	}
 }
 
 // resolveInheritedRole handles scope checking before resolving an inherited role.

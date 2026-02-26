@@ -173,7 +173,6 @@ func (p *azureProvider) authorizeRoleTemporal(
 
 	user := req.GetUser()
 	role := req.GetRole()
-	isComposite := role.IsComposite()
 
 	// Composite-aware role name: unique for composite, base for non-composite.
 	roleName := role.GetName()
@@ -184,9 +183,9 @@ func (p *azureProvider) authorizeRoleTemporal(
 		wfCtx,
 		models.CreateTemporalProviderWorkflowName(identifier, GetOrCreateRoleDefinitionActivityName),
 		&GetOrCreateRoleDefinitionRequest{
-			RoleName:    roleName,
-			Description: role.GetDescription(),
-			Permissions: role.Permissions,
+			RoleIdentifier: roleName,
+			Description:    role.GetDescription(),
+			Permissions:    role.Permissions,
 		},
 	).Get(wfCtx, &roleDefResp); err != nil {
 		return nil, fmt.Errorf("GetOrCreateRoleDefinition activity failed: %w", err)
@@ -266,7 +265,7 @@ func (p *azureProvider) revokeRoleTemporal(
 	if err := workflow.ExecuteActivity(
 		wfCtx,
 		models.CreateTemporalProviderWorkflowName(identifier, GetRoleDefinitionActivityName),
-		&GetRoleDefinitionRequest{RoleName: roleName},
+		&GetRoleDefinitionRequest{RoleIdentifier: roleName},
 	).Get(wfCtx, &roleDefResp); err != nil {
 		return nil, fmt.Errorf("GetRoleDefinition activity failed: %w", err)
 	}

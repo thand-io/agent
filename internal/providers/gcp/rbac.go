@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -29,6 +30,43 @@ func newThandCondition() *cloudresourcemanager.Expr {
 		Description: "This binding is managed by thand",
 		Expression:  "true", // Always evaluates to true, used as a tag
 	}
+}
+
+// gcpInvalidRoleIDChars matches any character NOT allowed in a GCP custom role ID.
+// GCP constraint: [a-zA-Z0-9_\.]{3,64}
+var gcpInvalidRoleIDChars = regexp.MustCompile(`[^a-zA-Z0-9_.]`)
+
+// sanitizeGCPRoleID transforms a role name into a valid GCP custom role ID.
+// GCP requires role IDs to match [a-zA-Z0-9_\.]{3,64}.
+//
+// Steps:
+//  1. Replace invalid characters (spaces, hyphens, etc.) with underscores.
+//  2. Collapse consecutive underscores.
+//  3. Trim leading/trailing underscores.
+//  4. Truncate to 64 characters.
+//  5. If the result is shorter than 3 chars, pad with underscores.
+func sanitizeGCPRoleID(name string) string {
+	sanitized := gcpInvalidRoleIDChars.ReplaceAllString(name, "_")
+
+	// Collapse consecutive underscores
+	for strings.Contains(sanitized, "__") {
+		sanitized = strings.ReplaceAll(sanitized, "__", "_")
+	}
+
+	sanitized = strings.Trim(sanitized, "_")
+
+	// Truncate to GCP maximum of 64 characters
+	if len(sanitized) > 64 {
+		sanitized = sanitized[:64]
+		sanitized = strings.TrimRight(sanitized, "_")
+	}
+
+	// Pad if too short (minimum 3 characters)
+	for len(sanitized) < 3 {
+		sanitized += "_"
+	}
+
+	return sanitized
 }
 
 // primitiveRoles are GCP basic/primitive roles that do not support IAM conditions.
@@ -119,7 +157,7 @@ func (p *gcpProvider) AuthorizeRole(
 	// If permissions are specified, create a custom role with those permissions.
 	// Composite roles get a unique name; non-composite roles share a base identifier.
 	if len(role.Permissions.Allow) > 0 {
-		customRoleName := role.GetName()
+		customRoleName := sanitizeGCPRoleID(role.GetName())
 
 		existingRole, err := p.getRole(ctx, projectId, customRoleName)
 		if err != nil {
@@ -404,7 +442,7 @@ func (p *gcpProvider) authorizeRoleTemporal(
 
 	if len(role.Permissions.Allow) > 0 {
 		// Composite roles get a unique name; non-composite roles share a base identifier.
-		customRoleName := role.GetName()
+		customRoleName := sanitizeGCPRoleID(role.GetName())
 
 		var resp GetOrCreateAndBindCustomRoleResponse
 		if err := workflow.ExecuteActivity(

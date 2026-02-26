@@ -57,12 +57,13 @@ func (p *awsProvider) authorizeRoleIdentityCenter(
 	psReq := &FindOrCreatePermissionSetRequest{
 		InstanceArn: instanceResp.InstanceArn,
 		Role:        &role.Role,
+		RoleName:    role.GetUniqueName(),
 		IsComposite: isComposite,
+		Version:     role.GetVersionString(),
 	}
-	if !isComposite {
-		psReq.Version = role.GetVersionString()
-	}
+
 	psResp, err := p.execFindOrCreatePermissionSet(task, psReq)
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to find or create permission set: %w", err)
 	}
@@ -1096,7 +1097,15 @@ func (p *awsProvider) execFindOrCreatePermissionSet(
 		}
 		return &resp, nil
 	}
-	arn, needsUpdate, err := p.findOrCreatePermissionSet(task.GetContext(), req.InstanceArn, req.RoleName, req.Role, req.IsComposite, req.Version)
+	arn, needsUpdate, err := p.findOrCreatePermissionSet(
+		task.GetContext(),
+		req.InstanceArn,
+		req.RoleName,
+		req.Role,
+		req.IsComposite,
+		req.Version,
+	)
+
 	if err != nil {
 		return nil, err
 	}

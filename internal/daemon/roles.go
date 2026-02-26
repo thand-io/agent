@@ -337,6 +337,17 @@ func (s *Server) postEvaluateRole(c *gin.Context) {
 		return
 	}
 
+	// Resolve provider objects from the requested provider names
+	var resolvedProviders []models.Provider
+	for _, providerName := range request.Providers {
+		provider, err := s.Config.GetProviderByName(providerName)
+		if err != nil {
+			s.getErrorPage(c, http.StatusNotFound, "Provider not found", err)
+			return
+		}
+		resolvedProviders = append(resolvedProviders, provider)
+	}
+
 	results := make(map[string]*models.CompositeRole)
 
 	for _, identityID := range request.Identities {
@@ -348,8 +359,8 @@ func (s *Server) postEvaluateRole(c *gin.Context) {
 			return
 		}
 
-		// Evaluate the composite role
-		compositeRole, err := s.Config.GetCompositeRoleForIdentity(identityResult, baseRole)
+		// Evaluate the composite role, scoped to the requested providers
+		compositeRole, err := s.Config.GetCompositeRoleForIdentity(identityResult, baseRole, resolvedProviders...)
 		if err != nil {
 			s.getErrorPage(c, http.StatusInternalServerError, "Failed to evaluate composite role", err)
 			return

@@ -43,12 +43,6 @@ const (
 	// ThandManagedTagKey is the tag/label key that marks a CSP resource as
 	// managed by thand. Providers use this during cleanup and discovery.
 	ThandManagedTagKey = "thand:managed"
-
-	// CompositeMetadataKey is stored in AuthorizeRoleResponse.Metadata to
-	// indicate whether the role was provisioned as composite (true) or
-	// non-composite (false). Revocation uses this to decide whether to
-	// delete the underlying CSP role.
-	CompositeMetadataKey = "composite"
 )
 
 type CompositeRole struct {
@@ -77,7 +71,22 @@ func (r *CompositeRole) IsComposite() bool {
 	return r.Composite
 }
 
-func (r *CompositeRole) GetIdentifier() uuid.UUID {
+func (r *CompositeRole) SetUniqueIdentifier(uuid uuid.UUID) {
+	r.UUID = uuid
+}
+
+func (r *CompositeRole) SetUniquIdentifierFromString(idStr string) {
+
+	// Create uuidd from string that may already contain a hash suffix (e.g., "baseRole_abcdef123456")
+	r.UUID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(idStr))
+
+}
+
+func (r *CompositeRole) SetProviders(providers []string) {
+	r.Providers = providers
+}
+
+func (r *CompositeRole) GetUniqueIdentifier() uuid.UUID {
 	if r.UUID != uuid.Nil {
 		return r.UUID
 	}
@@ -89,12 +98,12 @@ func (r *CompositeRole) GetName() string {
 	if r.Composite {
 		return r.GetUniqueName()
 	}
-	return r.Role.GetName()
+	return r.Role.GetIdentifier()
 }
 
 func (r *CompositeRole) GetUniqueName() string {
 
-	roleIdentifier := r.GetIdentifier()
+	roleIdentifier := r.GetUniqueIdentifier()
 
 	// Create FNV-1a hash (non-cryptographic, fast, 6 hex chars)
 	h := fnv.New32a()

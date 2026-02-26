@@ -358,6 +358,19 @@ func validateInheritedRolesExist(provider Provider, role *Role, providerRoles []
 	return nil
 }
 
+// ValidateRolePermissions expands wildcard permissions in a role's Allow and Deny lists
+// against the given provider's known permission set, then conditionally re-condenses them.
+//
+// This is the final step of the expand→resolve→condense pipeline: after allow/deny
+// conflict resolution, wildcards like "bigquery.datasets.*" are expanded into their
+// concrete individual permissions. For providers where SupportsWildcards is true
+// (e.g. AWS, Azure) the original wildcard patterns are then restored. For providers
+// where SupportsWildcards is false (e.g. GCP, Okta) the permissions remain expanded
+// so the cloud API receives fully-qualified permission names.
+func ValidateRolePermissions(provider Provider, role *Role) error {
+	return validateRolePermissions(provider, role)
+}
+
 // validateRolePermissions validates that role permissions exist in the provider
 func validateRolePermissions(provider Provider, role *Role) error {
 
@@ -512,6 +525,22 @@ func expandPermissionsWildcard(providerPermissions []SearchResult[ProviderPermis
 // their original patterns (true for AWS/Azure) or left expanded (false for GCP/Okta).
 func ValidatePermissionsPublic(providerPermissions []SearchResult[ProviderPermission], statements RoleStatements, supportsWildcards bool) (RoleStatements, error) {
 	return validatePermissions(providerPermissions, statements, supportsWildcards)
+}
+
+// ExpandRolePermissionsForProvider expands wildcard permissions in a role's Allow and Deny
+// lists against the given provider's known permission set, respecting the provider's
+// SupportsWildcards capability flag.
+//
+// For providers where SupportsWildcards is false (e.g. GCP, Okta), wildcards like
+// "bigquery.datasets.*" are expanded into their individual concrete permissions before
+// the role is sent to the cloud API. For providers where SupportsWildcards is true
+// (e.g. AWS, Azure), the original wildcard patterns are preserved.
+//
+// This is the exported counterpart of validateRolePermissions, intended for use
+// during role assembly (e.g. in GetCompositeRoleForWorkflow) so that the correct
+// permission set reaches the provider at authorization time.
+func ExpandRolePermissionsForProvider(provider Provider, role *Role) error {
+	return validateRolePermissions(provider, role)
 }
 
 // condenseToOriginalWildcards replaces individually-expanded permissions with

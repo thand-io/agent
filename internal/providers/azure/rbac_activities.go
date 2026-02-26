@@ -20,9 +20,9 @@ type azureProviderActivities struct {
 // ─────────────────────────────────────────────────────────────────────────────
 
 type GetOrCreateRoleDefinitionRequest struct {
-	RoleName    string                 `json:"role_name"`
-	Description string                 `json:"description"`
-	Permissions models.RolePermissions `json:"permissions"`
+	RoleIdentifier string                 `json:"role_identifier"` // CSP resource name from CompositeRole.GetName()
+	Description    string                 `json:"description"`
+	Permissions    models.RolePermissions `json:"permissions"`
 }
 
 type GetOrCreateRoleDefinitionResponse struct {
@@ -39,7 +39,7 @@ type CreateRoleAssignmentResponse struct {
 }
 
 type GetRoleDefinitionRequest struct {
-	RoleName string `json:"role_name"`
+	RoleIdentifier string `json:"role_identifier"` // CSP resource name from CompositeRole.GetName()
 }
 
 type GetRoleDefinitionResponse struct {
@@ -68,12 +68,12 @@ func (a *azureProviderActivities) GetOrCreateRoleDefinition(
 	ctx context.Context,
 	req *GetOrCreateRoleDefinitionRequest,
 ) (*GetOrCreateRoleDefinitionResponse, error) {
-	role, err := a.provider.getRoleDefinition(ctx, req.RoleName)
+	role, err := a.provider.getRoleDefinition(ctx, req.RoleIdentifier)
 	if err != nil {
-		role, err = a.provider.createRoleDefinition(ctx, req.RoleName, req.Description, req.Permissions)
+		role, err = a.provider.createRoleDefinition(ctx, req.RoleIdentifier, req.Description, req.Permissions)
 		if err != nil {
 			return nil, temporal.NewApplicationErrorWithOptions(
-				fmt.Sprintf("failed to create Azure role definition '%s': %v", req.RoleName, err),
+				fmt.Sprintf("failed to create Azure role definition '%s': %v", req.RoleIdentifier, err),
 				"AzureRoleDefinitionError",
 				temporal.ApplicationErrorOptions{
 					NextRetryDelay: 3 * time.Second,
@@ -114,12 +114,12 @@ func (a *azureProviderActivities) GetRoleDefinition(
 	ctx context.Context,
 	req *GetRoleDefinitionRequest,
 ) (*GetRoleDefinitionResponse, error) {
-	role, err := a.provider.getRoleDefinition(ctx, req.RoleName)
+	role, err := a.provider.getRoleDefinition(ctx, req.RoleIdentifier)
 	if err != nil {
 		// A missing role definition during revocation is a permanent failure —
 		// there is nothing to revoke if the role no longer exists.
 		return nil, temporal.NewNonRetryableApplicationError(
-			fmt.Sprintf("Azure role definition '%s' not found during revocation", req.RoleName),
+			fmt.Sprintf("Azure role definition '%s' not found during revocation", req.RoleIdentifier),
 			"AzureRoleNotFoundError",
 			err,
 		)
