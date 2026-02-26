@@ -83,20 +83,24 @@ func TestAWSProviderFunctional(t *testing.T) {
 	}
 
 	// Create test role
-	testRole := &models.Role{
-		Name:        "TestRole",
-		Description: "Test IAM role for functional testing",
-		Permissions: models.RolePermissions{
-			Allow: models.RoleStatements{{
-				Operations: []string{
-					"s3:GetObject",
-					"s3:PutObject",
-					"ec2:DescribeInstances",
-				}},
+	testRole := &models.CompositeRole{
+		Composite: true,
+		Role: models.Role{
+			Identifier:  "test_role",
+			Name:        "TestRole",
+			Description: "Test IAM role for functional testing",
+			Permissions: models.RolePermissions{
+				Allow: models.RoleStatements{{
+					Operations: []string{
+						"s3:GetObject",
+						"s3:PutObject",
+						"ec2:DescribeInstances",
+					}},
+				},
 			},
+			Providers: []string{"aws"},
+			Enabled:   true,
 		},
-		Providers: []string{"aws"},
-		Enabled:   true,
 	}
 
 	// Helper function to check if role exists
@@ -220,7 +224,7 @@ func TestAWSProviderFunctional(t *testing.T) {
 		require.True(t, ok, "Provider should implement GetIamClient method")
 		iamClient := iamClientProvider.GetIamClient()
 
-		roleName := testRole.GetIdentifier() // "test_role"
+		roleName := testRole.GetName() // composite role name with hash suffix
 
 		// Verify role doesn't exist initially
 		assert.False(t, roleExists(iamClient, roleName), "Role should not exist initially")
