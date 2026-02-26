@@ -617,7 +617,7 @@ func (c *Config) resolveCompositeRole(
 	numInherits := len(baseRole.Inherits)
 	if numInherits == 0 {
 		// No inheritance to process, just resolve conflicts and return
-		c.resolvePermissionConflicts(&compositeRole)
+		c.resolvePermissionConflicts(&compositeRole, providers...)
 		c.expandPermissionsForProviders(&compositeRole, providers)
 		return &models.CompositeRole{Role: compositeRole, Providers: baseRole.Providers}, nil
 	}
@@ -696,13 +696,13 @@ func (c *Config) resolveCompositeRole(
 		}
 
 		// Merge inherited role into composite
-		c.mergeRole(&compositeRole, inheritedRole)
+		c.mergeRole(&compositeRole, inheritedRole, providers...)
 		// Mark that we inherited from a thand role (not a provider role)
 		hasThandRoleInheritance = true
 	}
 
 	compositeRole.Inherits = remainingInherits
-	c.resolvePermissionConflicts(&compositeRole)
+	c.resolvePermissionConflicts(&compositeRole, providers...)
 	c.expandPermissionsForProviders(&compositeRole, providers)
 
 	// Validate composite role limits after merging
@@ -715,6 +715,21 @@ func (c *Config) resolveCompositeRole(
 		Providers: baseRole.Providers,
 		Composite: hasThandRoleInheritance,
 	}, nil
+}
+
+// providersSupportsWildcards returns true when every provider in the list supports
+// wildcard permissions in its API (e.g. AWS, Azure). Returns true when the list is
+// empty (no provider restriction). Returns false as soon as any provider reports
+// SupportsWildcards=false (e.g. GCP, Okta), so that CondenseActions is skipped and
+// individually-expanded permissions are kept in their concrete form.
+func providersSupportsWildcards(providers []models.Provider) bool {
+	for _, p := range providers {
+		caps := p.GetCapabilities()
+		if caps != nil && caps.Permissions != nil && !caps.Permissions.SupportsWildcards {
+			return false
+		}
+	}
+	return true
 }
 
 // expandPermissionsForProviders validates and expands wildcard permissions in a role
@@ -907,13 +922,13 @@ func (c *Config) filterRoleByProviderNames(role *models.Role, providerNames []st
 // Parent (composite) takes precedence over child (inherited) in conflicts:
 // - Parent Allow overrides Child Deny
 // - Parent Deny overrides Child Allow
-func (c *Config) mergeRole(composite *models.Role, inherited *models.Role) {
+func (c *Config) mergeRole(composite *models.Role, inherited *models.Role, providers ...models.Provider) {
 	// Filter inherited items by composite's providers
 	inheritedAllowPerms := c.filterStatementsListByProvider(inherited.Permissions.Allow, composite.Providers)
 	inheritedDenyPerms := c.filterStatementsListByProvider(inherited.Permissions.Deny, composite.Providers)
 
 	// Merge permissions with conflict resolution
-	c.mergePermissionsWithConflictResolution(composite, inheritedAllowPerms, inheritedDenyPerms)
+	c.mergePermissionsWithConflictResolution(composite, inheritedAllowPerms, inheritedDenyPerms, providers...)
 }
 
 // normalizeStatements expands all statement operations and creates a map by operation.
@@ -1042,7 +1057,7 @@ func stringSlicesEqual(a, b []string) bool {
 // Groups operations by their target sets for more efficient statement representation.
 // rebuildStatementsFromNormalized reconstructs Statement objects from normalized data
 // and appends any preserved statements (those with conditions) at the end.
-func rebuildStatementsFromNormalized(normalized map[string]map[string]bool, preserved models.RoleStatements) models.RoleStatements {
+func rebuildStatementsFromNormalized(normalized map[string]map[string]bool, preserved models.RoleStatements, supportsWildcards bool) models.RoleStatements {
 	// Return nil if both inputs are empty
 	if len(normalized) == 0 && len(preserved) == 0 {
 		return nil
@@ -1069,7 +1084,13 @@ func rebuildStatementsFromNormalized(normalized map[string]map[string]bool, pres
 
 		// Build statements, one per unique target set
 		for targetKey, ops := range targetGroupToOps {
-			condensedOps := models.CondenseActions(ops)
+			var condensedOps []string
+			if supportsWildcards {
+				condensedOps = models.CondenseActions(ops)
+			} else {
+				sort.Strings(ops)
+				condensedOps = ops
+			}
 			targets := targetGroupToTargets[targetKey]
 
 			// Filter out empty string marker (means "all targets")
@@ -1096,7 +1117,7 @@ func rebuildStatementsFromNormalized(normalized map[string]map[string]bool, pres
 // mergePermissionsWithConflictResolution merges permissions with proper conflict resolution.
 // Parent Allow overrides Child Deny, Parent Deny overrides Child Allow.
 // This function preserves both operations AND targets during merging.
-func (c *Config) mergePermissionsWithConflictResolution(composite *models.Role, childAllow, childDeny models.RoleStatements) {
+func (c *Config) mergePermissionsWithConflictResolution(composite *models.Role, childAllow, childDeny models.RoleStatements, providers ...models.Provider) {
 	// Separate normalized and preserved statements
 	parentAllowNorm, parentAllowPreserved := normalizeStatements(composite.Permissions.Allow)
 	parentDenyNorm, parentDenyPreserved := normalizeStatements(composite.Permissions.Deny)
@@ -1192,9 +1213,12 @@ func (c *Config) mergePermissionsWithConflictResolution(composite *models.Role, 
 	finalAllowPreserved := append(childAllowPreserved, parentAllowPreserved...)
 	finalDenyPreserved := append(childDenyPreserved, parentDenyPreserved...)
 
-	// Rebuild statements from normalized form with preserved statements
-	composite.Permissions.Allow = rebuildStatementsFromNormalized(finalAllowNorm, finalAllowPreserved)
-	composite.Permissions.Deny = rebuildStatementsFromNormalized(finalDenyNorm, finalDenyPreserved)
+	// Rebuild statements from normalized form with preserved statements.
+	// Skip CondenseActions for providers that do not support wildcards so that
+	// individually expanded permissions are not re-condensed back into patterns.
+	supportsWildcards := providersSupportsWildcards(providers)
+	composite.Permissions.Allow = rebuildStatementsFromNormalized(finalAllowNorm, finalAllowPreserved, supportsWildcards)
+	composite.Permissions.Deny = rebuildStatementsFromNormalized(finalDenyNorm, finalDenyPreserved, supportsWildcards)
 }
 
 // isOperationSubsumedByWildcard checks if an operation is covered by a wildcard
@@ -1256,7 +1280,7 @@ func (c *Config) filterStatementsListByProvider(stmts models.RoleStatements, all
 //	Allow: ["s3:GetObject", "s3:PutObject"]  +  Deny: ["s3:PutObject", "s3:DeleteObject"]
 //	Result: Allow: ["s3:GetObject"]  +  Deny: ["s3:DeleteObject"]
 //	(s3:PutObject removed from both due to conflict)
-func (c *Config) resolvePermissionConflicts(role *models.Role) {
+func (c *Config) resolvePermissionConflicts(role *models.Role, providers ...models.Provider) {
 	// Separate normalized and preserved statements
 	allowNorm, allowPreserved := normalizeStatements(role.Permissions.Allow)
 	denyNorm, denyPreserved := normalizeStatements(role.Permissions.Deny)
@@ -1273,9 +1297,10 @@ func (c *Config) resolvePermissionConflicts(role *models.Role) {
 	// They could conflict with each other if identical - remove both
 	dedupedAllow, dedupedDeny := deduplicatePreservedStatements(allowPreserved, denyPreserved)
 
-	// Rebuild statements
-	role.Permissions.Allow = rebuildStatementsFromNormalized(allowNorm, dedupedAllow)
-	role.Permissions.Deny = rebuildStatementsFromNormalized(denyNorm, dedupedDeny)
+	// Rebuild statements, skipping CondenseActions for providers that do not support wildcards.
+	supportsWildcards := providersSupportsWildcards(providers)
+	role.Permissions.Allow = rebuildStatementsFromNormalized(allowNorm, dedupedAllow, supportsWildcards)
+	role.Permissions.Deny = rebuildStatementsFromNormalized(denyNorm, dedupedDeny, supportsWildcards)
 }
 
 // parseProviderPrefix checks if a spec has a provider prefix (e.g., "gcp-prod:permission").
