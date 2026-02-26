@@ -3099,16 +3099,17 @@ func TestGetCompositeRoleForIdentity(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, result)
 
+			uniqueName := result.GetUniqueName()
 			if tt.expectChange {
 				// Should have a different identifier with hash suffix
-				assert.NotEqual(t, originalIdentifier, result.Identifier, "Identifier should change for composite roles")
-				assert.Contains(t, result.Identifier, "_", "Composite role identifier should contain underscore separator")
-				assert.True(t, strings.HasPrefix(result.Identifier, originalIdentifier+"_"), "Identifier should start with original identifier plus underscore")
+				assert.NotEqual(t, originalIdentifier, uniqueName, "Identifier should change for composite roles")
+				assert.Contains(t, uniqueName, "_", "Composite role identifier should contain underscore separator")
+				assert.True(t, strings.HasPrefix(uniqueName, originalIdentifier+"_"), "Identifier should start with original identifier plus underscore")
 				assert.True(t, result.Composite, "Role should be marked as composite")
 			} else {
-				// For non-composite roles, identifier is always updated with hash
-				assert.NotEqual(t, originalIdentifier, result.Identifier, "Identifier is always updated")
-				assert.Contains(t, result.Identifier, "_", "Identifier should contain underscore separator")
+				// For non-composite roles, GetUniqueName() still returns a hash-suffixed name
+				assert.NotEqual(t, originalIdentifier, uniqueName, "GetUniqueName should return a hash-suffixed name")
+				assert.Contains(t, uniqueName, "_", "Unique name should contain underscore separator")
 			}
 		})
 	}
@@ -3216,15 +3217,16 @@ func TestGetCompositeRoleForWorkflow(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, result)
 
-			// Identifier should always change for workflow roles
+			// GetUniqueName() always returns a hash-suffixed name
 			originalIdentifier := workflow.GetRole().Identifier
-			assert.NotEqual(t, originalIdentifier, result.Identifier, "Identifier should change for workflow composite roles")
-			assert.Contains(t, result.Identifier, "_", "Composite role identifier should contain underscore separator")
-			assert.True(t, strings.HasPrefix(result.Identifier, originalIdentifier+"_"), "Identifier should start with original identifier plus underscore")
+			uniqueName := result.GetUniqueName()
+			assert.NotEqual(t, originalIdentifier, uniqueName, "Unique name should change for workflow composite roles")
+			assert.Contains(t, uniqueName, "_", "Unique name should contain underscore separator")
+			assert.True(t, strings.HasPrefix(uniqueName, originalIdentifier+"_"), "Unique name should start with original identifier plus underscore")
 
 			// Verify the identifier is unique (contains hash)
-			parts := strings.Split(result.Identifier, "_")
-			assert.GreaterOrEqual(t, len(parts), 2, "Identifier should have at least 2 parts separated by underscore")
+			parts := strings.Split(uniqueName, "_")
+			assert.GreaterOrEqual(t, len(parts), 2, "Unique name should have at least 2 parts separated by underscore")
 			hashPart := parts[len(parts)-1]
 			assert.Equal(t, 6, len(hashPart), "Hash part should be 6 characters")
 		})
@@ -3302,7 +3304,7 @@ func TestGetCompositeRoleForIdentity_DifferentIdentitiesDifferentIdentifiers(t *
 	require.NotNil(t, result2)
 
 	// Different identities should produce different identifiers
-	assert.NotEqual(t, result1.Identifier, result2.Identifier, "Different identities should produce different composite role identifiers")
+	assert.NotEqual(t, result1.GetUniqueName(), result2.GetUniqueName(), "Different identities should produce different composite role identifiers")
 	assert.True(t, result1.Composite, "Result1 should be composite")
 	assert.True(t, result2.Composite, "Result2 should be composite")
 }

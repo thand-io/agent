@@ -732,19 +732,17 @@ func providersSupportsWildcards(providers []models.Provider) bool {
 	return true
 }
 
-// expandPermissionsForProviders validates and expands wildcard permissions in a role
-// for each provider. For providers where SupportsWildcards is false (e.g. GCP, Okta),
-// wildcards like "bigquery.datasets.*" are expanded into their individual concrete
-// permissions so they can be sent to the cloud API. For providers where
-// SupportsWildcards is true (e.g. AWS, Azure), the original wildcard patterns are
-// preserved. This hooks into the end of permission resolution, alongside the existing
-// condensation step, so it runs naturally as part of role assembly.
+// expandPermissionsForProviders expands wildcard permissions in a role for each
+// provider that does not support wildcard patterns in its API (e.g. GCP, Okta).
+// Providers where SupportsWildcards is true (e.g. AWS, Azure) are skipped — their
+// APIs accept wildcard patterns natively and no expansion is required.
 func (c *Config) expandPermissionsForProviders(role *models.Role, providers []models.Provider) {
 	for _, provider := range providers {
-		if err := models.ValidateRolePermissions(provider, role); err != nil {
-			logrus.WithError(err).WithField("provider", provider.GetIdentifier()).
-				Warn("Failed to expand permissions for provider during role resolution")
+		caps := provider.GetCapabilities()
+		if caps == nil || caps.Permissions == nil || caps.Permissions.SupportsWildcards {
+			continue
 		}
+		models.ExpandWildcardPermissionsForProvider(provider, role)
 	}
 }
 
@@ -1376,7 +1374,6 @@ var (
 	condenseActions         = models.CondenseActions
 	expandCondensedActions  = models.ExpandCondensedActions
 	isCondensablePermission = models.IsCondensablePermission
-	isSubsumedByWildcard    = models.IsSubsumedByWildcard
 )
 
 // providerIdentifiers builds a deduplicated list of provider names from the

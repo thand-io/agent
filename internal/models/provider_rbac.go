@@ -543,6 +543,58 @@ func ExpandRolePermissionsForProvider(provider Provider, role *Role) error {
 	return validateRolePermissions(provider, role)
 }
 
+// ExpandWildcardPermissionsForProvider expands wildcard operations (those containing "*")
+// in a role's Allow and Deny lists against the given provider's known permission set.
+// Unlike ValidateRolePermissions, non-wildcard operations are never checked against the
+// provider dataset — they pass through exactly as-is. This makes it safe to call on
+// composite roles that contain generic or cross-provider permissions alongside the
+// provider-specific wildcards that need expanding.
+//
+// A wildcard that matches no permissions in the provider dataset is logged and silently
+// dropped from the list.
+func ExpandWildcardPermissionsForProvider(provider Provider, role *Role) {
+	if provider == nil || role == nil {
+		return
+	}
+
+	providerPermissions, err := provider.ListPermissions(context.TODO(), &SearchRequest{})
+	if err != nil || len(providerPermissions) == 0 {
+		return
+	}
+
+	expand := func(stmts RoleStatements) RoleStatements {
+		result := make(RoleStatements, 0, len(stmts))
+		for _, stmt := range stmts {
+			var ops []string
+			for _, op := range stmt.Operations {
+				if !strings.Contains(op, "*") {
+					ops = append(ops, op)
+					continue
+				}
+				expanded, expErr := expandPermissionsWildcard(providerPermissions, op)
+				if expErr != nil || len(expanded) == 0 {
+					logrus.WithField("permission", op).
+						WithField("provider", provider.GetIdentifier()).
+						Warn("Wildcard permission matched no provider permissions, dropping")
+					continue
+				}
+				ops = append(ops, expanded...)
+			}
+			if len(ops) > 0 {
+				result = append(result, Statement{
+					Operations: ops,
+					Targets:    stmt.Targets,
+					Conditions: stmt.Conditions,
+				})
+			}
+		}
+		return result
+	}
+
+	role.Permissions.Allow = expand(role.Permissions.Allow)
+	role.Permissions.Deny = expand(role.Permissions.Deny)
+}
+
 // condenseToOriginalWildcards replaces individually-expanded permissions with
 // their original wildcard patterns.  Any permission in operations that matches
 // an original wildcard (via path.Match) is removed and the wildcard is added
