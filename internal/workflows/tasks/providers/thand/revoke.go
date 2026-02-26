@@ -96,7 +96,13 @@ func (t *thandTask) executeRevocationTask(
 	var revokeTasks []revokeTask
 
 	for _, providerName := range elevateRequest.Providers {
-		for _, identity := range elevateRequest.Identities {
+
+		provider, err := t.config.GetProviderByName(providerName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get provider: %w", err)
+		}
+
+		for _, identityId := range elevateRequest.Identities {
 			var authorizeResponse *models.AuthorizeRoleResponse
 
 			// Try to hydrate the authorization response for this identity
@@ -106,36 +112,36 @@ func (t *thandTask) executeRevocationTask(
 				authorizationsMap, ok := req["authorizations"]
 
 				if !ok {
-					log.WithField("identity", identity).Debug("No authorizations found in context for revocation")
+					log.WithField("identity", identityId).Debug("No authorizations found in context for revocation")
 					continue
 				}
 
 				if objectMap, ok := authorizationsMap.(map[string]any); ok {
-					if identityMap, ok := objectMap[identity].(map[string]any); ok {
+					if identityMap, ok := objectMap[identityId].(map[string]any); ok {
 						localResponse := models.AuthorizeRoleResponse{}
 						if err := common.ConvertMapToInterface(identityMap, &localResponse); err != nil {
-							log.WithError(err).WithField("identity", identity).Warn("Failed to convert authorize response")
+							log.WithError(err).WithField("identity", identityId).Warn("Failed to convert authorize response")
 						}
 						authorizeResponse = &localResponse
 					}
 				} else if authzMap, ok := authorizationsMap.(map[string]*models.AuthorizeRoleResponse); ok {
-					if authResp, ok := authzMap[identity]; ok {
+					if authResp, ok := authzMap[identityId]; ok {
 						authorizeResponse = authResp
 					}
 				}
 			}
 
-			identityObj := t.resolveIdentity(identity)
+			identityObj := t.resolveIdentity(identityId)
 
 			if identityObj == nil {
-				log.WithField("identity", identity).Warn("Failed to resolve identity for revocation, skipping")
+				log.WithField("identity", identityId).Warn("Failed to resolve identity for revocation, skipping")
 				continue
 			}
 
 			user := identityObj.GetUser()
 
 			if user == nil {
-				log.WithField("identity", identity).Warn("Resolved identity has no user for revocation, skipping")
+				log.WithField("identity", identityId).Warn("Resolved identity has no user for revocation, skipping")
 				continue
 			}
 
@@ -147,11 +153,23 @@ func (t *thandTask) executeRevocationTask(
 				tenantsToProcess = []string{""} // Use empty string to indicate no tenant
 			}
 
+			// A composite role is created for each identity
+			compositeRole, err := t.config.GetCompositeRoleForWorkflow(
+				identityObj,
+				workflowTask,
+				provider,
+			)
+
+			if err != nil {
+				log.WithError(err).WithField("identity", identityId).Error("Failed to get composite role for identity")
+				return nil, fmt.Errorf("failed to get composite role for identity %s: %w", identityId, err)
+			}
+
 			for _, tenantID := range tenantsToProcess {
 				revokeReq := models.RevokeRoleRequest{
 					RoleRequest: &models.RoleRequest{
 						User:     user,
-						Role:     elevateRequest.Role,
+						Role:     compositeRole,
 						Duration: &duration,
 						Tenant:   tenantID,
 					},
@@ -160,13 +178,13 @@ func (t *thandTask) executeRevocationTask(
 
 				revokeTasks = append(revokeTasks, revokeTask{
 					ProviderName:      providerName,
-					Identity:          identity,
+					Identity:          identityId,
 					RevokeReq:         revokeReq,
 					AuthorizeResponse: authorizeResponse,
 				})
 
 				log.WithFields(logrus.Fields{
-					"user":     identity,
+					"user":     identityId,
 					"role":     elevateRequest.Role.GetName(),
 					"provider": providerName,
 					"duration": duration,

@@ -67,7 +67,7 @@ func (p *cloudflareProvider) AuthorizeRole(
 
 	// Use policy-based RBAC for granular resource access
 	// Map the role name to get permission group IDs, then build policies
-	err := p.buildMembershipFromRole(ctx, &params, role)
+	err := p.buildMembershipFromRole(ctx, &params, &role.Role)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build policies: %w", err)
 	}
@@ -238,7 +238,7 @@ func (p *cloudflareProvider) authorizeRoleTemporal(
 		models.CreateTemporalProviderWorkflowName(identifier, AuthorizeAccountMemberActivityName),
 		&AuthorizeAccountMemberRequest{
 			User: req.GetUser(),
-			Role: req.GetRole(),
+			Role: &req.GetRole().Role,
 		},
 	).Get(wfCtx, &resp); err != nil {
 		return nil, fmt.Errorf("AuthorizeAccountMember activity failed: %w", err)

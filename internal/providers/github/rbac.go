@@ -37,7 +37,7 @@ func (p *githubProvider) AuthorizeRole(
 	// Process each target in the role's permission statements
 	for _, stmt := range role.Permissions.Allow {
 		for _, target := range stmt.Targets {
-			if err := p.authorizeResource(ctx, username, target, role); err != nil {
+			if err := p.authorizeResource(ctx, username, target, &role.Role); err != nil {
 				return nil, fmt.Errorf("failed to authorize resource %s: %w", target, err)
 			}
 		}
@@ -116,7 +116,7 @@ func (p *githubProvider) authorizeRoleTemporal(
 				&AuthorizeResourceRequest{
 					Username: user.Name,
 					Resource: target,
-					Role:     role,
+					Role:     &role.Role,
 				},
 			).Get(wfCtx, nil); err != nil {
 				return nil, fmt.Errorf("AuthorizeResource activity failed for %s: %w", target, err)

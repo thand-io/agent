@@ -41,6 +41,14 @@ func isPrimitiveRole(roleName string) bool {
 }
 
 // AuthorizeRole grants access for a user to a role.
+//
+// Role lifecycle:
+//   - Composite roles: custom GCP role gets a unique name (hashed suffix).
+//     On revoke the role is deleted.
+//   - Non-composite roles: custom GCP role uses the base identifier so it
+//     can be shared across users. On revoke only the IAM binding is removed.
+//     A project label tracks the role version; permissions are patched only
+//     when the version is stale.
 func (p *gcpProvider) AuthorizeRole(
 	task models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
@@ -56,6 +64,12 @@ func (p *gcpProvider) AuthorizeRole(
 
 	user := req.GetUser()
 	role := req.GetRole()
+	isComposite := role.IsComposite()
+
+	logrus.WithFields(logrus.Fields{
+		"role":         role.Role.GetIdentifier(),
+		"is_composite": isComposite,
+	}).Info("GCP authorizeRole: determining role lifecycle")
 
 	if len(role.Inherits) == 0 && len(role.Permissions.Allow) == 0 {
 		return nil, fmt.Errorf("role %s has no inherits or permissions defined", role.Name)
@@ -102,10 +116,11 @@ func (p *gcpProvider) AuthorizeRole(
 		}
 	}
 
-	// If permissions are specified, create a custom role with those permissions
+	// If permissions are specified, create a custom role with those permissions.
+	// Composite roles get a unique name; non-composite roles share a base identifier.
 	if len(role.Permissions.Allow) > 0 {
-		// Check if the custom role already exists
-		customRoleName := role.GetIdentifier()
+		customRoleName := role.GetName()
+
 		existingRole, err := p.getRole(ctx, projectId, customRoleName)
 		if err != nil {
 			// If role doesn't exist, create it
@@ -113,7 +128,7 @@ func (p *gcpProvider) AuthorizeRole(
 				ctx,
 				projectId,
 				customRoleName,
-				role.GetName(),
+				role.Role.GetName(),
 				role.GetDescription(),
 				stage,
 				role.Permissions,
@@ -129,16 +144,41 @@ func (p *gcpProvider) AuthorizeRole(
 				)
 			}
 
+			// For non-composite roles, record the version in a project label.
+			if !isComposite {
+				p.setRoleVersionLabel(ctx, projectId, customRoleName, role.GetVersionString())
+			}
+
 			logrus.WithFields(logrus.Fields{
-				"role_name":   customRoleName,
-				"project_id":  projectId,
-				"permissions": role.Permissions.Allow,
+				"role_name":    customRoleName,
+				"project_id":   projectId,
+				"is_composite": isComposite,
+				"permissions":  role.Permissions.Allow,
 			}).Info("Created custom GCP role")
 		} else {
-			// Role already exists – patch permissions if the desired set has changed
-			existingRole, err = p.patchRoleIfStale(ctx, projectId, existingRole, role.Permissions)
-			if err != nil {
-				return nil, fmt.Errorf("failed to update custom role %s: %w", customRoleName, err)
+			// Role already exists — for non-composite roles, check version first.
+			needsUpdate := true
+			if !isComposite {
+				storedVersion := p.getRoleVersionLabel(ctx, projectId, customRoleName)
+				requestedVersion := role.GetVersionString()
+				if storedVersion == requestedVersion {
+					needsUpdate = false
+					logrus.WithFields(logrus.Fields{
+						"role_name": customRoleName,
+						"version":   requestedVersion,
+					}).Info("Non-composite role version is current; skipping permission refresh")
+				}
+			}
+
+			if needsUpdate {
+				existingRole, err = p.patchRoleIfStale(ctx, projectId, existingRole, role.Permissions)
+				if err != nil {
+					return nil, fmt.Errorf("failed to update custom role %s: %w", customRoleName, err)
+				}
+				// Update version label after patching (non-composite only).
+				if !isComposite {
+					p.setRoleVersionLabel(ctx, projectId, customRoleName, role.GetVersionString())
+				}
 			}
 		}
 
@@ -170,7 +210,11 @@ func (p *gcpProvider) AuthorizeRole(
 	}, nil
 }
 
-// Revoke removes access for a user from a role
+// Revoke removes access for a user from a role.
+//
+// Role lifecycle on revoke:
+//   - Composite: unbind user + delete custom role.
+//   - Non-composite: unbind user only; the custom role is retained.
 func (p *gcpProvider) RevokeRole(
 	task models.ProviderContext,
 	req *models.RevokeRoleRequest,
@@ -184,10 +228,18 @@ func (p *gcpProvider) RevokeRole(
 
 	ctx := task.GetContext()
 	user := req.GetUser()
+	role := req.GetRole()
 	projectId := p.GetProjectId()
 	if len(req.Tenant) > 0 {
 		projectId = req.Tenant
 	}
+
+	isComposite := role.IsComposite()
+
+	logrus.WithFields(logrus.Fields{
+		"role":         role.Role.GetIdentifier(),
+		"is_composite": isComposite,
+	}).Info("GCP revokeRole: determining cleanup strategy")
 
 	if req.AuthorizeRoleResponse == nil {
 		return nil, fmt.Errorf("no authorize role response found for revocation")
@@ -259,24 +311,33 @@ func (p *gcpProvider) RevokeRole(
 				"project_id": projectId,
 			}).Info("Successfully unbound user from custom GCP role")
 
-			// Delete the custom role after unbinding
-			err = p.deleteRole(ctx, projectId, customRoleName)
-			if err != nil {
-				return nil, temporal.NewApplicationErrorWithOptions(
-					fmt.Sprintf("failed to delete custom role %s: %v", customRoleName, err),
-					"GcpCustomRoleDeletionError",
-					temporal.ApplicationErrorOptions{
-						NextRetryDelay: 3 * time.Second,
-						Cause:          err,
-					},
-				)
-			}
+			// Composite: delete the custom role after unbinding.
+			// Non-composite: retain the role for future authorizations.
+			if isComposite {
+				err = p.deleteRole(ctx, projectId, customRoleName)
+				if err != nil {
+					return nil, temporal.NewApplicationErrorWithOptions(
+						fmt.Sprintf("failed to delete custom role %s: %v", customRoleName, err),
+						"GcpCustomRoleDeletionError",
+						temporal.ApplicationErrorOptions{
+							NextRetryDelay: 3 * time.Second,
+							Cause:          err,
+						},
+					)
+				}
 
-			logrus.WithFields(logrus.Fields{
-				"role_name":  customRoleName,
-				"project_id": projectId,
-				"user_email": user.Email,
-			}).Info("Successfully deleted custom GCP role")
+				logrus.WithFields(logrus.Fields{
+					"role_name":  customRoleName,
+					"project_id": projectId,
+					"user_email": user.Email,
+				}).Info("Successfully deleted custom GCP role (composite)")
+			} else {
+				logrus.WithFields(logrus.Fields{
+					"role_name":  customRoleName,
+					"project_id": projectId,
+					"user_email": user.Email,
+				}).Info("Retained custom GCP role (non-composite); only IAM binding removed")
+			}
 		}
 	}
 
@@ -312,6 +373,7 @@ func (p *gcpProvider) authorizeRoleTemporal(
 
 	user := req.GetUser()
 	role := req.GetRole()
+	isComposite := role.IsComposite()
 	projectID := p.GetProjectId()
 	if len(req.Tenant) > 0 {
 		projectID = req.Tenant
@@ -341,6 +403,9 @@ func (p *gcpProvider) authorizeRoleTemporal(
 	}
 
 	if len(role.Permissions.Allow) > 0 {
+		// Composite roles get a unique name; non-composite roles share a base identifier.
+		customRoleName := role.GetName()
+
 		var resp GetOrCreateAndBindCustomRoleResponse
 		if err := workflow.ExecuteActivity(
 			wfCtx,
@@ -348,11 +413,13 @@ func (p *gcpProvider) authorizeRoleTemporal(
 			&GetOrCreateAndBindCustomRoleRequest{
 				ProjectID:   projectID,
 				User:        user,
-				RoleName:    role.GetIdentifier(),
-				Title:       role.GetName(),
+				RoleName:    customRoleName,
+				Title:       role.Role.GetName(),
 				Description: role.GetDescription(),
 				Stage:       stage,
 				Permissions: role.Permissions,
+				IsComposite: isComposite,
+				Version:     role.GetVersionString(),
 			},
 		).Get(wfCtx, &resp); err != nil {
 			return nil, fmt.Errorf("GetOrCreateAndBindCustomRole activity failed: %w", err)
@@ -367,6 +434,9 @@ func (p *gcpProvider) authorizeRoleTemporal(
 }
 
 // revokeRoleTemporal sequences GCP role revocation as independent Temporal activities.
+//
+// Composite roles: unbind user + delete custom role (UnbindAndDeleteCustomRole).
+// Non-composite roles: unbind user only (UnbindUserFromCustomRole).
 func (p *gcpProvider) revokeRoleTemporal(
 	wfCtx workflow.Context,
 	taskQueue string,
@@ -381,10 +451,14 @@ func (p *gcpProvider) revokeRoleTemporal(
 	wfCtx = workflow.WithActivityOptions(wfCtx, ao)
 
 	user := req.GetUser()
+	role := req.GetRole()
 	projectID := p.GetProjectId()
 	if len(req.Tenant) > 0 {
 		projectID = req.Tenant
 	}
+
+	// Determine composite flag from the role.
+	isComposite := role.IsComposite()
 
 	if req.AuthorizeRoleResponse == nil || len(req.AuthorizeRoleResponse.Roles) == 0 {
 		return nil, fmt.Errorf("no roles found in authorization response for revocation")
@@ -403,7 +477,8 @@ func (p *gcpProvider) revokeRoleTemporal(
 			).Get(wfCtx, nil); err != nil {
 				return nil, fmt.Errorf("UnbindUserFromPredefinedRole activity failed for %s: %w", roleName, err)
 			}
-		} else {
+		} else if isComposite {
+			// Composite: unbind + delete the custom role.
 			if err := workflow.ExecuteActivity(
 				wfCtx,
 				models.CreateTemporalProviderWorkflowName(identifier, UnbindAndDeleteCustomRoleActivityName),
@@ -414,6 +489,19 @@ func (p *gcpProvider) revokeRoleTemporal(
 				},
 			).Get(wfCtx, nil); err != nil {
 				return nil, fmt.Errorf("UnbindAndDeleteCustomRole activity failed for %s: %w", roleName, err)
+			}
+		} else {
+			// Non-composite: unbind only; retain the custom role.
+			if err := workflow.ExecuteActivity(
+				wfCtx,
+				models.CreateTemporalProviderWorkflowName(identifier, UnbindUserFromCustomRoleActivityName),
+				&UnbindUserFromCustomRoleRequest{
+					ProjectID: projectID,
+					User:      user,
+					RoleName:  roleName,
+				},
+			).Get(wfCtx, nil); err != nil {
+				return nil, fmt.Errorf("UnbindUserFromCustomRole activity failed for %s: %w", roleName, err)
 			}
 		}
 	}
@@ -581,6 +669,75 @@ func parseCustomRolePath(fullPath string) (string, error) {
 		return "", fmt.Errorf("invalid custom role name format: %q, expected projects/{project}/roles/{roleName}", fullPath)
 	}
 	return parts[3], nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Project-label based version tracking for non-composite roles
+// ─────────────────────────────────────────────────────────────────────────────
+
+// roleVersionLabelKey returns the GCP project label key for a role's version.
+// GCP label keys: lowercase letters, digits, hyphens, underscores. Max 63 chars.
+func roleVersionLabelKey(roleName string) string {
+	sanitized := strings.ToLower(strings.ReplaceAll(roleName, "_", "-"))
+	key := "thand-role-" + sanitized
+	if len(key) > 63 {
+		key = key[:63]
+	}
+	return key
+}
+
+// getRoleVersionLabel reads the version stored for a custom role in project labels.
+// Returns an empty string if the label does not exist or the API call fails.
+func (p *gcpProvider) getRoleVersionLabel(ctx context.Context, projectID, roleName string) string {
+	if p.crmV3Client == nil {
+		return ""
+	}
+	project, err := p.crmV3Client.Projects.Get("projects/" + projectID).Context(ctx).Do()
+	if err != nil {
+		logrus.WithError(err).WithField("project_id", projectID).Warn("Failed to read project labels for version check")
+		return ""
+	}
+	if project.Labels == nil {
+		return ""
+	}
+	return project.Labels[roleVersionLabelKey(roleName)]
+}
+
+// setRoleVersionLabel writes the version for a custom role into a project label.
+// Errors are logged as warnings — labeling failures should not block authorization.
+func (p *gcpProvider) setRoleVersionLabel(ctx context.Context, projectID, roleName, version string) {
+	if p.crmV3Client == nil {
+		return
+	}
+	labelKey := roleVersionLabelKey(roleName)
+
+	// Read current labels.
+	project, err := p.crmV3Client.Projects.Get("projects/" + projectID).Context(ctx).Do()
+	if err != nil {
+		logrus.WithError(err).WithField("project_id", projectID).Warn("Failed to read project for label update")
+		return
+	}
+	if project.Labels == nil {
+		project.Labels = make(map[string]string)
+	}
+	// Sanitize version value for GCP label (lowercase, max 63 chars, no dots → hyphens).
+	sanitizedVersion := strings.ToLower(strings.ReplaceAll(version, ".", "-"))
+	if len(sanitizedVersion) > 63 {
+		sanitizedVersion = sanitizedVersion[:63]
+	}
+	project.Labels[labelKey] = sanitizedVersion
+
+	_, err = p.crmV3Client.Projects.Patch("projects/"+projectID, project).
+		UpdateMask("labels").
+		Context(ctx).
+		Do()
+	if err != nil {
+		logrus.WithError(err).WithFields(logrus.Fields{
+			"project_id": projectID,
+			"label_key":  labelKey,
+			"version":    sanitizedVersion,
+		}).Warn("Failed to set project label for role version")
+	}
 }
 
 // permissionsEqual returns true when two permission slices contain the same elements (order-independent).

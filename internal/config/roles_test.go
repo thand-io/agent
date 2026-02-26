@@ -36,7 +36,7 @@ func TestGetCompositeRole(t *testing.T) {
 		providers     map[string]models.Provider
 		identity      *models.Identity
 		roleName      string
-		expected      *models.Role
+		expected      *models.CompositeRole
 		expectError   bool
 		errorContains string
 	}{
@@ -61,14 +61,16 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "basic",
-			expected: &models.Role{
-				Name:        "basic",
-				Description: "Basic role",
-				Permissions: models.RolePermissions{
-					Allow: stmts("read"),
-					Deny:  stmts("delete"),
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "basic",
+					Description: "Basic role",
+					Permissions: models.RolePermissions{
+						Allow: stmts("read"),
+						Deny:  stmts("delete"),
+					},
+					Enabled: true,
 				},
-				Enabled:   true,
 				Composite: false, // No inheritance, not composite
 			},
 			expectError: false,
@@ -108,24 +110,26 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "extended",
-			expected: &models.Role{
-				Name:        "extended",
-				Description: "Extended role",
-				Inherits:    []string{"base"},
-				Permissions: models.RolePermissions{
-					Allow: models.RoleStatements{
-						{
-							Operations: []string{"read"},
-							Targets:    []string{"resource1"},
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "extended",
+					Description: "Extended role",
+					Inherits:    []string{"base"},
+					Permissions: models.RolePermissions{
+						Allow: models.RoleStatements{
+							{
+								Operations: []string{"read"},
+								Targets:    []string{"resource1"},
+							},
+							{
+								Operations: []string{"write"},
+								Targets:    []string{"resource2"},
+							},
 						},
-						{
-							Operations: []string{"write"},
-							Targets:    []string{"resource2"},
-						},
+						Deny: stmts("admin"),
 					},
-					Deny: stmts("admin"),
+					Enabled: true,
 				},
-				Enabled:   true,
 				Composite: true, // Inherits from thand role, should be composite
 			},
 			expectError: false,
@@ -169,15 +173,17 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "admin",
-			expected: &models.Role{
-				Name:        "admin",
-				Description: "Admin role",
-				Inherits:    []string{"read-role", "write-role"},
-				Permissions: models.RolePermissions{
-					Allow: stmts("admin", "read", "write"),
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "admin",
+					Description: "Admin role",
+					Inherits:    []string{"read-role", "write-role"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("admin", "read", "write"),
+					},
+					Workflows: []string{"admin-workflow"}, // Only the role's own workflows, not inherited
+					Enabled:   true,
 				},
-				Workflows: []string{"admin-workflow"}, // Only the role's own workflows, not inherited
-				Enabled:   true,
 				Composite: true, // Inherits from thand roles, should be composite
 			},
 			expectError: false,
@@ -216,14 +222,16 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "public",
-			expected: &models.Role{
-				Name:        "public",
-				Description: "Public role",
-				Inherits:    []string{"scoped"},
-				Permissions: models.RolePermissions{
-					Allow: stmts("read", "special"),
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "public",
+					Description: "Public role",
+					Inherits:    []string{"scoped"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("read", "special"),
+					},
+					Enabled: true,
 				},
-				Enabled:   true,
 				Composite: true, // Inherits from thand role, should be composite
 			},
 			expectError: false,
@@ -262,14 +270,16 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "public",
-			expected: &models.Role{
-				Name:        "public",
-				Description: "Public role",
-				Inherits:    []string{"scoped"},
-				Permissions: models.RolePermissions{
-					Allow: stmts("read"),
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "public",
+					Description: "Public role",
+					Inherits:    []string{"scoped"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("read"),
+					},
+					Enabled: true,
 				},
-				Enabled: true,
 			},
 			expectError: false,
 		},
@@ -368,14 +378,16 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "user-role",
-			expected: &models.Role{
-				Name:        "user-role",
-				Description: "User role inheriting group role",
-				Inherits:    []string{"group-role"},
-				Permissions: models.RolePermissions{
-					Allow: stmts("group-action", "user-action"), // sorted alphabetically
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "user-role",
+					Description: "User role inheriting group role",
+					Inherits:    []string{"group-role"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("group-action", "user-action"), // sorted alphabetically
+					},
+					Enabled: true,
 				},
-				Enabled:   true,
 				Composite: true, // Inherits from thand role, should be composite
 			},
 			expectError: false,
@@ -415,15 +427,17 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "child-role",
-			expected: &models.Role{
-				Name:        "child-role",
-				Description: "Child role inheriting domain-scoped base",
-				Inherits:    []string{"base-role"},
-				Permissions: models.RolePermissions{
-					Allow: stmts("base-action", "child-action"),
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "child-role",
+					Description: "Child role inheriting domain-scoped base",
+					Inherits:    []string{"base-role"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("base-action", "child-action"),
+					},
+					Enabled: true,
 				},
 				Composite: true,
-				Enabled:   true,
 			},
 			expectError: false,
 		},
@@ -462,14 +476,16 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "child-role",
-			expected: &models.Role{
-				Name:        "child-role",
-				Description: "Child role inheriting domain-scoped base",
-				Inherits:    []string{"base-role"},
-				Permissions: models.RolePermissions{
-					Allow: stmts("child-action"), // base-action not inherited
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "child-role",
+					Description: "Child role inheriting domain-scoped base",
+					Inherits:    []string{"base-role"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("child-action"), // base-action not inherited
+					},
+					Enabled: true,
 				},
-				Enabled: true,
 			},
 			expectError: false,
 		},
@@ -510,15 +526,17 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "parent-role",
-			expected: &models.Role{
-				Name:        "parent-role",
-				Description: "Parent inheriting mixed-scope role",
-				Inherits:    []string{"scoped-base"},
-				Permissions: models.RolePermissions{
-					Allow: stmts("parent-action", "scoped-action"),
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "parent-role",
+					Description: "Parent inheriting mixed-scope role",
+					Inherits:    []string{"scoped-base"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("parent-action", "scoped-action"),
+					},
+					Enabled: true,
 				},
 				Composite: true,
-				Enabled:   true,
 			},
 			expectError: false,
 		},
@@ -566,15 +584,17 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "child",
-			expected: &models.Role{
-				Name:        "child",
-				Description: "Child role",
-				Inherits:    []string{"parent"},
-				Permissions: models.RolePermissions{
-					Allow: stmts("child-action", "grandparent-action", "parent-action"),
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "child",
+					Description: "Child role",
+					Inherits:    []string{"parent"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("child-action", "grandparent-action", "parent-action"),
+					},
+					Enabled: true,
 				},
 				Composite: true,
-				Enabled:   true,
 			},
 			expectError: false,
 		},
@@ -633,18 +653,20 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "developer-role",
-			expected: &models.Role{
-				Name:        "developer-role",
-				Description: "Developer role requiring group membership",
-				Permissions: models.RolePermissions{
-					Allow: models.RoleStatements{{Operations: []string{"dev:read,write"}}},
-				},
-				Scopes: models.RoleScopes{
-					Allow: models.ScopeIdentities{
-						Groups: []string{"developers"},
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "developer-role",
+					Description: "Developer role requiring group membership",
+					Permissions: models.RolePermissions{
+						Allow: models.RoleStatements{{Operations: []string{"dev:read,write"}}},
 					},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Groups: []string{"developers"},
+						},
+					},
+					Enabled: true,
 				},
-				Enabled: true,
 			},
 			expectError: false,
 		},
@@ -734,20 +756,22 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "mixed-scope-role",
-			expected: &models.Role{
-				Name:        "mixed-scope-role",
-				Description: "Role with multiple scope types",
-				Permissions: models.RolePermissions{
-					Allow: stmts("mixed:action"),
-				},
-				Scopes: models.RoleScopes{
-					Allow: models.ScopeIdentities{
-						Users:   []string{"other@company.com"},
-						Groups:  []string{"admins"},
-						Domains: []string{"example.com"},
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "mixed-scope-role",
+					Description: "Role with multiple scope types",
+					Permissions: models.RolePermissions{
+						Allow: stmts("mixed:action"),
 					},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Users:   []string{"other@company.com"},
+							Groups:  []string{"admins"},
+							Domains: []string{"example.com"},
+						},
+					},
+					Enabled: true,
 				},
-				Enabled: true,
 			},
 			expectError: false,
 		},

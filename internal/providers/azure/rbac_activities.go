@@ -52,6 +52,12 @@ type DeleteRoleAssignmentRequest struct {
 	PrincipalID      string       `json:"principal_id"`
 }
 
+// DeleteRoleDefinitionRequest carries the role definition ID to delete.
+// Used for composite roles only — non-composite definitions are retained.
+type DeleteRoleDefinitionRequest struct {
+	RoleDefinitionID string `json:"role_definition_id"`
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Activity implementations
 // ─────────────────────────────────────────────────────────────────────────────
@@ -132,6 +138,25 @@ func (a *azureProviderActivities) DeleteRoleAssignment(
 		return temporal.NewApplicationErrorWithOptions(
 			fmt.Sprintf("failed to delete Azure role assignment for user '%s': %v", req.User.Email, err),
 			"AzureRoleAssignmentDeleteError",
+			temporal.ApplicationErrorOptions{
+				NextRetryDelay: 3 * time.Second,
+				Cause:          err,
+			},
+		)
+	}
+	return nil
+}
+
+// DeleteRoleDefinition removes a custom Azure role definition.
+// Used for composite roles only — non-composite definitions are retained.
+func (a *azureProviderActivities) DeleteRoleDefinition(
+	ctx context.Context,
+	req *DeleteRoleDefinitionRequest,
+) error {
+	if err := a.provider.deleteRoleDefinition(ctx, req.RoleDefinitionID); err != nil {
+		return temporal.NewApplicationErrorWithOptions(
+			fmt.Sprintf("failed to delete Azure role definition '%s': %v", req.RoleDefinitionID, err),
+			"AzureRoleDefinitionDeleteError",
 			temporal.ApplicationErrorOptions{
 				NextRetryDelay: 3 * time.Second,
 				Cause:          err,

@@ -30,8 +30,8 @@ type ConfigImpl interface {
 	GetLocalServerUrl() string
 
 	// Roles
-	GetCompositeRole(identity *Identity, baseRole *Role) (*Role, error)
-	GetCompositeRoleForWorkflow(identity *Identity, workflow *ElevateWorkflowTask) (*Role, error)
+	GetCompositeRole(identity *Identity, baseRole *Role, providers ...Provider) (*CompositeRole, error)
+	GetCompositeRoleForWorkflow(identity *Identity, workflow *ElevateWorkflowTask, providers ...Provider) (*CompositeRole, error)
 
 	// Identities
 	GetIdentity(byEmail string) (*Identity, error)

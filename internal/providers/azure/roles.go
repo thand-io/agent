@@ -323,6 +323,33 @@ func (p *azureProvider) getScope() string {
 	return fmt.Sprintf("/subscriptions/%s", p.subscriptionID)
 }
 
+// deleteRoleDefinition removes a custom role definition by its fully-qualified ID.
+// Should only be called for composite roles after all assignments are removed.
+func (p *azureProvider) deleteRoleDefinition(ctx context.Context, roleDefinitionID string) error {
+	scope := p.getScope()
+
+	// The roleDefinitionID from Azure is a fully-qualified resource ID.
+	// Extract just the GUID for the Delete call.
+	parts := strings.Split(roleDefinitionID, "/")
+	guid := parts[len(parts)-1]
+
+	_, err := p.roleDefClient.Delete(ctx, scope, guid, nil)
+	if err != nil {
+		// If the role definition was already deleted, treat as success.
+		var respErr *azcore.ResponseError
+		if errors.As(err, &respErr) && respErr.StatusCode == 404 {
+			logrus.WithField("role_definition_id", roleDefinitionID).
+				Info("Azure role definition already deleted — treating as success")
+			return nil
+		}
+		return fmt.Errorf("failed to delete role definition %s: %w", roleDefinitionID, err)
+	}
+
+	logrus.WithField("role_definition_id", roleDefinitionID).
+		Info("Successfully deleted Azure role definition")
+	return nil
+}
+
 func loadRoles() ([]models.ProviderRole, error) {
 
 	startTime := time.Now()

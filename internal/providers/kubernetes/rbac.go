@@ -33,14 +33,14 @@ func (p *kubernetesProvider) AuthorizeRole(
 	role := req.GetRole()
 
 	// Determine scope based on role configuration
-	namespace := p.getNamespaceFromRole(role)
+	namespace := p.getNamespaceFromRole(&role.Role)
 
 	if len(namespace) > 0 {
 		// Create namespaced Role and RoleBinding
-		return p.authorizeNamespacedRole(ctx, user, role, namespace)
+		return p.authorizeNamespacedRole(ctx, user, &role.Role, namespace)
 	} else {
 		// Create cluster-wide ClusterRole and ClusterRoleBinding
-		return p.authorizeClusterRole(ctx, user, role)
+		return p.authorizeClusterRole(ctx, user, &role.Role)
 	}
 }
 
@@ -61,12 +61,12 @@ func (p *kubernetesProvider) RevokeRole(
 	user := req.GetUser()
 	role := req.GetRole()
 
-	namespace := p.getNamespaceFromRole(role)
+	namespace := p.getNamespaceFromRole(&role.Role)
 
 	if len(namespace) > 0 {
-		return p.revokeNamespacedRole(ctx, user, role, namespace)
+		return p.revokeNamespacedRole(ctx, user, &role.Role, namespace)
 	} else {
-		return p.revokeClusterRole(ctx, user, role)
+		return p.revokeClusterRole(ctx, user, &role.Role)
 	}
 }
 
@@ -103,14 +103,14 @@ func (p *kubernetesProvider) authorizeRoleTemporal(
 
 	user := req.GetUser()
 	role := req.GetRole()
-	namespace := p.getNamespaceFromRole(role)
+	namespace := p.getNamespaceFromRole(&role.Role)
 
 	var resp models.AuthorizeRoleResponse
 	if len(namespace) > 0 {
 		if err := workflow.ExecuteActivity(
 			wfCtx,
 			models.CreateTemporalProviderWorkflowName(identifier, AuthorizeNamespacedRoleActivityName),
-			&AuthorizeNamespacedRoleRequest{User: user, Role: role, Namespace: namespace},
+			&AuthorizeNamespacedRoleRequest{User: user, Role: &role.Role, Namespace: namespace},
 		).Get(wfCtx, &resp); err != nil {
 			return nil, fmt.Errorf("AuthorizeNamespacedRole activity failed: %w", err)
 		}
@@ -118,7 +118,7 @@ func (p *kubernetesProvider) authorizeRoleTemporal(
 		if err := workflow.ExecuteActivity(
 			wfCtx,
 			models.CreateTemporalProviderWorkflowName(identifier, AuthorizeClusterRoleActivityName),
-			&AuthorizeClusterRoleRequest{User: user, Role: role},
+			&AuthorizeClusterRoleRequest{User: user, Role: &role.Role},
 		).Get(wfCtx, &resp); err != nil {
 			return nil, fmt.Errorf("AuthorizeClusterRole activity failed: %w", err)
 		}
@@ -146,14 +146,14 @@ func (p *kubernetesProvider) revokeRoleTemporal(
 
 	user := req.GetUser()
 	role := req.GetRole()
-	namespace := p.getNamespaceFromRole(role)
+	namespace := p.getNamespaceFromRole(&role.Role)
 
 	var resp models.RevokeRoleResponse
 	if len(namespace) > 0 {
 		if err := workflow.ExecuteActivity(
 			wfCtx,
 			models.CreateTemporalProviderWorkflowName(identifier, RevokeNamespacedRoleActivityName),
-			&RevokeNamespacedRoleRequest{User: user, Role: role, Namespace: namespace},
+			&RevokeNamespacedRoleRequest{User: user, Role: &role.Role, Namespace: namespace},
 		).Get(wfCtx, &resp); err != nil {
 			return nil, fmt.Errorf("RevokeNamespacedRole activity failed: %w", err)
 		}
@@ -161,7 +161,7 @@ func (p *kubernetesProvider) revokeRoleTemporal(
 		if err := workflow.ExecuteActivity(
 			wfCtx,
 			models.CreateTemporalProviderWorkflowName(identifier, RevokeClusterRoleActivityName),
-			&RevokeClusterRoleRequest{User: user, Role: role},
+			&RevokeClusterRoleRequest{User: user, Role: &role.Role},
 		).Get(wfCtx, &resp); err != nil {
 			return nil, fmt.Errorf("RevokeClusterRole activity failed: %w", err)
 		}

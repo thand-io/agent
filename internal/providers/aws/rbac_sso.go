@@ -24,11 +24,26 @@ import (
 // authorizeRoleIdentityCenter handles role authorization for Identity Center users.
 // Each step is dispatched as a Temporal activity when a workflow context is present,
 // or executed inline otherwise. The exec* helpers encapsulate that branching.
+//
+// Role lifecycle:
+//   - Composite roles: permission set is always refreshed. On revoke the
+//     permission set is cleaned up (deleted if unused).
+//   - Non-composite roles: permission set is created once with a version tag.
+//     Policies are only refreshed when the version has changed. On revoke
+//     only the account assignment is removed; the permission set is retained.
 func (p *awsProvider) authorizeRoleIdentityCenter(
 	task models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
 	targetAccountID string,
 ) (*models.AuthorizeRoleResponse, error) {
+
+	role := req.GetRole()
+	isComposite := role.IsComposite()
+
+	logrus.WithFields(logrus.Fields{
+		"role":         role.Role.GetIdentifier(),
+		"is_composite": isComposite,
+	}).Info("SSO authorizeRole: determining role lifecycle")
 
 	// Step 1 — resolve the Identity Center instance
 	instanceResp, err := p.execGetIdentityCenterInstance(task, &GetIdentityCenterInstanceRequest{})
@@ -36,67 +51,75 @@ func (p *awsProvider) authorizeRoleIdentityCenter(
 		return nil, fmt.Errorf("failed to find Identity Center instance: %w", err)
 	}
 
-	// Step 2 — find or create the permission set for the role
-	psResp, err := p.execFindOrCreatePermissionSet(task, &FindOrCreatePermissionSetRequest{
+	// Step 2 — find or create the permission set for the role.
+	// For non-composite roles, pass the version so the activity can tag the
+	// permission set and skip policy updates when the version hasn’t changed.
+	psReq := &FindOrCreatePermissionSetRequest{
 		InstanceArn: instanceResp.InstanceArn,
-		Role:        req.GetRole(),
-	})
+		Role:        &role.Role,
+		IsComposite: isComposite,
+	}
+	if !isComposite {
+		psReq.Version = role.GetVersionString()
+	}
+	psResp, err := p.execFindOrCreatePermissionSet(task, psReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find or create permission set: %w", err)
 	}
 
-	// Step 2.5 — provision permission set to propagate any policy changes to all accounts.
-	// AWS requires ProvisionPermissionSet after PutInlinePolicyToPermissionSet or
-	// AttachManagedPolicyToPermissionSet, otherwise updates silently don't propagate.
-	psProvisionResp, err := p.execProvisionPermissionSet(task, &ProvisionPermissionSetRequest{
-		InstanceArn:      instanceResp.InstanceArn,
-		PermissionSetArn: psResp.PermissionSetArn,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to provision permission set: %w", err)
-	}
-	// Poll until provisioning completes. Check first (may already be done for new sets
-	// with no prior accounts), then sleep-and-retry if still in progress.
-	provCheckReq := &CheckPermissionSetProvisioningStatusRequest{
-		InstanceArn: instanceResp.InstanceArn,
-		RequestId:   psProvisionResp.RequestId,
-	}
-	provFirstCheck, err := p.execCheckPermissionSetProvisioningStatus(task, provCheckReq)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check permission set provisioning status: %w", err)
-	}
-	if !provFirstCheck.Succeeded {
-		if task.HasTemporalContext() {
-			for {
-				if err := workflow.Sleep(task.GetTemporalContext(), awsProviderDeleteRoleAssignmentBackoffDuration); err != nil {
-					return nil, fmt.Errorf("workflow sleep cancelled while waiting for permission set provisioning: %w", err)
+	// Step 2.5 — provision permission set to propagate any policy changes.
+	// For non-composite roles where no update was needed we can skip provisioning.
+	needsProvisioning := isComposite || psResp.NeedsUpdate
+	if needsProvisioning {
+		psProvisionResp, err := p.execProvisionPermissionSet(task, &ProvisionPermissionSetRequest{
+			InstanceArn:      instanceResp.InstanceArn,
+			PermissionSetArn: psResp.PermissionSetArn,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to provision permission set: %w", err)
+		}
+		// Poll until provisioning completes.
+		provCheckReq := &CheckPermissionSetProvisioningStatusRequest{
+			InstanceArn: instanceResp.InstanceArn,
+			RequestId:   psProvisionResp.RequestId,
+		}
+		provFirstCheck, err := p.execCheckPermissionSetProvisioningStatus(task, provCheckReq)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check permission set provisioning status: %w", err)
+		}
+		if !provFirstCheck.Succeeded {
+			if task.HasTemporalContext() {
+				for {
+					if err := workflow.Sleep(task.GetTemporalContext(), awsProviderDeleteRoleAssignmentBackoffDuration); err != nil {
+						return nil, fmt.Errorf("workflow sleep cancelled while waiting for permission set provisioning: %w", err)
+					}
+					provCheckResp, err := p.execCheckPermissionSetProvisioningStatus(task, provCheckReq)
+					if err != nil {
+						return nil, err
+					}
+					if provCheckResp.Succeeded {
+						break
+					}
 				}
-				provCheckResp, err := p.execCheckPermissionSetProvisioningStatus(task, provCheckReq)
-				if err != nil {
-					return nil, err
+			} else {
+				provisioned := false
+				for iter := 0; iter < awsProviderDeleteRoleAssignmentBackoffLimit; iter++ {
+					if err := task.GetContext().Err(); err != nil {
+						return nil, fmt.Errorf("context cancelled while waiting for permission set provisioning: %w", err)
+					}
+					time.Sleep(awsProviderDeleteRoleAssignmentBackoffDuration)
+					provCheckResp, err := p.execCheckPermissionSetProvisioningStatus(task, provCheckReq)
+					if err != nil {
+						return nil, err
+					}
+					if provCheckResp.Succeeded {
+						provisioned = true
+						break
+					}
 				}
-				if provCheckResp.Succeeded {
-					break
+				if !provisioned {
+					return nil, fmt.Errorf("timed out waiting for permission set %s to provision", psResp.PermissionSetArn)
 				}
-			}
-		} else {
-			provisioned := false
-			for iter := 0; iter < awsProviderDeleteRoleAssignmentBackoffLimit; iter++ {
-				if err := task.GetContext().Err(); err != nil {
-					return nil, fmt.Errorf("context cancelled while waiting for permission set provisioning: %w", err)
-				}
-				time.Sleep(awsProviderDeleteRoleAssignmentBackoffDuration)
-				provCheckResp, err := p.execCheckPermissionSetProvisioningStatus(task, provCheckReq)
-				if err != nil {
-					return nil, err
-				}
-				if provCheckResp.Succeeded {
-					provisioned = true
-					break
-				}
-			}
-			if !provisioned {
-				return nil, fmt.Errorf("timed out waiting for permission set %s to provision", psResp.PermissionSetArn)
 			}
 		}
 	}
@@ -155,8 +178,14 @@ func (p *awsProvider) getIdentityCenterInstance(ctx context.Context) (instanceAr
 
 // findOrCreatePermissionSet finds an existing permission set by name, or creates a new one
 // with the specified role's policies and permissions. Uses pagination to search all permission sets.
-func (p *awsProvider) findOrCreatePermissionSet(ctx context.Context, instanceArn string, role *models.Role) (string, error) {
-	permissionSetName := role.GetIdentifier()
+//
+// Role lifecycle:
+//   - Composite (isComposite == true): policies are always refreshed on every call.
+//   - Non-composite (isComposite == false): the permission set is tagged with a version
+//     and policies are only refreshed when the version changes. Returns needsUpdate=false
+//     when the existing version matches, allowing the caller to skip provisioning.
+func (p *awsProvider) findOrCreatePermissionSet(ctx context.Context, instanceArn string, roleName string, role *models.Role, isComposite bool, version string) (string, bool, error) {
+	permissionSetName := roleName
 
 	// Search existing permission sets with pagination
 	var nextToken *string
@@ -167,7 +196,7 @@ func (p *awsProvider) findOrCreatePermissionSet(ctx context.Context, instanceArn
 		})
 		if err != nil {
 			logrus.WithError(err).Error("Failed to list permission sets in Identity Center")
-			return "", fmt.Errorf("failed to list permission sets: %w", err)
+			return "", false, fmt.Errorf("failed to list permission sets: %w", err)
 		}
 
 		for _, permissionSetArn := range resp.PermissionSets {
@@ -185,26 +214,50 @@ func (p *awsProvider) findOrCreatePermissionSet(ctx context.Context, instanceArn
 			}
 
 			if *desc.PermissionSet.Name == permissionSetName {
-				// Permission set exists, ensure it has the required policies attached
+				// Permission set exists.
+				// For non-composite roles, check the version tag to decide
+				// whether to refresh policies.
+				if !isComposite && len(version) > 0 {
+					currentVersion := p.getPermissionSetVersionTag(ctx, instanceArn, permissionSetArn)
+					if currentVersion == version {
+						logrus.WithFields(logrus.Fields{
+							"permissionSetArn": permissionSetArn,
+							"version":          version,
+						}).Info("Non-composite permission set version is current; skipping policy refresh")
+						return permissionSetArn, false, nil
+					}
+					logrus.WithFields(logrus.Fields{
+						"permissionSetArn": permissionSetArn,
+						"currentVersion":   currentVersion,
+						"requestedVersion": version,
+					}).Info("Non-composite permission set version is stale; refreshing policies")
+				}
 
-				// Attach inline permissions if any
+				// Refresh policies — composite always, non-composite when stale.
 				if len(role.Permissions.Allow) > 0 || len(role.Permissions.Deny) > 0 {
 					err = p.attachPermissionsToPermissionSet(ctx, instanceArn, permissionSetArn, role.Permissions)
 					if err != nil {
 						logrus.WithError(err).WithField("permissionSetArn", permissionSetArn).Error("Failed to attach permissions to existing permission set")
-						return "", fmt.Errorf("failed to attach permissions to existing permission set: %w", err)
+						return "", false, fmt.Errorf("failed to attach permissions to existing permission set: %w", err)
 					}
 				}
 
-				// Attach managed policies from role.Inherits
 				if len(role.Inherits) > 0 {
 					err = p.attachManagedPoliciesToPermissionSet(ctx, instanceArn, permissionSetArn, role.Inherits)
 					if err != nil {
-						return "", fmt.Errorf("failed to attach managed policies to existing permission set: %w", err)
+						return "", false, fmt.Errorf("failed to attach managed policies to existing permission set: %w", err)
 					}
 				}
 
-				return permissionSetArn, nil
+				// Tag with updated version for non-composite roles.
+				if !isComposite && len(version) > 0 {
+					p.tagPermissionSet(ctx, instanceArn, permissionSetArn, map[string]string{
+						models.ThandVersionTagKey: version,
+						models.ThandManagedTagKey: "true",
+					})
+				}
+
+				return permissionSetArn, true, nil
 			}
 		}
 
@@ -214,15 +267,26 @@ func (p *awsProvider) findOrCreatePermissionSet(ctx context.Context, instanceArn
 		nextToken = resp.NextToken
 	}
 
-	// Create new permission set
-	createResp, err := p.ssoAdminService.CreatePermissionSet(ctx, &ssoadmin.CreatePermissionSetInput{
+	// Create new permission set — optionally tag non-composite with version.
+	var tags []types.Tag
+	if !isComposite && len(version) > 0 {
+		tags = []types.Tag{
+			{Key: aws.String(models.ThandVersionTagKey), Value: aws.String(version)},
+			{Key: aws.String(models.ThandManagedTagKey), Value: aws.String("true")},
+		}
+	}
+	createInput := &ssoadmin.CreatePermissionSetInput{
 		InstanceArn:     aws.String(instanceArn),
 		Name:            aws.String(permissionSetName),
 		Description:     aws.String(role.Description),
 		SessionDuration: aws.String(p.GetConfig().GetStringWithDefault("session_duration", "PT8H")),
-	})
+	}
+	if len(tags) > 0 {
+		createInput.Tags = tags
+	}
+	createResp, err := p.ssoAdminService.CreatePermissionSet(ctx, createInput)
 	if err != nil {
-		return "", fmt.Errorf("failed to create permission set: %w", err)
+		return "", false, fmt.Errorf("failed to create permission set: %w", err)
 	}
 
 	permissionSetArn := *createResp.PermissionSet.PermissionSetArn
@@ -231,7 +295,7 @@ func (p *awsProvider) findOrCreatePermissionSet(ctx context.Context, instanceArn
 	if len(role.Permissions.Allow) > 0 || len(role.Permissions.Deny) > 0 {
 		err = p.attachPermissionsToPermissionSet(ctx, instanceArn, permissionSetArn, role.Permissions)
 		if err != nil {
-			return "", fmt.Errorf("failed to attach permissions to permission set: %w", err)
+			return "", false, fmt.Errorf("failed to attach permissions to permission set: %w", err)
 		}
 	}
 
@@ -239,11 +303,50 @@ func (p *awsProvider) findOrCreatePermissionSet(ctx context.Context, instanceArn
 	if len(role.Inherits) > 0 {
 		err = p.attachManagedPoliciesToPermissionSet(ctx, instanceArn, permissionSetArn, role.Inherits)
 		if err != nil {
-			return "", fmt.Errorf("failed to attach managed policies to permission set: %w", err)
+			return "", false, fmt.Errorf("failed to attach managed policies to permission set: %w", err)
 		}
 	}
 
-	return permissionSetArn, nil
+	return permissionSetArn, true, nil
+}
+
+// getPermissionSetVersionTag reads the thand:version tag from a permission set.
+// Returns an empty string if the tag is absent or the API call fails (non-fatal).
+func (p *awsProvider) getPermissionSetVersionTag(ctx context.Context, instanceArn, permissionSetArn string) string {
+	resp, err := p.ssoAdminService.ListTagsForResource(ctx, &ssoadmin.ListTagsForResourceInput{
+		InstanceArn: aws.String(instanceArn),
+		ResourceArn: aws.String(permissionSetArn),
+	})
+	if err != nil {
+		logrus.WithError(err).WithField("permissionSetArn", permissionSetArn).Warn("Failed to list tags for permission set")
+		return ""
+	}
+	for _, tag := range resp.Tags {
+		if tag.Key != nil && *tag.Key == models.ThandVersionTagKey && tag.Value != nil {
+			return *tag.Value
+		}
+	}
+	return ""
+}
+
+// tagPermissionSet sets or updates tags on a permission set.
+// Errors are logged as warnings — tagging failures should not block authorization.
+func (p *awsProvider) tagPermissionSet(ctx context.Context, instanceArn, permissionSetArn string, tags map[string]string) {
+	var ssoTags []types.Tag
+	for k, v := range tags {
+		ssoTags = append(ssoTags, types.Tag{
+			Key:   aws.String(k),
+			Value: aws.String(v),
+		})
+	}
+	_, err := p.ssoAdminService.TagResource(ctx, &ssoadmin.TagResourceInput{
+		InstanceArn: aws.String(instanceArn),
+		ResourceArn: aws.String(permissionSetArn),
+		Tags:        ssoTags,
+	})
+	if err != nil {
+		logrus.WithError(err).WithField("permissionSetArn", permissionSetArn).Warn("Failed to tag permission set")
+	}
 }
 
 // attachPermissionsToPermissionSet creates an inline policy for the permission set
@@ -536,10 +639,22 @@ func (p *awsProvider) createAccountAssignment(ctx context.Context, instanceArn, 
 // Each step is dispatched as a Temporal activity when a workflow context is present,
 // or executed inline otherwise. The backoff polling loop sleeps via workflow.Sleep
 // on the Temporal path (deterministic, replay-safe) and time.Sleep otherwise.
+//
+// Role lifecycle on revoke:
+//   - Composite: delete account assignment + cleanup (delete) the permission set.
+//   - Non-composite: delete account assignment only; the permission set is
+//     retained for future authorizations.
 func (p *awsProvider) revokeRoleIdentityCenter(task models.ProviderContext, req *models.RevokeRoleRequest, targetAccountID string) error {
 
 	user := req.GetUser()
 	role := req.GetRole()
+
+	isComposite := role.IsComposite()
+
+	logrus.WithFields(logrus.Fields{
+		"role":         role.Role.GetIdentifier(),
+		"is_composite": isComposite,
+	}).Info("SSO revokeRole: determining cleanup strategy")
 
 	// Step 1 — resolve the Identity Center instance
 	instanceResp, err := p.execGetIdentityCenterInstance(task, &GetIdentityCenterInstanceRequest{})
@@ -561,14 +676,14 @@ func (p *awsProvider) revokeRoleIdentityCenter(task models.ProviderContext, req 
 	}
 	if len(storedPermissionSetArn) == 0 {
 		logrus.WithFields(logrus.Fields{
-			"roleName":  role.GetIdentifier(),
+			"roleName":  role.GetName(),
 			"accountId": targetAccountID,
 		}).Warn("No permission set ARN in metadata, falling back to name-based lookup")
 	}
 	psResp, err := p.execFindPermissionSetByName(task, &FindPermissionSetByNameRequest{
 		InstanceArn:      instanceResp.InstanceArn,
 		PermissionSetArn: storedPermissionSetArn,
-		RoleName:         role.GetIdentifier(),
+		RoleName:         role.GetName(),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to find permission set: %w in region: %s", err, p.GetRegion())
@@ -599,8 +714,11 @@ func (p *awsProvider) revokeRoleIdentityCenter(task models.ProviderContext, req 
 		PermissionSetArn: psResp.PermissionSetArn,
 	}
 	if deleteResp.RequestId == "" {
-		// Already revoked (idempotent); skip polling but still attempt cleanup.
-		p.execCleanupPermissionSet(task, cleanupReq)
+		// Already revoked (idempotent); skip polling.
+		// Only attempt cleanup for composite roles.
+		if isComposite {
+			p.execCleanupPermissionSet(task, cleanupReq)
+		}
 		return nil
 	}
 
@@ -625,7 +743,11 @@ func (p *awsProvider) revokeRoleIdentityCenter(task models.ProviderContext, req 
 				return err
 			}
 			if checkResp.Succeeded {
-				p.execCleanupPermissionSet(task, cleanupReq)
+				// Composite: clean up (delete) the permission set.
+				// Non-composite: retain the permission set for future use.
+				if isComposite {
+					p.execCleanupPermissionSet(task, cleanupReq)
+				}
 				return nil
 			}
 		}
@@ -641,7 +763,9 @@ func (p *awsProvider) revokeRoleIdentityCenter(task models.ProviderContext, req 
 			return err
 		}
 		if checkResp.Succeeded {
-			p.execCleanupPermissionSet(task, cleanupReq)
+			if isComposite {
+				p.execCleanupPermissionSet(task, cleanupReq)
+			}
 			return nil
 		}
 	}
@@ -972,11 +1096,11 @@ func (p *awsProvider) execFindOrCreatePermissionSet(
 		}
 		return &resp, nil
 	}
-	arn, err := p.findOrCreatePermissionSet(task.GetContext(), req.InstanceArn, req.Role)
+	arn, needsUpdate, err := p.findOrCreatePermissionSet(task.GetContext(), req.InstanceArn, req.RoleName, req.Role, req.IsComposite, req.Version)
 	if err != nil {
 		return nil, err
 	}
-	return &FindOrCreatePermissionSetResponse{PermissionSetArn: arn}, nil
+	return &FindOrCreatePermissionSetResponse{PermissionSetArn: arn, NeedsUpdate: needsUpdate}, nil
 }
 
 func (p *awsProvider) execFindIdentityCenterUser(

@@ -3,12 +3,108 @@ package models
 import (
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 )
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Role lifecycle constants
+//
+// Roles follow one of two lifecycle patterns depending on whether they are
+// composite (i.e. resolved from inherited thand roles) or non-composite:
+//
+//	Composite roles    – Unique per identity. Created on authorize, deleted on
+//	                      revoke. Their CSP name includes a hash suffix so each
+//	                      session gets an isolated role.
+//
+//	Non-composite roles – Persistent / shared. Created once with a version tag,
+//	                      reused across sessions. On revoke only the user
+//	                      binding is removed; the role itself is retained.
+//	                      The version tag is checked on each authorize; if the
+//	                      role definition has changed the CSP role is updated
+//	                      in-place.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+const (
+	// DefaultRoleVersion is used when a role has no explicit version set.
+	DefaultRoleVersion = "0.0.0"
+
+	// ThandVersionTagKey is the tag/label key used on CSP resources to record
+	// the role definition version at the time the role was last created or
+	// updated. Providers compare this value against the current role version
+	// to decide whether an update is needed.
+	ThandVersionTagKey = "thand:version"
+
+	// ThandManagedTagKey is the tag/label key that marks a CSP resource as
+	// managed by thand. Providers use this during cleanup and discovery.
+	ThandManagedTagKey = "thand:managed"
+
+	// CompositeMetadataKey is stored in AuthorizeRoleResponse.Metadata to
+	// indicate whether the role was provisioned as composite (true) or
+	// non-composite (false). Revocation uses this to decide whether to
+	// delete the underlying CSP role.
+	CompositeMetadataKey = "composite"
+)
+
+type CompositeRole struct {
+
+	// A unique identifier for this specific composite role
+	// instance, generated based on the identity, base role,
+	// and providers. This allows caching and reusing
+	// composite roles for the same context without
+	// needing to recompute them.
+	UUID uuid.UUID `json:"uuid,omitempty"`
+
+	// Set the providers that this composite role has been resolved
+	// for
+	Providers []string `json:"providers,omitempty"` // The provider context for this composite role (e.g., "aws", "gcp", "azure")
+
+	// Composite indicates that this role is the result of resolving a base role and all its inherited roles into a single flattened role.
+	Composite bool `json:"composite" default:"true"` // Must be true for CompositeRole
+
+	Role
+}
+
+// IsComposite returns true when the role was produced by merging inherited
+// thand roles. Composite roles are per-identity and should be deleted on
+// revocation. Non-composite roles are persistent and shared.
+func (r *CompositeRole) IsComposite() bool {
+	return r.Composite
+}
+
+func (r *CompositeRole) GetIdentifier() uuid.UUID {
+	if r.UUID != uuid.Nil {
+		return r.UUID
+	}
+	// Fallback to base role identifier if UUID is not set
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(r.Role.GetIdentifier()))
+}
+
+func (r *CompositeRole) GetName() string {
+	if r.Composite {
+		return r.GetUniqueName()
+	}
+	return r.Role.GetName()
+}
+
+func (r *CompositeRole) GetUniqueName() string {
+
+	roleIdentifier := r.GetIdentifier()
+
+	// Create FNV-1a hash (non-cryptographic, fast, 6 hex chars)
+	h := fnv.New32a()
+	h.Write([]byte(roleIdentifier.String()))
+
+	// Conform to snake_case for consistency
+	newIdentifier := fmt.Sprintf("%s_%06x", r.Role.GetIdentifier(), h.Sum32()&0xFFFFFF)
+
+	return newIdentifier
+}
 
 type Role struct {
 	Version     *version.Version `json:"version,omitempty"`
@@ -25,8 +121,7 @@ type Role struct {
 
 	Scopes RoleScopes `json:"scopes"` // scope of who can be assigned this role
 
-	Composite bool `json:"composite" default:"false"` // Whether this role is a composite role (i.e., aggregates other roles)
-	Enabled   bool `json:"enabled" default:"true"`    // By default enable the role
+	Enabled bool `json:"enabled" default:"true"` // By default enable the role
 }
 
 // UnmarshalJSON provides backwards compatibility for Role.
@@ -218,6 +313,15 @@ func (r *Role) IsValid() bool {
 
 func (r *Role) GetVersion() *version.Version {
 	return r.Version
+}
+
+// GetVersionString returns the role version as a string suitable for tagging.
+// Returns "0.0.0" when no version is explicitly set.
+func (r *Role) GetVersionString() string {
+	if r.Version != nil {
+		return r.Version.String()
+	}
+	return DefaultRoleVersion
 }
 
 func (r *Role) GetIdentifier() string {

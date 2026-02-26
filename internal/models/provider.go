@@ -144,7 +144,7 @@ type AuthorizeSessionResponse struct {
 type RoleRequest struct {
 	Tenant   string         `json:"tenant,omitempty"` // Optional tenant ID for multi-account providers
 	User     *User          `json:"user"`
-	Role     *Role          `json:"role"`
+	Role     *CompositeRole `json:"role"`
 	Duration *time.Duration `json:"duration,omitempty"` // Optional duration for temporary access
 }
 
@@ -158,7 +158,7 @@ func (r *RoleRequest) GetUser() *User {
 	return r.User
 }
 
-func (r *RoleRequest) GetRole() *Role {
+func (r *RoleRequest) GetRole() *CompositeRole {
 	return r.Role
 }
 

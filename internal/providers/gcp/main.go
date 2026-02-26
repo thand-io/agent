@@ -24,10 +24,11 @@ import (
 const GcpProviderName = "gcp"
 
 const (
-	BindUserToPredefinedRoleActivityName      = "BindUserToPredefinedRole"
-	GetOrCreateAndBindCustomRoleActivityName  = "GetOrCreateAndBindCustomRole"
-	UnbindUserFromPredefinedRoleActivityName  = "UnbindUserFromPredefinedRole"
-	UnbindAndDeleteCustomRoleActivityName     = "UnbindAndDeleteCustomRole"
+	BindUserToPredefinedRoleActivityName     = "BindUserToPredefinedRole"
+	GetOrCreateAndBindCustomRoleActivityName = "GetOrCreateAndBindCustomRole"
+	UnbindUserFromPredefinedRoleActivityName = "UnbindUserFromPredefinedRole"
+	UnbindAndDeleteCustomRoleActivityName    = "UnbindAndDeleteCustomRole"
+	UnbindUserFromCustomRoleActivityName     = "UnbindUserFromCustomRole"
 )
 
 var DefaultStage = "GA"

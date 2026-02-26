@@ -14,13 +14,14 @@ import (
 
 // EvaluateRoleRequest represents the request body for POST /roles/evaluate
 type EvaluateRoleRequest struct {
-	Role     string `json:"role" binding:"required"`     // Role key (identifier) to evaluate
-	Identity string `json:"identity" binding:"required"` // Identity ID to evaluate against
+	Role       string   `json:"role" binding:"required"`       // Role key (identifier) to evaluate
+	Identities []string `json:"identities" binding:"required"` // Identity IDs to evaluate against
+	Providers  []string `json:"providers,omitempty"`           // Optional list of providers to consider in evaluation
 }
 
 // EvaluateRoleResponse represents the response for POST /roles/evaluate
 type EvaluateRoleResponse struct {
-	Role *models.Role `json:"role"` // The evaluated composite role
+	Results map[string]*models.CompositeRole `json:"results"` // Map of identity ID to evaluated composite role
 }
 
 // getRoles handles GET /api/v1/roles
@@ -233,7 +234,7 @@ type RolePageData struct {
 	TemplateData
 	RoleKey       string
 	Role          *models.Role
-	CompositeRole *models.Role
+	CompositeRole *models.CompositeRole
 }
 
 // getRolePage handles GET /role/:role
@@ -336,21 +337,28 @@ func (s *Server) postEvaluateRole(c *gin.Context) {
 		return
 	}
 
-	// Look up the identity from available identities
-	identityResult, err := s.Config.GetIdentity(request.Identity)
-	if err != nil {
-		s.getErrorPage(c, http.StatusNotFound, "Identity not found", err)
-		return
-	}
+	results := make(map[string]*models.CompositeRole)
 
-	// Evaluate the composite role
-	compositeRole, err := s.Config.GetCompositeRole(identityResult, baseRole)
-	if err != nil {
-		s.getErrorPage(c, http.StatusInternalServerError, "Failed to evaluate composite role", err)
-		return
+	for _, identityID := range request.Identities {
+
+		// Look up the identity from available identities
+		identityResult, err := s.Config.GetIdentity(identityID)
+		if err != nil {
+			s.getErrorPage(c, http.StatusNotFound, "Identity not found", err)
+			return
+		}
+
+		// Evaluate the composite role
+		compositeRole, err := s.Config.GetCompositeRoleForIdentity(identityResult, baseRole)
+		if err != nil {
+			s.getErrorPage(c, http.StatusInternalServerError, "Failed to evaluate composite role", err)
+			return
+		}
+
+		results[identityID] = compositeRole
 	}
 
 	c.JSON(http.StatusOK, EvaluateRoleResponse{
-		Role: compositeRole,
+		Results: results,
 	})
 }

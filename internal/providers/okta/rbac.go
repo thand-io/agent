@@ -169,7 +169,7 @@ func (p *oktaProvider) AuthorizeRole(
 	if len(role.Permissions.Allow) > 0 {
 
 		// Create a custom admin role with the specified permissions
-		customRoleType, err := p.createCustomAdminRole(ctx, role)
+		customRoleType, err := p.createCustomAdminRole(ctx, &role.Role)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create custom admin role: %w", err)
 		}
@@ -464,7 +464,7 @@ func (p *oktaProvider) authorizeRoleTemporal(
 		&OktaAddGroupTargetsRequest{
 			OktaUserID: userResp.OktaUserID,
 			UserEmail:  user.Email,
-			Role:       role,
+			Role:       &role.Role,
 		},
 	).Get(wfCtx, &groupResp); err != nil {
 		return nil, fmt.Errorf("OktaAddGroupTargets activity failed: %w", err)
@@ -496,7 +496,7 @@ func (p *oktaProvider) authorizeRoleTemporal(
 			models.CreateTemporalProviderWorkflowName(identifier, OktaCreateAndAssignCustomRoleActivityName),
 			&OktaCreateAndAssignCustomRoleRequest{
 				OktaUserID: userResp.OktaUserID,
-				Role:       role,
+				Role:       &role.Role,
 			},
 		).Get(wfCtx, &customResp); err != nil {
 			return nil, fmt.Errorf("OktaCreateAndAssignCustomRole activity failed: %w", err)
@@ -512,7 +512,7 @@ func (p *oktaProvider) authorizeRoleTemporal(
 		&OktaAssignApplicationTargetsRequest{
 			OktaUserID: userResp.OktaUserID,
 			UserEmail:  user.Email,
-			Role:       role,
+			Role:       &role.Role,
 		},
 	).Get(wfCtx, &appResp); err != nil {
 		return nil, fmt.Errorf("OktaAssignApplicationTargets activity failed: %w", err)

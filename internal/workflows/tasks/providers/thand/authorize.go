@@ -188,13 +188,25 @@ func (t *thandTask) executeAuthorization(
 				elevateRequest.Tenants = []string{""} // Use empty string to indicate no tenant
 			}
 
+			// A composite role is created for each identity
+			compositeRole, err := t.config.GetCompositeRoleForWorkflow(
+				identityObj,
+				workflowTask,
+				provider,
+			)
+
+			if err != nil {
+				log.WithError(err).WithField("identity", identityId).Error("Failed to get composite role for identity")
+				return nil, fmt.Errorf("failed to get composite role for identity %s: %w", identityId, err)
+			}
+
 			for _, tenantId := range elevateRequest.Tenants {
 
 				identityObj.ID = identityId
 				authReq := models.AuthorizeRoleRequest{
 					RoleRequest: &models.RoleRequest{
 						User:     identityObj.GetUser(),
-						Role:     elevateRequest.Role,
+						Role:     compositeRole,
 						Duration: &duration,
 						Tenant:   tenantId,
 					},
