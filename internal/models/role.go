@@ -98,14 +98,10 @@ func CompositeRoleWorkflowIdentifier(workflowID string, role *Role, identity *Id
 	if identity != nil {
 		userIdentity = identity.GetMappableIdentifier()
 	}
-	versionStr := "1.0.0"
-	if role.Version != nil {
-		versionStr = role.Version.String()
-	}
 	return fmt.Sprintf("%s:%s:%s:%s:%s",
 		workflowID,
 		role.Identifier,
-		versionStr,
+		role.GetVersionString(),
 		role.Name,
 		userIdentity,
 	)

@@ -65,7 +65,7 @@ func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 
 	logrus.WithFields(logrus.Fields{
 		"provider": providerID,
-	}).Debug("Starting tenant synchronization")
+	}).Debug("Starting synchronization")
 
 	for {
 
@@ -118,7 +118,7 @@ func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 
 	logrus.WithFields(logrus.Fields{
 		"provider": providerID,
-	}).Debug("Starting tenant synchronization")
+	}).Debug("Completed synchronization")
 
 	return nil
 }
