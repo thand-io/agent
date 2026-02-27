@@ -32,7 +32,7 @@ import (
 //     Policies are only refreshed when the version has changed. On revoke
 //     only the account assignment is removed; the permission set is retained.
 func (p *awsProvider) authorizeRoleIdentityCenter(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
 	targetAccountID string,
 ) (*models.AuthorizeRoleResponse, error) {
@@ -46,7 +46,7 @@ func (p *awsProvider) authorizeRoleIdentityCenter(
 	}).Info("SSO authorizeRole: determining role lifecycle")
 
 	// Step 1 — resolve the Identity Center instance
-	instanceResp, err := p.execGetIdentityCenterInstance(task, &GetIdentityCenterInstanceRequest{})
+	instanceResp, err := p.execGetIdentityCenterInstance(ctx, &GetIdentityCenterInstanceRequest{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to find Identity Center instance: %w", err)
 	}
@@ -62,7 +62,7 @@ func (p *awsProvider) authorizeRoleIdentityCenter(
 		Version:     role.GetVersionString(),
 	}
 
-	psResp, err := p.execFindOrCreatePermissionSet(task, psReq)
+	psResp, err := p.execFindOrCreatePermissionSet(ctx, psReq)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to find or create permission set: %w", err)
@@ -72,7 +72,7 @@ func (p *awsProvider) authorizeRoleIdentityCenter(
 	// For non-composite roles where no update was needed we can skip provisioning.
 	needsProvisioning := isComposite || psResp.NeedsUpdate
 	if needsProvisioning {
-		psProvisionResp, err := p.execProvisionPermissionSet(task, &ProvisionPermissionSetRequest{
+		psProvisionResp, err := p.execProvisionPermissionSet(ctx, &ProvisionPermissionSetRequest{
 			InstanceArn:      instanceResp.InstanceArn,
 			PermissionSetArn: psResp.PermissionSetArn,
 		})
@@ -84,17 +84,17 @@ func (p *awsProvider) authorizeRoleIdentityCenter(
 			InstanceArn: instanceResp.InstanceArn,
 			RequestId:   psProvisionResp.RequestId,
 		}
-		provFirstCheck, err := p.execCheckPermissionSetProvisioningStatus(task, provCheckReq)
+		provFirstCheck, err := p.execCheckPermissionSetProvisioningStatus(ctx, provCheckReq)
 		if err != nil {
 			return nil, fmt.Errorf("failed to check permission set provisioning status: %w", err)
 		}
 		if !provFirstCheck.Succeeded {
-			if task.HasTemporalContext() {
+			if workflowCtx, ok := ctx.(workflow.Context); ok {
 				for {
-					if err := workflow.Sleep(task.GetTemporalContext(), awsProviderDeleteRoleAssignmentBackoffDuration); err != nil {
+					if err := workflow.Sleep(workflowCtx, awsProviderDeleteRoleAssignmentBackoffDuration); err != nil {
 						return nil, fmt.Errorf("workflow sleep cancelled while waiting for permission set provisioning: %w", err)
 					}
-					provCheckResp, err := p.execCheckPermissionSetProvisioningStatus(task, provCheckReq)
+					provCheckResp, err := p.execCheckPermissionSetProvisioningStatus(workflowCtx, provCheckReq)
 					if err != nil {
 						return nil, err
 					}
@@ -104,12 +104,13 @@ func (p *awsProvider) authorizeRoleIdentityCenter(
 				}
 			} else {
 				provisioned := false
+				localCtx := ctx.(context.Context)
 				for iter := 0; iter < awsProviderDeleteRoleAssignmentBackoffLimit; iter++ {
-					if err := task.GetContext().Err(); err != nil {
+					if err := localCtx.Err(); err != nil {
 						return nil, fmt.Errorf("context cancelled while waiting for permission set provisioning: %w", err)
 					}
 					time.Sleep(awsProviderDeleteRoleAssignmentBackoffDuration)
-					provCheckResp, err := p.execCheckPermissionSetProvisioningStatus(task, provCheckReq)
+					provCheckResp, err := p.execCheckPermissionSetProvisioningStatus(localCtx, provCheckReq)
 					if err != nil {
 						return nil, err
 					}
@@ -126,7 +127,7 @@ func (p *awsProvider) authorizeRoleIdentityCenter(
 	}
 
 	// Step 3 — find the user in Identity Center
-	userResp, err := p.execFindIdentityCenterUser(task, &FindIdentityCenterUserRequest{
+	userResp, err := p.execFindIdentityCenterUser(ctx, &FindIdentityCenterUserRequest{
 		IdentityStoreId: instanceResp.IdentityStoreId,
 		Email:           req.GetUser().Email,
 	})
@@ -135,7 +136,7 @@ func (p *awsProvider) authorizeRoleIdentityCenter(
 	}
 
 	// Step 4 — create the account assignment
-	if err := p.execCreateAccountAssignment(task, &CreateAccountAssignmentRequest{
+	if err := p.execCreateAccountAssignment(ctx, &CreateAccountAssignmentRequest{
 		InstanceArn:      instanceResp.InstanceArn,
 		PermissionSetArn: psResp.PermissionSetArn,
 		PrincipalId:      userResp.PrincipalId,
@@ -645,7 +646,7 @@ func (p *awsProvider) createAccountAssignment(ctx context.Context, instanceArn, 
 //   - Composite: delete account assignment + cleanup (delete) the permission set.
 //   - Non-composite: delete account assignment only; the permission set is
 //     retained for future authorizations.
-func (p *awsProvider) revokeRoleIdentityCenter(task models.ProviderContext, req *models.RevokeRoleRequest, targetAccountID string) error {
+func (p *awsProvider) revokeRoleIdentityCenter(ctx models.ProviderContext, req *models.RevokeRoleRequest, targetAccountID string) error {
 
 	user := req.GetUser()
 	role := req.GetRole()
@@ -658,7 +659,7 @@ func (p *awsProvider) revokeRoleIdentityCenter(task models.ProviderContext, req 
 	}).Info("SSO revokeRole: determining cleanup strategy")
 
 	// Step 1 — resolve the Identity Center instance
-	instanceResp, err := p.execGetIdentityCenterInstance(task, &GetIdentityCenterInstanceRequest{})
+	instanceResp, err := p.execGetIdentityCenterInstance(ctx, &GetIdentityCenterInstanceRequest{})
 	if err != nil {
 		return fmt.Errorf("failed to find Identity Center instance: %w", err)
 	}
@@ -681,7 +682,7 @@ func (p *awsProvider) revokeRoleIdentityCenter(task models.ProviderContext, req 
 			"accountId": targetAccountID,
 		}).Warn("No permission set ARN in metadata, falling back to name-based lookup")
 	}
-	psResp, err := p.execFindPermissionSetByName(task, &FindPermissionSetByNameRequest{
+	psResp, err := p.execFindPermissionSetByName(ctx, &FindPermissionSetByNameRequest{
 		InstanceArn:      instanceResp.InstanceArn,
 		PermissionSetArn: storedPermissionSetArn,
 		RoleName:         role.GetName(),
@@ -691,7 +692,7 @@ func (p *awsProvider) revokeRoleIdentityCenter(task models.ProviderContext, req 
 	}
 
 	// Step 3 — find the user in Identity Center
-	userResp, err := p.execFindIdentityCenterUser(task, &FindIdentityCenterUserRequest{
+	userResp, err := p.execFindIdentityCenterUser(ctx, &FindIdentityCenterUserRequest{
 		IdentityStoreId: instanceResp.IdentityStoreId,
 		Email:           user.Email,
 	})
@@ -700,7 +701,7 @@ func (p *awsProvider) revokeRoleIdentityCenter(task models.ProviderContext, req 
 	}
 
 	// Step 4 — delete the account assignment
-	deleteResp, err := p.execDeleteAccountAssignment(task, &DeleteAccountAssignmentRequest{
+	deleteResp, err := p.execDeleteAccountAssignment(ctx, &DeleteAccountAssignmentRequest{
 		InstanceArn:      instanceResp.InstanceArn,
 		PermissionSetArn: psResp.PermissionSetArn,
 		PrincipalId:      userResp.PrincipalId,
@@ -718,7 +719,7 @@ func (p *awsProvider) revokeRoleIdentityCenter(task models.ProviderContext, req 
 		// Already revoked (idempotent); skip polling.
 		// Only attempt cleanup for composite roles.
 		if isComposite {
-			p.execCleanupPermissionSet(task, cleanupReq)
+			p.execCleanupPermissionSet(ctx, cleanupReq)
 		}
 		return nil
 	}
@@ -734,12 +735,12 @@ func (p *awsProvider) revokeRoleIdentityCenter(task models.ProviderContext, req 
 		TargetAccountID: targetAccountID,
 	}
 
-	if task.HasTemporalContext() {
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
 		for {
-			if err := workflow.Sleep(task.GetTemporalContext(), awsProviderDeleteRoleAssignmentBackoffDuration); err != nil {
+			if err := workflow.Sleep(workflowCtx, awsProviderDeleteRoleAssignmentBackoffDuration); err != nil {
 				return fmt.Errorf("workflow sleep cancelled while waiting for account assignment deletion: %w", err)
 			}
-			checkResp, err := p.execCheckAssignmentDeletionStatus(task, checkReq)
+			checkResp, err := p.execCheckAssignmentDeletionStatus(workflowCtx, checkReq)
 			if err != nil {
 				return err
 			}
@@ -747,25 +748,27 @@ func (p *awsProvider) revokeRoleIdentityCenter(task models.ProviderContext, req 
 				// Composite: clean up (delete) the permission set.
 				// Non-composite: retain the permission set for future use.
 				if isComposite {
-					p.execCleanupPermissionSet(task, cleanupReq)
+					p.execCleanupPermissionSet(workflowCtx, cleanupReq)
 				}
 				return nil
 			}
 		}
 	}
 
+	localCtx := ctx.(context.Context)
+
 	for iter := 0; iter < awsProviderDeleteRoleAssignmentBackoffLimit; iter++ {
-		if err := task.GetContext().Err(); err != nil {
+		if err := localCtx.Err(); err != nil {
 			return fmt.Errorf("context cancelled while waiting for account assignment deletion: %w", err)
 		}
 		time.Sleep(awsProviderDeleteRoleAssignmentBackoffDuration)
-		checkResp, err := p.execCheckAssignmentDeletionStatus(task, checkReq)
+		checkResp, err := p.execCheckAssignmentDeletionStatus(localCtx, checkReq)
 		if err != nil {
 			return err
 		}
 		if checkResp.Succeeded {
 			if isComposite {
-				p.execCleanupPermissionSet(task, cleanupReq)
+				p.execCleanupPermissionSet(localCtx, cleanupReq)
 			}
 			return nil
 		}
@@ -1059,12 +1062,11 @@ func (p *awsProvider) findPermissionSetByName(ctx context.Context, instanceArn, 
 // ───────────────────────────────────────────────────────────────────────────────
 
 func (p *awsProvider) execGetIdentityCenterInstance(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *GetIdentityCenterInstanceRequest,
 ) (*GetIdentityCenterInstanceResponse, error) {
-	if task.HasTemporalContext() {
-		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
-			TaskQueue:           task.GetTaskQueue(),
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		wfCtx := workflow.WithActivityOptions(workflowCtx, workflow.ActivityOptions{
 			StartToCloseTimeout: 30 * time.Second,
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
@@ -1074,7 +1076,8 @@ func (p *awsProvider) execGetIdentityCenterInstance(
 		}
 		return &resp, nil
 	}
-	instanceArn, identityStoreId, err := p.getIdentityCenterInstance(task.GetContext())
+	localCtx := ctx.(context.Context)
+	instanceArn, identityStoreId, err := p.getIdentityCenterInstance(localCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -1082,12 +1085,11 @@ func (p *awsProvider) execGetIdentityCenterInstance(
 }
 
 func (p *awsProvider) execFindOrCreatePermissionSet(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *FindOrCreatePermissionSetRequest,
 ) (*FindOrCreatePermissionSetResponse, error) {
-	if task.HasTemporalContext() {
-		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
-			TaskQueue:           task.GetTaskQueue(),
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		wfCtx := workflow.WithActivityOptions(workflowCtx, workflow.ActivityOptions{
 			StartToCloseTimeout: 2 * time.Minute,
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
@@ -1097,8 +1099,9 @@ func (p *awsProvider) execFindOrCreatePermissionSet(
 		}
 		return &resp, nil
 	}
+	localCtx := ctx.(context.Context)
 	arn, needsUpdate, err := p.findOrCreatePermissionSet(
-		task.GetContext(),
+		localCtx,
 		req.InstanceArn,
 		req.RoleName,
 		req.Role,
@@ -1113,12 +1116,11 @@ func (p *awsProvider) execFindOrCreatePermissionSet(
 }
 
 func (p *awsProvider) execFindIdentityCenterUser(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *FindIdentityCenterUserRequest,
 ) (*FindIdentityCenterUserResponse, error) {
-	if task.HasTemporalContext() {
-		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
-			TaskQueue:           task.GetTaskQueue(),
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		wfCtx := workflow.WithActivityOptions(workflowCtx, workflow.ActivityOptions{
 			StartToCloseTimeout: 30 * time.Second,
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
@@ -1128,7 +1130,8 @@ func (p *awsProvider) execFindIdentityCenterUser(
 		}
 		return &resp, nil
 	}
-	principalId, err := p.findIdentityCenterUser(task.GetContext(), req.IdentityStoreId, req.Email)
+	localCtx := ctx.(context.Context)
+	principalId, err := p.findIdentityCenterUser(localCtx, req.IdentityStoreId, req.Email)
 	if err != nil {
 		return nil, err
 	}
@@ -1136,27 +1139,26 @@ func (p *awsProvider) execFindIdentityCenterUser(
 }
 
 func (p *awsProvider) execCreateAccountAssignment(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *CreateAccountAssignmentRequest,
 ) error {
-	if task.HasTemporalContext() {
-		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
-			TaskQueue:           task.GetTaskQueue(),
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		wfCtx := workflow.WithActivityOptions(workflowCtx, workflow.ActivityOptions{
 			StartToCloseTimeout: 2 * time.Minute,
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
 		return workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), CreateAccountAssignmentActivityName), req).Get(wfCtx, nil)
 	}
-	return p.createAccountAssignment(task.GetContext(), req.InstanceArn, req.PermissionSetArn, req.PrincipalId, req.TargetAccountID)
+	localCtx := ctx.(context.Context)
+	return p.createAccountAssignment(localCtx, req.InstanceArn, req.PermissionSetArn, req.PrincipalId, req.TargetAccountID)
 }
 
 func (p *awsProvider) execFindPermissionSetByName(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *FindPermissionSetByNameRequest,
 ) (*FindPermissionSetByNameResponse, error) {
-	if task.HasTemporalContext() {
-		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
-			TaskQueue:           task.GetTaskQueue(),
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		wfCtx := workflow.WithActivityOptions(workflowCtx, workflow.ActivityOptions{
 			StartToCloseTimeout: 30 * time.Second,
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
@@ -1170,7 +1172,8 @@ func (p *awsProvider) execFindPermissionSetByName(
 	if len(req.PermissionSetArn) > 0 {
 		return &FindPermissionSetByNameResponse{PermissionSetArn: req.PermissionSetArn}, nil
 	}
-	arn, err := p.findPermissionSetByName(task.GetContext(), req.InstanceArn, req.RoleName)
+	localCtx := ctx.(context.Context)
+	arn, err := p.findPermissionSetByName(localCtx, req.InstanceArn, req.RoleName)
 	if err != nil {
 		return nil, err
 	}
@@ -1178,12 +1181,11 @@ func (p *awsProvider) execFindPermissionSetByName(
 }
 
 func (p *awsProvider) execDeleteAccountAssignment(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *DeleteAccountAssignmentRequest,
 ) (*DeleteAccountAssignmentResponse, error) {
-	if task.HasTemporalContext() {
-		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
-			TaskQueue:           task.GetTaskQueue(),
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		wfCtx := workflow.WithActivityOptions(workflowCtx, workflow.ActivityOptions{
 			StartToCloseTimeout: 2 * time.Minute,
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
@@ -1193,7 +1195,8 @@ func (p *awsProvider) execDeleteAccountAssignment(
 		}
 		return &resp, nil
 	}
-	requestId, err := p.deleteAccountAssignment(task.GetContext(), req.InstanceArn, req.PermissionSetArn, req.PrincipalId, req.TargetAccountID)
+	localCtx := ctx.(context.Context)
+	requestId, err := p.deleteAccountAssignment(localCtx, req.InstanceArn, req.PermissionSetArn, req.PrincipalId, req.TargetAccountID)
 	if err != nil {
 		return nil, err
 	}
@@ -1201,12 +1204,11 @@ func (p *awsProvider) execDeleteAccountAssignment(
 }
 
 func (p *awsProvider) execCheckAssignmentDeletionStatus(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *CheckAssignmentDeletionStatusRequest,
 ) (*CheckAssignmentDeletionStatusResponse, error) {
-	if task.HasTemporalContext() {
-		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
-			TaskQueue:           task.GetTaskQueue(),
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		wfCtx := workflow.WithActivityOptions(workflowCtx, workflow.ActivityOptions{
 			StartToCloseTimeout: 30 * time.Second,
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
@@ -1216,7 +1218,8 @@ func (p *awsProvider) execCheckAssignmentDeletionStatus(
 		}
 		return &resp, nil
 	}
-	succeeded, err := p.checkAssignmentDeletionStatus(task.GetContext(), req.InstanceArn, req.RequestId, req.PrincipalId, req.TargetAccountID)
+	localCtx := ctx.(context.Context)
+	succeeded, err := p.checkAssignmentDeletionStatus(localCtx, req.InstanceArn, req.RequestId, req.PrincipalId, req.TargetAccountID)
 	if err != nil {
 		return nil, err
 	}
@@ -1227,28 +1230,27 @@ func (p *awsProvider) execCheckAssignmentDeletionStatus(
 // both paths — errors are swallowed and logged so a cleanup failure never
 // blocks the primary revocation result.
 func (p *awsProvider) execCleanupPermissionSet(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *CleanupPermissionSetRequest,
 ) {
-	if task.HasTemporalContext() {
-		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
-			TaskQueue:           task.GetTaskQueue(),
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		wfCtx := workflow.WithActivityOptions(workflowCtx, workflow.ActivityOptions{
 			StartToCloseTimeout: 1 * time.Minute,
 			RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 1},
 		})
 		_ = workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), CleanupPermissionSetActivityName), req).Get(wfCtx, nil)
 		return
 	}
-	p.tryCleanupPermissionSet(task.GetContext(), req.InstanceArn, req.PermissionSetArn)
+	localCtx := ctx.(context.Context)
+	p.tryCleanupPermissionSet(localCtx, req.InstanceArn, req.PermissionSetArn)
 }
 
 func (p *awsProvider) execProvisionPermissionSet(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *ProvisionPermissionSetRequest,
 ) (*ProvisionPermissionSetResponse, error) {
-	if task.HasTemporalContext() {
-		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
-			TaskQueue:           task.GetTaskQueue(),
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		wfCtx := workflow.WithActivityOptions(workflowCtx, workflow.ActivityOptions{
 			StartToCloseTimeout: 30 * time.Second,
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
@@ -1258,7 +1260,8 @@ func (p *awsProvider) execProvisionPermissionSet(
 		}
 		return &resp, nil
 	}
-	requestId, err := p.provisionPermissionSet(task.GetContext(), req.InstanceArn, req.PermissionSetArn)
+	localCtx := ctx.(context.Context)
+	requestId, err := p.provisionPermissionSet(localCtx, req.InstanceArn, req.PermissionSetArn)
 	if err != nil {
 		return nil, err
 	}
@@ -1266,12 +1269,11 @@ func (p *awsProvider) execProvisionPermissionSet(
 }
 
 func (p *awsProvider) execCheckPermissionSetProvisioningStatus(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *CheckPermissionSetProvisioningStatusRequest,
 ) (*CheckPermissionSetProvisioningStatusResponse, error) {
-	if task.HasTemporalContext() {
-		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
-			TaskQueue:           task.GetTaskQueue(),
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		wfCtx := workflow.WithActivityOptions(workflowCtx, workflow.ActivityOptions{
 			StartToCloseTimeout: 30 * time.Second,
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
@@ -1281,7 +1283,8 @@ func (p *awsProvider) execCheckPermissionSetProvisioningStatus(
 		}
 		return &resp, nil
 	}
-	succeeded, err := p.checkPermissionSetProvisioningStatus(task.GetContext(), req.InstanceArn, req.RequestId)
+	localCtx := ctx.(context.Context)
+	succeeded, err := p.checkPermissionSetProvisioningStatus(localCtx, req.InstanceArn, req.RequestId)
 	if err != nil {
 		return nil, err
 	}

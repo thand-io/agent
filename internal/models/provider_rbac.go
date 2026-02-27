@@ -12,12 +12,40 @@ import (
 
 	"github.com/blevesearch/bleve/v2"
 	"github.com/sirupsen/logrus"
-	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 type AuthorizeRoleRequest struct {
-	*RoleRequest
-	ProviderIdentifier string `json:"provider_identifier,omitempty"` // Provider identifier for routing to the correct agent
+	Tenant   *ProviderTenant `json:"tenant,omitempty"`   // Optional tenant ID for multi-account providers
+	Identity *Identity       `json:"identity,omitempty"` // User or group identifier
+	Role     *CompositeRole  `json:"role,omitempty"`
+	Duration *time.Duration  `json:"duration,omitempty"` // Optional duration for temporary access
+}
+
+func (r *AuthorizeRoleRequest) IsValid() bool {
+	return r.Identity != nil && r.Role != nil
+}
+
+func (r *AuthorizeRoleRequest) GetUser() *User {
+	if r.Identity == nil {
+		return nil
+	}
+	return r.Identity.User
+}
+
+func (r *AuthorizeRoleRequest) GetRole() *CompositeRole {
+	return r.Role
+}
+
+func (r *AuthorizeRoleRequest) GetTenant() *ProviderTenant {
+	return r.Tenant
+}
+
+func (r *AuthorizeRoleRequest) GetDuration() *time.Duration {
+	return r.Duration
+}
+
+func (r *AuthorizeRoleRequest) HasTenant() bool {
+	return r.Tenant != nil && len(r.Tenant.ID) > 0
 }
 
 type AuthorizeRoleResponse struct {
@@ -30,9 +58,8 @@ type AuthorizeRoleResponse struct {
 }
 
 type RevokeRoleRequest struct {
-	*RoleRequest
+	*AuthorizeRoleRequest
 	AuthorizeRoleResponse *AuthorizeRoleResponse `json:"response,omitempty"`
-	ProviderIdentifier    string                 `json:"provider_identifier,omitempty"` // Provider identifier for routing to the correct agent
 }
 
 type RevokeRoleResponse struct {
@@ -146,7 +173,9 @@ func (r SynchronizeTenantsResponse) GetPagination() *PaginationOptions  { return
 // It is an alias for WorkflowTaskSupport so providers receive both the plain
 // Go context and, when inside a Temporal workflow coroutine, the workflow.Context
 // needed to schedule sub-activities with proper retries.
-type ProviderContext = sdkWorkflowsModel.WorkflowTaskSupport
+type ProviderContext interface {
+	Deadline() (deadline time.Time, ok bool)
+}
 
 // ProviderRoleBasedAccessControl defines the interface for providers that support RBAC
 type ProviderRoleBasedAccessControl interface {
@@ -188,7 +217,7 @@ type ProviderRoleBasedAccessControl interface {
 
 	// Authorize a role for a user (Bind a user to a role)
 	AuthorizeRole(
-		taskSupport sdkWorkflowsModel.WorkflowTaskSupport,
+		ctx ProviderContext,
 		req *AuthorizeRoleRequest,
 	) (
 		*AuthorizeRoleResponse, // Return any custom metadata the provider wants to store
@@ -197,7 +226,7 @@ type ProviderRoleBasedAccessControl interface {
 
 	// Revoke a role from a user
 	RevokeRole(
-		taskSupport sdkWorkflowsModel.WorkflowTaskSupport,
+		ctx ProviderContext,
 		req *RevokeRoleRequest, // Any metadata returned from AuthorizeRole
 	) (*RevokeRoleResponse, error)
 
@@ -210,7 +239,7 @@ type ProviderRoleBasedAccessControl interface {
 }
 
 func (p *BaseProvider) AuthorizeRole(
-	taskSupport sdkWorkflowsModel.WorkflowTaskSupport,
+	ctx ProviderContext,
 	req *AuthorizeRoleRequest,
 ) (*AuthorizeRoleResponse, error) {
 	// Default implementation does nothing
@@ -218,7 +247,7 @@ func (p *BaseProvider) AuthorizeRole(
 }
 
 func (p *BaseProvider) RevokeRole(
-	taskSupport sdkWorkflowsModel.WorkflowTaskSupport,
+	ctx ProviderContext,
 	req *RevokeRoleRequest,
 ) (*RevokeRoleResponse, error) {
 	// Default implementation does nothing

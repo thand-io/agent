@@ -241,9 +241,9 @@ func TestConvertToSnakeCase(t *testing.T) {
 			expected: "hello_world_test",
 		},
 		{
-			name:     "with allowed special characters",
+			name:     "with special characters",
 			input:    "test_name+=value,.@domain-com",
-			expected: "test_name+=value,.@domain-com",
+			expected: "test_name_value_domain_com",
 		},
 		{
 			name:     "with numbers",
@@ -253,12 +253,12 @@ func TestConvertToSnakeCase(t *testing.T) {
 		{
 			name:     "with invalid special characters",
 			input:    "test#name$value%",
-			expected: "testnamevalue",
+			expected: "test_name_value",
 		},
 		{
 			name:     "mixed case with spaces and special chars",
 			input:    "My Test Name@domain.com",
-			expected: "my_test_name@domain.com",
+			expected: "my_test_name_domain_com",
 		},
 		{
 			name:     "empty string",
@@ -278,12 +278,12 @@ func TestConvertToSnakeCase(t *testing.T) {
 		{
 			name:     "ending with space",
 			input:    "hello world ",
-			expected: "hello_world_",
+			expected: "hello_world",
 		},
 		{
-			name:     "only special characters (allowed)",
+			name:     "only special characters",
 			input:    "_+=,.@-",
-			expected: "_+=,.@-",
+			expected: "",
 		},
 		{
 			name:     "only special characters (not allowed)",

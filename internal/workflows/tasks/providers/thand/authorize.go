@@ -3,7 +3,6 @@ package thand
 import (
 	"errors"
 	"fmt"
-	"maps"
 	"net/http"
 	"sync"
 	"time"
@@ -97,7 +96,7 @@ func (t *thandTask) buildBasicModelOutput(elevateRequest *models.ElevateRequestI
 // authResult holds the result of an authorization operation
 type authResult struct {
 	Identity     string
-	AuthRequest  *models.AuthorizeRoleRequest
+	AuthRequest  *models.WorkflowRoleRequest
 	AuthResponse *models.AuthorizeRoleResponse
 	Error        error
 }
@@ -106,7 +105,7 @@ type authResult struct {
 type authTask struct {
 	ProviderName string
 	Identity     string
-	AuthRequest  models.AuthorizeRoleRequest
+	AuthRequest  *models.WorkflowRoleRequest
 }
 
 // executeAuthorization performs the main authorization workflow
@@ -116,6 +115,11 @@ func (t *thandTask) executeAuthorization(
 	call *taskModel.ThandTask,
 	elevateRequest *models.ElevateRequestInternal,
 ) (any, error) {
+
+	// CRITICAL - YOU CANNOT CALL FOR LOCAL ROLES AND PROVIDERS OR WORKFLOWS
+	// These must be either activities or sub-workflows to be executed
+	// by a worker that has registered itself as being able to support
+	// either a role, provider or workflow.
 
 	log := workflowTask.GetLogger()
 
@@ -155,31 +159,7 @@ func (t *thandTask) executeAuthorization(
 
 	for _, providerName := range elevateRequest.Providers {
 
-		provider, err := t.config.GetProviderByName(providerName)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get provider: %w", err)
-		}
-
-		validateOutput, err := t.validateRoleAndBuildOutput(provider, *elevateRequest)
-		if err != nil {
-			return nil, err
-		}
-
-		maps.Copy(modelOutput, validateOutput)
-
 		for _, identityId := range elevateRequest.Identities {
-
-			identityObj := t.resolveIdentity(identityId)
-
-			if identityObj == nil {
-				logrus.Warnf("failed to resolve identity: %s", identityId)
-				continue
-			}
-
-			if identityObj.GetUser() == nil {
-				logrus.Warnf("resolved identity has no user: %s", identityId)
-				continue
-			}
 
 			// Check if we have tenants specified in our request. If so, we need
 			// to create an authorization task for each identity and tenant combination
@@ -188,51 +168,28 @@ func (t *thandTask) executeAuthorization(
 				elevateRequest.Tenants = []string{""} // Use empty string to indicate no tenant
 			}
 
-			// A composite role is created for each identity
-			compositeRole, err := t.config.GetCompositeRoleForWorkflow(
-				identityObj,
-				workflowTask,
-				provider,
-			)
-
-			if err != nil {
-				log.WithError(err).WithField("identity", identityId).Error("Failed to get composite role for identity")
-				return nil, fmt.Errorf("failed to get composite role for identity %s: %w", identityId, err)
-			}
-
 			for _, tenantId := range elevateRequest.Tenants {
 
-				identityObj.ID = identityId
-				authReq := models.AuthorizeRoleRequest{
-					RoleRequest: &models.RoleRequest{
-						User:     identityObj.GetUser(),
-						Role:     compositeRole,
-						Duration: &duration,
-						Tenant:   tenantId,
-					},
+				authReq := models.WorkflowRoleRequest{
+					WorkflowID: workflowTask.GetWorkflowID(),
+					Identity:   identityId,
+					Role:       elevateRequest.Role,
+					Duration:   &duration,
+					Tenant:     tenantId,
 				}
-
-				log.WithFields(logrus.Fields{
-					"identity_id": identityId,
-					"provider":    providerName,
-					"tenant":      tenantId,
-					"role":        elevateRequest.Role.Name,
-				}).Debug("authorize.go: Creating AuthorizeRoleRequest with Tenant")
 
 				authTasks = append(authTasks, authTask{
 					ProviderName: providerName,
 					Identity:     identityId,
-					AuthRequest:  authReq,
+					AuthRequest:  &authReq,
 				})
 
 				log.WithFields(logrus.Fields{
-					"user":     authReq.User.GetIdentity(),
-					"source":   authReq.User.Source,
-					"username": authReq.User.Username,
-					"role":     authReq.Role.GetName(),
-					"provider": providerName,
-					"duration": duration,
-					"tenant":   tenantId,
+					"iddentity": identityId,
+					"role":      authReq.Role.GetName(),
+					"provider":  providerName,
+					"duration":  duration,
+					"tenant":    tenantId,
 				}).Info("Preparing authorization logic")
 
 			}
@@ -273,7 +230,19 @@ func (t *thandTask) executeAuthorization(
 	}
 
 	for _, req := range authTasks {
-		requests[req.Identity] = &req.AuthRequest
+		var dur *time.Duration
+		if req.AuthRequest.Duration != nil {
+			d := *req.AuthRequest.Duration
+			dur = &d
+		}
+		requests[req.Identity] = &models.AuthorizeRoleRequest{
+			Identity: &models.Identity{ID: req.AuthRequest.Identity},
+			Tenant:   &models.ProviderTenant{ID: req.AuthRequest.Tenant},
+			Role: &models.CompositeRole{
+				Role: *req.AuthRequest.Role,
+			},
+			Duration: dur,
+		}
 	}
 
 	if len(returnedErrors) > 0 && len(authorizations) == 0 {
@@ -330,29 +299,30 @@ func (t *thandTask) runAuthTask(
 		wfName := models.CreateTemporalProviderWorkflowName(
 			task.ProviderName, models.TemporalAuthorizeRoleWorkflowName)
 
+		// The workflow id will be the role_id + tenant + identity to ensure uniqueness
+		// and prevent other users being elevated
 		childOpts := workflow.ChildWorkflowOptions{
-			WorkflowID: fmt.Sprintf("%s_%s",
+			WorkflowID: fmt.Sprintf("%s_authorizeRole_%s",
 				workflowTask.GetWorkflowID(),
-				task.AuthRequest.GetRole().GetIdentifier()),
+				task.AuthRequest.Role.GetName()),
 			TaskQueue: workflowTask.GetTaskQueue(),
 		}
 		ctx = workflow.WithChildOptions(ctx, childOpts)
 
 		req := task.AuthRequest
-		req.ProviderIdentifier = task.ProviderName
 
 		var resp models.AuthorizeRoleResponse
 		err := workflow.ExecuteChildWorkflow(ctx, wfName, req).Get(ctx, &resp)
 		if err != nil {
 			return authResult{
 				Identity:    task.Identity,
-				AuthRequest: &task.AuthRequest,
+				AuthRequest: task.AuthRequest,
 				Error:       err,
 			}
 		}
 		return authResult{
 			Identity:     task.Identity,
-			AuthRequest:  &task.AuthRequest,
+			AuthRequest:  task.AuthRequest,
 			AuthResponse: &resp,
 			Error:        nil,
 		}
@@ -363,14 +333,26 @@ func (t *thandTask) runAuthTask(
 	if err != nil {
 		return authResult{
 			Identity:    task.Identity,
-			AuthRequest: &task.AuthRequest,
+			AuthRequest: task.AuthRequest,
 			Error:       fmt.Errorf("failed to get provider: %w", err),
 		}
 	}
-	authOut, err := providerCall.AuthorizeRole(workflowTask, &task.AuthRequest)
+	authRoleReq, err := models.CreateAuthorizeRoleRequest(
+		t.config,
+		providerCall,
+		task.AuthRequest,
+	)
+	if err != nil {
+		return authResult{
+			Identity:    task.Identity,
+			AuthRequest: task.AuthRequest,
+			Error:       fmt.Errorf("failed to create authorize role request: %w", err),
+		}
+	}
+	authOut, err := providerCall.AuthorizeRole(workflowTask.GetContext(), authRoleReq)
 	return authResult{
 		Identity:     task.Identity,
-		AuthRequest:  &task.AuthRequest,
+		AuthRequest:  task.AuthRequest,
 		AuthResponse: authOut,
 		Error:        err,
 	}
@@ -421,29 +403,6 @@ func (t *thandTask) executeParallel(
 	}
 
 	return results, nil
-}
-
-// validateRoleAndBuildOutput validates the role and builds the initial model output
-func (t *thandTask) validateRoleAndBuildOutput(
-	provider models.Provider,
-	elevateRequest models.ElevateRequestInternal,
-) (map[string]any, error) {
-	modelOutput := map[string]any{}
-
-	validateOut, err := models.ValidateRole(provider, elevateRequest)
-	if err != nil {
-		logrus.WithFields(logrus.Fields{
-			"error": err,
-			"role":  elevateRequest.Role,
-		}).Error("Failed to validate role")
-		return nil, err
-	}
-
-	if len(validateOut) > 0 {
-		maps.Copy(modelOutput, validateOut)
-	}
-
-	return modelOutput, nil
 }
 
 func (t *thandTask) GetExport() *model.Export {

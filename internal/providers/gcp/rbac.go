@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -32,41 +31,22 @@ func newThandCondition() *cloudresourcemanager.Expr {
 	}
 }
 
-// gcpInvalidRoleIDChars matches any character NOT allowed in a GCP custom role ID.
-// GCP constraint: [a-zA-Z0-9_\.]{3,64}
-var gcpInvalidRoleIDChars = regexp.MustCompile(`[^a-zA-Z0-9_.]`)
-
-// sanitizeGCPRoleID transforms a role name into a valid GCP custom role ID.
-// GCP requires role IDs to match [a-zA-Z0-9_\.]{3,64}.
-//
-// Steps:
-//  1. Replace invalid characters (spaces, hyphens, etc.) with underscores.
-//  2. Collapse consecutive underscores.
-//  3. Trim leading/trailing underscores.
-//  4. Truncate to 64 characters.
-//  5. If the result is shorter than 3 chars, pad with underscores.
-func sanitizeGCPRoleID(name string) string {
-	sanitized := gcpInvalidRoleIDChars.ReplaceAllString(name, "_")
-
-	// Collapse consecutive underscores
-	for strings.Contains(sanitized, "__") {
-		sanitized = strings.ReplaceAll(sanitized, "__", "_")
-	}
-
-	sanitized = strings.Trim(sanitized, "_")
+// gcpRoleID converts a role name into a valid GCP custom role ID
+// using common.ConvertToSnakeCase and enforcing GCP length constraints ({3,64}).
+func gcpRoleID(name string) string {
+	id := common.ConvertToSnakeCase(name)
 
 	// Truncate to GCP maximum of 64 characters
-	if len(sanitized) > 64 {
-		sanitized = sanitized[:64]
-		sanitized = strings.TrimRight(sanitized, "_")
+	if len(id) > 64 {
+		id = strings.TrimRight(id[:64], "_")
 	}
 
 	// Pad if too short (minimum 3 characters)
-	for len(sanitized) < 3 {
-		sanitized += "_"
+	for len(id) < 3 {
+		id += "_"
 	}
 
-	return sanitized
+	return id
 }
 
 // primitiveRoles are GCP basic/primitive roles that do not support IAM conditions.
@@ -88,13 +68,14 @@ func isPrimitiveRole(roleName string) bool {
 //     A project label tracks the role version; permissions are patched only
 //     when the version is stale.
 func (p *gcpProvider) AuthorizeRole(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
-	if task.HasTemporalContext() {
-		return p.authorizeRoleTemporal(task.GetTemporalContext(), task.GetTaskQueue(), req)
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		return p.authorizeRoleTemporal(workflowCtx, req)
 	}
-	ctx := task.GetContext()
+
+	localCtx := ctx.(context.Context)
 
 	if !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to authorize gcp role")
@@ -115,8 +96,8 @@ func (p *gcpProvider) AuthorizeRole(
 
 	config := p.GetConfig()
 	projectId := p.GetProjectId()
-	if len(req.Tenant) > 0 {
-		projectId = req.Tenant
+	if req.HasTenant() {
+		projectId = req.GetTenant().ID
 	}
 	stage := config.GetStringWithDefault("stage", "GA")
 
@@ -126,13 +107,13 @@ func (p *gcpProvider) AuthorizeRole(
 	if len(role.Inherits) > 0 {
 		for _, inheritedRole := range role.Inherits {
 			// Validate that the role is a valid GCP predefined role
-			predefinedRole, err := p.GetRole(ctx, inheritedRole)
+			predefinedRole, err := p.GetRole(localCtx, inheritedRole)
 			if err != nil {
 				return nil, fmt.Errorf("invalid GCP role '%s': %w", inheritedRole, err)
 			}
 
 			// Bind the user to the predefined role via IAM policy
-			err = p.bindUserToPredefinedRole(ctx, projectId, user, predefinedRole.Name)
+			err = p.bindUserToPredefinedRole(localCtx, projectId, user, predefinedRole.Name)
 			if err != nil {
 				return nil, temporal.NewApplicationErrorWithOptions(
 					fmt.Sprintf("failed to bind user to role %s: %v", predefinedRole.Name, err),
@@ -157,13 +138,13 @@ func (p *gcpProvider) AuthorizeRole(
 	// If permissions are specified, create a custom role with those permissions.
 	// Composite roles get a unique name; non-composite roles share a base identifier.
 	if len(role.Permissions.Allow) > 0 {
-		customRoleName := sanitizeGCPRoleID(role.GetName())
+		customRoleName := gcpRoleID(role.GetName())
 
-		existingRole, err := p.getRole(ctx, projectId, customRoleName)
+		existingRole, err := p.getRole(localCtx, projectId, customRoleName)
 		if err != nil {
 			// If role doesn't exist, create it
 			existingRole, err = p.createRole(
-				ctx,
+				localCtx,
 				projectId,
 				customRoleName,
 				role.Role.GetName(),
@@ -184,7 +165,7 @@ func (p *gcpProvider) AuthorizeRole(
 
 			// For non-composite roles, record the version in a project label.
 			if !isComposite {
-				p.setRoleVersionLabel(ctx, projectId, customRoleName, role.GetVersionString())
+				p.setRoleVersionLabel(localCtx, projectId, customRoleName, role.GetVersionString())
 			}
 
 			logrus.WithFields(logrus.Fields{
@@ -197,7 +178,7 @@ func (p *gcpProvider) AuthorizeRole(
 			// Role already exists — for non-composite roles, check version first.
 			needsUpdate := true
 			if !isComposite {
-				storedVersion := p.getRoleVersionLabel(ctx, projectId, customRoleName)
+				storedVersion := p.getRoleVersionLabel(localCtx, projectId, customRoleName)
 				requestedVersion := role.GetVersionString()
 				if storedVersion == requestedVersion {
 					needsUpdate = false
@@ -209,19 +190,19 @@ func (p *gcpProvider) AuthorizeRole(
 			}
 
 			if needsUpdate {
-				existingRole, err = p.patchRoleIfStale(ctx, projectId, existingRole, role.Permissions)
+				existingRole, err = p.patchRoleIfStale(localCtx, projectId, existingRole, role.Permissions)
 				if err != nil {
 					return nil, fmt.Errorf("failed to update custom role %s: %w", customRoleName, err)
 				}
 				// Update version label after patching (non-composite only).
 				if !isComposite {
-					p.setRoleVersionLabel(ctx, projectId, customRoleName, role.GetVersionString())
+					p.setRoleVersionLabel(localCtx, projectId, customRoleName, role.GetVersionString())
 				}
 			}
 		}
 
 		// Bind the user to the custom role via IAM policy
-		err = p.bindUserToRole(ctx, projectId, user, existingRole)
+		err = p.bindUserToRole(localCtx, projectId, user, existingRole)
 		if err != nil {
 			return nil, temporal.NewApplicationErrorWithOptions(
 				fmt.Sprintf("failed to bind user to custom role %s: %v", existingRole.Name, err),
@@ -254,22 +235,24 @@ func (p *gcpProvider) AuthorizeRole(
 //   - Composite: unbind user + delete custom role.
 //   - Non-composite: unbind user only; the custom role is retained.
 func (p *gcpProvider) RevokeRole(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
-	if task.HasTemporalContext() {
-		return p.revokeRoleTemporal(task.GetTemporalContext(), task.GetTaskQueue(), req)
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		return p.revokeRoleTemporal(workflowCtx, req)
 	}
+
+	localCtx := ctx.(context.Context)
+
 	if !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to revoke gcp role")
 	}
 
-	ctx := task.GetContext()
 	user := req.GetUser()
 	role := req.GetRole()
 	projectId := p.GetProjectId()
-	if len(req.Tenant) > 0 {
-		projectId = req.Tenant
+	if req.HasTenant() {
+		projectId = req.GetTenant().ID
 	}
 
 	isComposite := role.IsComposite()
@@ -295,7 +278,7 @@ func (p *gcpProvider) RevokeRole(
 		// Check if this is a predefined role (starts with "roles/") or custom role (starts with "projects/")
 		if strings.HasPrefix(roleName, "roles/") {
 			// Predefined role - unbind directly by role name
-			err := p.unbindUserFromPredefinedRole(ctx, projectId, user, roleName)
+			err := p.unbindUserFromPredefinedRole(localCtx, projectId, user, roleName)
 			if err != nil {
 				return nil, temporal.NewApplicationErrorWithOptions(
 					fmt.Sprintf("failed to unbind user from predefined role %s: %v", roleName, err),
@@ -319,7 +302,7 @@ func (p *gcpProvider) RevokeRole(
 				return nil, err
 			}
 
-			existingRole, err := p.getRole(ctx, projectId, customRoleName)
+			existingRole, err := p.getRole(localCtx, projectId, customRoleName)
 			if err != nil {
 				return nil, temporal.NewApplicationErrorWithOptions(
 					fmt.Sprintf("failed to get custom role %s: %v", customRoleName, err),
@@ -331,7 +314,7 @@ func (p *gcpProvider) RevokeRole(
 				)
 			}
 
-			err = p.unbindUserFromRole(ctx, projectId, user, existingRole)
+			err = p.unbindUserFromRole(localCtx, projectId, user, existingRole)
 			if err != nil {
 				return nil, temporal.NewApplicationErrorWithOptions(
 					fmt.Sprintf("failed to unbind user from custom role %s: %v", roleName, err),
@@ -352,7 +335,7 @@ func (p *gcpProvider) RevokeRole(
 			// Composite: delete the custom role after unbinding.
 			// Non-composite: retain the role for future authorizations.
 			if isComposite {
-				err = p.deleteRole(ctx, projectId, customRoleName)
+				err = p.deleteRole(localCtx, projectId, customRoleName)
 				if err != nil {
 					return nil, temporal.NewApplicationErrorWithOptions(
 						fmt.Sprintf("failed to delete custom role %s: %v", customRoleName, err),
@@ -394,7 +377,6 @@ func (p *gcpProvider) GetAuthorizedAccessUrl(
 // authorizeRoleTemporal sequences GCP role authorization as independent Temporal activities.
 func (p *gcpProvider) authorizeRoleTemporal(
 	wfCtx workflow.Context,
-	taskQueue string,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
 	if !req.IsValid() {
@@ -403,7 +385,6 @@ func (p *gcpProvider) authorizeRoleTemporal(
 
 	identifier := p.GetIdentifier()
 	ao := workflow.ActivityOptions{
-		TaskQueue:           taskQueue,
 		StartToCloseTimeout: 2 * time.Minute,
 		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 	}
@@ -413,8 +394,8 @@ func (p *gcpProvider) authorizeRoleTemporal(
 	role := req.GetRole()
 	isComposite := role.IsComposite()
 	projectID := p.GetProjectId()
-	if len(req.Tenant) > 0 {
-		projectID = req.Tenant
+	if req.HasTenant() {
+		projectID = req.GetTenant().ID
 	}
 	stage := p.GetConfig().GetStringWithDefault("stage", "GA")
 
@@ -442,7 +423,7 @@ func (p *gcpProvider) authorizeRoleTemporal(
 
 	if len(role.Permissions.Allow) > 0 {
 		// Composite roles get a unique name; non-composite roles share a base identifier.
-		customRoleName := sanitizeGCPRoleID(role.GetName())
+		customRoleName := gcpRoleID(role.GetName())
 
 		var resp GetOrCreateAndBindCustomRoleResponse
 		if err := workflow.ExecuteActivity(
@@ -477,12 +458,10 @@ func (p *gcpProvider) authorizeRoleTemporal(
 // Non-composite roles: unbind user only (UnbindUserFromCustomRole).
 func (p *gcpProvider) revokeRoleTemporal(
 	wfCtx workflow.Context,
-	taskQueue string,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
 	identifier := p.GetIdentifier()
 	ao := workflow.ActivityOptions{
-		TaskQueue:           taskQueue,
 		StartToCloseTimeout: 2 * time.Minute,
 		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 	}
@@ -491,8 +470,8 @@ func (p *gcpProvider) revokeRoleTemporal(
 	user := req.GetUser()
 	role := req.GetRole()
 	projectID := p.GetProjectId()
-	if len(req.Tenant) > 0 {
-		projectID = req.Tenant
+	if req.HasTenant() {
+		projectID = req.GetTenant().ID
 	}
 
 	// Determine composite flag from the role.
@@ -714,12 +693,11 @@ func parseCustomRolePath(fullPath string) (string, error) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // roleVersionLabelKey returns the GCP project label key for a role's version.
-// GCP label keys: lowercase letters, digits, hyphens, underscores. Max 63 chars.
+// Uses common.ConvertToSnakeCase for sanitization then enforces the 63-char GCP label limit.
 func roleVersionLabelKey(roleName string) string {
-	sanitized := strings.ToLower(strings.ReplaceAll(roleName, "_", "-"))
-	key := "thand-role-" + sanitized
+	key := "thand_role_" + common.ConvertToSnakeCase(roleName)
 	if len(key) > 63 {
-		key = key[:63]
+		key = strings.TrimRight(key[:63], "_")
 	}
 	return key
 }
@@ -758,10 +736,10 @@ func (p *gcpProvider) setRoleVersionLabel(ctx context.Context, projectID, roleNa
 	if project.Labels == nil {
 		project.Labels = make(map[string]string)
 	}
-	// Sanitize version value for GCP label (lowercase, max 63 chars, no dots → hyphens).
-	sanitizedVersion := strings.ToLower(strings.ReplaceAll(version, ".", "-"))
+	// Sanitize version value for GCP label (max 63 chars).
+	sanitizedVersion := common.ConvertToSnakeCase(version)
 	if len(sanitizedVersion) > 63 {
-		sanitizedVersion = sanitizedVersion[:63]
+		sanitizedVersion = strings.TrimRight(sanitizedVersion[:63], "_")
 	}
 	project.Labels[labelKey] = sanitizedVersion
 

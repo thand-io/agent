@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/hashicorp/go-version"
 	"github.com/thand-io/agent/internal/common"
@@ -139,29 +138,4 @@ type Provider interface {
 
 type AuthorizeSessionResponse struct {
 	Url string `json:"url"`
-}
-
-type RoleRequest struct {
-	Tenant   string         `json:"tenant,omitempty"` // Optional tenant ID for multi-account providers
-	User     *User          `json:"user"`
-	Role     *CompositeRole `json:"role"`
-	Duration *time.Duration `json:"duration,omitempty"` // Optional duration for temporary access
-}
-
-// IsValid checks if any of the fields are nil
-// if they are then it returns false
-func (r *RoleRequest) IsValid() bool {
-	return r.User != nil && r.Role != nil
-}
-
-func (r *RoleRequest) GetUser() *User {
-	return r.User
-}
-
-func (r *RoleRequest) GetRole() *CompositeRole {
-	return r.Role
-}
-
-func (r *RoleRequest) GetDuration() *time.Duration {
-	return r.Duration
 }

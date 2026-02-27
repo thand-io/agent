@@ -1,6 +1,7 @@
 package terraform
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -12,13 +13,14 @@ import (
 
 // Authorize grants access for a user to a role
 func (p *terraformProvider) AuthorizeRole(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
-	if task.HasTemporalContext() {
-		return p.authorizeRoleTemporal(task.GetTemporalContext(), task.GetTaskQueue(), req)
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		return p.authorizeRoleTemporal(workflowCtx, req)
 	}
-	ctx := task.GetContext()
+
+	localCtx := ctx.(context.Context)
 
 	if !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to authorize terraform role")
@@ -46,7 +48,7 @@ func (p *terraformProvider) AuthorizeRole(
 			Workspace: &tfe.Workspace{ID: workspaceID},
 		}
 
-		_, err := p.client.TeamAccess.Add(ctx, *teamAccess)
+		_, err := p.client.TeamAccess.Add(localCtx, *teamAccess)
 		if err != nil {
 			return nil, fmt.Errorf("failed to authorize user %s for role %s on workspace %s: %w",
 				user.ID, role.Name, workspaceID, err)
@@ -58,13 +60,14 @@ func (p *terraformProvider) AuthorizeRole(
 
 // Revoke removes access for a user from a role
 func (p *terraformProvider) RevokeRole(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
-	if task.HasTemporalContext() {
-		return p.revokeRoleTemporal(task.GetTemporalContext(), task.GetTaskQueue(), req)
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		return p.revokeRoleTemporal(workflowCtx, req)
 	}
-	ctx := task.GetContext()
+
+	localCtx := ctx.(context.Context)
 
 	user := req.GetUser()
 	role := req.GetRole()
@@ -86,7 +89,7 @@ func (p *terraformProvider) RevokeRole(
 			WorkspaceID: workspaceID,
 		}
 
-		teamAccesses, err := p.client.TeamAccess.List(ctx, listOptions)
+		teamAccesses, err := p.client.TeamAccess.List(localCtx, listOptions)
 		if err != nil {
 			return nil, fmt.Errorf("failed to list team accesses for workspace %s: %w", workspaceID, err)
 		}
@@ -95,7 +98,7 @@ func (p *terraformProvider) RevokeRole(
 		found := false
 		for _, ta := range teamAccesses.Items {
 			if ta.Team.ID == user.ID { // Assuming user ID maps to team ID
-				err := p.client.TeamAccess.Remove(ctx, ta.ID)
+				err := p.client.TeamAccess.Remove(localCtx, ta.ID)
 				if err != nil {
 					return nil, fmt.Errorf("failed to revoke access for user %s on workspace %s: %w",
 						user.ID, workspaceID, err)
@@ -116,7 +119,6 @@ func (p *terraformProvider) RevokeRole(
 // authorizeRoleTemporal dispatches an AddTeamAccess activity per workspace in parallel.
 func (p *terraformProvider) authorizeRoleTemporal(
 	wfCtx workflow.Context,
-	taskQueue string,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
 	if !req.IsValid() {
@@ -125,7 +127,6 @@ func (p *terraformProvider) authorizeRoleTemporal(
 
 	identifier := p.GetIdentifier()
 	ao := workflow.ActivityOptions{
-		TaskQueue:           taskQueue,
 		StartToCloseTimeout: 2 * time.Minute,
 		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 	}
@@ -169,12 +170,10 @@ func (p *terraformProvider) authorizeRoleTemporal(
 // revokeRoleTemporal dispatches a RemoveTeamAccess activity per workspace in parallel.
 func (p *terraformProvider) revokeRoleTemporal(
 	wfCtx workflow.Context,
-	taskQueue string,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
 	identifier := p.GetIdentifier()
 	ao := workflow.ActivityOptions{
-		TaskQueue:           taskQueue,
 		StartToCloseTimeout: 2 * time.Minute,
 		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 	}

@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/thand-io/agent/internal/models"
-	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 // stmts converts a []string to models.RoleStatements for test convenience
@@ -3119,19 +3118,6 @@ func TestGetCompositeRoleForIdentity(t *testing.T) {
 // creates a unique identifier that includes the workflow ID and differs from the original
 func TestGetCompositeRoleForWorkflow(t *testing.T) {
 	// Helper to create a workflow task with a role
-	createWorkflowTask := func(workflowID string, role *models.Role) *models.ElevateWorkflowTask {
-		req := &models.ElevateRequestInternal{
-			ElevateRequest: models.ElevateRequest{
-				Role: role,
-			},
-		}
-		return &models.ElevateWorkflowTask{
-			WorkflowTask: &sdkWorkflowsModel.WorkflowTask{
-				WorkflowID: workflowID,
-				Context:    req,
-			},
-		}
-	}
 
 	tests := []struct {
 		name       string
@@ -3206,8 +3192,7 @@ func TestGetCompositeRoleForWorkflow(t *testing.T) {
 				},
 			}
 
-			workflow := createWorkflowTask(tt.workflowID, &tt.role)
-			result, err := config.GetCompositeRoleForWorkflow(tt.identity, workflow)
+			result, err := config.GetCompositeRoleForWorkflow(tt.identity, &tt.role, tt.workflowID)
 
 			if tt.shouldFail {
 				require.Error(t, err)
@@ -3218,7 +3203,7 @@ func TestGetCompositeRoleForWorkflow(t *testing.T) {
 			require.NotNil(t, result)
 
 			// GetUniqueName() always returns a hash-suffixed name
-			originalIdentifier := workflow.GetRole().Identifier
+			originalIdentifier := tt.role.Identifier
 			uniqueName := result.GetUniqueName()
 			assert.NotEqual(t, originalIdentifier, uniqueName, "Unique name should change for workflow composite roles")
 			assert.Contains(t, uniqueName, "_", "Unique name should contain underscore separator")
@@ -3239,7 +3224,7 @@ func TestGetCompositeRoleForWorkflow(t *testing.T) {
 				Definitions: make(map[string]models.Role),
 			},
 		}
-		result, err := config.GetCompositeRoleForWorkflow(nil, nil)
+		result, err := config.GetCompositeRoleForWorkflow(nil, nil, "")
 		require.Error(t, err)
 		assert.Nil(t, result)
 		assert.Contains(t, err.Error(), "workflow is nil")

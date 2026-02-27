@@ -10,7 +10,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
 	sdkWorkflowsRunner "github.com/thand-io/agent/sdk/workflows/runner"
-	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
@@ -24,13 +23,14 @@ const resourceTypeAccountRBAC = "account"
 // AuthorizeRole grants access for a user to a role in Cloudflare
 // Supports both account-wide roles and resource-scoped policies
 func (p *cloudflareProvider) AuthorizeRole(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
-	if task.HasTemporalContext() {
-		return p.authorizeRoleTemporal(task.GetTemporalContext(), task.GetTaskQueue(), req)
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		return p.authorizeRoleTemporal(workflowCtx, req)
 	}
-	ctx := task.GetContext()
+
+	localCtx := ctx.(context.Context)
 
 	// Check for nil inputs
 	if !req.IsValid() {
@@ -67,7 +67,7 @@ func (p *cloudflareProvider) AuthorizeRole(
 
 	// Use policy-based RBAC for granular resource access
 	// Map the role name to get permission group IDs, then build policies
-	err := p.buildMembershipFromRole(ctx, &params, &role.Role)
+	err := p.buildMembershipFromRole(localCtx, &params, &role.Role)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build policies: %w", err)
 	}
@@ -80,7 +80,7 @@ func (p *cloudflareProvider) AuthorizeRole(
 	}).Info("Creating account member with resource-scoped policies")
 
 	// Check if the member already exists
-	existingMember, err := p.findAccountMember(ctx, user.Email)
+	existingMember, err := p.findAccountMember(localCtx, user.Email)
 	if err == nil && existingMember != nil {
 		// Member exists, update instead of create
 		logrus.WithFields(logrus.Fields{
@@ -90,7 +90,7 @@ func (p *cloudflareProvider) AuthorizeRole(
 
 		existingMember.Roles = nil // Clear policies when assigning roles
 
-		updatedMember, err := p.client.UpdateAccountMember(ctx, accountID, existingMember.ID, *existingMember)
+		updatedMember, err := p.client.UpdateAccountMember(localCtx, accountID, existingMember.ID, *existingMember)
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to update account member: %w", err)
@@ -114,11 +114,10 @@ func (p *cloudflareProvider) AuthorizeRole(
 	params.Roles = nil // Clear roles when assigning policies
 
 	// Member doesn't exist, create new
-	member, err := p.client.CreateAccountMember(ctx, accountRC, params)
+	member, err := p.client.CreateAccountMember(localCtx, accountRC, params)
 	if err != nil {
-		attempt := activity.GetInfo(ctx).Attempt
 		return nil, temporal.NewApplicationErrorWithOptions(
-			fmt.Sprintf("failed to create cloudflare account member on attempt %d", attempt),
+			"failed to create cloudflare account member",
 			"CloudflareAccountMemberCreationError",
 			temporal.ApplicationErrorOptions{
 				NextRetryDelay: 3 * time.Second,
@@ -145,13 +144,14 @@ func (p *cloudflareProvider) AuthorizeRole(
 // RevokeRole removes access for a user from a role in Cloudflare
 // Handles both account-wide roles and resource-scoped policies
 func (p *cloudflareProvider) RevokeRole(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
-	if task.HasTemporalContext() {
-		return p.revokeRoleTemporal(task.GetTemporalContext(), task.GetTaskQueue(), req)
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		return p.revokeRoleTemporal(workflowCtx, req)
 	}
-	ctx := task.GetContext()
+
+	localCtx := ctx.(context.Context)
 
 	// Check for nil inputs
 	if !req.IsValid() {
@@ -179,7 +179,7 @@ func (p *cloudflareProvider) RevokeRole(
 		accountID := p.GetAccountID()
 
 		// List account members to find the user
-		members, _, err := p.client.AccountMembers(ctx, accountID, cloudflare.PaginationOptions{})
+		members, _, err := p.client.AccountMembers(localCtx, accountID, cloudflare.PaginationOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("failed to list account members: %w", err)
 		}
@@ -200,7 +200,7 @@ func (p *cloudflareProvider) RevokeRole(
 	// If partial revocation is needed in the future, use UpdateAccountMember instead
 	accountID := p.GetAccountID()
 
-	err := p.client.DeleteAccountMember(ctx, accountID, memberID)
+	err := p.client.DeleteAccountMember(localCtx, accountID, memberID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to delete account member: %w", err)
 	}
@@ -217,7 +217,6 @@ func (p *cloudflareProvider) RevokeRole(
 // authorizeRoleTemporal sequences Cloudflare role authorization as a single retryable activity.
 func (p *cloudflareProvider) authorizeRoleTemporal(
 	wfCtx workflow.Context,
-	taskQueue string,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
 	if !req.IsValid() {
@@ -226,7 +225,6 @@ func (p *cloudflareProvider) authorizeRoleTemporal(
 
 	identifier := p.GetIdentifier()
 	ao := workflow.ActivityOptions{
-		TaskQueue:           taskQueue,
 		StartToCloseTimeout: 2 * time.Minute,
 		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 	}
@@ -256,7 +254,6 @@ func (p *cloudflareProvider) authorizeRoleTemporal(
 // revokeRoleTemporal sequences Cloudflare role revocation as a single retryable activity.
 func (p *cloudflareProvider) revokeRoleTemporal(
 	wfCtx workflow.Context,
-	taskQueue string,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
 	if !req.IsValid() {
@@ -265,7 +262,6 @@ func (p *cloudflareProvider) revokeRoleTemporal(
 
 	identifier := p.GetIdentifier()
 	ao := workflow.ActivityOptions{
-		TaskQueue:           taskQueue,
 		StartToCloseTimeout: 2 * time.Minute,
 		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 	}

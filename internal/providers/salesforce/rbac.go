@@ -17,13 +17,13 @@ import (
 const MetadataPriorProfileKey = "prior_profile"
 
 func (p *salesForceProvider) AuthorizeRole(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
-	if task.HasTemporalContext() {
-		return p.authorizeRoleTemporal(task.GetTemporalContext(), task.GetTaskQueue(), req)
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		return p.authorizeRoleTemporal(workflowCtx, req)
 	}
-	ctx := task.GetContext()
+	localCtx := ctx.(context.Context)
 
 	if !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to authorize salesforce role")
@@ -43,7 +43,7 @@ func (p *salesForceProvider) AuthorizeRole(
 	profileName := strings.TrimPrefix(
 		role.Inherits[0], fmt.Sprintf("%s:", p.GetProvider()))
 
-	profileResult, err := p.GetRole(ctx, profileName)
+	profileResult, err := p.GetRole(localCtx, profileName)
 
 	if err != nil {
 		return nil, temporal.NewApplicationErrorWithOptions(
@@ -136,11 +136,11 @@ func (p *salesForceProvider) AuthorizeRole(
 
 // Revoke removes access for a user from a role by reverting to the prior profile
 func (p *salesForceProvider) RevokeRole(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
-	if task.HasTemporalContext() {
-		return p.revokeRoleTemporal(task.GetTemporalContext(), task.GetTaskQueue(), req)
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		return p.revokeRoleTemporal(workflowCtx, req)
 	}
 	client := p.client
 
@@ -237,7 +237,6 @@ func (p *salesForceProvider) RevokeRole(
 // authorizeRoleTemporal sequences Salesforce role authorization as three Temporal activities.
 func (p *salesForceProvider) authorizeRoleTemporal(
 	wfCtx workflow.Context,
-	taskQueue string,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
 	if !req.IsValid() {
@@ -246,7 +245,6 @@ func (p *salesForceProvider) authorizeRoleTemporal(
 
 	identifier := p.GetIdentifier()
 	ao := workflow.ActivityOptions{
-		TaskQueue:           taskQueue,
 		StartToCloseTimeout: 2 * time.Minute,
 		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 	}
@@ -311,12 +309,10 @@ func (p *salesForceProvider) authorizeRoleTemporal(
 // revokeRoleTemporal sequences Salesforce role revocation as two Temporal activities.
 func (p *salesForceProvider) revokeRoleTemporal(
 	wfCtx workflow.Context,
-	taskQueue string,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
 	identifier := p.GetIdentifier()
 	ao := workflow.ActivityOptions{
-		TaskQueue:           taskQueue,
 		StartToCloseTimeout: 2 * time.Minute,
 		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 	}

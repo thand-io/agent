@@ -58,7 +58,9 @@ type CompositeRole struct {
 	// for
 	Providers []string `json:"providers,omitempty"` // The provider context for this composite role (e.g., "aws", "gcp", "azure")
 
-	// Composite indicates that this role is the result of resolving a base role and all its inherited roles into a single flattened role.
+	// Composite indicates whether this role is a resolved, flattened composite
+	// that includes inherited thand roles (true) or a non-composite, persistent
+	// role representation without applied inheritance (false).
 	Composite bool `json:"composite" default:"true"` // Must be true for CompositeRole
 
 	Role

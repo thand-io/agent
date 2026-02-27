@@ -2,12 +2,13 @@ package models
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
-	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
@@ -240,43 +241,166 @@ func ProviderSynchronizeWorkflow(ctx workflow.Context, syncReq SynchronizeReques
 	return &SynchronizeResponse{}, nil
 }
 
+type WorkflowRoleRequest struct {
+	WorkflowID string         `json:"workflow_id"`      // ID of the workflow for which the role is being authorized
+	Tenant     string         `json:"tenant,omitempty"` // Optional tenant ID for multi-account providers
+	Identity   string         `json:"identity"`         // User or group identifier
+	Role       *Role          `json:"role"`
+	Duration   *time.Duration `json:"duration,omitempty"` // Optional duration for temporary access
+}
+
+// IsValid checks if any of the fields are nil
+// if they are then it returns false
+func (r *WorkflowRoleRequest) IsValid() bool {
+	return r.WorkflowID != "" && r.Identity != "" && r.Role != nil
+}
+
+func (r *WorkflowRoleRequest) GetWorkflowID() string {
+	return r.WorkflowID
+}
+
+func (r *WorkflowRoleRequest) GetIdentity() string {
+	return r.Identity
+}
+
+func (r *WorkflowRoleRequest) GetRole() *Role {
+	return r.Role
+}
+
+func (r *WorkflowRoleRequest) GetDuration() *time.Duration {
+	return r.Duration
+}
+
 // CreateProviderAuthorizeRoleWorkflow returns a workflow function that captures the
 // live provider instance via closure. The child workflow receives the Temporal
 // workflow.Context, constructs a WorkflowTaskSupport with it, and delegates to
 // provider.AuthorizeRole — allowing the provider to dispatch activities, use
 // workflow.Go, and manage state just as it does in the primary workflow.
-func CreateProviderAuthorizeRoleWorkflow(provider Provider) func(workflow.Context, AuthorizeRoleRequest) (*AuthorizeRoleResponse, error) {
-	return func(ctx workflow.Context, req AuthorizeRoleRequest) (*AuthorizeRoleResponse, error) {
-		if len(req.ProviderIdentifier) == 0 {
-			return nil, fmt.Errorf("provider identifier is required")
-		}
+func CreateProviderAuthorizeRoleWorkflow(cfg ConfigImpl, provider Provider) func(workflow.Context, WorkflowRoleRequest) (*AuthorizeRoleResponse, error) {
+	return func(ctx workflow.Context, req WorkflowRoleRequest) (*AuthorizeRoleResponse, error) {
 
 		log := workflow.GetLogger(ctx)
-		log.Info("Starting authorize role workflow", "provider", req.ProviderIdentifier)
+		log.Info("Starting authorize role workflow", "provider", provider.GetIdentifier())
 
-		// Build a WorkflowTaskSupport with the child workflow's context so the
-		// provider's AuthorizeRole can dispatch activities, use workflow.Go, etc.
-		taskSupport := &sdkWorkflowsModel.WorkflowTask{}
-		taskSupport.WithTemporalContext(ctx)
+		request, err := CreateAuthorizeRoleRequest(cfg, provider, &req)
+		if err != nil {
+			log.Error("Failed to create authorize role request", "error", err)
+			return nil, err
+		}
 
-		return provider.AuthorizeRole(taskSupport, &req)
+		return provider.AuthorizeRole(ctx, request)
 	}
+}
+
+type WorkflowRevokeRoleRequest struct {
+	RevokeRoleRequest     *WorkflowRoleRequest
+	AuthorizeRoleResponse *AuthorizeRoleResponse
 }
 
 // CreateProviderRevokeRoleWorkflow returns a workflow function that captures the
 // live provider instance via closure for revocation operations.
-func CreateProviderRevokeRoleWorkflow(provider Provider) func(workflow.Context, RevokeRoleRequest) (*RevokeRoleResponse, error) {
-	return func(ctx workflow.Context, req RevokeRoleRequest) (*RevokeRoleResponse, error) {
-		if len(req.ProviderIdentifier) == 0 {
-			return nil, fmt.Errorf("provider identifier is required")
-		}
+func CreateProviderRevokeRoleWorkflow(cfg ConfigImpl, provider Provider) func(workflow.Context, WorkflowRevokeRoleRequest) (*RevokeRoleResponse, error) {
+	return func(ctx workflow.Context, req WorkflowRevokeRoleRequest) (*RevokeRoleResponse, error) {
 
 		log := workflow.GetLogger(ctx)
-		log.Info("Starting revoke role workflow", "provider", req.ProviderIdentifier)
+		log.Info("Starting revoke role workflow", "provider", provider.GetIdentifier())
 
-		taskSupport := &sdkWorkflowsModel.WorkflowTask{}
-		taskSupport.WithTemporalContext(ctx)
+		var authReq *AuthorizeRoleRequest
+		if req.RevokeRoleRequest != nil {
+			var err error
+			authReq, err = CreateAuthorizeRoleRequest(
+				cfg, provider, req.RevokeRoleRequest)
+			if err != nil {
+				log.Error("Failed to create revoke role request", "error", err)
+				return nil, err
+			}
+		}
 
-		return provider.RevokeRole(taskSupport, &req)
+		revokeReq := &RevokeRoleRequest{
+			AuthorizeRoleRequest:  authReq,
+			AuthorizeRoleResponse: req.AuthorizeRoleResponse,
+		}
+
+		return provider.RevokeRole(ctx, revokeReq)
 	}
+}
+
+func CreateAuthorizeRoleRequest(
+	cfg ConfigImpl,
+	provider Provider,
+	req *WorkflowRoleRequest,
+) (*AuthorizeRoleRequest, error) {
+
+	// Get the user identity from the request
+	identity, err := cfg.GetIdentity(req.Identity)
+	if err != nil {
+		identity = &Identity{
+			ID: req.Identity,
+			User: &User{
+				Email: req.Identity,
+			},
+		}
+	}
+
+	var tenant *ProviderTenant
+	if len(req.Tenant) != 0 {
+		tenant, err = cfg.GetTenant(req.Tenant)
+		if err != nil {
+			tenant = &ProviderTenant{
+				ID: req.Tenant,
+			}
+		}
+	}
+
+	// Validate the role
+	_, err = validateRoleAndBuildOutput(provider, ElevateRequestInternal{
+		User:         identity.User,
+		AuthorizedAt: &time.Time{},
+		ElevateRequest: ElevateRequest{
+			Role: req.GetRole(),
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("role validation failed: %w", err)
+	}
+
+	compositeRole, err := cfg.GetCompositeRoleForWorkflow(
+		identity,
+		req.GetRole(),
+		req.GetWorkflowID(),
+		provider,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get composite role for identity %s: %w", req.Identity, err)
+	}
+
+	return &AuthorizeRoleRequest{
+		Identity: identity,
+		Tenant:   tenant,
+		Role:     compositeRole,
+		Duration: req.Duration,
+	}, nil
+}
+
+// validateRoleAndBuildOutput validates the role and builds the initial model output
+func validateRoleAndBuildOutput(
+	provider Provider,
+	elevateRequest ElevateRequestInternal,
+) (map[string]any, error) {
+	modelOutput := map[string]any{}
+
+	validateOut, err := ValidateRole(provider, elevateRequest)
+	if err != nil {
+		logrus.WithFields(logrus.Fields{
+			"error": err,
+			"role":  elevateRequest.Role,
+		}).Error("Failed to validate role")
+		return nil, err
+	}
+
+	if len(validateOut) > 0 {
+		maps.Copy(modelOutput, validateOut)
+	}
+
+	return modelOutput, nil
 }

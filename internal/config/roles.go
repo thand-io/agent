@@ -424,16 +424,18 @@ func (c *Config) GetCompositeRole(
 //   - An inherited role cannot be resolved
 func (c *Config) GetCompositeRoleForWorkflow(
 	identity *models.Identity,
-	workflow *models.ElevateWorkflowTask,
+	baseRole *models.Role,
+	workflowID string,
 	providers ...models.Provider,
 ) (*models.CompositeRole, error) {
 
-	if workflow == nil {
-		return nil, fmt.Errorf("cannot resolve composite role: workflow is nil")
+	if workflowID == "" {
+		return nil, fmt.Errorf("cannot resolve composite role: workflow ID is empty")
 	}
 
-	// Get identifier for workflow
-	baseRole := workflow.GetRole()
+	if baseRole == nil {
+		return nil, fmt.Errorf("cannot resolve composite role: workflow role is nil")
+	}
 
 	// Set an ephemeral identifier for this composite role (not persisted, just for caching/indexing)
 	// Extract user from identity (handles nil identity gracefully)
@@ -450,7 +452,7 @@ func (c *Config) GetCompositeRoleForWorkflow(
 
 	// Combine all components to create a unique identifier
 	roleIdentifier := fmt.Sprintf("%s:%s:%s:%s:%s",
-		workflow.GetWorkflowID(),
+		workflowID,
 		baseRole.Identifier,
 		versionStr,
 		baseRole.Name,
@@ -461,7 +463,7 @@ func (c *Config) GetCompositeRoleForWorkflow(
 		roleIdentifier, identity, baseRole, providers...)
 
 	if err != nil {
-		logrus.WithError(err).Errorf("Failed to resolve composite role for workflow '%s'", workflow.GetWorkflowID())
+		logrus.WithError(err).Errorf("Failed to resolve composite role for workflow '%s'", workflowID)
 		return nil, err
 	}
 

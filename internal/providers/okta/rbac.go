@@ -51,13 +51,13 @@ type ResourceSetAssignmentRequest struct {
 
 // AuthorizeRole assigns a role to a user in Okta
 func (p *oktaProvider) AuthorizeRole(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
-	if task.HasTemporalContext() {
-		return p.authorizeRoleTemporal(task.GetTemporalContext(), task.GetTaskQueue(), req)
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		return p.authorizeRoleTemporal(workflowCtx, req)
 	}
-	ctx := task.GetContext()
+	localCtx := ctx.(context.Context)
 	if !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to authorize Okta role")
 	}
@@ -71,7 +71,7 @@ func (p *oktaProvider) AuthorizeRole(
 	}
 
 	// Get the Okta user
-	oktaUser, _, err := p.client.User.GetUser(ctx, user.Email)
+	oktaUser, _, err := p.client.User.GetUser(localCtx, user.Email)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find user in Okta: %w", err)
 	}
@@ -88,7 +88,7 @@ func (p *oktaProvider) AuthorizeRole(
 				groupId := after
 
 				// Get the okta groups and add the user to each
-				identity, err := p.GetIdentity(ctx, groupId)
+				identity, err := p.GetIdentity(localCtx, groupId)
 
 				if err != nil {
 					return nil, fmt.Errorf("failed to get group %s: %w", groupId, err)
@@ -98,7 +98,7 @@ func (p *oktaProvider) AuthorizeRole(
 					return nil, fmt.Errorf("group %s not found in Okta", groupId)
 				}
 
-				err = p.AddUserToGroup(ctx, identity.GetGroup().ID, oktaUser.Id)
+				err = p.AddUserToGroup(localCtx, identity.GetGroup().ID, oktaUser.Id)
 
 				if err != nil {
 					return nil, fmt.Errorf("failed to add user to group %s: %w", groupId, err)
@@ -125,7 +125,7 @@ func (p *oktaProvider) AuthorizeRole(
 			}
 
 			// Assign the role to the user
-			assignedRole, _, err := p.client.User.AssignRoleToUser(ctx, oktaUser.Id, roleAssignment, nil)
+			assignedRole, _, err := p.client.User.AssignRoleToUser(localCtx, oktaUser.Id, roleAssignment, nil)
 			if err != nil {
 				if oktaErr, ok := err.(*okta.Error); ok {
 					if strings.ToUpper(oktaErr.ErrorCode) == "E0000090" {
@@ -169,7 +169,7 @@ func (p *oktaProvider) AuthorizeRole(
 	if len(role.Permissions.Allow) > 0 {
 
 		// Create a custom admin role with the specified permissions
-		customRoleType, err := p.createCustomAdminRole(ctx, &role.Role)
+		customRoleType, err := p.createCustomAdminRole(localCtx, &role.Role)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create custom admin role: %w", err)
 		}
@@ -181,7 +181,7 @@ func (p *oktaProvider) AuthorizeRole(
 		}).Info("Created custom admin role in Okta")
 
 		// Assign the role to the user
-		err = p.assignCustomRoleToUser(ctx, ResourceSetAssignmentRequest{
+		err = p.assignCustomRoleToUser(localCtx, ResourceSetAssignmentRequest{
 			Add: []ResourceSetAssignment{
 				{
 					PrincipalID:     oktaUser.Id,
@@ -215,7 +215,7 @@ func (p *oktaProvider) AuthorizeRole(
 				appIdentifier := after
 
 				// Get the application resource
-				appResource, err := p.GetResource(ctx, appIdentifier)
+				appResource, err := p.GetResource(localCtx, appIdentifier)
 				if err != nil {
 					return nil, fmt.Errorf("failed to get application %s: %w", appIdentifier, err)
 				}
@@ -229,7 +229,7 @@ func (p *oktaProvider) AuthorizeRole(
 					Id: oktaUser.Id,
 				}
 
-				_, _, err = p.client.Application.AssignUserToApplication(ctx, appResource.ID, appUser)
+				_, _, err = p.client.Application.AssignUserToApplication(localCtx, appResource.ID, appUser)
 
 				if err != nil {
 					return nil, temporal.NewApplicationErrorWithOptions(
@@ -264,13 +264,13 @@ func (p *oktaProvider) AuthorizeRole(
 
 // RevokeRole removes a role from a user in Okta
 func (p *oktaProvider) RevokeRole(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
-	if task.HasTemporalContext() {
-		return p.revokeRoleTemporal(task.GetTemporalContext(), task.GetTaskQueue(), req)
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		return p.revokeRoleTemporal(workflowCtx, req)
 	}
-	ctx := task.GetContext()
+	localCtx := ctx.(context.Context)
 
 	if !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to revoke Okta role")
@@ -279,7 +279,7 @@ func (p *oktaProvider) RevokeRole(
 	user := req.GetUser()
 
 	// Get the Okta user
-	oktaUser, _, err := p.client.User.GetUser(ctx, user.Email)
+	oktaUser, _, err := p.client.User.GetUser(localCtx, user.Email)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find user in Okta: %w", err)
 	}
@@ -293,7 +293,7 @@ func (p *oktaProvider) RevokeRole(
 
 	// Revoke roles
 	if len(metadata.Roles) > 0 {
-		if err := p.revokeRoles(ctx, metadata.Roles, oktaUser.Id, user.Email); err != nil {
+		if err := p.revokeRoles(localCtx, metadata.Roles, oktaUser.Id, user.Email); err != nil {
 			return nil, temporal.NewApplicationErrorWithOptions(
 				"Failed to revoke roles from user",
 				"OktaRolesRevocationError",
@@ -307,7 +307,7 @@ func (p *oktaProvider) RevokeRole(
 
 	// Revoke groups
 	if len(metadata.Groups) > 0 {
-		if err := p.revokeGroups(ctx, metadata.Groups, oktaUser.Id, user.Email); err != nil {
+		if err := p.revokeGroups(localCtx, metadata.Groups, oktaUser.Id, user.Email); err != nil {
 			return nil, temporal.NewApplicationErrorWithOptions(
 				"Failed to revoke groups from user",
 				"OktaGroupsRevocationError",
@@ -321,7 +321,7 @@ func (p *oktaProvider) RevokeRole(
 
 	// Revoke applications
 	if len(metadata.Resources) > 0 {
-		if err := p.revokeResources(ctx, metadata.Resources, oktaUser.Id, user.Email); err != nil {
+		if err := p.revokeResources(localCtx, metadata.Resources, oktaUser.Id, user.Email); err != nil {
 			return nil, temporal.NewApplicationErrorWithOptions(
 				"Failed to revoke resources from user",
 				"OktaResourcesRevocationError",
@@ -422,7 +422,6 @@ func (p *oktaProvider) revokeResources(ctx context.Context, resourceIds []string
 // authorizeRoleTemporal sequences Okta role authorization as independent Temporal activities.
 func (p *oktaProvider) authorizeRoleTemporal(
 	wfCtx workflow.Context,
-	taskQueue string,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
 	if !req.IsValid() {
@@ -431,7 +430,6 @@ func (p *oktaProvider) authorizeRoleTemporal(
 
 	identifier := p.GetIdentifier()
 	ao := workflow.ActivityOptions{
-		TaskQueue:           taskQueue,
 		StartToCloseTimeout: 2 * time.Minute,
 		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 	}
@@ -530,12 +528,10 @@ func (p *oktaProvider) authorizeRoleTemporal(
 // revokeRoleTemporal sequences Okta role revocation as independent Temporal activities.
 func (p *oktaProvider) revokeRoleTemporal(
 	wfCtx workflow.Context,
-	taskQueue string,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
 	identifier := p.GetIdentifier()
 	ao := workflow.ActivityOptions{
-		TaskQueue:           taskQueue,
 		StartToCloseTimeout: 2 * time.Minute,
 		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 	}

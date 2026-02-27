@@ -45,23 +45,26 @@ func ConvertInterfaceToMap(from any) (map[string]any, error) {
 	return result, nil
 }
 
-/*
-Convert everything to lowercase and only allow
-these special characters: _+=,.@-
-*/
+// ConvertToSnakeCase transforms a string into a clean snake_case identifier.
+// Only lowercase letters, digits, and underscores are kept.
+// All other characters (spaces, hyphens, dots, special chars, etc.) are
+// replaced with underscores, consecutive underscores are collapsed, and
+// leading/trailing underscores are trimmed.
 func ConvertToSnakeCase(name string) string {
 	var builder strings.Builder
-	for i, r := range name {
+	for _, r := range name {
 		if unicode.IsLetter(r) || unicode.IsDigit(r) {
 			builder.WriteRune(unicode.ToLower(r))
-		} else if strings.ContainsRune("_+=,.@-", r) {
-			builder.WriteRune(r)
-		} else if unicode.IsSpace(r) {
-			// Replace spaces with underscores
-			if i > 0 && builder.Len() > 0 && builder.String()[builder.Len()-1] != '_' {
-				builder.WriteRune('_')
-			}
+		} else {
+			builder.WriteRune('_')
 		}
 	}
-	return builder.String()
+	result := builder.String()
+
+	// Collapse consecutive underscores
+	for strings.Contains(result, "__") {
+		result = strings.ReplaceAll(result, "__", "_")
+	}
+
+	return strings.Trim(result, "_")
 }
