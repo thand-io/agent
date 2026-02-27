@@ -3106,9 +3106,9 @@ func TestGetCompositeRoleForIdentity(t *testing.T) {
 				assert.True(t, strings.HasPrefix(uniqueName, originalIdentifier+"_"), "Identifier should start with original identifier plus underscore")
 				assert.True(t, result.Composite, "Role should be marked as composite")
 			} else {
-				// For non-composite roles, GetName() still returns a hash-suffixed name
-				assert.NotEqual(t, originalIdentifier, uniqueName, "GetName should return a hash-suffixed name")
-				assert.Contains(t, uniqueName, "_", "Unique name should contain underscore separator")
+				// Non-composite roles return the plain identifier, not hash-suffixed
+				assert.Equal(t, originalIdentifier, uniqueName, "GetName should return the identifier for non-composite roles")
+				assert.False(t, result.Composite, "Role without inheritance should not be composite")
 			}
 		})
 	}
@@ -3217,14 +3217,9 @@ func TestGetCompositeRoleForWorkflow(t *testing.T) {
 				hashPart := parts[len(parts)-1]
 				assert.Equal(t, 6, len(hashPart), "Hash part should be 6 characters")
 			} else {
-				// Non-composite roles also get a hash-suffixed name
-				assert.NotEqual(t, originalIdentifier, uniqueName, "Non-composite role should still get a hash-suffixed name")
-				assert.Contains(t, uniqueName, "_", "Unique name should contain underscore separator")
-				assert.True(t, strings.HasPrefix(uniqueName, originalIdentifier+"_"), "Unique name should start with original identifier plus underscore")
-				parts := strings.Split(uniqueName, "_")
-				assert.GreaterOrEqual(t, len(parts), 2, "Unique name should have at least 2 parts separated by underscore")
-				hashPart := parts[len(parts)-1]
-				assert.Equal(t, 6, len(hashPart), "Hash part should be 6 characters")
+				// Non-composite roles return the plain identifier, not hash-suffixed
+				assert.Equal(t, originalIdentifier, uniqueName, "Non-composite role should return plain identifier")
+				assert.False(t, result.Composite, "Role without inheritance should not be composite")
 			}
 		})
 	}

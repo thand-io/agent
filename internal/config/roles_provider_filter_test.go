@@ -565,7 +565,10 @@ func TestGetCompositeRoleForIdentityPassesProviders(t *testing.T) {
 			"gcp-prod ops should be filtered when only aws provider passed through GetCompositeRoleForIdentity")
 	}
 
-	// Verify the identifier was updated (GetCompositeRoleForIdentity generates unique IDs)
-	assert.NotEqual(t, "passthrough_role", result.GetName(),
-		"GetName should return a hash-suffixed identifier")
+	// Non-composite roles (no thand inheritance) keep their plain identifier as the display name,
+	// but GetCompositeRoleForIdentity still stamps a unique UUID onto them.
+	assert.Equal(t, "passthrough_role", result.GetName(),
+		"Non-composite role GetName should return plain identifier")
+	assert.NotEqual(t, result.UUID, [16]byte{},
+		"GetCompositeRoleForIdentity should have set a unique UUID")
 }
