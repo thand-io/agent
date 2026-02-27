@@ -376,6 +376,8 @@ func (c *Config) ReloadConfig() error {
 		} else {
 			logrus.Warningln("No providers loaded from external source")
 		}
+
+		// Roles depend on providers, so we load them in the same goroutine to ensure they are loaded after providers
 		roles, err := c.LoadRoles()
 		if err != nil {
 			logrus.WithError(err).Errorln("Error loading roles")

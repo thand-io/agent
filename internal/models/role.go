@@ -61,7 +61,8 @@ type CompositeRole struct {
 	// Composite indicates whether this role is a resolved, flattened composite
 	// that includes inherited thand roles (true) or a non-composite, persistent
 	// role representation without applied inheritance (false).
-	Composite bool `json:"composite" default:"true"` // Must be true for CompositeRole
+	// Defaults to true for composite roles; may be false when representing a non-composite role within CompositeRole.
+	Composite bool `json:"composite" default:"true"`
 
 	Role
 }

@@ -63,6 +63,10 @@ func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 
 	ctx = workflow.WithLocalActivityOptions(ctx, ao)
 
+	logrus.WithFields(logrus.Fields{
+		"provider": providerID,
+	}).Debug("Starting tenant synchronization")
+
 	for {
 
 		var resp Resp
@@ -79,6 +83,10 @@ func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 		).Get(ctx, &resp)
 
 		if err != nil {
+			logrus.WithFields(logrus.Fields{
+				"provider": providerID,
+				"error":    err,
+			}).Error("Error executing synchronization activity")
 			return err
 		}
 
@@ -91,6 +99,10 @@ func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 		).Get(ctx, nil)
 
 		if err != nil {
+			logrus.WithFields(logrus.Fields{
+				"provider": providerID,
+				"error":    err,
+			}).Error("Error patching synchronization results upstream")
 			return err
 		}
 
@@ -103,6 +115,10 @@ func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 		req.SetPagination(pagination)
 
 	}
+
+	logrus.WithFields(logrus.Fields{
+		"provider": providerID,
+	}).Debug("Starting tenant synchronization")
 
 	return nil
 }
