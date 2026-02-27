@@ -69,6 +69,12 @@ func (p *gcpProvider) AuthorizeRole(
 	}
 	stage := config.GetStringWithDefault("stage", "GA")
 
+	// GCP custom roles are project-scoped only (created via Projects.Roles API).
+	// Reject requests that attempt to use custom permissions on a folder tenant.
+	if isFolderResource(projectId) && len(role.Permissions.Allow) > 0 {
+		return nil, fmt.Errorf("custom roles (permissions.allow) are not supported for folder-level resources (%s); GCP custom roles can only be created at the project level", projectId)
+	}
+
 	var assignedRoles []string
 
 	// If inherits is specified, validate and bind predefined GCP roles
@@ -753,7 +759,7 @@ func removeMemberFromPolicyV3(policy *crmv3.Policy, roleName, member string) boo
 
 		idx := slices.Index(binding.Members, member)
 		if idx == -1 {
-			continue
+			return false
 		}
 
 		binding.Members = slices.Delete(binding.Members, idx, idx+1)
