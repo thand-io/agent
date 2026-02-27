@@ -315,7 +315,7 @@ func TestAWSElevationWithTemporal(t *testing.T) {
 
 	// Calculate the expected role name that will be created by the AWS provider
 	// The provider uses GetIdentifier which appends a hash to ensure uniqueness
-	expectedRoleName := role.GetIdentifier()
+	expectedRoleName := role.GetName()
 	t.Logf("Expected IAM role name: %s", expectedRoleName)
 
 	t.Run("Full elevation lifecycle with Temporal", func(t *testing.T) {

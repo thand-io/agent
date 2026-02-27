@@ -38,7 +38,7 @@ func (p *awsProvider) authorizeRoleTraditionalIAM(
 	isComposite := role.IsComposite()
 
 	logrus.WithFields(logrus.Fields{
-		"role":         role.Role.GetIdentifier(),
+		"role":         role.GetName(),
 		"is_composite": isComposite,
 	}).Info("IAM authorizeRole: determining role lifecycle")
 

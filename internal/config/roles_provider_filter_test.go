@@ -566,6 +566,6 @@ func TestGetCompositeRoleForIdentityPassesProviders(t *testing.T) {
 	}
 
 	// Verify the identifier was updated (GetCompositeRoleForIdentity generates unique IDs)
-	assert.NotEqual(t, "passthrough_role", result.GetUniqueName(),
-		"GetUniqueName should return a hash-suffixed identifier")
+	assert.NotEqual(t, "passthrough_role", result.GetName(),
+		"GetName should return a hash-suffixed identifier")
 }

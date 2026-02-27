@@ -41,7 +41,7 @@ func (p *awsProvider) authorizeRoleIdentityCenter(
 	isComposite := role.IsComposite()
 
 	logrus.WithFields(logrus.Fields{
-		"role":         role.Role.GetIdentifier(),
+		"role":         role.GetName(),
 		"is_composite": isComposite,
 	}).Info("SSO authorizeRole: determining role lifecycle")
 
@@ -57,7 +57,7 @@ func (p *awsProvider) authorizeRoleIdentityCenter(
 	psReq := &FindOrCreatePermissionSetRequest{
 		InstanceArn: instanceResp.InstanceArn,
 		Role:        &role.Role,
-		RoleName:    role.GetUniqueName(),
+		RoleName:    role.GetName(),
 		IsComposite: isComposite,
 		Version:     role.GetVersionString(),
 	}
@@ -654,7 +654,7 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx models.ProviderContext, req *
 	isComposite := role.IsComposite()
 
 	logrus.WithFields(logrus.Fields{
-		"role":         role.Role.GetIdentifier(),
+		"role":         role.GetName(),
 		"is_composite": isComposite,
 	}).Info("SSO revokeRole: determining cleanup strategy")
 

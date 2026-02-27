@@ -86,7 +86,7 @@ func (p *gcpProvider) AuthorizeRole(
 	isComposite := role.IsComposite()
 
 	logrus.WithFields(logrus.Fields{
-		"role":         role.Role.GetIdentifier(),
+		"role":         role.GetName(),
 		"is_composite": isComposite,
 	}).Info("GCP authorizeRole: determining role lifecycle")
 
@@ -258,7 +258,7 @@ func (p *gcpProvider) RevokeRole(
 	isComposite := role.IsComposite()
 
 	logrus.WithFields(logrus.Fields{
-		"role":         role.Role.GetIdentifier(),
+		"role":         role.GetName(),
 		"is_composite": isComposite,
 	}).Info("GCP revokeRole: determining cleanup strategy")
 

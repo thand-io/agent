@@ -98,12 +98,12 @@ func (r *CompositeRole) GetUniqueIdentifier() uuid.UUID {
 
 func (r *CompositeRole) GetName() string {
 	if r.Composite {
-		return r.GetUniqueName()
+		return r.getUniqueName()
 	}
 	return r.Role.GetIdentifier()
 }
 
-func (r *CompositeRole) GetUniqueName() string {
+func (r *CompositeRole) getUniqueName() string {
 
 	roleIdentifier := r.GetUniqueIdentifier()
 

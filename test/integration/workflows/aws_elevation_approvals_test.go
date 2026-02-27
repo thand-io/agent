@@ -109,8 +109,8 @@ func TestAWSElevationApprovalsWorkflow(t *testing.T) {
 	role := testCase.Roles["aws_test_admin"]
 
 	// Calculate the expected role name that will be created by the AWS provider
-	// The provider uses GetIdentifier which appends a hash to ensure uniqueness
-	expectedRoleName := role.GetIdentifier()
+	// The provider uses GetName which returns the role name
+	expectedRoleName := role.GetName()
 	t.Logf("Expected IAM role name: %s", expectedRoleName)
 
 	t.Run("Full elevation lifecycle with multiple approvers", func(t *testing.T) {

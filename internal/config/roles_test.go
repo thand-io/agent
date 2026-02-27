@@ -3098,7 +3098,7 @@ func TestGetCompositeRoleForIdentity(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, result)
 
-			uniqueName := result.GetUniqueName()
+			uniqueName := result.GetName()
 			if tt.expectChange {
 				// Should have a different identifier with hash suffix
 				assert.NotEqual(t, originalIdentifier, uniqueName, "Identifier should change for composite roles")
@@ -3106,8 +3106,8 @@ func TestGetCompositeRoleForIdentity(t *testing.T) {
 				assert.True(t, strings.HasPrefix(uniqueName, originalIdentifier+"_"), "Identifier should start with original identifier plus underscore")
 				assert.True(t, result.Composite, "Role should be marked as composite")
 			} else {
-				// For non-composite roles, GetUniqueName() still returns a hash-suffixed name
-				assert.NotEqual(t, originalIdentifier, uniqueName, "GetUniqueName should return a hash-suffixed name")
+				// For non-composite roles, GetName() still returns a hash-suffixed name
+				assert.NotEqual(t, originalIdentifier, uniqueName, "GetName should return a hash-suffixed name")
 				assert.Contains(t, uniqueName, "_", "Unique name should contain underscore separator")
 			}
 		})
@@ -3202,9 +3202,9 @@ func TestGetCompositeRoleForWorkflow(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, result)
 
-			// GetUniqueName() always returns a hash-suffixed name
+			// GetName() always returns a hash-suffixed name
 			originalIdentifier := tt.role.Identifier
-			uniqueName := result.GetUniqueName()
+			uniqueName := result.GetName()
 			assert.NotEqual(t, originalIdentifier, uniqueName, "Unique name should change for workflow composite roles")
 			assert.Contains(t, uniqueName, "_", "Unique name should contain underscore separator")
 			assert.True(t, strings.HasPrefix(uniqueName, originalIdentifier+"_"), "Unique name should start with original identifier plus underscore")
@@ -3289,7 +3289,7 @@ func TestGetCompositeRoleForIdentity_DifferentIdentitiesDifferentIdentifiers(t *
 	require.NotNil(t, result2)
 
 	// Different identities should produce different identifiers
-	assert.NotEqual(t, result1.GetUniqueName(), result2.GetUniqueName(), "Different identities should produce different composite role identifiers")
+	assert.NotEqual(t, result1.GetName(), result2.GetName(), "Different identities should produce different composite role identifiers")
 	assert.True(t, result1.Composite, "Result1 should be composite")
 	assert.True(t, result2.Composite, "Result2 should be composite")
 }
