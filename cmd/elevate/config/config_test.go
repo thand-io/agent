@@ -16,13 +16,14 @@ func TestLoadFromEnvUsesDefaultSocketPath(t *testing.T) {
 	t.Setenv(EnvSocketUser, "")
 	t.Setenv(EnvSocketGroup, "")
 	t.Setenv(EnvLogLevel, "")
+	t.Setenv(EnvWindowsAdminGroup, "")
 
 	cfg, err := LoadFromEnv()
 	if err != nil {
 		t.Fatalf("LoadFromEnv failed: %v", err)
 	}
 
-	if cfg.SocketPath != DefaultSocketPath {
+	if cfg.SocketPath != defaultSocketPath() {
 		t.Fatalf("unexpected socket path: got %q want %q", cfg.SocketPath, defaultSocketPath())
 	}
 	if cfg.SudoersDir != DefaultSudoersDir {
@@ -34,8 +35,8 @@ func TestLoadFromEnvUsesDefaultSocketPath(t *testing.T) {
 	if cfg.VisudoBin != DefaultVisudoBin {
 		t.Fatalf("unexpected visudo bin: got %q want %q", cfg.VisudoBin, DefaultVisudoBin)
 	}
-	if cfg.StatePath != DefaultStatePath {
-		t.Fatalf("unexpected state path: got %q want %q", cfg.StatePath, DefaultStatePath)
+	if cfg.StatePath != defaultStatePath() {
+		t.Fatalf("unexpected state path: got %q want %q", cfg.StatePath, defaultStatePath())
 	}
 	if cfg.CleanupInterval != DefaultCleanup {
 		t.Fatalf("unexpected cleanup interval: got %s want %s", cfg.CleanupInterval, DefaultCleanup)
@@ -52,6 +53,9 @@ func TestLoadFromEnvUsesDefaultSocketPath(t *testing.T) {
 	if cfg.LogLevel != DefaultLogLevel {
 		t.Fatalf("unexpected log level: got %q want %q", cfg.LogLevel, DefaultLogLevel)
 	}
+	if cfg.WindowsAdminGroup != "" {
+		t.Fatalf("unexpected windows admin group: got %q want empty", cfg.WindowsAdminGroup)
+	}
 }
 
 func TestLoadFromEnvUsesConfiguredSocketPath(t *testing.T) {
@@ -65,6 +69,7 @@ func TestLoadFromEnvUsesConfiguredSocketPath(t *testing.T) {
 	wantSocketUser := "tom"
 	wantSocketGroup := "thand"
 	wantLogLevel := "warn"
+	wantWindowsAdminGroup := "Administrators"
 	t.Setenv(EnvSocketPath, wantSocket)
 	t.Setenv(EnvSudoersDir, wantSudoers)
 	t.Setenv(EnvSudoersFile, wantSudoersFile)
@@ -75,6 +80,7 @@ func TestLoadFromEnvUsesConfiguredSocketPath(t *testing.T) {
 	t.Setenv(EnvSocketUser, wantSocketUser)
 	t.Setenv(EnvSocketGroup, wantSocketGroup)
 	t.Setenv(EnvLogLevel, wantLogLevel)
+	t.Setenv(EnvWindowsAdminGroup, wantWindowsAdminGroup)
 
 	cfg, err := LoadFromEnv()
 	if err != nil {
@@ -110,6 +116,9 @@ func TestLoadFromEnvUsesConfiguredSocketPath(t *testing.T) {
 	}
 	if cfg.LogLevel != wantLogLevel {
 		t.Fatalf("unexpected log level: got %q want %q", cfg.LogLevel, wantLogLevel)
+	}
+	if cfg.WindowsAdminGroup != wantWindowsAdminGroup {
+		t.Fatalf("unexpected windows admin group: got %q want %q", cfg.WindowsAdminGroup, wantWindowsAdminGroup)
 	}
 }
 
@@ -238,6 +247,22 @@ func TestValidateRejectsInvalidLogLevel(t *testing.T) {
 	}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected validation error for log level")
+	}
+}
+
+func TestValidateForWindowsDoesNotRequireLinuxSudoersFields(t *testing.T) {
+	cfg := &Config{
+		SocketPath:      `C:\ProgramData\Thand\elevate.sock`,
+		SudoersDir:      "   ",
+		SudoersFile:     "   ",
+		VisudoBin:       "   ",
+		StatePath:       `C:\ProgramData\Thand\elevate\state.json`,
+		CleanupInterval: time.Minute,
+		RequestTimeout:  time.Second,
+		LogLevel:        "info",
+	}
+	if err := cfg.validateForOS("windows"); err != nil {
+		t.Fatalf("unexpected validation error for windows config: %v", err)
 	}
 }
 

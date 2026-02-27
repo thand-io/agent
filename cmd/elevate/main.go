@@ -122,7 +122,7 @@ func buildPlatformDependencies(cfg *elevateconfig.Config) (*platformDependencies
 	case "darwin":
 		return nil, fmt.Errorf("unsupported operating system %q: darwin implementation not added yet", runtime.GOOS)
 	case "windows":
-		return nil, fmt.Errorf("unsupported operating system %q: windows implementation not added yet", runtime.GOOS)
+		return buildWindowsPlatformDependencies(cfg)
 	default:
 		return nil, fmt.Errorf("unsupported operating system %q", runtime.GOOS)
 	}
@@ -153,7 +153,31 @@ func buildLinuxPlatformDependencies(cfg *elevateconfig.Config) (*platformDepende
 	return &platformDependencies{
 		ipc:         ipcServer,
 		grantEngine: grantEngine,
-		clock:       clock.NewLinuxClock(),
+		clock:       clock.NewClock(),
+	}, nil
+}
+
+func buildWindowsPlatformDependencies(cfg *elevateconfig.Config) (*platformDependencies, error) {
+	ipcOpts := []ipc.Option{}
+	if cfg.SocketUser != "" {
+		ipcOpts = append(ipcOpts, ipc.WithSocketUser(cfg.SocketUser))
+	}
+	ipcServer, err := ipc.NewUnixServer(cfg.SocketPath, ipcOpts...)
+	if err != nil {
+		return nil, err
+	}
+
+	grantEngine, err := grant.NewWindowsEngine(grant.WindowsEngineConfig{
+		AdminGroup: cfg.WindowsAdminGroup,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &platformDependencies{
+		ipc:         ipcServer,
+		grantEngine: grantEngine,
+		clock:       clock.NewClock(),
 	}, nil
 }
 

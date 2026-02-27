@@ -32,6 +32,8 @@ const (
 	EnvStatePath = "THAND_ELEVATE_STATE_PATH"
 	// DefaultStatePath is the default persisted grant state file path.
 	DefaultStatePath = "/var/lib/thand/elevate/state.json"
+	// DefaultStatePathWindows is the default persisted grant state file path on Windows.
+	DefaultStatePathWindows = `C:\ProgramData\Thand\elevate\state.json`
 	// EnvCleanupInterval overrides the periodic cleanup interval duration.
 	EnvCleanupInterval = "THAND_ELEVATE_CLEANUP_INTERVAL"
 	// DefaultCleanup is the default periodic cleanup interval.
@@ -48,6 +50,8 @@ const (
 	EnvLogLevel = "THAND_ELEVATE_LOG_LEVEL"
 	// DefaultLogLevel is the default helper log level.
 	DefaultLogLevel = "info"
+	// EnvWindowsAdminGroup overrides the local administrator group name on Windows.
+	EnvWindowsAdminGroup = "THAND_ELEVATE_WINDOWS_ADMIN_GROUP"
 )
 
 // Config contains runtime configuration for the elevate helper.
@@ -58,11 +62,12 @@ type Config struct {
 	VisudoBin   string
 	StatePath   string
 
-	CleanupInterval time.Duration
-	RequestTimeout  time.Duration
-	SocketUser      string
-	SocketGroup     string
-	LogLevel        string
+	CleanupInterval   time.Duration
+	RequestTimeout    time.Duration
+	SocketUser        string
+	SocketGroup       string
+	LogLevel          string
+	WindowsAdminGroup string
 }
 
 // LoadFromEnv loads helper configuration from environment variables with defaults.
@@ -89,7 +94,7 @@ func LoadFromEnv() (*Config, error) {
 
 	statePath := strings.TrimSpace(os.Getenv(EnvStatePath))
 	if statePath == "" {
-		statePath = DefaultStatePath
+		statePath = defaultStatePath()
 	}
 
 	cleanupInterval := DefaultCleanup
@@ -114,6 +119,7 @@ func LoadFromEnv() (*Config, error) {
 	if logLevel == "" {
 		logLevel = DefaultLogLevel
 	}
+	windowsAdminGroup := strings.TrimSpace(os.Getenv(EnvWindowsAdminGroup))
 
 	cfg := &Config{
 		SocketPath:  socketPath,
@@ -122,11 +128,12 @@ func LoadFromEnv() (*Config, error) {
 		VisudoBin:   visudoBin,
 		StatePath:   statePath,
 
-		CleanupInterval: cleanupInterval,
-		RequestTimeout:  requestTimeout,
-		SocketUser:      socketUser,
-		SocketGroup:     socketGroup,
-		LogLevel:        logLevel,
+		CleanupInterval:   cleanupInterval,
+		RequestTimeout:    requestTimeout,
+		SocketUser:        socketUser,
+		SocketGroup:       socketGroup,
+		LogLevel:          logLevel,
+		WindowsAdminGroup: windowsAdminGroup,
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -143,8 +150,19 @@ func defaultSocketPath() string {
 	return DefaultSocketPath
 }
 
+func defaultStatePath() string {
+	if runtime.GOOS == "windows" {
+		return DefaultStatePathWindows
+	}
+	return DefaultStatePath
+}
+
 // Validate ensures required configuration fields are present and safe.
 func (c *Config) Validate() error {
+	return c.validateForOS(runtime.GOOS)
+}
+
+func (c *Config) validateForOS(goos string) error {
 	if c == nil {
 		return fmt.Errorf("config is required")
 	}
@@ -152,14 +170,16 @@ func (c *Config) Validate() error {
 	if strings.TrimSpace(c.SocketPath) == "" {
 		return fmt.Errorf("socket path is required")
 	}
-	if strings.TrimSpace(c.SudoersDir) == "" {
-		return fmt.Errorf("sudoers dir is required")
-	}
-	if strings.TrimSpace(c.SudoersFile) == "" {
-		return fmt.Errorf("sudoers file is required")
-	}
-	if strings.TrimSpace(c.VisudoBin) == "" {
-		return fmt.Errorf("visudo binary is required")
+	if goos != "windows" {
+		if strings.TrimSpace(c.SudoersDir) == "" {
+			return fmt.Errorf("sudoers dir is required")
+		}
+		if strings.TrimSpace(c.SudoersFile) == "" {
+			return fmt.Errorf("sudoers file is required")
+		}
+		if strings.TrimSpace(c.VisudoBin) == "" {
+			return fmt.Errorf("visudo binary is required")
+		}
 	}
 	if strings.TrimSpace(c.StatePath) == "" {
 		return fmt.Errorf("state path is required")

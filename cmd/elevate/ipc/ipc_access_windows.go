@@ -13,7 +13,7 @@ func (s *UnixServer) configureSocketFileAccess(path string) error {
 }
 
 func (s *UnixServer) applyWindowsACL(path string) error {
-	if s.socketUser == "" && s.socketGrp == "" {
+	if s.socketUser == "" {
 		return nil
 	}
 
@@ -24,9 +24,6 @@ func (s *UnixServer) applyWindowsACL(path string) error {
 	}
 	if s.socketUser != "" {
 		args = append(args, "/grant", fmt.Sprintf("%s:(M)", s.socketUser))
-	}
-	if s.socketGrp != "" {
-		args = append(args, "/grant", fmt.Sprintf("%s:(M)", s.socketGrp))
 	}
 
 	if err := s.runCommand("icacls", args...); err != nil {
