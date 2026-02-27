@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strconv"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -12,8 +12,10 @@ import (
 const (
 	// EnvSocketPath overrides the helper IPC socket path.
 	EnvSocketPath = "THAND_ELEVATE_SOCKET_PATH"
-	// DefaultSocketPath is the default helper IPC socket path.
+	// DefaultSocketPath is the default helper IPC socket path on Unix platforms.
 	DefaultSocketPath = "/var/run/thand/elevate.sock"
+	// DefaultSocketPathWindows is the default helper IPC socket path on Windows.
+	DefaultSocketPathWindows = `C:\ProgramData\Thand\elevate.sock`
 	// EnvSudoersDir overrides the sudoers include directory for grant files.
 	EnvSudoersDir = "THAND_ELEVATE_SUDOERS_DIR"
 	// DefaultSudoersDir is the default sudoers include directory for grant files.
@@ -30,6 +32,8 @@ const (
 	EnvStatePath = "THAND_ELEVATE_STATE_PATH"
 	// DefaultStatePath is the default persisted grant state file path.
 	DefaultStatePath = "/var/lib/thand/elevate/state.json"
+	// DefaultStatePathWindows is the default persisted grant state file path on Windows.
+	DefaultStatePathWindows = `C:\ProgramData\Thand\elevate\state.json`
 	// EnvCleanupInterval overrides the periodic cleanup interval duration.
 	EnvCleanupInterval = "THAND_ELEVATE_CLEANUP_INTERVAL"
 	// DefaultCleanup is the default periodic cleanup interval.
@@ -38,12 +42,16 @@ const (
 	EnvRequestTimeout = "THAND_ELEVATE_REQUEST_TIMEOUT"
 	// DefaultRequestTimeout is the default per-request handler timeout.
 	DefaultRequestTimeout = 30 * time.Second
-	// EnvSocketGID optionally sets Unix socket group ownership (root:<gid>).
-	EnvSocketGID = "THAND_ELEVATE_SOCKET_GID"
+	// EnvSocketUser optionally sets socket owner username.
+	EnvSocketUser = "THAND_ELEVATE_SOCKET_USER"
+	// EnvSocketGroup optionally sets socket group name.
+	EnvSocketGroup = "THAND_ELEVATE_SOCKET_GROUP"
 	// EnvLogLevel overrides helper log level.
 	EnvLogLevel = "THAND_ELEVATE_LOG_LEVEL"
 	// DefaultLogLevel is the default helper log level.
 	DefaultLogLevel = "info"
+	// EnvWindowsAdminGroup overrides the local administrator group name on Windows.
+	EnvWindowsAdminGroup = "THAND_ELEVATE_WINDOWS_ADMIN_GROUP"
 )
 
 // Config contains runtime configuration for the elevate helper.
@@ -54,17 +62,19 @@ type Config struct {
 	VisudoBin   string
 	StatePath   string
 
-	CleanupInterval time.Duration
-	RequestTimeout  time.Duration
-	SocketGID       int
-	LogLevel        string
+	CleanupInterval   time.Duration
+	RequestTimeout    time.Duration
+	SocketUser        string
+	SocketGroup       string
+	LogLevel          string
+	WindowsAdminGroup string
 }
 
 // LoadFromEnv loads helper configuration from environment variables with defaults.
 func LoadFromEnv() (*Config, error) {
 	socketPath := strings.TrimSpace(os.Getenv(EnvSocketPath))
 	if socketPath == "" {
-		socketPath = DefaultSocketPath
+		socketPath = defaultSocketPath()
 	}
 
 	sudoersDir := strings.TrimSpace(os.Getenv(EnvSudoersDir))
@@ -84,7 +94,7 @@ func LoadFromEnv() (*Config, error) {
 
 	statePath := strings.TrimSpace(os.Getenv(EnvStatePath))
 	if statePath == "" {
-		statePath = DefaultStatePath
+		statePath = defaultStatePath()
 	}
 
 	cleanupInterval := DefaultCleanup
@@ -103,18 +113,13 @@ func LoadFromEnv() (*Config, error) {
 		}
 		requestTimeout = parsed
 	}
-	socketGID := -1
-	if configured := strings.TrimSpace(os.Getenv(EnvSocketGID)); configured != "" {
-		parsed, err := strconv.Atoi(configured)
-		if err != nil {
-			return nil, fmt.Errorf("parse socket gid: %w", err)
-		}
-		socketGID = parsed
-	}
+	socketUser := strings.TrimSpace(os.Getenv(EnvSocketUser))
+	socketGroup := strings.TrimSpace(os.Getenv(EnvSocketGroup))
 	logLevel := strings.TrimSpace(os.Getenv(EnvLogLevel))
 	if logLevel == "" {
 		logLevel = DefaultLogLevel
 	}
+	windowsAdminGroup := strings.TrimSpace(os.Getenv(EnvWindowsAdminGroup))
 
 	cfg := &Config{
 		SocketPath:  socketPath,
@@ -123,10 +128,12 @@ func LoadFromEnv() (*Config, error) {
 		VisudoBin:   visudoBin,
 		StatePath:   statePath,
 
-		CleanupInterval: cleanupInterval,
-		RequestTimeout:  requestTimeout,
-		SocketGID:       socketGID,
-		LogLevel:        logLevel,
+		CleanupInterval:   cleanupInterval,
+		RequestTimeout:    requestTimeout,
+		SocketUser:        socketUser,
+		SocketGroup:       socketGroup,
+		LogLevel:          logLevel,
+		WindowsAdminGroup: windowsAdminGroup,
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -136,8 +143,26 @@ func LoadFromEnv() (*Config, error) {
 	return cfg, nil
 }
 
+func defaultSocketPath() string {
+	if runtime.GOOS == "windows" {
+		return DefaultSocketPathWindows
+	}
+	return DefaultSocketPath
+}
+
+func defaultStatePath() string {
+	if runtime.GOOS == "windows" {
+		return DefaultStatePathWindows
+	}
+	return DefaultStatePath
+}
+
 // Validate ensures required configuration fields are present and safe.
 func (c *Config) Validate() error {
+	return c.validateForOS(runtime.GOOS)
+}
+
+func (c *Config) validateForOS(goos string) error {
 	if c == nil {
 		return fmt.Errorf("config is required")
 	}
@@ -145,14 +170,16 @@ func (c *Config) Validate() error {
 	if strings.TrimSpace(c.SocketPath) == "" {
 		return fmt.Errorf("socket path is required")
 	}
-	if strings.TrimSpace(c.SudoersDir) == "" {
-		return fmt.Errorf("sudoers dir is required")
-	}
-	if strings.TrimSpace(c.SudoersFile) == "" {
-		return fmt.Errorf("sudoers file is required")
-	}
-	if strings.TrimSpace(c.VisudoBin) == "" {
-		return fmt.Errorf("visudo binary is required")
+	if goos != "windows" {
+		if strings.TrimSpace(c.SudoersDir) == "" {
+			return fmt.Errorf("sudoers dir is required")
+		}
+		if strings.TrimSpace(c.SudoersFile) == "" {
+			return fmt.Errorf("sudoers file is required")
+		}
+		if strings.TrimSpace(c.VisudoBin) == "" {
+			return fmt.Errorf("visudo binary is required")
+		}
 	}
 	if strings.TrimSpace(c.StatePath) == "" {
 		return fmt.Errorf("state path is required")
@@ -162,9 +189,6 @@ func (c *Config) Validate() error {
 	}
 	if c.RequestTimeout <= 0 {
 		return fmt.Errorf("request timeout must be > 0")
-	}
-	if c.SocketGID < -1 {
-		return fmt.Errorf("socket gid must be >= -1")
 	}
 	if _, err := ParseLogLevel(c.LogLevel); err != nil {
 		return err

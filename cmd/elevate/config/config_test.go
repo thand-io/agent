@@ -13,16 +13,18 @@ func TestLoadFromEnvUsesDefaultSocketPath(t *testing.T) {
 	t.Setenv(EnvStatePath, "")
 	t.Setenv(EnvCleanupInterval, "")
 	t.Setenv(EnvRequestTimeout, "")
-	t.Setenv(EnvSocketGID, "")
+	t.Setenv(EnvSocketUser, "")
+	t.Setenv(EnvSocketGroup, "")
 	t.Setenv(EnvLogLevel, "")
+	t.Setenv(EnvWindowsAdminGroup, "")
 
 	cfg, err := LoadFromEnv()
 	if err != nil {
 		t.Fatalf("LoadFromEnv failed: %v", err)
 	}
 
-	if cfg.SocketPath != DefaultSocketPath {
-		t.Fatalf("unexpected socket path: got %q want %q", cfg.SocketPath, DefaultSocketPath)
+	if cfg.SocketPath != defaultSocketPath() {
+		t.Fatalf("unexpected socket path: got %q want %q", cfg.SocketPath, defaultSocketPath())
 	}
 	if cfg.SudoersDir != DefaultSudoersDir {
 		t.Fatalf("unexpected sudoers dir: got %q want %q", cfg.SudoersDir, DefaultSudoersDir)
@@ -33,8 +35,8 @@ func TestLoadFromEnvUsesDefaultSocketPath(t *testing.T) {
 	if cfg.VisudoBin != DefaultVisudoBin {
 		t.Fatalf("unexpected visudo bin: got %q want %q", cfg.VisudoBin, DefaultVisudoBin)
 	}
-	if cfg.StatePath != DefaultStatePath {
-		t.Fatalf("unexpected state path: got %q want %q", cfg.StatePath, DefaultStatePath)
+	if cfg.StatePath != defaultStatePath() {
+		t.Fatalf("unexpected state path: got %q want %q", cfg.StatePath, defaultStatePath())
 	}
 	if cfg.CleanupInterval != DefaultCleanup {
 		t.Fatalf("unexpected cleanup interval: got %s want %s", cfg.CleanupInterval, DefaultCleanup)
@@ -42,11 +44,17 @@ func TestLoadFromEnvUsesDefaultSocketPath(t *testing.T) {
 	if cfg.RequestTimeout != DefaultRequestTimeout {
 		t.Fatalf("unexpected request timeout: got %s want %s", cfg.RequestTimeout, DefaultRequestTimeout)
 	}
-	if cfg.SocketGID != -1 {
-		t.Fatalf("unexpected socket gid: got %d want -1", cfg.SocketGID)
+	if cfg.SocketUser != "" {
+		t.Fatalf("unexpected socket user: got %q want empty", cfg.SocketUser)
+	}
+	if cfg.SocketGroup != "" {
+		t.Fatalf("unexpected socket group: got %q want empty", cfg.SocketGroup)
 	}
 	if cfg.LogLevel != DefaultLogLevel {
 		t.Fatalf("unexpected log level: got %q want %q", cfg.LogLevel, DefaultLogLevel)
+	}
+	if cfg.WindowsAdminGroup != "" {
+		t.Fatalf("unexpected windows admin group: got %q want empty", cfg.WindowsAdminGroup)
 	}
 }
 
@@ -58,8 +66,10 @@ func TestLoadFromEnvUsesConfiguredSocketPath(t *testing.T) {
 	wantStatePath := "/tmp/custom-state.json"
 	wantCleanup := "30s"
 	wantRequestTimeout := "5m"
-	wantSocketGID := "1000"
+	wantSocketUser := "tom"
+	wantSocketGroup := "thand"
 	wantLogLevel := "warn"
+	wantWindowsAdminGroup := "Administrators"
 	t.Setenv(EnvSocketPath, wantSocket)
 	t.Setenv(EnvSudoersDir, wantSudoers)
 	t.Setenv(EnvSudoersFile, wantSudoersFile)
@@ -67,8 +77,10 @@ func TestLoadFromEnvUsesConfiguredSocketPath(t *testing.T) {
 	t.Setenv(EnvStatePath, wantStatePath)
 	t.Setenv(EnvCleanupInterval, wantCleanup)
 	t.Setenv(EnvRequestTimeout, wantRequestTimeout)
-	t.Setenv(EnvSocketGID, wantSocketGID)
+	t.Setenv(EnvSocketUser, wantSocketUser)
+	t.Setenv(EnvSocketGroup, wantSocketGroup)
 	t.Setenv(EnvLogLevel, wantLogLevel)
+	t.Setenv(EnvWindowsAdminGroup, wantWindowsAdminGroup)
 
 	cfg, err := LoadFromEnv()
 	if err != nil {
@@ -96,11 +108,17 @@ func TestLoadFromEnvUsesConfiguredSocketPath(t *testing.T) {
 	if cfg.RequestTimeout != 5*time.Minute {
 		t.Fatalf("unexpected request timeout: got %s want %s", cfg.RequestTimeout, 5*time.Minute)
 	}
-	if cfg.SocketGID != 1000 {
-		t.Fatalf("unexpected socket gid: got %d want %d", cfg.SocketGID, 1000)
+	if cfg.SocketUser != wantSocketUser {
+		t.Fatalf("unexpected socket user: got %q want %q", cfg.SocketUser, wantSocketUser)
+	}
+	if cfg.SocketGroup != wantSocketGroup {
+		t.Fatalf("unexpected socket group: got %q want %q", cfg.SocketGroup, wantSocketGroup)
 	}
 	if cfg.LogLevel != wantLogLevel {
 		t.Fatalf("unexpected log level: got %q want %q", cfg.LogLevel, wantLogLevel)
+	}
+	if cfg.WindowsAdminGroup != wantWindowsAdminGroup {
+		t.Fatalf("unexpected windows admin group: got %q want %q", cfg.WindowsAdminGroup, wantWindowsAdminGroup)
 	}
 }
 
@@ -115,13 +133,6 @@ func TestLoadFromEnvRejectsInvalidRequestTimeout(t *testing.T) {
 	t.Setenv(EnvRequestTimeout, "not-a-duration")
 	if _, err := LoadFromEnv(); err == nil {
 		t.Fatal("expected request timeout parse error")
-	}
-}
-
-func TestLoadFromEnvRejectsInvalidSocketGID(t *testing.T) {
-	t.Setenv(EnvSocketGID, "not-an-int")
-	if _, err := LoadFromEnv(); err == nil {
-		t.Fatal("expected socket gid parse error")
 	}
 }
 
@@ -224,22 +235,6 @@ func TestValidateRejectsNonPositiveRequestTimeout(t *testing.T) {
 	}
 }
 
-func TestValidateRejectsInvalidSocketGID(t *testing.T) {
-	cfg := &Config{
-		SocketPath:      "/var/run/thand/elevate.sock",
-		SudoersDir:      "/etc/sudoers.d",
-		SudoersFile:     "/etc/sudoers",
-		VisudoBin:       "visudo",
-		StatePath:       "/var/lib/thand/elevate/state.json",
-		CleanupInterval: time.Minute,
-		RequestTimeout:  time.Minute,
-		SocketGID:       -2,
-	}
-	if err := cfg.Validate(); err == nil {
-		t.Fatal("expected validation error for socket gid")
-	}
-}
-
 func TestValidateRejectsInvalidLogLevel(t *testing.T) {
 	cfg := &Config{
 		SocketPath:      "/var/run/thand/elevate.sock",
@@ -252,6 +247,22 @@ func TestValidateRejectsInvalidLogLevel(t *testing.T) {
 	}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected validation error for log level")
+	}
+}
+
+func TestValidateForWindowsDoesNotRequireLinuxSudoersFields(t *testing.T) {
+	cfg := &Config{
+		SocketPath:      `C:\ProgramData\Thand\elevate.sock`,
+		SudoersDir:      "   ",
+		SudoersFile:     "   ",
+		VisudoBin:       "   ",
+		StatePath:       `C:\ProgramData\Thand\elevate\state.json`,
+		CleanupInterval: time.Minute,
+		RequestTimeout:  time.Second,
+		LogLevel:        "info",
+	}
+	if err := cfg.validateForOS("windows"); err != nil {
+		t.Fatalf("unexpected validation error for windows config: %v", err)
 	}
 }
 
