@@ -306,19 +306,22 @@ func (s *UnixServer) removeStaleSocket(path string) error {
 }
 
 type unixConn struct {
-	conn   *net.UnixConn
+	conn   net.Conn
 	reader *bufio.Reader
+	max    int
 }
 
 func newUnixConn(conn *net.UnixConn, maxFrame int) handler.IPCConn {
 	return &unixConn{
 		conn:   conn,
 		reader: bufio.NewReaderSize(conn, maxFrame+1),
+		max:    maxFrame,
 	}
 }
 
 // ReadFrame reads one newline-delimited frame from the connection.
 func (c *unixConn) ReadFrame(ctx context.Context) ([]byte, error) {
+	var frame []byte
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -330,8 +333,14 @@ func (c *unixConn) ReadFrame(ctx context.Context) ([]byte, error) {
 		}
 
 		line, err := c.reader.ReadSlice('\n')
+		if len(line) > 0 {
+			frame = append(frame, line...)
+			if len(frame) > c.max {
+				return nil, ErrFrameTooLarge
+			}
+		}
 		if err == nil {
-			return normalizeReadFrame(line), nil
+			return append([]byte(nil), normalizeReadFrame(frame)...), nil
 		}
 
 		if errors.Is(err, bufio.ErrBufferFull) {
