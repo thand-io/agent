@@ -85,7 +85,7 @@ type stubClock struct {
 func (c *stubClock) NowMonoNS() int64      { return c.mono.Load() }
 func (c *stubClock) NowWallUTC() time.Time { return c.wall }
 
-func TestIsExpiredMonotonicAndWallFallback(t *testing.T) {
+func TestIsExpired(t *testing.T) {
 	baseWall := time.Date(2026, 2, 22, 12, 0, 0, 0, time.UTC)
 
 	tests := []struct {
@@ -96,27 +96,51 @@ func TestIsExpiredMonotonicAndWallFallback(t *testing.T) {
 		want    bool
 	}{
 		{
-			name: "monotonic not expired",
+			name: "not expired when wall and monotonic are both active",
 			grant: domain.GrantState{
-				GrantedAtMonoNS: 100,
-				DurationSeconds: 10,
+				GrantedAtMonoNS:  100,
+				GrantedAtWallUTC: baseWall,
+				DurationSeconds:  10,
 			},
 			nowMono: 105,
 			nowWall: baseWall,
 			want:    false,
 		},
 		{
-			name: "monotonic expired",
+			name: "expired when wall clock has expired",
 			grant: domain.GrantState{
-				GrantedAtMonoNS: 100,
-				DurationSeconds: 10,
+				GrantedAtMonoNS:  100,
+				GrantedAtWallUTC: baseWall,
+				DurationSeconds:  10,
+			},
+			nowMono: 105,
+			nowWall: baseWall.Add(11 * time.Second),
+			want:    true,
+		},
+		{
+			name: "expired when wall clock is active but monotonic has expired",
+			grant: domain.GrantState{
+				GrantedAtMonoNS:  100,
+				GrantedAtWallUTC: baseWall,
+				DurationSeconds:  10,
 			},
 			nowMono: 100 + int64(10*time.Second),
 			nowWall: baseWall,
 			want:    true,
 		},
 		{
-			name: "reboot fallback to wall clock",
+			name: "not expired after restart when wall clock is still active",
+			grant: domain.GrantState{
+				GrantedAtMonoNS:  1_000_000,
+				GrantedAtWallUTC: baseWall,
+				DurationSeconds:  10,
+			},
+			nowMono: 1,
+			nowWall: baseWall.Add(5 * time.Second),
+			want:    false,
+		},
+		{
+			name: "expired after restart when wall clock has expired",
 			grant: domain.GrantState{
 				GrantedAtMonoNS:  1_000_000,
 				GrantedAtWallUTC: baseWall,
@@ -147,8 +171,8 @@ func TestIsExpiredMonotonicAndWallFallback(t *testing.T) {
 func TestCleanupRunStartupSweep(t *testing.T) {
 	store := &stubStore{
 		grants: []domain.GrantState{
-			{RequestID: "expired", WorkflowID: "wf", Username: "alice", GrantedAtMonoNS: 1, DurationSeconds: 1},
-			{RequestID: "active", WorkflowID: "wf", Username: "bob", GrantedAtMonoNS: 1000, DurationSeconds: 3600},
+			{RequestID: "expired", WorkflowID: "wf", Username: "alice", GrantedAtMonoNS: 1, GrantedAtWallUTC: time.Date(2026, 2, 22, 11, 59, 58, 0, time.UTC), DurationSeconds: 1},
+			{RequestID: "active", WorkflowID: "wf", Username: "bob", GrantedAtMonoNS: 1000, GrantedAtWallUTC: time.Date(2026, 2, 22, 12, 0, 0, 0, time.UTC), DurationSeconds: 3600},
 		},
 	}
 	engine := &stubGrantEngine{}
@@ -185,11 +209,12 @@ func TestCleanupRunPeriodicSweep(t *testing.T) {
 	store := &stubStore{
 		grants: []domain.GrantState{
 			{
-				RequestID:       "will-expire",
-				WorkflowID:      "wf",
-				Username:        "alice",
-				GrantedAtMonoNS: 1,
-				DurationSeconds: 1,
+				RequestID:        "will-expire",
+				WorkflowID:       "wf",
+				Username:         "alice",
+				GrantedAtMonoNS:  1,
+				GrantedAtWallUTC: time.Date(2026, 2, 22, 12, 0, 0, 0, time.UTC),
+				DurationSeconds:  1,
 			},
 		},
 	}
