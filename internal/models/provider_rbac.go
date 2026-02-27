@@ -22,7 +22,7 @@ type AuthorizeRoleRequest struct {
 }
 
 func (r *AuthorizeRoleRequest) IsValid() bool {
-	return r.Identity != nil && r.Role != nil
+	return r.Identity != nil && r.Identity.User != nil && r.Role != nil
 }
 
 func (r *AuthorizeRoleRequest) GetUser() *User {

@@ -507,7 +507,7 @@ func (c *Config) getCompositeRoleForIdentity(
 	}
 
 	// Update identifier to make it unique for this composite role instance
-	resolvedRole.SetUniquIdentifierFromString(roleIdentifier)
+	resolvedRole.SetUniqueIdentifierFromString(roleIdentifier)
 
 	// Log the identifier change for debugging
 	logrus.WithFields(logrus.Fields{

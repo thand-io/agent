@@ -77,9 +77,9 @@ func (r *CompositeRole) SetUniqueIdentifier(uuid uuid.UUID) {
 	r.UUID = uuid
 }
 
-func (r *CompositeRole) SetUniquIdentifierFromString(idStr string) {
+func (r *CompositeRole) SetUniqueIdentifierFromString(idStr string) {
 
-	// Create uuidd from string that may already contain a hash suffix (e.g., "baseRole_abcdef123456")
+	// Create uuid from string that may already contain a hash suffix (e.g., "baseRole_abcdef123456")
 	r.UUID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(idStr))
 
 }

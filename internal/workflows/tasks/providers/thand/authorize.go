@@ -185,7 +185,7 @@ func (t *thandTask) executeAuthorization(
 				})
 
 				log.WithFields(logrus.Fields{
-					"iddentity": identityId,
+					"identity":  identityId,
 					"role":      authReq.Role.GetName(),
 					"provider":  providerName,
 					"duration":  duration,

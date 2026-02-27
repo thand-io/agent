@@ -149,7 +149,7 @@ func TestAWSElevationApprovalsWorkflow(t *testing.T) {
 		// CompositeRoleWorkflowIdentifier hashes workflowID + role identifier + user identity.
 		identityForName := &models.Identity{ID: testUser.Email, User: testUser}
 		nameRef := models.CompositeRole{Role: role}
-		nameRef.SetUniquIdentifierFromString(models.CompositeRoleWorkflowIdentifier(workflowID, &role, identityForName))
+		nameRef.SetUniqueIdentifierFromString(models.CompositeRoleWorkflowIdentifier(workflowID, &role, identityForName))
 		expectedRoleName := nameRef.GetName()
 		t.Logf("Expected IAM role name: %s", expectedRoleName)
 
