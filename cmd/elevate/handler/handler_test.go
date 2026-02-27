@@ -74,12 +74,19 @@ type stubStateStore struct {
 	deleteCalls int
 	putErr      error
 	deleteErr   error
+	grants      []domain.GrantState
 }
 
 func (s *stubStateStore) Put(ctx context.Context, grant domain.GrantState) error {
 	_ = ctx
-	_ = grant
 	s.putCalls++
+	for i := range s.grants {
+		if s.grants[i].RequestID == grant.RequestID {
+			s.grants[i] = grant
+			return s.putErr
+		}
+	}
+	s.grants = append(s.grants, grant)
 	return s.putErr
 }
 
@@ -92,7 +99,9 @@ func (s *stubStateStore) Delete(ctx context.Context, requestID string) error {
 
 func (s *stubStateStore) List(ctx context.Context) ([]domain.GrantState, error) {
 	_ = ctx
-	return nil, nil
+	out := make([]domain.GrantState, len(s.grants))
+	copy(out, s.grants)
+	return out, nil
 }
 
 type stubClock struct {
@@ -157,8 +166,15 @@ func TestHandleConnectionRevokeSuccess(t *testing.T) {
 		},
 	}
 	grantEngine := &stubGrantEngine{}
-	state := &stubStateStore{}
-	h := New(grantEngine, &stubVerifier{}, state, stubClock{})
+	state := &stubStateStore{grants: []domain.GrantState{{
+		RequestID:        req.RequestID,
+		WorkflowID:       req.WorkflowID,
+		Username:         req.Username,
+		GrantedAtWallUTC: time.Now().UTC(),
+		GrantedAtMonoNS:  1,
+		DurationSeconds:  60,
+	}}}
+	h := New(grantEngine, &stubVerifier{}, state, stubClock{wall: time.Now().UTC()})
 	h.generateNonce = func() (string, error) { return nonce, nil }
 
 	if err := h.HandleConnection(context.Background(), conn); err != nil {
@@ -167,8 +183,82 @@ func TestHandleConnectionRevokeSuccess(t *testing.T) {
 	if grantEngine.revokeCalls != 1 {
 		t.Fatalf("expected 1 revoke call, got %d", grantEngine.revokeCalls)
 	}
-	if state.deleteCalls != 1 {
-		t.Fatalf("expected 1 state delete, got %d", state.deleteCalls)
+	if state.putCalls != 1 {
+		t.Fatalf("expected 1 state put, got %d", state.putCalls)
+	}
+	if len(state.grants) != 1 || state.grants[0].CompletedAtWallUTC.IsZero() {
+		t.Fatalf("expected revoke to mark stored grant completed, got %+v", state.grants)
+	}
+	assertChallengeAndResult(t, conn.writeFrames, nonce, req.RequestID, resultStatusOK)
+}
+
+func TestHandleConnectionRevokeWithoutStateStillRevokes(t *testing.T) {
+	req := domain.RequestFrame{
+		Type:       domain.FrameTypeRequest,
+		Action:     domain.ActionRevoke,
+		WorkflowID: "wf-1",
+		RequestID:  "req-missing",
+		Username:   "alice",
+	}
+	nonce := "fixed-nonce-revoke-missing"
+
+	conn := &stubConn{
+		readFrames: [][]byte{
+			mustJSON(t, req),
+			mustJSON(t, signedResponseFor(t, req, nonce)),
+		},
+	}
+	grantEngine := &stubGrantEngine{}
+	state := &stubStateStore{}
+	h := New(grantEngine, &stubVerifier{}, state, stubClock{wall: time.Now().UTC()})
+	h.generateNonce = func() (string, error) { return nonce, nil }
+
+	if err := h.HandleConnection(context.Background(), conn); err != nil {
+		t.Fatalf("HandleConnection failed: %v", err)
+	}
+	if grantEngine.revokeCalls != 1 {
+		t.Fatalf("expected revoke without state to still revoke, got %d", grantEngine.revokeCalls)
+	}
+	assertChallengeAndResult(t, conn.writeFrames, nonce, req.RequestID, resultStatusOK)
+}
+
+func TestHandleConnectionRevokeSkipsPrivilegeRemovalForBaselineGrant(t *testing.T) {
+	req := domain.RequestFrame{
+		Type:       domain.FrameTypeRequest,
+		Action:     domain.ActionRevoke,
+		WorkflowID: "wf-1",
+		RequestID:  "req-baseline",
+		Username:   "alice",
+	}
+	nonce := "fixed-nonce-revoke-baseline"
+
+	conn := &stubConn{
+		readFrames: [][]byte{
+			mustJSON(t, req),
+			mustJSON(t, signedResponseFor(t, req, nonce)),
+		},
+	}
+	grantEngine := &stubGrantEngine{}
+	state := &stubStateStore{grants: []domain.GrantState{{
+		RequestID:            req.RequestID,
+		WorkflowID:           req.WorkflowID,
+		Username:             req.Username,
+		GrantedAtWallUTC:     time.Now().UTC(),
+		GrantedAtMonoNS:      1,
+		DurationSeconds:      60,
+		WasAlreadyPrivileged: true,
+	}}}
+	h := New(grantEngine, &stubVerifier{}, state, stubClock{wall: time.Now().UTC()})
+	h.generateNonce = func() (string, error) { return nonce, nil }
+
+	if err := h.HandleConnection(context.Background(), conn); err != nil {
+		t.Fatalf("HandleConnection failed: %v", err)
+	}
+	if grantEngine.revokeCalls != 0 {
+		t.Fatalf("expected baseline revoke to skip privilege removal, got %d", grantEngine.revokeCalls)
+	}
+	if len(state.grants) != 1 || state.grants[0].CompletedAtWallUTC.IsZero() {
+		t.Fatalf("expected baseline grant to be marked completed, got %+v", state.grants)
 	}
 	assertChallengeAndResult(t, conn.writeFrames, nonce, req.RequestID, resultStatusOK)
 }

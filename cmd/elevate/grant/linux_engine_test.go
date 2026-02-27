@@ -175,6 +175,9 @@ func TestBaselinePrivilegeHook(t *testing.T) {
 	if !res.WasAlreadyPrivileged {
 		t.Fatal("expected WasAlreadyPrivileged=true from hook")
 	}
+	if _, err := os.Stat(filepath.Join(dir, "thand-r1")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected no sudoers file when user already has baseline privilege, got err=%v", err)
+	}
 }
 
 func TestGrantFailsWhenSudoersDirMissing(t *testing.T) {

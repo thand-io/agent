@@ -42,6 +42,10 @@ const (
 	EnvRequestTimeout = "THAND_ELEVATE_REQUEST_TIMEOUT"
 	// DefaultRequestTimeout is the default per-request handler timeout.
 	DefaultRequestTimeout = 30 * time.Second
+	// EnvStateRetention overrides how long completed grant tombstones are retained.
+	EnvStateRetention = "THAND_ELEVATE_STATE_RETENTION"
+	// DefaultStateRetention is the default completed grant retention window.
+	DefaultStateRetention = 24 * time.Hour
 	// EnvSocketUser optionally sets socket owner username.
 	EnvSocketUser = "THAND_ELEVATE_SOCKET_USER"
 	// EnvSocketGroup optionally sets socket group name.
@@ -64,6 +68,7 @@ type Config struct {
 
 	CleanupInterval   time.Duration
 	RequestTimeout    time.Duration
+	StateRetention    time.Duration
 	SocketUser        string
 	SocketGroup       string
 	LogLevel          string
@@ -113,6 +118,14 @@ func LoadFromEnv() (*Config, error) {
 		}
 		requestTimeout = parsed
 	}
+	stateRetention := DefaultStateRetention
+	if configured := strings.TrimSpace(os.Getenv(EnvStateRetention)); configured != "" {
+		parsed, err := time.ParseDuration(configured)
+		if err != nil {
+			return nil, fmt.Errorf("parse state retention: %w", err)
+		}
+		stateRetention = parsed
+	}
 	socketUser := strings.TrimSpace(os.Getenv(EnvSocketUser))
 	socketGroup := strings.TrimSpace(os.Getenv(EnvSocketGroup))
 	logLevel := strings.TrimSpace(os.Getenv(EnvLogLevel))
@@ -130,6 +143,7 @@ func LoadFromEnv() (*Config, error) {
 
 		CleanupInterval:   cleanupInterval,
 		RequestTimeout:    requestTimeout,
+		StateRetention:    stateRetention,
 		SocketUser:        socketUser,
 		SocketGroup:       socketGroup,
 		LogLevel:          logLevel,
@@ -189,6 +203,9 @@ func (c *Config) validateForOS(goos string) error {
 	}
 	if c.RequestTimeout <= 0 {
 		return fmt.Errorf("request timeout must be > 0")
+	}
+	if c.StateRetention <= 0 {
+		return fmt.Errorf("state retention must be > 0")
 	}
 	if _, err := ParseLogLevel(c.LogLevel); err != nil {
 		return err

@@ -38,6 +38,7 @@ func main() {
 		"socket_path", deps.cfg.SocketPath,
 		"state_path", deps.cfg.StatePath,
 		"cleanup_interval", deps.cfg.CleanupInterval.String(),
+		"state_retention", deps.cfg.StateRetention.String(),
 		"request_timeout", deps.cfg.RequestTimeout.String(),
 		"socket_user", deps.cfg.SocketUser,
 		"socket_group", deps.cfg.SocketGroup,
@@ -97,7 +98,7 @@ func buildDependencies() (*dependencies, error) {
 		handler.WithLogger(logger),
 		handler.WithRequestTimeout(cfg.RequestTimeout),
 	)
-	cleanupRunner, err := NewCleanupRunner(stateStore, platformDeps.grantEngine, platformDeps.clock, cfg.CleanupInterval, logger)
+	cleanupRunner, err := NewCleanupRunner(stateStore, platformDeps.grantEngine, platformDeps.clock, cfg.CleanupInterval, cfg.StateRetention, logger)
 	if err != nil {
 		return nil, err
 	}

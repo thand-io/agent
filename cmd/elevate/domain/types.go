@@ -74,4 +74,5 @@ type GrantState struct {
 	GrantedAtMonoNS      int64     `json:"granted_at_mono_ns"`
 	DurationSeconds      int64     `json:"duration_seconds"`
 	WasAlreadyPrivileged bool      `json:"was_already_privileged"`
+	CompletedAtWallUTC   time.Time `json:"completed_at_wall_utc,omitempty"`
 }

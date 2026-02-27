@@ -21,6 +21,12 @@ func (s *stubStore) Put(ctx context.Context, grant domain.GrantState) error {
 	_ = ctx
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	for i := range s.grants {
+		if s.grants[i].RequestID == grant.RequestID {
+			s.grants[i] = grant
+			return nil
+		}
+	}
 	s.grants = append(s.grants, grant)
 	return nil
 }
@@ -181,7 +187,7 @@ func TestCleanupRunStartupSweep(t *testing.T) {
 	}
 	clock.mono.Store(2_000_000_000)
 
-	runner, err := NewCleanupRunner(store, engine, clock, 10*time.Millisecond, slog.Default())
+	runner, err := NewCleanupRunner(store, engine, clock, 10*time.Millisecond, 24*time.Hour, slog.Default())
 	if err != nil {
 		t.Fatalf("NewCleanupRunner failed: %v", err)
 	}
@@ -200,8 +206,19 @@ func TestCleanupRunStartupSweep(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
-	if len(left) != 1 || left[0].RequestID != "active" {
+	if len(left) != 2 {
 		t.Fatalf("unexpected grants left: %+v", left)
+	}
+	expired, foundExpired := findGrantStateByID(left, "expired")
+	active, foundActive := findGrantStateByID(left, "active")
+	if !foundExpired || !foundActive {
+		t.Fatalf("unexpected grants left: %+v", left)
+	}
+	if expired.CompletedAtWallUTC.IsZero() {
+		t.Fatalf("expected expired grant to be retained as completed: %+v", expired)
+	}
+	if !active.CompletedAtWallUTC.IsZero() {
+		t.Fatalf("expected active grant to remain active: %+v", active)
 	}
 }
 
@@ -224,7 +241,7 @@ func TestCleanupRunPeriodicSweep(t *testing.T) {
 	}
 	clock.mono.Store(0)
 
-	runner, err := NewCleanupRunner(store, engine, clock, 10*time.Millisecond, slog.Default())
+	runner, err := NewCleanupRunner(store, engine, clock, 10*time.Millisecond, 24*time.Hour, slog.Default())
 	if err != nil {
 		t.Fatalf("NewCleanupRunner failed: %v", err)
 	}
@@ -248,4 +265,50 @@ func TestCleanupRunPeriodicSweep(t *testing.T) {
 	if engine.revokedCount() == 0 {
 		t.Fatal("expected periodic revoke to occur")
 	}
+}
+
+func TestCleanupPurgesCompletedGrantAfterRetention(t *testing.T) {
+	completedAt := time.Date(2026, 2, 22, 12, 0, 0, 0, time.UTC)
+	store := &stubStore{
+		grants: []domain.GrantState{
+			{
+				RequestID:          "completed",
+				WorkflowID:         "wf",
+				Username:           "alice",
+				GrantedAtMonoNS:    1,
+				GrantedAtWallUTC:   completedAt.Add(-time.Hour),
+				DurationSeconds:    60,
+				CompletedAtWallUTC: completedAt,
+			},
+		},
+	}
+	engine := &stubGrantEngine{}
+	clock := &stubClock{wall: completedAt.Add(25 * time.Hour)}
+	clock.mono.Store(1)
+
+	runner, err := NewCleanupRunner(store, engine, clock, time.Minute, 24*time.Hour, slog.Default())
+	if err != nil {
+		t.Fatalf("NewCleanupRunner failed: %v", err)
+	}
+
+	if err := runner.runOnce(context.Background()); err != nil {
+		t.Fatalf("runOnce failed: %v", err)
+	}
+
+	left, err := store.List(context.Background())
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(left) != 0 {
+		t.Fatalf("expected retained grant to be purged, got %+v", left)
+	}
+}
+
+func findGrantStateByID(grants []domain.GrantState, requestID string) (domain.GrantState, bool) {
+	for _, grant := range grants {
+		if grant.RequestID == requestID {
+			return grant, true
+		}
+	}
+	return domain.GrantState{}, false
 }

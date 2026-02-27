@@ -13,6 +13,7 @@ func TestLoadFromEnvUsesDefaultSocketPath(t *testing.T) {
 	t.Setenv(EnvStatePath, "")
 	t.Setenv(EnvCleanupInterval, "")
 	t.Setenv(EnvRequestTimeout, "")
+	t.Setenv(EnvStateRetention, "")
 	t.Setenv(EnvSocketUser, "")
 	t.Setenv(EnvSocketGroup, "")
 	t.Setenv(EnvLogLevel, "")
@@ -44,6 +45,9 @@ func TestLoadFromEnvUsesDefaultSocketPath(t *testing.T) {
 	if cfg.RequestTimeout != DefaultRequestTimeout {
 		t.Fatalf("unexpected request timeout: got %s want %s", cfg.RequestTimeout, DefaultRequestTimeout)
 	}
+	if cfg.StateRetention != DefaultStateRetention {
+		t.Fatalf("unexpected state retention: got %s want %s", cfg.StateRetention, DefaultStateRetention)
+	}
 	if cfg.SocketUser != "" {
 		t.Fatalf("unexpected socket user: got %q want empty", cfg.SocketUser)
 	}
@@ -66,6 +70,7 @@ func TestLoadFromEnvUsesConfiguredSocketPath(t *testing.T) {
 	wantStatePath := "/tmp/custom-state.json"
 	wantCleanup := "30s"
 	wantRequestTimeout := "5m"
+	wantStateRetention := "48h"
 	wantSocketUser := "tom"
 	wantSocketGroup := "thand"
 	wantLogLevel := "warn"
@@ -77,6 +82,7 @@ func TestLoadFromEnvUsesConfiguredSocketPath(t *testing.T) {
 	t.Setenv(EnvStatePath, wantStatePath)
 	t.Setenv(EnvCleanupInterval, wantCleanup)
 	t.Setenv(EnvRequestTimeout, wantRequestTimeout)
+	t.Setenv(EnvStateRetention, wantStateRetention)
 	t.Setenv(EnvSocketUser, wantSocketUser)
 	t.Setenv(EnvSocketGroup, wantSocketGroup)
 	t.Setenv(EnvLogLevel, wantLogLevel)
@@ -108,6 +114,9 @@ func TestLoadFromEnvUsesConfiguredSocketPath(t *testing.T) {
 	if cfg.RequestTimeout != 5*time.Minute {
 		t.Fatalf("unexpected request timeout: got %s want %s", cfg.RequestTimeout, 5*time.Minute)
 	}
+	if cfg.StateRetention != 48*time.Hour {
+		t.Fatalf("unexpected state retention: got %s want %s", cfg.StateRetention, 48*time.Hour)
+	}
 	if cfg.SocketUser != wantSocketUser {
 		t.Fatalf("unexpected socket user: got %q want %q", cfg.SocketUser, wantSocketUser)
 	}
@@ -136,6 +145,13 @@ func TestLoadFromEnvRejectsInvalidRequestTimeout(t *testing.T) {
 	}
 }
 
+func TestLoadFromEnvRejectsInvalidStateRetention(t *testing.T) {
+	t.Setenv(EnvStateRetention, "not-a-duration")
+	if _, err := LoadFromEnv(); err == nil {
+		t.Fatal("expected state retention parse error")
+	}
+}
+
 func TestValidateRejectsEmptySocketPath(t *testing.T) {
 	cfg := &Config{
 		SocketPath:      "   ",
@@ -144,6 +160,7 @@ func TestValidateRejectsEmptySocketPath(t *testing.T) {
 		VisudoBin:       "visudo",
 		StatePath:       "/var/lib/thand/elevate/state.json",
 		CleanupInterval: time.Minute,
+		StateRetention:  24 * time.Hour,
 	}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected validation error for empty socket path")
@@ -158,6 +175,7 @@ func TestValidateRejectsEmptySudoersDir(t *testing.T) {
 		VisudoBin:       "visudo",
 		StatePath:       "/var/lib/thand/elevate/state.json",
 		CleanupInterval: time.Minute,
+		StateRetention:  24 * time.Hour,
 	}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected validation error for empty sudoers dir")
@@ -172,6 +190,7 @@ func TestValidateRejectsEmptySudoersFile(t *testing.T) {
 		VisudoBin:       "visudo",
 		StatePath:       "/var/lib/thand/elevate/state.json",
 		CleanupInterval: time.Minute,
+		StateRetention:  24 * time.Hour,
 	}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected validation error for empty sudoers file")
@@ -200,6 +219,7 @@ func TestValidateRejectsEmptyStatePath(t *testing.T) {
 		VisudoBin:       "visudo",
 		StatePath:       "   ",
 		CleanupInterval: time.Minute,
+		StateRetention:  24 * time.Hour,
 	}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected validation error for empty state path")
@@ -214,6 +234,7 @@ func TestValidateRejectsNonPositiveCleanupInterval(t *testing.T) {
 		VisudoBin:       "visudo",
 		StatePath:       "/var/lib/thand/elevate/state.json",
 		CleanupInterval: 0,
+		StateRetention:  24 * time.Hour,
 	}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected validation error for cleanup interval")
@@ -229,9 +250,26 @@ func TestValidateRejectsNonPositiveRequestTimeout(t *testing.T) {
 		StatePath:       "/var/lib/thand/elevate/state.json",
 		CleanupInterval: time.Minute,
 		RequestTimeout:  0,
+		StateRetention:  24 * time.Hour,
 	}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected validation error for request timeout")
+	}
+}
+
+func TestValidateRejectsNonPositiveStateRetention(t *testing.T) {
+	cfg := &Config{
+		SocketPath:      "/var/run/thand/elevate.sock",
+		SudoersDir:      "/etc/sudoers.d",
+		SudoersFile:     "/etc/sudoers",
+		VisudoBin:       "visudo",
+		StatePath:       "/var/lib/thand/elevate/state.json",
+		CleanupInterval: time.Minute,
+		RequestTimeout:  time.Second,
+		StateRetention:  0,
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected validation error for state retention")
 	}
 }
 
@@ -243,6 +281,8 @@ func TestValidateRejectsInvalidLogLevel(t *testing.T) {
 		VisudoBin:       "visudo",
 		StatePath:       "/var/lib/thand/elevate/state.json",
 		CleanupInterval: time.Minute,
+		RequestTimeout:  time.Second,
+		StateRetention:  24 * time.Hour,
 		LogLevel:        "verbose",
 	}
 	if err := cfg.Validate(); err == nil {
@@ -259,6 +299,7 @@ func TestValidateForWindowsDoesNotRequireLinuxSudoersFields(t *testing.T) {
 		StatePath:       `C:\ProgramData\Thand\elevate\state.json`,
 		CleanupInterval: time.Minute,
 		RequestTimeout:  time.Second,
+		StateRetention:  24 * time.Hour,
 		LogLevel:        "info",
 	}
 	if err := cfg.validateForOS("windows"); err != nil {

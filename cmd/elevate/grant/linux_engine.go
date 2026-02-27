@@ -148,6 +148,14 @@ func (e *LinuxEngine) Grant(ctx context.Context, req domain.GrantRequest) (domai
 	if err != nil {
 		return domain.GrantResult{}, fmt.Errorf("check baseline privilege: %w", err)
 	}
+	if alreadyPrivileged {
+		return domain.GrantResult{
+			RequestID:            req.RequestID,
+			Username:             req.Username,
+			Expiry:               e.now().Add(time.Duration(req.DurationSeconds) * time.Second),
+			WasAlreadyPrivileged: true,
+		}, nil
+	}
 
 	sudoersPath := e.sudoersPath(req.RequestID)
 	tmpPath := sudoersPath + ".tmp"
