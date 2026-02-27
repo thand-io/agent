@@ -32,7 +32,7 @@ import (
 // ─────────────────────────────────────────────────────────────────────────────
 const (
 	// DefaultRoleVersion is used when a role has no explicit version set.
-	DefaultRoleVersion = "0.0.0"
+	DefaultRoleVersion = "1.0.0"
 
 	// ThandVersionTagKey is the tag/label key used on CSP resources to record
 	// the role definition version at the time the role was last created or

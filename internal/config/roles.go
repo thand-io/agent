@@ -462,30 +462,13 @@ func (c *Config) GetCompositeRoleForIdentity(
 	}
 
 	// Set an ephemeral identifier for this composite role (not persisted, just for caching/indexing)
-	// Extract user from identity (handles nil identity gracefully)
-	userIdentity := "unknown"
-	if identity != nil {
-		userIdentity = identity.GetMappableIdentifier()
-	}
-
-	// Build the composite identifier
-	versionStr := "1.0.0"
-	if baseRole.Version != nil {
-		versionStr = baseRole.Version.String()
-	}
-
-	// Combine all components to create a unique identifier
-	roleIdentifier := fmt.Sprintf("%s:%s:%s:%s",
-		baseRole.Identifier,
-		versionStr,
-		baseRole.Name,
-		userIdentity)
+	roleIdentifier := models.CompositeRoleWorkflowIdentifier("", baseRole, identity)
 
 	derivedRole, err := c.getCompositeRoleForIdentity(
 		roleIdentifier, identity, baseRole, providers...)
 
 	if err != nil {
-		logrus.WithError(err).Errorf("Failed to resolve composite role for identity '%s'", userIdentity)
+		logrus.WithError(err).Errorf("Failed to resolve composite role for identity '%s'", identity.GetMappableIdentifier())
 		return nil, err
 	}
 
