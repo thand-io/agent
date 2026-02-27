@@ -161,14 +161,14 @@ func (e *LinuxEngine) Grant(ctx context.Context, req domain.GrantRequest) (domai
 		return domain.GrantResult{}, err
 	}
 
+	if err := os.Chmod(tmpPath, sudoersFileMode); err != nil {
+		_ = os.Remove(tmpPath)
+		return domain.GrantResult{}, fmt.Errorf("set sudoers permissions: %w", err)
+	}
+
 	if err := os.Rename(tmpPath, sudoersPath); err != nil {
 		_ = os.Remove(tmpPath)
 		return domain.GrantResult{}, fmt.Errorf("activate sudoers file: %w", err)
-	}
-
-	if err := os.Chmod(sudoersPath, sudoersFileMode); err != nil {
-		_ = os.Remove(sudoersPath)
-		return domain.GrantResult{}, fmt.Errorf("set sudoers permissions: %w", err)
 	}
 
 	return domain.GrantResult{
@@ -212,11 +212,11 @@ func (e *LinuxEngine) sudoersContent(req domain.GrantRequest) string {
 }
 
 func isValidRequestID(v string) bool {
-	return requestIDPattern.MatchString(strings.TrimSpace(v))
+	return requestIDPattern.MatchString(v)
 }
 
 func isValidUsername(v string) bool {
-	return usernamePattern.MatchString(strings.TrimSpace(v))
+	return usernamePattern.MatchString(v)
 }
 
 func (e *LinuxEngine) ensureSudoersDirExists() error {

@@ -54,6 +54,13 @@ func TestGrantWritesAndRevokesSudoersFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read sudoers file failed: %v", err)
 	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat sudoers file failed: %v", err)
+	}
+	if got := info.Mode().Perm(); got != sudoersFileMode {
+		t.Fatalf("unexpected sudoers file mode: got %o want %o", got, sudoersFileMode)
+	}
 	text := string(b)
 	if !strings.Contains(text, "request_id: abc-123") || !strings.Contains(text, "alice ALL=(ALL:ALL) NOPASSWD: ALL") {
 		t.Fatalf("unexpected sudoers content:\n%s", text)
@@ -107,9 +114,13 @@ func TestGrantInvalidRequest(t *testing.T) {
 		{RequestID: "", Username: "alice", DurationSeconds: 10},
 		{RequestID: "bad/id", Username: "alice", DurationSeconds: 10},
 		{RequestID: "bad\nid", Username: "alice", DurationSeconds: 10},
+		{RequestID: " req", Username: "alice", DurationSeconds: 10},
+		{RequestID: "req ", Username: "alice", DurationSeconds: 10},
 		{RequestID: "x", Username: "", DurationSeconds: 10},
 		{RequestID: "x", Username: "bad user", DurationSeconds: 10},
 		{RequestID: "x", Username: "bad\nuser", DurationSeconds: 10},
+		{RequestID: "x", Username: " alice", DurationSeconds: 10},
+		{RequestID: "x", Username: "alice ", DurationSeconds: 10},
 		{RequestID: "x", Username: "alice", DurationSeconds: 0},
 	}
 	for _, c := range cases {

@@ -24,7 +24,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	deps, err := buildDependencies(logger)
+	deps, err := buildDependencies()
 	if err != nil {
 		logger.Error("failed to build dependencies", "err", err)
 		os.Exit(1)
@@ -64,7 +64,7 @@ type platformDependencies struct {
 	clock       handler.Clock
 }
 
-func buildDependencies(baseLogger *slog.Logger) (*dependencies, error) {
+func buildDependencies() (*dependencies, error) {
 	cfg, err := elevateconfig.LoadFromEnv()
 	if err != nil {
 		return nil, err
@@ -73,11 +73,7 @@ func buildDependencies(baseLogger *slog.Logger) (*dependencies, error) {
 	if err != nil {
 		return nil, err
 	}
-	logger := baseLogger
-	if logger == nil {
-		logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	}
-	logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel}))
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel}))
 
 	platformDeps, err := buildPlatformDependencies(cfg)
 	if err != nil {
