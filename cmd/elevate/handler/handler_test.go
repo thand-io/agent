@@ -149,6 +149,164 @@ func TestHandleConnectionGrantSuccess(t *testing.T) {
 	assertChallengeAndResult(t, conn.writeFrames, nonce, req.RequestID, resultStatusOK)
 }
 
+func TestHandleConnectionGrantRejectsDuplicateRequestID(t *testing.T) {
+	req := domain.RequestFrame{
+		Type:            domain.FrameTypeRequest,
+		Action:          domain.ActionGrant,
+		WorkflowID:      "wf-1",
+		RequestID:       "req-dup",
+		Username:        "alice",
+		DurationSeconds: 60,
+	}
+	nonce := "fixed-nonce-dup"
+
+	conn := &stubConn{
+		readFrames: [][]byte{
+			mustJSON(t, req),
+			mustJSON(t, signedResponseFor(t, req, nonce)),
+		},
+	}
+	grantEngine := &stubGrantEngine{}
+	state := &stubStateStore{grants: []domain.GrantState{{
+		RequestID:        req.RequestID,
+		WorkflowID:       req.WorkflowID,
+		Username:         req.Username,
+		GrantedAtWallUTC: time.Now().UTC(),
+		GrantedAtMonoNS:  1,
+		DurationSeconds:  req.DurationSeconds,
+	}}}
+	h := New(grantEngine, &stubVerifier{}, state, stubClock{mono: 123, wall: time.Now().UTC()})
+	h.generateNonce = func() (string, error) { return nonce, nil }
+
+	if err := h.HandleConnection(context.Background(), conn); err != nil {
+		t.Fatalf("HandleConnection failed: %v", err)
+	}
+	if grantEngine.grantCalls != 0 {
+		t.Fatalf("expected duplicate request replay to skip grant, got %d grant calls", grantEngine.grantCalls)
+	}
+
+	assertChallengeAndResult(t, conn.writeFrames, nonce, req.RequestID, resultStatusOK)
+}
+
+func TestHandleConnectionGrantRejectsConflictingDuplicateRequestID(t *testing.T) {
+	req := domain.RequestFrame{
+		Type:            domain.FrameTypeRequest,
+		Action:          domain.ActionGrant,
+		WorkflowID:      "wf-1",
+		RequestID:       "req-dup-conflict",
+		Username:        "alice",
+		DurationSeconds: 60,
+	}
+	nonce := "fixed-nonce-dup-conflict"
+
+	conn := &stubConn{
+		readFrames: [][]byte{
+			mustJSON(t, req),
+			mustJSON(t, signedResponseFor(t, req, nonce)),
+		},
+	}
+	grantEngine := &stubGrantEngine{}
+	state := &stubStateStore{grants: []domain.GrantState{{
+		RequestID:        req.RequestID,
+		WorkflowID:       "wf-existing",
+		Username:         "bob",
+		GrantedAtWallUTC: time.Now().UTC(),
+		GrantedAtMonoNS:  1,
+		DurationSeconds:  60,
+	}}}
+	h := New(grantEngine, &stubVerifier{}, state, stubClock{mono: 123, wall: time.Now().UTC()})
+	h.generateNonce = func() (string, error) { return nonce, nil }
+
+	if err := h.HandleConnection(context.Background(), conn); err != nil {
+		t.Fatalf("HandleConnection failed: %v", err)
+	}
+	if grantEngine.grantCalls != 0 {
+		t.Fatalf("expected conflicting duplicate request ID to be rejected before grant, got %d grant calls", grantEngine.grantCalls)
+	}
+
+	assertChallengeAndResult(t, conn.writeFrames, nonce, req.RequestID, resultStatusError)
+	assertResultErrorCode(t, conn.writeFrames[1], ErrorCodeRequestConflict)
+}
+
+func TestHandleConnectionGrantRejectsActiveGrantForSameUser(t *testing.T) {
+	req := domain.RequestFrame{
+		Type:            domain.FrameTypeRequest,
+		Action:          domain.ActionGrant,
+		WorkflowID:      "wf-1",
+		RequestID:       "req-new",
+		Username:        "alice",
+		DurationSeconds: 60,
+	}
+	nonce := "fixed-nonce-user-active"
+
+	conn := &stubConn{
+		readFrames: [][]byte{
+			mustJSON(t, req),
+			mustJSON(t, signedResponseFor(t, req, nonce)),
+		},
+	}
+	grantEngine := &stubGrantEngine{}
+	state := &stubStateStore{grants: []domain.GrantState{{
+		RequestID:        "req-existing",
+		WorkflowID:       "wf-existing",
+		Username:         req.Username,
+		GrantedAtWallUTC: time.Now().UTC(),
+		GrantedAtMonoNS:  1,
+		DurationSeconds:  60,
+	}}}
+	h := New(grantEngine, &stubVerifier{}, state, stubClock{mono: 123, wall: time.Now().UTC()})
+	h.generateNonce = func() (string, error) { return nonce, nil }
+
+	if err := h.HandleConnection(context.Background(), conn); err != nil {
+		t.Fatalf("HandleConnection failed: %v", err)
+	}
+	if grantEngine.grantCalls != 0 {
+		t.Fatalf("expected active same-user grant to be rejected before grant, got %d grant calls", grantEngine.grantCalls)
+	}
+
+	assertChallengeAndResult(t, conn.writeFrames, nonce, req.RequestID, resultStatusError)
+	assertResultErrorCode(t, conn.writeFrames[1], ErrorCodeActiveGrantExists)
+}
+
+func TestHandleConnectionGrantAllowsNewGrantWhenExistingOneIsCompleted(t *testing.T) {
+	req := domain.RequestFrame{
+		Type:            domain.FrameTypeRequest,
+		Action:          domain.ActionGrant,
+		WorkflowID:      "wf-1",
+		RequestID:       "req-new",
+		Username:        "alice",
+		DurationSeconds: 60,
+	}
+	nonce := "fixed-nonce-user-completed"
+
+	conn := &stubConn{
+		readFrames: [][]byte{
+			mustJSON(t, req),
+			mustJSON(t, signedResponseFor(t, req, nonce)),
+		},
+	}
+	grantEngine := &stubGrantEngine{grantResult: domain.GrantResult{}}
+	state := &stubStateStore{grants: []domain.GrantState{{
+		RequestID:          "req-old",
+		WorkflowID:         "wf-existing",
+		Username:           req.Username,
+		GrantedAtWallUTC:   time.Now().UTC(),
+		GrantedAtMonoNS:    1,
+		DurationSeconds:    60,
+		CompletedAtWallUTC: time.Now().UTC(),
+	}}}
+	h := New(grantEngine, &stubVerifier{}, state, stubClock{mono: 123, wall: time.Now().UTC()})
+	h.generateNonce = func() (string, error) { return nonce, nil }
+
+	if err := h.HandleConnection(context.Background(), conn); err != nil {
+		t.Fatalf("HandleConnection failed: %v", err)
+	}
+	if grantEngine.grantCalls != 1 {
+		t.Fatalf("expected completed grant not to block new grant, got %d grant calls", grantEngine.grantCalls)
+	}
+	assertChallengeAndResult(t, conn.writeFrames, nonce, req.RequestID, resultStatusOK)
+}
+
 func TestHandleConnectionRevokeSuccess(t *testing.T) {
 	req := domain.RequestFrame{
 		Type:       domain.FrameTypeRequest,
@@ -362,5 +520,16 @@ func assertChallengeAndResult(t *testing.T, writes [][]byte, expectedNonce, expe
 	}
 	if result.Status != expectedStatus {
 		t.Fatalf("unexpected result status: got %s want %s", result.Status, expectedStatus)
+	}
+}
+
+func assertResultErrorCode(t *testing.T, frame []byte, expected ErrorCode) {
+	t.Helper()
+	var result domain.ResultFrame
+	if err := json.Unmarshal(frame, &result); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	if result.Error != string(expected) {
+		t.Fatalf("unexpected error code: got %q want %q", result.Error, expected)
 	}
 }

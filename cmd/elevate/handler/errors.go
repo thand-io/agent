@@ -6,9 +6,11 @@ import "fmt"
 type ErrorCode string
 
 const (
-	ErrorCodeInvalidRequest ErrorCode = "invalid_request"
-	ErrorCodeUnauthorized   ErrorCode = "unauthorized"
-	ErrorCodeInternal       ErrorCode = "internal_error"
+	ErrorCodeInvalidRequest   ErrorCode = "invalid_request"
+	ErrorCodeUnauthorized     ErrorCode = "unauthorized"
+	ErrorCodeInternal         ErrorCode = "internal_error"
+	ErrorCodeRequestConflict  ErrorCode = "request_conflict"
+	ErrorCodeActiveGrantExists ErrorCode = "active_grant_exists"
 )
 
 type responseError struct {
@@ -34,6 +36,14 @@ func unauthorizedErr(err error) *responseError {
 
 func internalErr(err error) *responseError {
 	return &responseError{Code: ErrorCodeInternal, Cause: err}
+}
+
+func requestConflictErr(err error) *responseError {
+	return &responseError{Code: ErrorCodeRequestConflict, Cause: err}
+}
+
+func activeGrantExistsErr(err error) *responseError {
+	return &responseError{Code: ErrorCodeActiveGrantExists, Cause: err}
 }
 
 func wrapInternal(msg string, err error) *responseError {
