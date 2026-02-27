@@ -88,6 +88,28 @@ func (r *CompositeRole) SetProviders(providers []string) {
 	r.Providers = providers
 }
 
+// CompositeRoleWorkflowIdentifier builds the unique string used to derive a composite
+// role's UUID (and therefore its CSP resource name via GetName) for a specific
+// workflow execution. Both the config layer (GetCompositeRoleForWorkflow) and any
+// test code that needs to predict the resulting role name should use this function.
+func CompositeRoleWorkflowIdentifier(workflowID string, role *Role, identity *Identity) string {
+	userIdentity := "unknown"
+	if identity != nil {
+		userIdentity = identity.GetMappableIdentifier()
+	}
+	versionStr := "1.0.0"
+	if role.Version != nil {
+		versionStr = role.Version.String()
+	}
+	return fmt.Sprintf("%s:%s:%s:%s:%s",
+		workflowID,
+		role.Identifier,
+		versionStr,
+		role.Name,
+		userIdentity,
+	)
+}
+
 func (r *CompositeRole) GetUniqueIdentifier() uuid.UUID {
 	if r.UUID != uuid.Nil {
 		return r.UUID

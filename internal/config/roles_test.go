@@ -3120,11 +3120,12 @@ func TestGetCompositeRoleForWorkflow(t *testing.T) {
 	// Helper to create a workflow task with a role
 
 	tests := []struct {
-		name       string
-		role       models.Role
-		workflowID string
-		identity   *models.Identity
-		shouldFail bool
+		name            string
+		role            models.Role
+		workflowID      string
+		identity        *models.Identity
+		shouldFail      bool
+		expectComposite bool
 	}{
 		{
 			name: "workflow with role without inheritance",
@@ -3137,7 +3138,8 @@ func TestGetCompositeRoleForWorkflow(t *testing.T) {
 				},
 				Enabled: true,
 			},
-			workflowID: "test-workflow",
+			workflowID:      "test-workflow",
+			expectComposite: false,
 			identity: &models.Identity{
 				ID: "user1",
 				User: &models.User{
@@ -3147,7 +3149,8 @@ func TestGetCompositeRoleForWorkflow(t *testing.T) {
 			},
 		},
 		{
-			name: "workflow with role with inheritance",
+			name:            "workflow with role with inheritance",
+			expectComposite: true,
 			role: models.Role{
 				Name:        "workflow-extended",
 				Identifier:  "workflow_extended",
@@ -3202,18 +3205,27 @@ func TestGetCompositeRoleForWorkflow(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, result)
 
-			// GetName() always returns a hash-suffixed name
 			originalIdentifier := tt.role.Identifier
 			uniqueName := result.GetName()
-			assert.NotEqual(t, originalIdentifier, uniqueName, "Unique name should change for workflow composite roles")
-			assert.Contains(t, uniqueName, "_", "Unique name should contain underscore separator")
-			assert.True(t, strings.HasPrefix(uniqueName, originalIdentifier+"_"), "Unique name should start with original identifier plus underscore")
-
-			// Verify the identifier is unique (contains hash)
-			parts := strings.Split(uniqueName, "_")
-			assert.GreaterOrEqual(t, len(parts), 2, "Unique name should have at least 2 parts separated by underscore")
-			hashPart := parts[len(parts)-1]
-			assert.Equal(t, 6, len(hashPart), "Hash part should be 6 characters")
+			if tt.expectComposite {
+				// Composite roles get a hash-suffixed name
+				assert.NotEqual(t, originalIdentifier, uniqueName, "Unique name should change for workflow composite roles")
+				assert.Contains(t, uniqueName, "_", "Unique name should contain underscore separator")
+				assert.True(t, strings.HasPrefix(uniqueName, originalIdentifier+"_"), "Unique name should start with original identifier plus underscore")
+				parts := strings.Split(uniqueName, "_")
+				assert.GreaterOrEqual(t, len(parts), 2, "Unique name should have at least 2 parts separated by underscore")
+				hashPart := parts[len(parts)-1]
+				assert.Equal(t, 6, len(hashPart), "Hash part should be 6 characters")
+			} else {
+				// Non-composite roles also get a hash-suffixed name
+				assert.NotEqual(t, originalIdentifier, uniqueName, "Non-composite role should still get a hash-suffixed name")
+				assert.Contains(t, uniqueName, "_", "Unique name should contain underscore separator")
+				assert.True(t, strings.HasPrefix(uniqueName, originalIdentifier+"_"), "Unique name should start with original identifier plus underscore")
+				parts := strings.Split(uniqueName, "_")
+				assert.GreaterOrEqual(t, len(parts), 2, "Unique name should have at least 2 parts separated by underscore")
+				hashPart := parts[len(parts)-1]
+				assert.Equal(t, 6, len(hashPart), "Hash part should be 6 characters")
+			}
 		})
 	}
 
@@ -3224,10 +3236,10 @@ func TestGetCompositeRoleForWorkflow(t *testing.T) {
 				Definitions: make(map[string]models.Role),
 			},
 		}
-		result, err := config.GetCompositeRoleForWorkflow(nil, nil, "")
+		result, err := config.GetCompositeRoleForWorkflow(nil, nil, "some-workflow")
 		require.Error(t, err)
 		assert.Nil(t, result)
-		assert.Contains(t, err.Error(), "workflow is nil")
+		assert.Contains(t, err.Error(), "workflow role is nil")
 	})
 }
 

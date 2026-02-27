@@ -437,27 +437,8 @@ func (c *Config) GetCompositeRoleForWorkflow(
 		return nil, fmt.Errorf("cannot resolve composite role: workflow role is nil")
 	}
 
-	// Set an ephemeral identifier for this composite role (not persisted, just for caching/indexing)
-	// Extract user from identity (handles nil identity gracefully)
-	userIdentity := "unknown"
-	if identity != nil {
-		userIdentity = identity.GetMappableIdentifier()
-	}
-
-	// Build the composite identifier
-	versionStr := "1.0.0"
-	if baseRole.Version != nil {
-		versionStr = baseRole.Version.String()
-	}
-
 	// Combine all components to create a unique identifier
-	roleIdentifier := fmt.Sprintf("%s:%s:%s:%s:%s",
-		workflowID,
-		baseRole.Identifier,
-		versionStr,
-		baseRole.Name,
-		userIdentity,
-	)
+	roleIdentifier := models.CompositeRoleWorkflowIdentifier(workflowID, baseRole, identity)
 
 	derivedRole, err := c.getCompositeRoleForIdentity(
 		roleIdentifier, identity, baseRole, providers...)
