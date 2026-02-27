@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"google.golang.org/api/cloudresourcemanager/v1"
+	crmv3 "google.golang.org/api/cloudresourcemanager/v3"
 	"google.golang.org/api/googleapi"
 	iam "google.golang.org/api/iam/v1"
 )
@@ -680,6 +681,141 @@ func (p *gcpProvider) withIAMPolicyUpdate(
 	return fmt.Errorf("failed to update IAM policy for project %s after %d attempts due to concurrent modifications", projectID, maxPolicyRetries)
 }
 
+// isFolderResource returns true if the resource ID represents a GCP folder (e.g. "folders/123456789").
+func isFolderResource(resourceID string) bool {
+	return strings.HasPrefix(resourceID, "folders/")
+}
+
+// newThandConditionV3 creates the thand-managed condition tag using the v3 CRM types.
+func newThandConditionV3() *crmv3.Expr {
+	return &crmv3.Expr{
+		Title:       "managed-by-thand",
+		Description: "This binding is managed by thand",
+		Expression:  "true",
+	}
+}
+
+// isThandManagedBindingV3 checks if a v3 binding has the thand condition tag.
+func isThandManagedBindingV3(binding *crmv3.Binding) bool {
+	return binding.Condition != nil && binding.Condition.Title == "managed-by-thand"
+}
+
+// addMemberToPolicyV3 adds a member to a role binding in a v3 policy, creating a new binding if necessary.
+// Returns true if the policy was modified.
+func addMemberToPolicyV3(policy *crmv3.Policy, roleName, member string) bool {
+	isPrimitive := isPrimitiveRole(roleName)
+
+	if isPrimitive {
+		logrus.WithFields(logrus.Fields{
+			"role":   roleName,
+			"member": member,
+		}).Warn("Binding to primitive role without IAM condition - GCP does not support conditions on primitive roles. Consider using predefined roles instead for better tracking.")
+	}
+
+	for _, binding := range policy.Bindings {
+		if binding.Role == roleName {
+			if (isPrimitive && binding.Condition == nil) || (!isPrimitive && isThandManagedBindingV3(binding)) {
+				if slices.Contains(binding.Members, member) {
+					return false
+				}
+				binding.Members = append(binding.Members, member)
+				return true
+			}
+		}
+	}
+
+	newBinding := &crmv3.Binding{
+		Role:    roleName,
+		Members: []string{member},
+	}
+	if !isPrimitive {
+		newBinding.Condition = newThandConditionV3()
+	}
+	policy.Bindings = append(policy.Bindings, newBinding)
+	return true
+}
+
+// removeMemberFromPolicyV3 removes a member from a role binding in a v3 policy.
+// Returns true if the member was found and removed.
+func removeMemberFromPolicyV3(policy *crmv3.Policy, roleName, member string) bool {
+	isPrimitive := isPrimitiveRole(roleName)
+
+	for i, binding := range policy.Bindings {
+		if binding.Role != roleName {
+			continue
+		}
+		if !isPrimitive && !isThandManagedBindingV3(binding) {
+			continue
+		}
+		if isPrimitive && binding.Condition != nil {
+			continue
+		}
+
+		idx := slices.Index(binding.Members, member)
+		if idx == -1 {
+			continue
+		}
+
+		binding.Members = slices.Delete(binding.Members, idx, idx+1)
+		if len(binding.Members) == 0 {
+			policy.Bindings = slices.Delete(policy.Bindings, i, i+1)
+		}
+		return true
+	}
+	return false
+}
+
+// withFolderIAMPolicyUpdate atomically fetches, mutates, and writes the IAM policy for a GCP folder.
+// It automatically retries on etag-mismatch conflicts up to maxPolicyRetries times.
+func (p *gcpProvider) withFolderIAMPolicyUpdate(
+	ctx context.Context,
+	folderID string,
+	mutateFn func(*crmv3.Policy) (bool, error),
+) error {
+	crmV3Service := p.crmV3Client
+	if crmV3Service == nil {
+		return fmt.Errorf("Cloud Resource Manager v3 client is not initialized, cannot manage folder IAM policies")
+	}
+
+	for attempt := 1; attempt <= maxPolicyRetries; attempt++ {
+		policy, err := crmV3Service.Folders.GetIamPolicy(folderID, &crmv3.GetIamPolicyRequest{
+			Options: &crmv3.GetPolicyOptions{
+				RequestedPolicyVersion: 3,
+			},
+		}).Context(ctx).Do()
+		if err != nil {
+			return fmt.Errorf("failed to get IAM policy for folder %s: %w", folderID, err)
+		}
+
+		policy.Version = 3
+
+		changed, err := mutateFn(policy)
+		if err != nil {
+			return err
+		}
+		if !changed {
+			return nil
+		}
+
+		_, err = crmV3Service.Folders.SetIamPolicy(folderID, &crmv3.SetIamPolicyRequest{
+			Policy: policy,
+		}).Context(ctx).Do()
+		if err != nil {
+			if isEtagConflict(err) && attempt < maxPolicyRetries {
+				logrus.WithFields(logrus.Fields{
+					"folder_id": folderID,
+					"attempt":   attempt,
+				}).Debug("IAM policy etag conflict, retrying")
+				time.Sleep(time.Duration(attempt) * 100 * time.Millisecond)
+				continue
+			}
+			return fmt.Errorf("failed to set IAM policy for folder %s: %w", folderID, err)
+		}
+		return nil
+	}
+	return fmt.Errorf("failed to update IAM policy for folder %s after %d attempts due to concurrent modifications", folderID, maxPolicyRetries)
+}
+
 func (p *gcpProvider) bindUserToRole(ctx context.Context, projectID string, user *models.User, iamRole *iam.Role) error {
 	return p.bindUserToRoleByName(ctx, projectID, user, iamRole.Name)
 }
@@ -689,7 +825,8 @@ func (p *gcpProvider) unbindUserFromRole(ctx context.Context, projectID string, 
 }
 
 // bindUserToRoleByName is the core implementation for binding a user to any role.
-func (p *gcpProvider) bindUserToRoleByName(ctx context.Context, projectID string, user *models.User, roleName string) error {
+// It supports both project-level and folder-level IAM bindings.
+func (p *gcpProvider) bindUserToRoleByName(ctx context.Context, resourceID string, user *models.User, roleName string) error {
 	member, err := validateAndFormatMember(user)
 	if err != nil {
 		return err
@@ -700,19 +837,35 @@ func (p *gcpProvider) bindUserToRoleByName(ctx context.Context, projectID string
 		return fmt.Errorf("binding to primitive role %q is blocked; set allow_primitive_roles: true in provider config to enable", roleName)
 	}
 
-	return p.withIAMPolicyUpdate(ctx, projectID, func(policy *cloudresourcemanager.Policy) (bool, error) {
+	if isFolderResource(resourceID) {
+		return p.withFolderIAMPolicyUpdate(ctx, resourceID, func(policy *crmv3.Policy) (bool, error) {
+			return addMemberToPolicyV3(policy, roleName, member), nil
+		})
+	}
+
+	return p.withIAMPolicyUpdate(ctx, resourceID, func(policy *cloudresourcemanager.Policy) (bool, error) {
 		return addMemberToPolicy(policy, roleName, member), nil
 	})
 }
 
 // unbindUserFromRoleByName is the core implementation for unbinding a user from any role.
-func (p *gcpProvider) unbindUserFromRoleByName(ctx context.Context, projectID string, user *models.User, roleName string) error {
+// It supports both project-level and folder-level IAM bindings.
+func (p *gcpProvider) unbindUserFromRoleByName(ctx context.Context, resourceID string, user *models.User, roleName string) error {
 	member, err := validateAndFormatMember(user)
 	if err != nil {
 		return err
 	}
 
-	return p.withIAMPolicyUpdate(ctx, projectID, func(policy *cloudresourcemanager.Policy) (bool, error) {
+	if isFolderResource(resourceID) {
+		return p.withFolderIAMPolicyUpdate(ctx, resourceID, func(policy *crmv3.Policy) (bool, error) {
+			if !removeMemberFromPolicyV3(policy, roleName, member) {
+				return false, fmt.Errorf("thand-managed role binding not found for role %s", roleName)
+			}
+			return true, nil
+		})
+	}
+
+	return p.withIAMPolicyUpdate(ctx, resourceID, func(policy *cloudresourcemanager.Policy) (bool, error) {
 		if !removeMemberFromPolicy(policy, roleName, member) {
 			return false, fmt.Errorf("thand-managed role binding not found for role %s", roleName)
 		}
