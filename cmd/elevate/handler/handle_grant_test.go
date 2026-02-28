@@ -164,6 +164,55 @@ func TestHandleConnectionGrantRejectsActiveGrantForSameUser(t *testing.T) {
 	assertResultErrorCode(t, conn.writeFrames[1], ErrorCodeActiveGrantExists)
 }
 
+func TestHandleConnectionGrantPrefersMatchingRequestIDOverEarlierActiveUserGrant(t *testing.T) {
+	req := domain.RequestFrame{
+		Type:            domain.FrameTypeRequest,
+		Action:          domain.ActionGrant,
+		WorkflowID:      "wf-1",
+		RequestID:       "req-dup",
+		Username:        "alice",
+		DurationSeconds: 60,
+	}
+	nonce := "fixed-nonce-dup-order"
+
+	conn := &stubConn{
+		readFrames: [][]byte{
+			mustJSON(t, req),
+			mustJSON(t, signedResponseFor(t, req, nonce)),
+		},
+	}
+	grantEngine := &stubGrantEngine{}
+	state := &stubStateStore{grants: []domain.GrantState{
+		{
+			RequestID:        "req-existing",
+			WorkflowID:       "wf-existing",
+			Username:         req.Username,
+			GrantedAtWallUTC: time.Now().UTC(),
+			GrantedAtMonoNS:  1,
+			DurationSeconds:  60,
+		},
+		{
+			RequestID:        req.RequestID,
+			WorkflowID:       req.WorkflowID,
+			Username:         req.Username,
+			GrantedAtWallUTC: time.Now().UTC(),
+			GrantedAtMonoNS:  1,
+			DurationSeconds:  req.DurationSeconds,
+		},
+	}}
+	h := New(grantEngine, &stubVerifier{}, state, stubClock{mono: 123, wall: time.Now().UTC()})
+	h.generateNonce = func() (string, error) { return nonce, nil }
+
+	if err := h.HandleConnection(context.Background(), conn); err != nil {
+		t.Fatalf("HandleConnection failed: %v", err)
+	}
+	if grantEngine.grantCalls != 0 {
+		t.Fatalf("expected duplicate request replay to skip grant, got %d grant calls", grantEngine.grantCalls)
+	}
+
+	assertChallengeAndResult(t, conn.writeFrames, nonce, req.RequestID, resultStatusOK)
+}
+
 func TestHandleConnectionGrantAllowsNewGrantWhenExistingOneIsCompleted(t *testing.T) {
 	req := domain.RequestFrame{
 		Type:            domain.FrameTypeRequest,

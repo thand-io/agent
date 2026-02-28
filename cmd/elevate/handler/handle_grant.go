@@ -73,6 +73,8 @@ func (e grantStateError) responseError() *responseError {
 }
 
 func validateGrantRequestState(grants []domain.GrantState, req domain.RequestFrame) grantStateError {
+	// Resolve request-id semantics first so exact retries remain idempotent even if
+	// the same user also has another active grant in the state list.
 	for _, grant := range grants {
 		if grant.RequestID == req.RequestID {
 			if sameGrantRequest(grant, req) {
@@ -83,6 +85,8 @@ func validateGrantRequestState(grants []domain.GrantState, req domain.RequestFra
 				err:  fmt.Errorf("request %q conflicts with existing state", req.RequestID),
 			}
 		}
+	}
+	for _, grant := range grants {
 		if grant.Username == req.Username && !isCompletedGrantState(grant) {
 			return grantStateError{
 				code: ErrorCodeActiveGrantExists,
