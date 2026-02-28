@@ -15,6 +15,7 @@ func TestWindowsGrantAddsUser(t *testing.T) {
 
 	engineAny, err := NewWindowsEngine(WindowsEngineConfig{},
 		WithWindowsNow(func() time.Time { return now }),
+		WithWindowsComputerName("TESTDEV"),
 		WithWindowsRunCommand(func(ctx context.Context, name string, args ...string) ([]byte, error) {
 			_ = ctx
 			if name != "powershell" {
@@ -67,6 +68,7 @@ func TestWindowsGrantAddsUser(t *testing.T) {
 
 func TestWindowsGrantAlreadyMember(t *testing.T) {
 	engineAny, err := NewWindowsEngine(WindowsEngineConfig{},
+		WithWindowsComputerName("TESTDEV"),
 		WithWindowsRunCommand(func(ctx context.Context, name string, args ...string) ([]byte, error) {
 			_ = ctx
 			if name != "powershell" {
@@ -75,7 +77,7 @@ func TestWindowsGrantAlreadyMember(t *testing.T) {
 			if args[3] != windowsMembershipScript {
 				t.Fatalf("unexpected script: %q", args[3])
 			}
-			return []byte(`[{"Name":"BUILTIN\\Administrators","ObjectClass":"Group","PrincipalSource":"Local"},{"Name":"alice","ObjectClass":"User","PrincipalSource":"Local"}]`), nil
+			return []byte(`[{"Name":"BUILTIN\\Administrators","ObjectClass":"Group"},{"Name":"alice","ObjectClass":"User"}]`), nil
 		}),
 	)
 	if err != nil {
@@ -98,6 +100,7 @@ func TestWindowsGrantAlreadyMember(t *testing.T) {
 
 func TestWindowsGrantAlreadyMemberWithSingleJSONObjectInArray(t *testing.T) {
 	engineAny, err := NewWindowsEngine(WindowsEngineConfig{},
+		WithWindowsComputerName("TESTDEV"),
 		WithWindowsRunCommand(func(ctx context.Context, name string, args ...string) ([]byte, error) {
 			_ = ctx
 			if name != "powershell" {
@@ -129,6 +132,7 @@ func TestWindowsGrantAlreadyMemberWithSingleJSONObjectInArray(t *testing.T) {
 
 func TestWindowsRevokeIdempotentWhenMissing(t *testing.T) {
 	engineAny, err := NewWindowsEngine(WindowsEngineConfig{},
+		WithWindowsComputerName("TESTDEV"),
 		WithWindowsRunCommand(func(ctx context.Context, name string, args ...string) ([]byte, error) {
 			_ = ctx
 			if name != "powershell" {
@@ -137,7 +141,7 @@ func TestWindowsRevokeIdempotentWhenMissing(t *testing.T) {
 			if args[3] != windowsMembershipScript {
 				t.Fatalf("unexpected script: %q", args[3])
 			}
-			return []byte(`[{"Name":"Administrator","ObjectClass":"User","PrincipalSource":"Local"}]`), nil
+			return []byte(`[{"Name":"Administrator","ObjectClass":"User"}]`), nil
 		}),
 	)
 	if err != nil {
@@ -158,6 +162,7 @@ func TestWindowsRevokeRemovesUser(t *testing.T) {
 	call := 0
 
 	engineAny, err := NewWindowsEngine(WindowsEngineConfig{},
+		WithWindowsComputerName("TESTDEV"),
 		WithWindowsRunCommand(func(ctx context.Context, name string, args ...string) ([]byte, error) {
 			_ = ctx
 			if name != "powershell" {
@@ -199,7 +204,7 @@ func TestWindowsRevokeRemovesUser(t *testing.T) {
 }
 
 func TestWindowsGrantInvalidRequest(t *testing.T) {
-	engineAny, err := NewWindowsEngine(WindowsEngineConfig{})
+	engineAny, err := NewWindowsEngine(WindowsEngineConfig{}, WithWindowsComputerName("TESTDEV"))
 	if err != nil {
 		t.Fatalf("NewWindowsEngine failed: %v", err)
 	}
@@ -212,5 +217,67 @@ func TestWindowsGrantInvalidRequest(t *testing.T) {
 	})
 	if !errors.Is(err, ErrInvalidGrantRequest) {
 		t.Fatalf("expected ErrInvalidGrantRequest, got %v", err)
+	}
+}
+
+func TestNewWindowsEngineRejectsInvalidAdminGroup(t *testing.T) {
+	_, err := NewWindowsEngine(WindowsEngineConfig{AdminGroup: "Administrators; Remove-Item *"}, WithWindowsComputerName("TESTDEV"))
+	if err == nil {
+		t.Fatal("expected invalid admin group error")
+	}
+}
+
+func TestWindowsUsernameMatchesLocalPrincipalExactly(t *testing.T) {
+	if !windowsUsernameMatches(`TESTDEV\alice`, "alice", "TESTDEV") {
+		t.Fatal("expected local machine-qualified principal to match")
+	}
+	if windowsUsernameMatches(`DOMAIN\alice`, "alice", "TESTDEV") {
+		t.Fatal("expected domain principal not to match local username")
+	}
+	if windowsUsernameMatches(`TESTDEV\bob`, "alice", "TESTDEV") {
+		t.Fatal("expected different local username not to match")
+	}
+}
+
+func TestWindowsGrantDomainPrincipalDoesNotCountAsAlreadyMember(t *testing.T) {
+	var addCalled bool
+
+	engineAny, err := NewWindowsEngine(WindowsEngineConfig{},
+		WithWindowsComputerName("TESTDEV"),
+		WithWindowsRunCommand(func(ctx context.Context, name string, args ...string) ([]byte, error) {
+			_ = ctx
+			if name != "powershell" {
+				t.Fatalf("unexpected command name %q", name)
+			}
+			switch args[3] {
+			case windowsMembershipScript:
+				return []byte(`[{"Name":"DOMAIN\\alice","ObjectClass":"User"}]`), nil
+			case windowsAddMemberScript:
+				addCalled = true
+				return []byte("ok"), nil
+			default:
+				t.Fatalf("unexpected script: %q", args[3])
+				return nil, nil
+			}
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewWindowsEngine failed: %v", err)
+	}
+	engine := engineAny.(*WindowsEngine)
+
+	res, err := engine.Grant(context.Background(), domain.GrantRequest{
+		RequestID:       "req-1",
+		Username:        "alice",
+		DurationSeconds: 60,
+	})
+	if err != nil {
+		t.Fatalf("Grant failed: %v", err)
+	}
+	if !addCalled {
+		t.Fatal("expected add command to be called for local user when only domain user is present")
+	}
+	if res.WasAlreadyPrivileged {
+		t.Fatal("expected WasAlreadyPrivileged=false for domain principal mismatch")
 	}
 }

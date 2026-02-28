@@ -2,20 +2,17 @@ package handler
 
 import (
 	"fmt"
-	"regexp"
+
+	"github.com/thand-io/agent/cmd/elevate/identity"
 )
-
-const maxUsernameLength = 32
-
-var usernamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9._-]*[$]?$`)
 
 func validateRequestUsername(username string) *responseError {
 	switch {
 	case username == "":
 		return invalidRequestErr(fmt.Errorf("username is required"))
-	case len(username) > maxUsernameLength:
+	case len(username) > identity.MaxAccountNameLength:
 		return invalidRequestErr(fmt.Errorf("username exceeds maximum length"))
-	case !usernamePattern.MatchString(username):
+	case !identity.ValidAccountName(username):
 		return invalidRequestErr(fmt.Errorf("username contains unsupported characters"))
 	default:
 		return nil

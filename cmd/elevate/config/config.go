@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/thand-io/agent/cmd/elevate/identity"
 )
 
 const (
@@ -209,6 +211,15 @@ func (c *Config) validateForOS(goos string) error {
 	}
 	if _, err := ParseLogLevel(c.LogLevel); err != nil {
 		return err
+	}
+	if c.SocketUser != "" && !identity.ValidAccountName(c.SocketUser) {
+		return fmt.Errorf("socket user is invalid")
+	}
+	if c.SocketGroup != "" && !identity.ValidAccountName(c.SocketGroup) {
+		return fmt.Errorf("socket group is invalid")
+	}
+	if goos == "windows" && c.WindowsAdminGroup != "" && !identity.ValidWindowsAdminGroup(c.WindowsAdminGroup) {
+		return fmt.Errorf("windows admin group is invalid")
 	}
 
 	return nil

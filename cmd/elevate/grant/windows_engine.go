@@ -3,13 +3,16 @@ package grant
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/thand-io/agent/cmd/elevate/domain"
 	"github.com/thand-io/agent/cmd/elevate/handler"
+	"github.com/thand-io/agent/cmd/elevate/identity"
 )
 
 const defaultWindowsAdminGroup = "Administrators"
@@ -54,6 +57,13 @@ func WithWindowsRunCommand(fn func(context.Context, string, ...string) ([]byte, 
 	}
 }
 
+// WithWindowsComputerName overrides the local computer name used for exact local-principal matching.
+func WithWindowsComputerName(name string) WindowsEngineOption {
+	return func(e *WindowsEngine) {
+		e.computerName = strings.TrimSpace(name)
+	}
+}
+
 // WindowsEngineConfig contains Windows grant engine configuration.
 type WindowsEngineConfig struct {
 	AdminGroup string
@@ -61,10 +71,11 @@ type WindowsEngineConfig struct {
 
 // WindowsEngine implements local-admin grant/revoke via local Administrators group membership.
 type WindowsEngine struct {
-	adminGroup string
-	now        func() time.Time
-	runCommand func(context.Context, string, ...string) ([]byte, error)
-	isMember   func(context.Context, string) (bool, error)
+	adminGroup   string
+	computerName string
+	now          func() time.Time
+	runCommand   func(context.Context, string, ...string) ([]byte, error)
+	isMember     func(context.Context, string) (bool, error)
 }
 
 // NewWindowsEngine constructs a Windows GrantEngine backed by PowerShell local-group cmdlets.
@@ -73,10 +84,27 @@ func NewWindowsEngine(cfg WindowsEngineConfig, opts ...WindowsEngineOption) (han
 	if adminGroup == "" {
 		adminGroup = defaultWindowsAdminGroup
 	}
+	if !identity.ValidWindowsAdminGroup(adminGroup) {
+		return nil, errors.New("windows admin group is invalid")
+	}
+
+	computerName := strings.TrimSpace(os.Getenv("COMPUTERNAME"))
+	if computerName == "" {
+		var err error
+		computerName, err = os.Hostname()
+		if err != nil {
+			return nil, fmt.Errorf("resolve windows computer name: %w", err)
+		}
+		computerName = strings.TrimSpace(computerName)
+	}
+	if computerName == "" {
+		return nil, errors.New("windows computer name is required")
+	}
 
 	e := &WindowsEngine{
-		adminGroup: adminGroup,
-		now:        func() time.Time { return time.Now().UTC() },
+		adminGroup:   adminGroup,
+		computerName: computerName,
+		now:          func() time.Time { return time.Now().UTC() },
 		runCommand: func(ctx context.Context, name string, args ...string) ([]byte, error) {
 			cmd := exec.CommandContext(ctx, name, args...)
 			return cmd.CombinedOutput()
@@ -164,7 +192,7 @@ func (e *WindowsEngine) checkMembership(ctx context.Context, username string) (b
 	}
 
 	for _, member := range members {
-		if windowsUsernameMatches(member.Name, username) {
+		if windowsUsernameMatches(member.Name, username, e.computerName) {
 			return true, nil
 		}
 	}
@@ -178,24 +206,20 @@ func (e *WindowsEngine) runPowerShell(ctx context.Context, script string, args .
 }
 
 func isValidWindowsUsername(v string) bool {
-	v = strings.TrimSpace(v)
-	if v == "" {
-		return false
-	}
-	if strings.ContainsAny(v, "\r\n") {
-		return false
-	}
-	return true
+	return identity.ValidAccountName(v)
 }
 
-func windowsUsernameMatches(line, username string) bool {
+func windowsUsernameMatches(line, username string, computerName string) bool {
 	lhs := strings.ToLower(strings.TrimSpace(line))
 	rhs := strings.ToLower(strings.TrimSpace(username))
+	localHost := strings.ToLower(strings.TrimSpace(computerName))
 	if lhs == rhs {
 		return true
 	}
-	if strings.HasSuffix(lhs, `\`+rhs) {
-		return true
+
+	prefix, suffix, ok := strings.Cut(lhs, `\`)
+	if ok {
+		return prefix == localHost && suffix == rhs
 	}
 	return false
 }

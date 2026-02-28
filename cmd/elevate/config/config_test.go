@@ -307,6 +307,57 @@ func TestValidateForWindowsDoesNotRequireLinuxSudoersFields(t *testing.T) {
 	}
 }
 
+func TestValidateRejectsInvalidSocketUser(t *testing.T) {
+	cfg := &Config{
+		SocketPath:      "/var/run/thand/elevate.sock",
+		SudoersDir:      "/etc/sudoers.d",
+		SudoersFile:     "/etc/sudoers",
+		VisudoBin:       "visudo",
+		StatePath:       "/var/lib/thand/elevate/state.json",
+		CleanupInterval: time.Minute,
+		RequestTimeout:  time.Second,
+		StateRetention:  24 * time.Hour,
+		LogLevel:        "info",
+		SocketUser:      "alice smith",
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected validation error for invalid socket user")
+	}
+}
+
+func TestValidateRejectsInvalidSocketGroup(t *testing.T) {
+	cfg := &Config{
+		SocketPath:      "/var/run/thand/elevate.sock",
+		SudoersDir:      "/etc/sudoers.d",
+		SudoersFile:     "/etc/sudoers",
+		VisudoBin:       "visudo",
+		StatePath:       "/var/lib/thand/elevate/state.json",
+		CleanupInterval: time.Minute,
+		RequestTimeout:  time.Second,
+		StateRetention:  24 * time.Hour,
+		LogLevel:        "info",
+		SocketGroup:     "thand/admins",
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected validation error for invalid socket group")
+	}
+}
+
+func TestValidateForWindowsRejectsInvalidAdminGroup(t *testing.T) {
+	cfg := &Config{
+		SocketPath:        `C:\ProgramData\Thand\elevate.sock`,
+		StatePath:         `C:\ProgramData\Thand\elevate\state.json`,
+		CleanupInterval:   time.Minute,
+		RequestTimeout:    time.Second,
+		StateRetention:    24 * time.Hour,
+		LogLevel:          "info",
+		WindowsAdminGroup: "Administrators; Remove-Item *",
+	}
+	if err := cfg.validateForOS("windows"); err == nil {
+		t.Fatal("expected validation error for invalid windows admin group")
+	}
+}
+
 func TestParseLogLevel(t *testing.T) {
 	tests := []struct {
 		in      string
