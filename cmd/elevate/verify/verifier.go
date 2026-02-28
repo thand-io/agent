@@ -40,7 +40,11 @@ type Option func(*Verifier) error
 
 func WithTrustedKeys(keys map[string]ed25519.PublicKey) Option {
 	return func(v *Verifier) error {
-		v.trustedKeys = cloneKeyMap(keys)
+		cloned, err := cloneKeyMap(keys)
+		if err != nil {
+			return err
+		}
+		v.trustedKeys = cloned
 		return nil
 	}
 }
@@ -154,12 +158,18 @@ func MatchSignedPayload(req domain.RequestFrame, payload SignedPayload, nonce st
 	return nil
 }
 
-func cloneKeyMap(in map[string]ed25519.PublicKey) map[string]ed25519.PublicKey {
+func cloneKeyMap(in map[string]ed25519.PublicKey) (map[string]ed25519.PublicKey, error) {
 	out := make(map[string]ed25519.PublicKey, len(in))
 	for k, v := range in {
+		if k == "" {
+			return nil, fmt.Errorf("%w: empty key id", ErrInvalidPublicKey)
+		}
+		if len(v) != ed25519.PublicKeySize {
+			return nil, fmt.Errorf("%w: key %s must be %d bytes", ErrInvalidPublicKey, k, ed25519.PublicKeySize)
+		}
 		pk := make(ed25519.PublicKey, len(v))
 		copy(pk, v)
 		out[k] = pk
 	}
-	return out
+	return out, nil
 }

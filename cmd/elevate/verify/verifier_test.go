@@ -135,6 +135,40 @@ func TestNewVerifierWithTrustedKeys(t *testing.T) {
 	}
 }
 
+func TestWithTrustedKeysRejectsInvalidKeyLength(t *testing.T) {
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKey failed: %v", err)
+	}
+
+	_, err = NewVerifier(WithTrustedKeys(map[string]ed25519.PublicKey{
+		"k": pub[:len(pub)-1],
+	}))
+	if err == nil {
+		t.Fatal("expected error for invalid trusted key length")
+	}
+	if !errors.Is(err, ErrInvalidPublicKey) {
+		t.Fatalf("expected ErrInvalidPublicKey, got: %v", err)
+	}
+}
+
+func TestWithTrustedKeysRejectsEmptyKeyID(t *testing.T) {
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKey failed: %v", err)
+	}
+
+	_, err = NewVerifier(WithTrustedKeys(map[string]ed25519.PublicKey{
+		"": pub,
+	}))
+	if err == nil {
+		t.Fatal("expected error for empty trusted key id")
+	}
+	if !errors.Is(err, ErrInvalidPublicKey) {
+		t.Fatalf("expected ErrInvalidPublicKey, got: %v", err)
+	}
+}
+
 func TestWithTrustedKeysSupportsPEM(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
