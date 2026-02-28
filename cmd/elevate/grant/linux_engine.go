@@ -245,7 +245,7 @@ func (e *LinuxEngine) ensureSudoersIncludeDir() error {
 	}
 
 	if !hasIncludedir(string(content), e.sudoersDir) {
-		return fmt.Errorf("sudoers file %q missing #includedir for %q", e.sudoersFile, e.sudoersDir)
+		return fmt.Errorf("sudoers file %q missing includedir for %q", e.sudoersFile, e.sudoersDir)
 	}
 
 	return nil
@@ -254,7 +254,7 @@ func (e *LinuxEngine) ensureSudoersIncludeDir() error {
 func hasIncludedir(content string, sudoersDir string) bool {
 	for _, line := range strings.Split(content, "\n") {
 		trimmed := strings.TrimSpace(line)
-		if !strings.HasPrefix(trimmed, "#includedir") {
+		if !strings.HasPrefix(trimmed, "#includedir") && !strings.HasPrefix(trimmed, "@includedir") {
 			continue
 		}
 		fields := strings.Fields(trimmed)

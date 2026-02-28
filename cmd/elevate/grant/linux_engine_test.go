@@ -213,8 +213,37 @@ func TestGrantFailsWhenSudoersMissingIncludedir(t *testing.T) {
 		Username:        "alice",
 		DurationSeconds: 60,
 	})
-	if err == nil || !strings.Contains(err.Error(), "missing #includedir") {
+	if err == nil || !strings.Contains(err.Error(), "missing includedir") {
 		t.Fatalf("expected missing include error, got %v", err)
+	}
+}
+
+func TestGrantAcceptsAtIncludedir(t *testing.T) {
+	dir := t.TempDir()
+	sudoersFile := writeTempSudoersFile(t, "@includedir "+dir+"\n")
+
+	engine := mustNewEngine(t, LinuxEngineConfig{
+		SudoersDir:  dir,
+		SudoersFile: sudoersFile,
+		VisudoBin:   "visudo",
+	},
+		WithValidateFile(func(ctx context.Context, path string) error {
+			_ = ctx
+			if _, err := os.Stat(path); err != nil {
+				return err
+			}
+			return nil
+		}),
+	)
+
+	_, err := engine.Grant(context.Background(), domain.GrantRequest{
+		RequestID:       "abc-123",
+		WorkflowID:      "wf-1",
+		Username:        "alice",
+		DurationSeconds: 60,
+	})
+	if err != nil {
+		t.Fatalf("Grant failed with @includedir: %v", err)
 	}
 }
 
