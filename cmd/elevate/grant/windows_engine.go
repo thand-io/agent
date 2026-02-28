@@ -17,10 +17,10 @@ const defaultWindowsAdminGroup = "Administrators"
 const (
 	windowsMembershipScript = `& {
 param($group)
-@(
+ConvertTo-Json -InputObject @(
 Get-LocalGroupMember -Group $group |
 	Select-Object Name,ObjectClass
-) | ConvertTo-Json -Compress
+) -Compress
 } `
 	windowsAddMemberScript = `& {
 param($group, $member)

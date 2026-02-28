@@ -96,6 +96,37 @@ func TestWindowsGrantAlreadyMember(t *testing.T) {
 	}
 }
 
+func TestWindowsGrantAlreadyMemberWithSingleJSONObjectInArray(t *testing.T) {
+	engineAny, err := NewWindowsEngine(WindowsEngineConfig{},
+		WithWindowsRunCommand(func(ctx context.Context, name string, args ...string) ([]byte, error) {
+			_ = ctx
+			if name != "powershell" {
+				t.Fatalf("unexpected command name %q", name)
+			}
+			if args[3] != windowsMembershipScript {
+				t.Fatalf("unexpected script: %q", args[3])
+			}
+			return []byte(`[{"Name":"alice","ObjectClass":"User"}]`), nil
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewWindowsEngine failed: %v", err)
+	}
+	engine := engineAny.(*WindowsEngine)
+
+	res, err := engine.Grant(context.Background(), domain.GrantRequest{
+		RequestID:       "req-1",
+		Username:        "alice",
+		DurationSeconds: 60,
+	})
+	if err != nil {
+		t.Fatalf("Grant failed: %v", err)
+	}
+	if !res.WasAlreadyPrivileged {
+		t.Fatal("expected WasAlreadyPrivileged=true")
+	}
+}
+
 func TestWindowsRevokeIdempotentWhenMissing(t *testing.T) {
 	engineAny, err := NewWindowsEngine(WindowsEngineConfig{},
 		WithWindowsRunCommand(func(ctx context.Context, name string, args ...string) ([]byte, error) {
