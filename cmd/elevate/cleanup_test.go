@@ -58,6 +58,7 @@ type stubGrantEngine struct {
 	mu      sync.Mutex
 	revoked []string
 	err     error
+	revokeC chan string
 }
 
 func (g *stubGrantEngine) Grant(ctx context.Context, req domain.GrantRequest) (domain.GrantResult, error) {
@@ -74,6 +75,12 @@ func (g *stubGrantEngine) Revoke(ctx context.Context, req domain.RevokeRequest) 
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.revoked = append(g.revoked, req.RequestID)
+	if g.revokeC != nil {
+		select {
+		case g.revokeC <- req.RequestID:
+		default:
+		}
+	}
 	return nil
 }
 
@@ -235,7 +242,7 @@ func TestCleanupRunPeriodicSweep(t *testing.T) {
 			},
 		},
 	}
-	engine := &stubGrantEngine{}
+	engine := &stubGrantEngine{revokeC: make(chan string, 1)}
 	clock := &stubClock{
 		wall: time.Date(2026, 2, 22, 12, 0, 0, 0, time.UTC),
 	}
@@ -254,9 +261,17 @@ func TestCleanupRunPeriodicSweep(t *testing.T) {
 		done <- runner.Run(ctx)
 	}()
 
-	time.Sleep(20 * time.Millisecond)
 	clock.mono.Store(2 * int64(time.Second))
-	time.Sleep(20 * time.Millisecond)
+
+	select {
+	case requestID := <-engine.revokeC:
+		if requestID != "will-expire" {
+			t.Fatalf("unexpected revoke request id: got %q want %q", requestID, "will-expire")
+		}
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("timed out waiting for periodic revoke")
+	}
+
 	cancel()
 
 	if err := <-done; err != nil {
