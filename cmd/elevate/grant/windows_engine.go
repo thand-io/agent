@@ -1,8 +1,8 @@
 package grant
 
 import (
-	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -13,6 +13,29 @@ import (
 )
 
 const defaultWindowsAdminGroup = "Administrators"
+
+const (
+	windowsMembershipScript = `& {
+param($group)
+@(
+Get-LocalGroupMember -Group $group |
+	Select-Object Name,ObjectClass
+) | ConvertTo-Json -Compress
+} `
+	windowsAddMemberScript = `& {
+param($group, $member)
+Add-LocalGroupMember -Group $group -Member $member
+} `
+	windowsRemoveMemberScript = `& {
+param($group, $member)
+Remove-LocalGroupMember -Group $group -Member $member
+} `
+)
+
+type windowsLocalGroupMember struct {
+	Name        string `json:"Name"`
+	ObjectClass string `json:"ObjectClass"`
+}
 
 // WindowsEngineOption configures a WindowsEngine instance.
 type WindowsEngineOption func(*WindowsEngine)
@@ -44,7 +67,7 @@ type WindowsEngine struct {
 	isMember   func(context.Context, string) (bool, error)
 }
 
-// NewWindowsEngine constructs a Windows GrantEngine backed by `net localgroup`.
+// NewWindowsEngine constructs a Windows GrantEngine backed by PowerShell local-group cmdlets.
 func NewWindowsEngine(cfg WindowsEngineConfig, opts ...WindowsEngineOption) (handler.GrantEngine, error) {
 	adminGroup := strings.TrimSpace(cfg.AdminGroup)
 	if adminGroup == "" {
@@ -79,7 +102,7 @@ func (e *WindowsEngine) Grant(ctx context.Context, req domain.GrantRequest) (dom
 		return domain.GrantResult{}, err
 	}
 	if !alreadyMember {
-		if _, err := e.runCommand(ctx, "net", "localgroup", e.adminGroup, req.Username, "/add"); err != nil {
+		if _, err := e.runPowerShell(ctx, windowsAddMemberScript, e.adminGroup, req.Username); err != nil {
 			// If membership changed between check and add, treat as already privileged.
 			raceMember, raceErr := e.isMember(ctx, req.Username)
 			if raceErr != nil {
@@ -114,7 +137,7 @@ func (e *WindowsEngine) Revoke(ctx context.Context, req domain.RevokeRequest) er
 		return nil
 	}
 
-	if _, err := e.runCommand(ctx, "net", "localgroup", e.adminGroup, req.Username, "/delete"); err != nil {
+	if _, err := e.runPowerShell(ctx, windowsRemoveMemberScript, e.adminGroup, req.Username); err != nil {
 		memberAfter, checkErr := e.isMember(ctx, req.Username)
 		if checkErr != nil {
 			return fmt.Errorf("remove windows admin group member: %w", err)
@@ -127,22 +150,31 @@ func (e *WindowsEngine) Revoke(ctx context.Context, req domain.RevokeRequest) er
 }
 
 func (e *WindowsEngine) checkMembership(ctx context.Context, username string) (bool, error) {
-	out, err := e.runCommand(ctx, "net", "localgroup", e.adminGroup)
+	out, err := e.runPowerShell(ctx, windowsMembershipScript, e.adminGroup)
 	if err != nil {
 		return false, fmt.Errorf("list windows admin group members: %w", err)
 	}
 
-	lines := bytes.Split(out, []byte{'\n'})
-	for _, raw := range lines {
-		line := strings.TrimSpace(strings.TrimRight(string(raw), "\r"))
-		if line == "" {
-			continue
-		}
-		if windowsUsernameMatches(line, username) {
+	var members []windowsLocalGroupMember
+	if len(strings.TrimSpace(string(out))) == 0 {
+		return false, nil
+	}
+	if err := json.Unmarshal(out, &members); err != nil {
+		return false, fmt.Errorf("decode windows admin group members: %w", err)
+	}
+
+	for _, member := range members {
+		if windowsUsernameMatches(member.Name, username) {
 			return true, nil
 		}
 	}
 	return false, nil
+}
+
+func (e *WindowsEngine) runPowerShell(ctx context.Context, script string, args ...string) ([]byte, error) {
+	psArgs := []string{"-NoProfile", "-NonInteractive", "-Command", script}
+	psArgs = append(psArgs, args...)
+	return e.runCommand(ctx, "powershell", psArgs...)
 }
 
 func isValidWindowsUsername(v string) bool {

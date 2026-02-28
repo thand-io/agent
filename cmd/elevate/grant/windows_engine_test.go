@@ -3,7 +3,6 @@ package grant
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -18,18 +17,26 @@ func TestWindowsGrantAddsUser(t *testing.T) {
 		WithWindowsNow(func() time.Time { return now }),
 		WithWindowsRunCommand(func(ctx context.Context, name string, args ...string) ([]byte, error) {
 			_ = ctx
-			if name != "net" {
+			if name != "powershell" {
 				t.Fatalf("unexpected command name %q", name)
 			}
-			joined := strings.Join(args, " ")
-			switch joined {
-			case "localgroup Administrators":
-				return []byte("Administrator\r\n"), nil
-			case "localgroup Administrators alice /add":
+			if len(args) < 5 {
+				t.Fatalf("unexpected command args: %+v", args)
+			}
+			switch args[3] {
+			case windowsMembershipScript:
+				if args[4] != "Administrators" {
+					t.Fatalf("unexpected membership group arg: %q", args[4])
+				}
+				return []byte("[]"), nil
+			case windowsAddMemberScript:
+				if args[4] != "Administrators" || args[5] != "alice" {
+					t.Fatalf("unexpected add args: %+v", args)
+				}
 				addCalled = true
 				return []byte("ok"), nil
 			default:
-				t.Fatalf("unexpected command args: %q", joined)
+				t.Fatalf("unexpected script: %q", args[3])
 				return nil, nil
 			}
 		}),
@@ -62,9 +69,13 @@ func TestWindowsGrantAlreadyMember(t *testing.T) {
 	engineAny, err := NewWindowsEngine(WindowsEngineConfig{},
 		WithWindowsRunCommand(func(ctx context.Context, name string, args ...string) ([]byte, error) {
 			_ = ctx
-			_ = name
-			_ = args
-			return []byte("BUILTIN\\Administrators\r\nalice\r\n"), nil
+			if name != "powershell" {
+				t.Fatalf("unexpected command name %q", name)
+			}
+			if args[3] != windowsMembershipScript {
+				t.Fatalf("unexpected script: %q", args[3])
+			}
+			return []byte(`[{"Name":"BUILTIN\\Administrators","ObjectClass":"Group","PrincipalSource":"Local"},{"Name":"alice","ObjectClass":"User","PrincipalSource":"Local"}]`), nil
 		}),
 	)
 	if err != nil {
@@ -89,9 +100,13 @@ func TestWindowsRevokeIdempotentWhenMissing(t *testing.T) {
 	engineAny, err := NewWindowsEngine(WindowsEngineConfig{},
 		WithWindowsRunCommand(func(ctx context.Context, name string, args ...string) ([]byte, error) {
 			_ = ctx
-			_ = name
-			_ = args
-			return []byte("Administrator\r\n"), nil
+			if name != "powershell" {
+				t.Fatalf("unexpected command name %q", name)
+			}
+			if args[3] != windowsMembershipScript {
+				t.Fatalf("unexpected script: %q", args[3])
+			}
+			return []byte(`[{"Name":"Administrator","ObjectClass":"User","PrincipalSource":"Local"}]`), nil
 		}),
 	)
 	if err != nil {
@@ -114,20 +129,22 @@ func TestWindowsRevokeRemovesUser(t *testing.T) {
 	engineAny, err := NewWindowsEngine(WindowsEngineConfig{},
 		WithWindowsRunCommand(func(ctx context.Context, name string, args ...string) ([]byte, error) {
 			_ = ctx
-			if name != "net" {
+			if name != "powershell" {
 				t.Fatalf("unexpected command name: %q", name)
 			}
 			call++
-			joined := strings.Join(args, " ")
 			switch call {
 			case 1:
-				if joined != "localgroup Administrators alice /delete" {
-					t.Fatalf("unexpected delete command args: %q", joined)
+				if args[3] != windowsRemoveMemberScript {
+					t.Fatalf("unexpected script: %q", args[3])
+				}
+				if args[4] != "Administrators" || args[5] != "alice" {
+					t.Fatalf("unexpected delete args: %+v", args)
 				}
 				deleted = true
 				return []byte("ok"), nil
 			default:
-				t.Fatalf("unexpected extra command: %q", joined)
+				t.Fatalf("unexpected extra command: %+v", args)
 				return nil, nil
 			}
 		}),
