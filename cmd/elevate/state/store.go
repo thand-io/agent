@@ -75,7 +75,6 @@ func (s *FileStore) Delete(ctx context.Context, requestID string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	requestID = strings.TrimSpace(requestID)
 	if requestID == "" {
 		return errors.New("request ID is required")
 	}

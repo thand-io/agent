@@ -75,3 +75,36 @@ func TestFileStoreDeleteMissingIsNoop(t *testing.T) {
 		t.Fatalf("Delete missing should be nil, got %v", err)
 	}
 }
+
+func TestFileStoreDeleteRequiresExactRequestID(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	store, err := NewFileStore(path)
+	if err != nil {
+		t.Fatalf("NewFileStore failed: %v", err)
+	}
+
+	grant := domain.GrantState{
+		RequestID:            "req-1",
+		WorkflowID:           "wf-1",
+		Username:             "alice",
+		GrantedAtWallUTC:     time.Date(2026, 2, 22, 10, 0, 0, 0, time.UTC),
+		GrantedAtMonoNS:      100,
+		DurationSeconds:      60,
+		WasAlreadyPrivileged: false,
+	}
+	if err := store.Put(context.Background(), grant); err != nil {
+		t.Fatalf("Put failed: %v", err)
+	}
+
+	if err := store.Delete(context.Background(), " req-1 "); err != nil {
+		t.Fatalf("Delete with non-matching request ID should be nil, got %v", err)
+	}
+
+	got, err := store.List(context.Background())
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(got) != 1 || got[0].RequestID != "req-1" {
+		t.Fatalf("expected exact request ID match to be required, got %+v", got)
+	}
+}
