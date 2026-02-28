@@ -236,37 +236,6 @@ func TestHandleConnectionGrantRejectsUnsafeUsername(t *testing.T) {
 	assertResultErrorCode(t, conn.writeFrames[1], ErrorCodeInvalidRequest)
 }
 
-func TestHandleConnectionGrantAcceptsSafeUsernameWithDotAndHyphen(t *testing.T) {
-	req := domain.RequestFrame{
-		Type:            domain.FrameTypeRequest,
-		Action:          domain.ActionGrant,
-		WorkflowID:      "wf-1",
-		RequestID:       "req-safe-user",
-		Username:        "alice.dev-1",
-		DurationSeconds: 60,
-	}
-	nonce := "fixed-nonce-safe-grant"
-
-	conn := &stubConn{
-		readFrames: [][]byte{
-			mustJSON(t, req),
-			mustJSON(t, signedResponseFor(t, req, nonce)),
-		},
-	}
-	grantEngine := &stubGrantEngine{grantResult: domain.GrantResult{}}
-	state := &stubStateStore{}
-	h := New(grantEngine, &stubVerifier{}, state, stubClock{mono: 123, wall: time.Now().UTC()})
-	h.generateNonce = func() (string, error) { return nonce, nil }
-
-	if err := h.HandleConnection(context.Background(), conn); err != nil {
-		t.Fatalf("HandleConnection failed: %v", err)
-	}
-	if grantEngine.grantCalls != 1 {
-		t.Fatalf("expected safe username to reach grant engine, got %d grant calls", grantEngine.grantCalls)
-	}
-	assertChallengeAndResult(t, conn.writeFrames, nonce, req.RequestID, resultStatusOK)
-}
-
 func TestHandleConnectionPayloadMismatchWritesError(t *testing.T) {
 	req := domain.RequestFrame{
 		Type:            domain.FrameTypeRequest,

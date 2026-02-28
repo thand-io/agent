@@ -7,7 +7,7 @@ import (
 
 const maxUsernameLength = 32
 
-var usernamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9.-]*$`)
+var usernamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9._-]*[$]?$`)
 
 func validateRequestUsername(username string) *responseError {
 	switch {
