@@ -662,7 +662,12 @@ func (c *Config) resolveCompositeRole(
 		}
 
 		// Merge inherited role into composite
-		c.mergeRole(&compositeRole, inheritedRole, providers...)
+		c.mergeRolePermissions(&compositeRole, inheritedRole, providers...)
+		// Bubble up provider-role inherits (e.g. ARN managed policies) from
+		// the resolved child so they propagate through the full chain.
+		if len(inheritedRole.Inherits) > 0 {
+			remainingInherits = append(remainingInherits, inheritedRole.Inherits...)
+		}
 		// Mark that we inherited from a thand role (not a provider role)
 		hasThandRoleInheritance = true
 	}
@@ -882,11 +887,11 @@ func (c *Config) filterRoleByProviderNames(role *models.Role, providerNames []st
 	role.Permissions.Deny = c.filterStatementsListByProvider(role.Permissions.Deny, providerNames)
 }
 
-// mergeRole merges an inherited role into the composite role.
+// mergeRolePermissions merges an inherited role into the composite role.
 // Parent (composite) takes precedence over child (inherited) in conflicts:
 // - Parent Allow overrides Child Deny
 // - Parent Deny overrides Child Allow
-func (c *Config) mergeRole(composite *models.Role, inherited *models.Role, providers ...models.Provider) {
+func (c *Config) mergeRolePermissions(composite *models.Role, inherited *models.Role, providers ...models.Provider) {
 	// Filter inherited items by composite's providers
 	inheritedAllowPerms := c.filterStatementsListByProvider(inherited.Permissions.Allow, composite.Providers)
 	inheritedDenyPerms := c.filterStatementsListByProvider(inherited.Permissions.Deny, composite.Providers)

@@ -287,6 +287,15 @@ func (r *WorkflowRoleRequest) GetDuration() *time.Duration {
 	return r.Duration
 }
 
+// authorizeRoleRequestSideEffect is used to carry the result of
+// CreateAuthorizeRoleRequest across a workflow.SideEffect boundary so that
+// non-deterministic operations (config lookups, UUID generation) are isolated
+// from workflow replay.
+type authorizeRoleRequestSideEffect struct {
+	Request *AuthorizeRoleRequest
+	Err     string
+}
+
 // CreateProviderAuthorizeRoleWorkflow returns a workflow function that captures the
 // live provider instance via closure. The child workflow receives the Temporal
 // workflow.Context, constructs a WorkflowTaskSupport with it, and delegates to
@@ -298,13 +307,31 @@ func CreateProviderAuthorizeRoleWorkflow(cfg ConfigImpl, provider Provider) func
 		log := workflow.GetLogger(ctx)
 		log.Info("Starting authorize role workflow", "provider", provider.GetIdentifier())
 
-		request, err := CreateAuthorizeRoleRequest(cfg, provider, &req)
-		if err != nil {
-			log.Error("Failed to create authorize role request", "error", err)
+		// Wrap in a SideEffect so that the non-deterministic operations inside
+		// CreateAuthorizeRoleRequest (config/identity/tenant lookups, UUID generation
+		// for the composite role identifier) are executed only on the first run and
+		// their result is recorded in the workflow event history. On replay, Temporal
+		// replays the recorded value instead of re-executing the function, keeping
+		// workflow execution deterministic.
+		encodedReq := workflow.SideEffect(ctx, func(ctx workflow.Context) any {
+			result, err := CreateAuthorizeRoleRequest(cfg, provider, &req)
+			if err != nil {
+				return authorizeRoleRequestSideEffect{Err: err.Error()}
+			}
+			return authorizeRoleRequestSideEffect{Request: result}
+		})
+
+		var se authorizeRoleRequestSideEffect
+		if err := encodedReq.Get(&se); err != nil {
+			log.Error("Failed to decode authorize role request side effect", "error", err)
 			return nil, err
 		}
+		if se.Err != "" {
+			log.Error("Failed to create authorize role request", "error", se.Err)
+			return nil, fmt.Errorf("%s", se.Err)
+		}
 
-		return provider.AuthorizeRole(ctx, request)
+		return provider.AuthorizeRole(ctx, se.Request)
 	}
 }
 
@@ -323,13 +350,27 @@ func CreateProviderRevokeRoleWorkflow(cfg ConfigImpl, provider Provider) func(wo
 
 		var authReq *AuthorizeRoleRequest
 		if req.RevokeRoleRequest != nil {
-			var err error
-			authReq, err = CreateAuthorizeRoleRequest(
-				cfg, provider, req.RevokeRoleRequest)
-			if err != nil {
-				log.Error("Failed to create revoke role request", "error", err)
+			// Same reasoning as in CreateProviderAuthorizeRoleWorkflow: wrap in a
+			// SideEffect to isolate non-deterministic config lookups and UUID
+			// generation from replay.
+			encodedReq := workflow.SideEffect(ctx, func(ctx workflow.Context) any {
+				result, err := CreateAuthorizeRoleRequest(cfg, provider, req.RevokeRoleRequest)
+				if err != nil {
+					return authorizeRoleRequestSideEffect{Err: err.Error()}
+				}
+				return authorizeRoleRequestSideEffect{Request: result}
+			})
+
+			var se authorizeRoleRequestSideEffect
+			if err := encodedReq.Get(&se); err != nil {
+				log.Error("Failed to decode revoke role request side effect", "error", err)
 				return nil, err
 			}
+			if se.Err != "" {
+				log.Error("Failed to create revoke role request", "error", se.Err)
+				return nil, fmt.Errorf("%s", se.Err)
+			}
+			authReq = se.Request
 		}
 
 		revokeReq := &RevokeRoleRequest{
