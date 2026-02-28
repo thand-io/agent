@@ -12,6 +12,9 @@ func (h *Handler) handleGrant(ctx context.Context, conn IPCConn, req domain.Requ
 	if err := h.authenticateRequest(ctx, conn, req); err != nil {
 		return h.writeRequestError(ctx, conn, req, err)
 	}
+	if err := validateRequestUsername(req.Username); err != nil {
+		return h.writeRequestError(ctx, conn, req, err)
+	}
 
 	grants, err := h.stateStore.List(ctx)
 	if err != nil {

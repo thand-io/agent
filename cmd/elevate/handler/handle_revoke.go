@@ -12,6 +12,9 @@ func (h *Handler) handleRevoke(ctx context.Context, conn IPCConn, req domain.Req
 		_ = h.writeRequestError(ctx, conn, req, err)
 		return nil
 	}
+	if err := validateRequestUsername(req.Username); err != nil {
+		return h.writeRequestError(ctx, conn, req, err)
+	}
 
 	grants, err := h.stateStore.List(ctx)
 	if err != nil {
