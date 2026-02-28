@@ -185,11 +185,11 @@ func (t *thandTask) executeAuthorization(
 				})
 
 				log.WithFields(logrus.Fields{
-					"identity":  identityId,
-					"role":      authReq.Role.GetName(),
-					"provider":  providerName,
-					"duration":  duration,
-					"tenant":    tenantId,
+					"identity": identityId,
+					"role":     authReq.Role.GetName(),
+					"provider": providerName,
+					"duration": duration,
+					"tenant":   tenantId,
 				}).Info("Preparing authorization logic")
 
 			}
@@ -299,12 +299,16 @@ func (t *thandTask) runAuthTask(
 		wfName := models.CreateTemporalProviderWorkflowName(
 			task.ProviderName, models.TemporalAuthorizeRoleWorkflowName)
 
-		// The workflow id will be the role_id + tenant + identity to ensure uniqueness
-		// and prevent other users being elevated
+		// Create unique child workflow ID using hash of composite identifier
+		// (provider + role + identity + tenant) to ensure uniqueness across
+		// different identities/tenants requesting the same role
 		childOpts := workflow.ChildWorkflowOptions{
-			WorkflowID: fmt.Sprintf("%s_authorizeRole_%s",
+			WorkflowID: models.CreateChildWorkflowID(
 				workflowTask.GetWorkflowID(),
-				task.AuthRequest.Role.GetName()),
+				"authorizeRole",
+				task.ProviderName,
+				task.AuthRequest,
+			),
 			TaskQueue: workflowTask.GetTaskQueue(),
 		}
 		ctx = workflow.WithChildOptions(ctx, childOpts)

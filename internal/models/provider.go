@@ -127,6 +127,13 @@ type Provider interface {
 	CanSynchronizeUsers() bool
 	CanSynchronizeGroups() bool
 
+	// Synchronization readiness — providers signal readiness after their
+	// initial role/permission data has been loaded.
+	SetPending()
+	SetReady()
+	IsReady() bool
+	Ready() <-chan struct{}
+
 	// Sub-interfaces
 	ProviderNotifier
 	ProviderWebhook

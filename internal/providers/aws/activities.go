@@ -10,7 +10,7 @@ func (b *awsProvider) RegisterActivities() any {
 	return &awsProviderActivities{provider: b}
 }
 
-// Aws uses static roles and permissions so we don't need to fetch them.
+// Aws uses static roles and permiss“ions so we don't need to fetch them.
 // Instead we will just return these in the synchronize call.
 func (p *awsProvider) Synchronize(
 	ctx context.Context,

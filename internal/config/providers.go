@@ -337,7 +337,12 @@ func (c *Config) InitializeProviders() error {
 
 			} else {
 				logrus.Infoln("Skipping Temporal registration for provider", result.key, "in non-server mode")
+				// Non-server mode: provider won't be synchronized, mark ready immediately
+				providerResult.SetReady()
 			}
+		} else {
+			// Provider doesn't have RBAC/Identity capabilities, no sync needed
+			result.provider.SetReady()
 		}
 
 		// The provider returned from the goroutine already has the client set

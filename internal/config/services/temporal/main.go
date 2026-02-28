@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
@@ -29,7 +30,9 @@ type TemporalClient struct {
 	identities []string
 	vault      models.VaultImpl
 
-	mu sync.Mutex
+	mu             sync.Mutex
+	readyCh        chan struct{}
+	closeReadyOnce sync.Once
 }
 
 func NewTemporalClient(
@@ -54,6 +57,7 @@ func NewTemporalClient(
 		identities: unique,
 		vault:      vault,
 		workers:    make(map[string]worker.Worker, len(unique)),
+		readyCh:    make(chan struct{}),
 	}
 }
 
@@ -159,13 +163,23 @@ func (a *TemporalClient) Initialize() error {
 	}
 
 	if len(a.workers) == 0 {
+		a.markReady() // Unblock any waiters even on failure
 		return fmt.Errorf("failed to start any Temporal workers")
+	}
+
+	// If versioning is enabled, confirm our deployment version is registered
+	// on the Temporal server before allowing workflow submissions via GetClient().
+	if a.config.DisableVersioning {
+		a.markReady()
+	} else {
+		go a.awaitVersionRegistration(buildID)
 	}
 
 	return nil
 }
 
 func (c *TemporalClient) GetClient() client.Client {
+	<-c.readyCh
 	return c.client
 }
 
@@ -237,7 +251,67 @@ func (c *TemporalClient) IsVersioningDisabled() bool {
 	return c.config.DisableVersioning
 }
 
+// versionRegistrationTimeout is the maximum time to wait for the Temporal
+// server to register our deployment version after worker startup.
+const versionRegistrationTimeout = 30 * time.Second
+
+// markReady signals that the Temporal client is ready for workflow submission.
+// Safe to call multiple times; only the first call has any effect.
+func (c *TemporalClient) markReady() {
+	c.closeReadyOnce.Do(func() { close(c.readyCh) })
+}
+
+// awaitVersionRegistration polls the Temporal server until our deployment
+// version is registered and visible, then signals readiness. This prevents
+// workflow submissions with PinnedVersioningOverride from failing because
+// the server hasn't indexed the version yet.
+func (c *TemporalClient) awaitVersionRegistration(buildID string) {
+	defer c.markReady()
+
+	deploymentName := sdkConstants.TemporalDeploymentName
+
+	logrus.WithFields(logrus.Fields{
+		"BuildID":        buildID,
+		"DeploymentName": deploymentName,
+	}).Info("Waiting for Temporal deployment version to be registered")
+
+	ctx, cancel := context.WithTimeout(context.Background(), versionRegistrationTimeout)
+	defer cancel()
+
+	handle := c.client.WorkerDeploymentClient().GetHandle(deploymentName)
+
+	backoff := 500 * time.Millisecond
+	maxBackoff := 5 * time.Second
+
+	for {
+		_, err := handle.DescribeVersion(ctx, client.WorkerDeploymentDescribeVersionOptions{
+			BuildID: buildID,
+		})
+		if err == nil {
+			logrus.WithFields(logrus.Fields{
+				"BuildID":        buildID,
+				"DeploymentName": deploymentName,
+			}).Info("Temporal deployment version registered and ready")
+			return
+		}
+
+		select {
+		case <-ctx.Done():
+			logrus.WithFields(logrus.Fields{
+				"BuildID":        buildID,
+				"DeploymentName": deploymentName,
+			}).Warn("Timed out waiting for Temporal deployment version, proceeding anyway")
+			return
+		case <-time.After(backoff):
+			if backoff < maxBackoff {
+				backoff *= 2
+			}
+		}
+	}
+}
+
 func (c *TemporalClient) Shutdown() error {
+	c.markReady() // Unblock any waiters
 	c.mu.Lock()
 	defer c.mu.Unlock()
 

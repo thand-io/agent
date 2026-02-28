@@ -433,6 +433,7 @@ func (s *Server) getProvidersAsProviderResponse(
 			Provider:     provider.GetProvider(),
 			Capabilities: provider.GetCapabilities(),
 			Enabled:      true,
+			Ready:        provider.IsReady(),
 		})
 	}
 

@@ -242,10 +242,16 @@ func (t *thandTask) runRevokeTask(
 		wfName := models.CreateTemporalProviderWorkflowName(
 			task.ProviderName, models.TemporalRevokeRoleWorkflowName)
 
+		// Create unique child workflow ID using hash of composite identifier
+		// (provider + role + identity + tenant) to ensure uniqueness across
+		// different identities/tenants requesting the same role
 		childOpts := workflow.ChildWorkflowOptions{
-			WorkflowID: fmt.Sprintf("%s_revokeRole_%s",
+			WorkflowID: models.CreateChildWorkflowID(
 				workflowTask.GetWorkflowID(),
-				task.RevokeReq.RevokeRoleRequest.Identity),
+				"revokeRole",
+				task.ProviderName,
+				task.RevokeReq.RevokeRoleRequest,
+			),
 			TaskQueue: workflowTask.GetTaskQueue(),
 		}
 		ctx = workflow.WithChildOptions(ctx, childOpts)

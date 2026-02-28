@@ -1,6 +1,8 @@
 package models
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"maps"
 	"slices"
@@ -42,6 +44,40 @@ func (b *BaseProvider) RegisterWorkflows() any {
 
 func CreateTemporalWorkflowIdentifier(workflowName string) string {
 	return strings.ToLower(fmt.Sprintf("%s-%s", common.GetClientIdentifier(), workflowName))
+}
+
+// CreateChildWorkflowID generates a unique child workflow ID by hashing a composite
+// identifier built from provider, role, identity, tenant, and parent workflow ID.
+// This ensures uniqueness across different identities/tenants requesting the same role.
+// Format: parentWorkflowID_operation_hash
+func CreateChildWorkflowID(parentWorkflowID, operation, provider string, req *WorkflowRoleRequest) string {
+	// Build composite identifier similar to CompositeRoleWorkflowIdentifier
+	// but using the data available in WorkflowRoleRequest
+	parts := []string{
+		req.WorkflowID,
+		provider,
+	}
+
+	if req.Role != nil {
+		parts = append(parts, req.Role.Identifier)
+		parts = append(parts, req.Role.GetVersionString())
+		parts = append(parts, req.Role.Name)
+	}
+
+	parts = append(parts, req.Identity)
+
+	if len(req.Tenant) > 0 {
+		parts = append(parts, req.Tenant)
+	}
+
+	// Create composite string
+	composite := strings.Join(parts, ":")
+
+	// Hash to get a stable, short identifier
+	hash := sha256.Sum256([]byte(composite))
+	hashStr := hex.EncodeToString(hash[:])[:12] // Use first 12 chars (48 bits)
+
+	return fmt.Sprintf("%s_%s_%s", parentWorkflowID, operation, hashStr)
 }
 
 func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](

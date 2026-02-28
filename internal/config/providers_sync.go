@@ -11,11 +11,13 @@ func (c *Config) synchronizeProvider(p models.Provider) {
 
 	if !c.IsServer() {
 		logrus.Debugln("Not a server instance, skipping provider synchronization")
+		p.SetReady()
 		return
 	}
 
 	if p == nil {
 		logrus.Warningln("Provider is nil, cannot synchronize")
+		p.SetReady()
 		return
 	}
 
@@ -28,7 +30,14 @@ func (c *Config) synchronizeProvider(p models.Provider) {
 		temporalClient = services.GetTemporal()
 	}
 
+	p.SetPending()
+
 	go func() {
+		// Always mark the provider as ready when this goroutine exits,
+		// even if synchronization fails. This prevents consumers from
+		// blocking indefinitely. Roles loaded before the error are still
+		// available; roles that failed to load will simply be absent.
+		defer p.SetReady()
 
 		syncRequest := models.SynchronizeRequest{
 			ProviderIdentifier: p.GetIdentifier(),

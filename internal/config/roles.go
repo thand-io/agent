@@ -9,6 +9,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/search"
@@ -230,6 +231,55 @@ func (rc *RoleConfig) ListRoles(
 	return models.ReturnSearchResults(filtered), nil
 }
 
+const providerReadinessTimeout = 5 * time.Minute
+
+// awaitProviderReadiness blocks until every registered provider signals ready
+// or the timeout expires. Uses each provider's Ready() channel so there is no
+// polling — we get signalled the moment each provider finishes synchronising.
+func (c *Config) awaitProviderReadiness() {
+	c.mu.RLock()
+	providers := make([]models.Provider, 0, len(c.providerInstances))
+	for _, p := range c.providerInstances {
+		providers = append(providers, p)
+	}
+	c.mu.RUnlock()
+
+	if len(providers) == 0 {
+		return
+	}
+
+	logrus.Infof("Waiting for %d provider(s) to become ready", len(providers))
+
+	deadline := time.After(providerReadinessTimeout)
+	for _, p := range providers {
+		select {
+		case <-p.Ready():
+			// provider is ready
+		case <-deadline:
+			logrus.WithField("provider", p.GetIdentifier()).
+				Error("Timed out waiting for provider readiness, role indexes may be incomplete")
+			return
+		}
+	}
+
+	logrus.Info("All providers ready, proceeding with role index build")
+}
+
+// anyProviderNotReady returns true if any of the named providers exist and
+// have not yet completed their initial synchronization.
+func (c *Config) anyProviderNotReady(providerNames []string) bool {
+	for _, name := range providerNames {
+		p, err := c.GetProviderByName(name)
+		if err != nil || p == nil {
+			continue
+		}
+		if !p.IsReady() {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *Config) ReloadRoleIndexes() error {
 
 	// Never compute indexs if we're not in server mode.
@@ -238,6 +288,10 @@ func (c *Config) ReloadRoleIndexes() error {
 		logrus.Debugln("Not running in server mode, skipping role index reload")
 		return nil
 	}
+
+	// Block until all providers have finished loading their roles/permissions
+	// so that inherited provider roles (ARNs, Azure built-ins, etc.) resolve.
+	c.awaitProviderReadiness()
 
 	// Create bleve index for roles
 	if c.Roles.Definitions == nil {
@@ -646,6 +700,18 @@ func (c *Config) resolveCompositeRole(
 				} else if len(providerRole.ID) != 0 {
 					remainingInherits = append(remainingInherits, providerRole.ID)
 				}
+				continue
+			}
+
+			// Provider role not found. If any target provider is still
+			// syncing, skip gracefully instead of falling through to the
+			// thand role registry (which will never contain provider roles
+			// like ARNs or Azure built-in names).
+			if c.anyProviderNotReady(providersForLookup) {
+				log.WithFields(logrus.Fields{
+					"inherited_role": inheritedRoleName,
+					"providers":      providersForLookup,
+				}).Warn("Skipping inherited role — provider(s) still syncing")
 				continue
 			}
 		}
