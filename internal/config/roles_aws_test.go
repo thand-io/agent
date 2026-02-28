@@ -1834,3 +1834,484 @@ func TestAWSInheritanceScopeDenial(t *testing.T) {
 			"Engineer should get composite role")
 	})
 }
+
+// TestAWSRoleResolutionFormats validates that AWS managed policies resolve
+// identically whether referenced by full ARN (arn:aws:iam::aws:policy/X) or
+// by short name (X). Tests multiple policies, scoped and unscoped roles, and
+// verifies the resolved Inherits entries match regardless of input format.
+func TestAWSRoleResolutionFormats(t *testing.T) {
+	awsProviders := map[string]models.ProviderConfig{
+		"aws-prod": {
+			Name:        "aws-prod",
+			Description: "AWS Production",
+			Provider:    "aws",
+		},
+		"aws-dev": {
+			Name:        "aws-dev",
+			Description: "AWS Development",
+			Provider:    "aws",
+		},
+	}
+
+	// ---------------------------------------------------------------
+	// 1. ARN format vs short name produce identical Inherits
+	// ---------------------------------------------------------------
+	t.Run("ARN and short name resolve to same provider role", func(t *testing.T) {
+		// Two roles that inherit the same set of AWS managed policies
+		// but using different name formats
+		rolesArn := map[string]models.Role{
+			"arn_role": {
+				Name:        "ARN Role",
+				Description: "Uses full ARN format",
+				Inherits: []string{
+					"arn:aws:iam::aws:policy/AdministratorAccess",
+					"arn:aws:iam::aws:policy/ReadOnlyAccess",
+					"arn:aws:iam::aws:policy/SecurityAudit",
+					"arn:aws:iam::aws:policy/PowerUserAccess",
+				},
+				Permissions: models.RolePermissions{
+					Allow: stmtsAws("cloudwatch:GetMetricData"),
+				},
+				Providers: []string{"aws-prod", "aws-dev"},
+				Enabled:   true,
+			},
+		}
+
+		rolesShort := map[string]models.Role{
+			"short_role": {
+				Name:        "Short Role",
+				Description: "Uses short name format",
+				Inherits: []string{
+					"AdministratorAccess",
+					"ReadOnlyAccess",
+					"SecurityAudit",
+					"PowerUserAccess",
+				},
+				Permissions: models.RolePermissions{
+					Allow: stmtsAws("cloudwatch:GetMetricData"),
+				},
+				Providers: []string{"aws-prod", "aws-dev"},
+				Enabled:   true,
+			},
+		}
+
+		configArn := newTestConfig(t, rolesArn, awsProviders)
+		configShort := newTestConfig(t, rolesShort, awsProviders)
+
+		identity := &models.Identity{
+			ID: "user1",
+			User: &models.User{
+				Username: "testuser",
+				Email:    "test@example.com",
+			},
+		}
+
+		resultArn, err := configArn.GetCompositeRoleByName(identity, "arn_role")
+		require.NoError(t, err)
+		require.NotNil(t, resultArn)
+
+		resultShort, err := configShort.GetCompositeRoleByName(identity, "short_role")
+		require.NoError(t, err)
+		require.NotNil(t, resultShort)
+
+		// Both should resolve to the same short names in Inherits
+		expectedInherits := []string{
+			"AdministratorAccess",
+			"ReadOnlyAccess",
+			"SecurityAudit",
+			"PowerUserAccess",
+		}
+		assert.ElementsMatch(t, expectedInherits, resultArn.Inherits,
+			"ARN format should resolve to short names: got %v", resultArn.Inherits)
+		assert.ElementsMatch(t, expectedInherits, resultShort.Inherits,
+			"Short name format should resolve to same short names: got %v", resultShort.Inherits)
+
+		// Both should be identical: same number of entries, same entries
+		assert.ElementsMatch(t, resultArn.Inherits, resultShort.Inherits,
+			"ARN and short name should produce identical Inherits")
+
+		// Neither should be composite (provider-only inheritance)
+		assert.False(t, resultArn.Composite, "ARN role should not be composite")
+		assert.False(t, resultShort.Composite, "Short role should not be composite")
+
+		// Permissions should be identical
+		assert.ElementsMatch(t,
+			collectOps(resultArn.Permissions.Allow),
+			collectOps(resultShort.Permissions.Allow),
+			"Permissions should be identical for both formats")
+	})
+
+	// ---------------------------------------------------------------
+	// 2. Mixed ARN + short name in same inherits list
+	// ---------------------------------------------------------------
+	t.Run("mixed ARN and short name in same inherits list", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"mixed_role": {
+				Name:        "Mixed Role",
+				Description: "Some inherits as ARN, some as short name",
+				Inherits: []string{
+					"arn:aws:iam::aws:policy/AdministratorAccess", // ARN
+					"ReadOnlyAccess",                            // short
+					"arn:aws:iam::aws:policy/SecurityAudit",     // ARN
+					"PowerUserAccess",                           // short
+					"IAMFullAccess",                             // short
+					"arn:aws:iam::aws:policy/IAMReadOnlyAccess", // ARN
+				},
+				Permissions: models.RolePermissions{
+					Allow: stmtsAws("logs:GetLogEvents"),
+				},
+				Providers: []string{"aws-prod"},
+				Enabled:   true,
+			},
+		}
+
+		providers := map[string]models.ProviderConfig{
+			"aws-prod": {
+				Name:     "aws-prod",
+				Provider: "aws",
+			},
+		}
+
+		config := newTestConfig(t, roles, providers)
+
+		identity := &models.Identity{
+			ID: "user1",
+			User: &models.User{
+				Username: "testuser",
+				Email:    "test@example.com",
+			},
+		}
+
+		result, err := config.GetCompositeRoleByName(identity, "mixed_role")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		// All 6 should resolve to short names
+		expectedInherits := []string{
+			"AdministratorAccess",
+			"ReadOnlyAccess",
+			"SecurityAudit",
+			"PowerUserAccess",
+			"IAMFullAccess",
+			"IAMReadOnlyAccess",
+		}
+		assert.ElementsMatch(t, expectedInherits, result.Inherits,
+			"Mixed ARN/short inherits should all resolve to short names: got %v", result.Inherits)
+		assert.Len(t, result.Inherits, 6,
+			"All 6 managed policies should be resolved: got %d", len(result.Inherits))
+
+		// Not composite (no thand roles)
+		assert.False(t, result.Composite)
+	})
+
+	// ---------------------------------------------------------------
+	// 3. ARN vs short name with allow-scoped role
+	// ---------------------------------------------------------------
+	t.Run("scoped role with ARN inherits resolves same as short name", func(t *testing.T) {
+		// Two identical scoped roles, one with ARNs, one with short names
+		makeRoles := func(useArn bool) map[string]models.Role {
+			var inherits []string
+			if useArn {
+				inherits = []string{
+					"arn:aws:iam::aws:policy/ReadOnlyAccess",
+					"arn:aws:iam::aws:policy/SecurityAudit",
+				}
+			} else {
+				inherits = []string{
+					"ReadOnlyAccess",
+					"SecurityAudit",
+				}
+			}
+			return map[string]models.Role{
+				"scoped_viewer": {
+					Name:        "Scoped Viewer",
+					Description: "Viewer scoped to engineering group",
+					Inherits:    inherits,
+					Permissions: models.RolePermissions{
+						Allow: stmtsAws("s3:GetObject", "s3:ListBuckets"),
+					},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Groups: []string{"engineering"},
+						},
+					},
+					Providers: []string{"aws-prod", "aws-dev"},
+					Enabled:   true,
+				},
+			}
+		}
+
+		configArn := newTestConfig(t, makeRoles(true), awsProviders)
+		configShort := newTestConfig(t, makeRoles(false), awsProviders)
+
+		// Allowed identity
+		allowed := &models.Identity{
+			ID: "eng1",
+			User: &models.User{
+				Username: "engineer",
+				Email:    "eng@example.com",
+				Groups:   []string{"engineering"},
+			},
+		}
+
+		resultArn, err := configArn.GetCompositeRoleByName(allowed, "scoped_viewer")
+		require.NoError(t, err)
+		require.NotNil(t, resultArn)
+
+		resultShort, err := configShort.GetCompositeRoleByName(allowed, "scoped_viewer")
+		require.NoError(t, err)
+		require.NotNil(t, resultShort)
+
+		// Inherits should be identical
+		assert.ElementsMatch(t, resultArn.Inherits, resultShort.Inherits,
+			"Scoped role: ARN and short name should produce identical Inherits")
+		assert.ElementsMatch(t, []string{"ReadOnlyAccess", "SecurityAudit"}, resultArn.Inherits)
+
+		// Permissions should be identical
+		assert.ElementsMatch(t,
+			collectOps(resultArn.Permissions.Allow),
+			collectOps(resultShort.Permissions.Allow))
+
+		// Denied identity — should fail for BOTH formats identically
+		denied := &models.Identity{
+			ID: "outsider1",
+			User: &models.User{
+				Username: "outsider",
+				Email:    "outsider@vendor.com",
+				Groups:   []string{"contractors"},
+			},
+		}
+
+		_, errArn := configArn.GetCompositeRoleByName(denied, "scoped_viewer")
+		_, errShort := configShort.GetCompositeRoleByName(denied, "scoped_viewer")
+
+		// Both should fail with the same scope denial
+		require.Error(t, errArn, "ARN format: denied user should fail")
+		require.Error(t, errShort, "Short format: denied user should fail")
+		assert.Contains(t, errArn.Error(), "not applicable",
+			"ARN format error should mention scope: %v", errArn)
+		assert.Contains(t, errShort.Error(), "not applicable",
+			"Short format error should mention scope: %v", errShort)
+	})
+
+	// ---------------------------------------------------------------
+	// 4. Thand role + mixed formats with deny scope at depth 2
+	// ---------------------------------------------------------------
+	t.Run("thand role plus mixed format inherits with deny scope", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"base_ops": {
+				Name:        "Base Ops",
+				Description: "Baseline ops with short-name provider roles",
+				Inherits: []string{
+					"ReadOnlyAccess", // short format
+				},
+				Permissions: models.RolePermissions{
+					Allow: stmtsAws("sts:GetCallerIdentity"),
+				},
+				Providers: []string{"aws-prod"},
+				Enabled:   true,
+			},
+			"elevated_ops": {
+				Name:        "Elevated Ops",
+				Description: "Elevated with ARN-format provider roles and a thand inherit",
+				Inherits: []string{
+					"base_ops", // thand role
+					"arn:aws:iam::aws:policy/AdministratorAccess", // ARN
+					"PowerUserAccess", // short
+				},
+				Permissions: models.RolePermissions{
+					Allow: stmtsAws("ec2:*", "rds:*"),
+					Deny:  stmtsAws("iam:DeleteRole"),
+				},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"sre-team"},
+					},
+					Deny: models.ScopeIdentities{
+						Users: []string{"probation@example.com"},
+					},
+				},
+				Providers: []string{"aws-prod"},
+				Enabled:   true,
+			},
+		}
+
+		providers := map[string]models.ProviderConfig{
+			"aws-prod": {
+				Name:     "aws-prod",
+				Provider: "aws",
+			},
+		}
+
+		config := newTestConfig(t, roles, providers)
+
+		// ── SRE member: passes allow scope, gets everything ──
+		sre := &models.Identity{
+			ID: "sre1",
+			User: &models.User{
+				Username: "sre-engineer",
+				Email:    "sre@example.com",
+				Groups:   []string{"sre-team", "engineering"},
+			},
+		}
+
+		resultSre, err := config.GetCompositeRoleByName(sre, "elevated_ops")
+		require.NoError(t, err)
+		require.NotNil(t, resultSre)
+
+		// Should be composite (inherited from base_ops thand role)
+		assert.True(t, resultSre.Composite,
+			"SRE should get composite role")
+
+		// All three provider roles: ReadOnlyAccess (from base_ops, bubbled up),
+		// AdministratorAccess (ARN format), PowerUserAccess (short format)
+		assert.Len(t, resultSre.Inherits, 3,
+			"SRE should have 3 provider roles: got %v", resultSre.Inherits)
+		assert.Contains(t, resultSre.Inherits, "ReadOnlyAccess",
+			"ReadOnlyAccess should bubble up from base_ops: got %v", resultSre.Inherits)
+		assert.Contains(t, resultSre.Inherits, "AdministratorAccess",
+			"AdministratorAccess (ARN) should resolve: got %v", resultSre.Inherits)
+		assert.Contains(t, resultSre.Inherits, "PowerUserAccess",
+			"PowerUserAccess (short) should resolve: got %v", resultSre.Inherits)
+
+		// Permissions merged
+		sreOps := collectOps(resultSre.Permissions.Allow)
+		assert.Contains(t, sreOps, "ec2:*")
+		assert.Contains(t, sreOps, "rds:*")
+		assert.Contains(t, sreOps, "sts:GetCallerIdentity",
+			"base_ops sts perm should merge: got %v", sreOps)
+
+		// Deny should be present
+		sreDeny := collectOps(resultSre.Permissions.Deny)
+		assert.Contains(t, sreDeny, "iam:DeleteRole")
+
+		// ── Probation user: in sre-team (allow) but explicitly denied ──
+		probation := &models.Identity{
+			ID: "prob1",
+			User: &models.User{
+				Username: "probation",
+				Email:    "probation@example.com",
+				Groups:   []string{"sre-team"},
+			},
+		}
+
+		_, errProb := config.GetCompositeRoleByName(probation, "elevated_ops")
+		require.Error(t, errProb,
+			"Probation user should be denied by scope even though in allow group")
+		assert.Contains(t, errProb.Error(), "not applicable",
+			"Error should mention scope denial: %v", errProb)
+
+		// ── Non-SRE user: not in sre-team group ──
+		outsider := &models.Identity{
+			ID: "out1",
+			User: &models.User{
+				Username: "outsider",
+				Email:    "outsider@example.com",
+				Groups:   []string{"developers"},
+			},
+		}
+
+		_, errOut := config.GetCompositeRoleByName(outsider, "elevated_ops")
+		require.Error(t, errOut,
+			"Non-SRE user should be denied by scope")
+		assert.Contains(t, errOut.Error(), "not applicable")
+	})
+
+	// ---------------------------------------------------------------
+	// 5. Three-level chain mixing ARN and short names at each tier
+	// ---------------------------------------------------------------
+	t.Run("three-level chain with mixed formats at every tier", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"tier0": {
+				Name:        "Tier 0",
+				Description: "Foundation with short-name inherit",
+				Inherits: []string{
+					"ReadOnlyAccess", // short format
+				},
+				Permissions: models.RolePermissions{
+					Allow: stmtsAws("sts:GetCallerIdentity"),
+				},
+				Providers: []string{"aws-prod"},
+				Enabled:   true,
+			},
+			"tier1": {
+				Name:        "Tier 1",
+				Description: "Middle with ARN inherit",
+				Inherits: []string{
+					"tier0", // thand
+					"arn:aws:iam::aws:policy/IAMReadOnlyAccess", // ARN
+				},
+				Permissions: models.RolePermissions{
+					Allow: stmtsAws("s3:GetObject"),
+				},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Domains: []string{"example.com"},
+					},
+				},
+				Providers: []string{"aws-prod"},
+				Enabled:   true,
+			},
+			"tier2": {
+				Name:        "Tier 2",
+				Description: "Top with mixed short + ARN inherits",
+				Inherits: []string{
+					"tier1",         // thand
+					"SecurityAudit", // short format
+					"arn:aws:iam::aws:policy/AdministratorAccess", // ARN
+				},
+				Permissions: models.RolePermissions{
+					Allow: stmtsAws("ec2:*"),
+				},
+				Providers: []string{"aws-prod"},
+				Enabled:   true,
+			},
+		}
+
+		providers := map[string]models.ProviderConfig{
+			"aws-prod": {
+				Name:     "aws-prod",
+				Provider: "aws",
+			},
+		}
+
+		config := newTestConfig(t, roles, providers)
+
+		identity := &models.Identity{
+			ID: "user1",
+			User: &models.User{
+				Username: "testuser",
+				Email:    "user@example.com",
+				Groups:   []string{"engineering"},
+			},
+		}
+
+		result, err := config.GetCompositeRoleByName(identity, "tier2")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		// Should be composite (thand inheritance chain)
+		assert.True(t, result.Composite)
+
+		// All provider roles from all tiers should be present:
+		// tier0: ReadOnlyAccess (short, bubbled up through tier1→tier2)
+		// tier1: IAMReadOnlyAccess (ARN, bubbled up through tier2)
+		// tier2: SecurityAudit (short), AdministratorAccess (ARN)
+		assert.Len(t, result.Inherits, 4,
+			"All 4 provider roles from all tiers should be present: got %v", result.Inherits)
+		assert.Contains(t, result.Inherits, "ReadOnlyAccess",
+			"ReadOnlyAccess (short, tier0) should bubble up: got %v", result.Inherits)
+		assert.Contains(t, result.Inherits, "IAMReadOnlyAccess",
+			"IAMReadOnlyAccess (ARN, tier1) should bubble up: got %v", result.Inherits)
+		assert.Contains(t, result.Inherits, "SecurityAudit",
+			"SecurityAudit (short, tier2) should resolve: got %v", result.Inherits)
+		assert.Contains(t, result.Inherits, "AdministratorAccess",
+			"AdministratorAccess (ARN, tier2) should resolve: got %v", result.Inherits)
+
+		// Permissions from all three tiers should be merged
+		allowOps := collectOps(result.Permissions.Allow)
+		assert.Contains(t, allowOps, "ec2:*", "tier2 perm: got %v", allowOps)
+		assert.Contains(t, allowOps, "s3:GetObject", "tier1 perm: got %v", allowOps)
+		assert.Contains(t, allowOps, "sts:GetCallerIdentity", "tier0 perm: got %v", allowOps)
+	})
+}
