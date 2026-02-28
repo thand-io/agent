@@ -180,14 +180,20 @@ func (a *TemporalClient) Initialize() error {
 
 func (c *TemporalClient) GetClient() client.Client {
 	<-c.readyCh
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return c.client
 }
 
 func (c *TemporalClient) HasClient() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return c.client != nil
 }
 
 func (c *TemporalClient) HasWorker() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return len(c.workers) > 0
 }
 
@@ -196,6 +202,9 @@ func (c *TemporalClient) HasWorker() bool {
 // If identities are provided, only matching workers are included.
 // Returns nil if no matching workers are found.
 func (c *TemporalClient) GetWorker(identities ...string) worker.Worker {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if len(c.workers) == 0 {
 		return nil
 	}
