@@ -90,7 +90,7 @@ func (h *Handler) HandleConnection(ctx context.Context, conn IPCConn) error {
 	case domain.ActionRevoke:
 		return h.handleRevoke(reqCtx, conn, req)
 	default:
-		return fmt.Errorf("%w: %s", ErrUnsupportedAction, req.Action)
+		return h.writeRequestError(reqCtx, conn, req, invalidRequestErr(fmt.Errorf("%w: %s", ErrUnsupportedAction, req.Action)))
 	}
 }
 
