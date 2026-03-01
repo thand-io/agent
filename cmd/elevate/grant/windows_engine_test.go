@@ -13,7 +13,7 @@ func TestWindowsGrantAddsUser(t *testing.T) {
 	now := time.Date(2026, 2, 23, 20, 0, 0, 0, time.UTC)
 	var addCalled bool
 
-	engineAny, err := NewWindowsEngine(WindowsEngineConfig{},
+	engine, err := NewWindowsEngine(WindowsEngineConfig{},
 		WithWindowsNow(func() time.Time { return now }),
 		WithWindowsComputerName("TESTDEV"),
 		WithWindowsRunCommand(func(ctx context.Context, name string, args ...string) ([]byte, error) {
@@ -45,8 +45,6 @@ func TestWindowsGrantAddsUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWindowsEngine failed: %v", err)
 	}
-	engine := engineAny.(*WindowsEngine)
-
 	res, err := engine.Grant(context.Background(), domain.GrantRequest{
 		RequestID:       "req-1",
 		Username:        "alice",
@@ -67,7 +65,7 @@ func TestWindowsGrantAddsUser(t *testing.T) {
 }
 
 func TestWindowsGrantAlreadyMember(t *testing.T) {
-	engineAny, err := NewWindowsEngine(WindowsEngineConfig{},
+	engine, err := NewWindowsEngine(WindowsEngineConfig{},
 		WithWindowsComputerName("TESTDEV"),
 		WithWindowsRunCommand(func(ctx context.Context, name string, args ...string) ([]byte, error) {
 			_ = ctx
@@ -83,8 +81,6 @@ func TestWindowsGrantAlreadyMember(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWindowsEngine failed: %v", err)
 	}
-	engine := engineAny.(*WindowsEngine)
-
 	res, err := engine.Grant(context.Background(), domain.GrantRequest{
 		RequestID:       "req-1",
 		Username:        "alice",
@@ -99,7 +95,7 @@ func TestWindowsGrantAlreadyMember(t *testing.T) {
 }
 
 func TestWindowsGrantAlreadyMemberWithSingleJSONObjectInArray(t *testing.T) {
-	engineAny, err := NewWindowsEngine(WindowsEngineConfig{},
+	engine, err := NewWindowsEngine(WindowsEngineConfig{},
 		WithWindowsComputerName("TESTDEV"),
 		WithWindowsRunCommand(func(ctx context.Context, name string, args ...string) ([]byte, error) {
 			_ = ctx
@@ -115,8 +111,6 @@ func TestWindowsGrantAlreadyMemberWithSingleJSONObjectInArray(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWindowsEngine failed: %v", err)
 	}
-	engine := engineAny.(*WindowsEngine)
-
 	res, err := engine.Grant(context.Background(), domain.GrantRequest{
 		RequestID:       "req-1",
 		Username:        "alice",
@@ -131,7 +125,7 @@ func TestWindowsGrantAlreadyMemberWithSingleJSONObjectInArray(t *testing.T) {
 }
 
 func TestWindowsRevokeIdempotentWhenMissing(t *testing.T) {
-	engineAny, err := NewWindowsEngine(WindowsEngineConfig{},
+	engine, err := NewWindowsEngine(WindowsEngineConfig{},
 		WithWindowsComputerName("TESTDEV"),
 		WithWindowsRunCommand(func(ctx context.Context, name string, args ...string) ([]byte, error) {
 			_ = ctx
@@ -147,8 +141,6 @@ func TestWindowsRevokeIdempotentWhenMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWindowsEngine failed: %v", err)
 	}
-	engine := engineAny.(*WindowsEngine)
-
 	if err := engine.Revoke(context.Background(), domain.RevokeRequest{
 		RequestID: "req-1",
 		Username:  "alice",
@@ -161,7 +153,7 @@ func TestWindowsRevokeRemovesUser(t *testing.T) {
 	var deleted bool
 	call := 0
 
-	engineAny, err := NewWindowsEngine(WindowsEngineConfig{},
+	engine, err := NewWindowsEngine(WindowsEngineConfig{},
 		WithWindowsComputerName("TESTDEV"),
 		WithWindowsRunCommand(func(ctx context.Context, name string, args ...string) ([]byte, error) {
 			_ = ctx
@@ -188,8 +180,6 @@ func TestWindowsRevokeRemovesUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWindowsEngine failed: %v", err)
 	}
-	engine := engineAny.(*WindowsEngine)
-
 	engine.isMember = func(context.Context, string) (bool, error) { return true, nil }
 
 	if err := engine.Revoke(context.Background(), domain.RevokeRequest{
@@ -204,11 +194,10 @@ func TestWindowsRevokeRemovesUser(t *testing.T) {
 }
 
 func TestWindowsGrantInvalidRequest(t *testing.T) {
-	engineAny, err := NewWindowsEngine(WindowsEngineConfig{}, WithWindowsComputerName("TESTDEV"))
+	engine, err := NewWindowsEngine(WindowsEngineConfig{}, WithWindowsComputerName("TESTDEV"))
 	if err != nil {
 		t.Fatalf("NewWindowsEngine failed: %v", err)
 	}
-	engine := engineAny.(*WindowsEngine)
 
 	_, err = engine.Grant(context.Background(), domain.GrantRequest{
 		RequestID:       "",
@@ -242,7 +231,7 @@ func TestWindowsUsernameMatchesLocalPrincipalExactly(t *testing.T) {
 func TestWindowsGrantDomainPrincipalDoesNotCountAsAlreadyMember(t *testing.T) {
 	var addCalled bool
 
-	engineAny, err := NewWindowsEngine(WindowsEngineConfig{},
+	engine, err := NewWindowsEngine(WindowsEngineConfig{},
 		WithWindowsComputerName("TESTDEV"),
 		WithWindowsRunCommand(func(ctx context.Context, name string, args ...string) ([]byte, error) {
 			_ = ctx
@@ -264,8 +253,6 @@ func TestWindowsGrantDomainPrincipalDoesNotCountAsAlreadyMember(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWindowsEngine failed: %v", err)
 	}
-	engine := engineAny.(*WindowsEngine)
-
 	res, err := engine.Grant(context.Background(), domain.GrantRequest{
 		RequestID:       "req-1",
 		Username:        "alice",

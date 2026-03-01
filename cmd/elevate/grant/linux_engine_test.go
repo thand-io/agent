@@ -262,7 +262,7 @@ func mustNewEngine(t *testing.T, cfg LinuxEngineConfig, opts ...EngineOption) *L
 	if err != nil {
 		t.Fatalf("NewLinuxEngine failed: %v", err)
 	}
-	return engine.(*LinuxEngine)
+	return engine
 }
 
 func TestNewLinuxEngineRequiresConfigFields(t *testing.T) {

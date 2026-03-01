@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/thand-io/agent/cmd/elevate/domain"
-	"github.com/thand-io/agent/cmd/elevate/handler"
 	"github.com/thand-io/agent/cmd/elevate/identity"
 )
 
@@ -78,8 +77,8 @@ type WindowsEngine struct {
 	isMember     func(context.Context, string) (bool, error)
 }
 
-// NewWindowsEngine constructs a Windows GrantEngine backed by PowerShell local-group cmdlets.
-func NewWindowsEngine(cfg WindowsEngineConfig, opts ...WindowsEngineOption) (handler.GrantEngine, error) {
+// NewWindowsEngine constructs a Windows engine backed by PowerShell local-group cmdlets.
+func NewWindowsEngine(cfg WindowsEngineConfig, opts ...WindowsEngineOption) (*WindowsEngine, error) {
 	adminGroup := strings.TrimSpace(cfg.AdminGroup)
 	if adminGroup == "" {
 		adminGroup = defaultWindowsAdminGroup
@@ -223,5 +222,3 @@ func windowsUsernameMatches(line, username string, computerName string) bool {
 	}
 	return false
 }
-
-var _ handler.GrantEngine = (*WindowsEngine)(nil)

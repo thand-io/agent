@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/thand-io/agent/cmd/elevate/domain"
-	"github.com/thand-io/agent/cmd/elevate/handler"
 )
 
 const (
@@ -79,8 +78,8 @@ type LinuxEngineConfig struct {
 	VisudoBin   string
 }
 
-// NewLinuxEngine constructs a Linux GrantEngine backed by sudoers.d files.
-func NewLinuxEngine(cfg LinuxEngineConfig, opts ...EngineOption) (handler.GrantEngine, error) {
+// NewLinuxEngine constructs a Linux engine backed by sudoers.d files.
+func NewLinuxEngine(cfg LinuxEngineConfig, opts ...EngineOption) (*LinuxEngine, error) {
 	e := &LinuxEngine{
 		sudoersDir:  strings.TrimSpace(cfg.SudoersDir),
 		sudoersFile: strings.TrimSpace(cfg.SudoersFile),

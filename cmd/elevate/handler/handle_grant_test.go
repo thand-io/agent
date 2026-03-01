@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/thand-io/agent/cmd/elevate/domain"
+	"github.com/thand-io/agent/cmd/elevate/grant"
 )
 
 func TestHandleConnectionGrantSuccess(t *testing.T) {
@@ -318,4 +319,37 @@ func TestHandleConnectionPayloadMismatchWritesError(t *testing.T) {
 
 	assertChallengeAndResult(t, conn.writeFrames, nonce, req.RequestID, resultStatusError)
 	assertResultErrorCode(t, conn.writeFrames[1], ErrorCodeUnauthorized)
+}
+
+func TestHandleConnectionGrantMapsInvalidGrantRequestToInvalidRequest(t *testing.T) {
+	req := domain.RequestFrame{
+		Type:            domain.FrameTypeRequest,
+		Action:          domain.ActionGrant,
+		WorkflowID:      "wf-1",
+		RequestID:       "req-invalid-grant",
+		Username:        "alice",
+		DurationSeconds: 60,
+	}
+	nonce := "fixed-nonce-invalid-grant"
+
+	conn := &stubConn{
+		readFrames: [][]byte{
+			mustJSON(t, req),
+			mustJSON(t, signedResponseFor(t, req, nonce)),
+		},
+	}
+	grantEngine := &stubGrantEngine{grantErr: grant.ErrInvalidGrantRequest}
+	state := &stubStateStore{}
+	h := New(grantEngine, &stubVerifier{}, state, stubClock{mono: 123, wall: time.Now().UTC()})
+	h.generateNonce = func() (string, error) { return nonce, nil }
+
+	if err := h.HandleConnection(context.Background(), conn); err != nil {
+		t.Fatalf("HandleConnection failed: %v", err)
+	}
+	if grantEngine.grantCalls != 1 {
+		t.Fatalf("expected grant to be attempted once, got %d", grantEngine.grantCalls)
+	}
+
+	assertChallengeAndResult(t, conn.writeFrames, nonce, req.RequestID, resultStatusError)
+	assertResultErrorCode(t, conn.writeFrames[1], ErrorCodeInvalidRequest)
 }

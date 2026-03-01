@@ -36,7 +36,7 @@ func (h *Handler) handleGrant(ctx context.Context, conn IPCConn, req domain.Requ
 		DurationSeconds: req.DurationSeconds,
 	})
 	if err != nil {
-		return h.writeRequestError(ctx, conn, req, wrapInternal("grant", err))
+		return h.writeRequestError(ctx, conn, req, fmt.Errorf("grant: %w", err))
 	}
 
 	state := domain.GrantState{

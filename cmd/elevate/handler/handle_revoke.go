@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/thand-io/agent/cmd/elevate/domain"
 )
@@ -41,7 +42,7 @@ func (h *Handler) handleRevoke(ctx context.Context, conn IPCConn, req domain.Req
 		WorkflowID: req.WorkflowID,
 		Username:   username,
 	}); err != nil {
-		return h.writeRequestError(ctx, conn, req, wrapInternal("revoke", err))
+		return h.writeRequestError(ctx, conn, req, fmt.Errorf("revoke: %w", err))
 	}
 
 	if found {
@@ -70,11 +71,12 @@ func isCompletedGrantState(grant domain.GrantState) bool {
 	return !grant.CompletedAtWallUTC.IsZero()
 }
 
-func (h *Handler) writeRequestError(ctx context.Context, conn IPCConn, req domain.RequestFrame, err *responseError) error {
-	if writeErr := h.writeResult(ctx, conn, req, resultStatusError, err.Code); writeErr != nil {
+func (h *Handler) writeRequestError(ctx context.Context, conn IPCConn, req domain.RequestFrame, err error) error {
+	resErr := classifyResponseError(err)
+	if writeErr := h.writeResult(ctx, conn, req, resultStatusError, resErr.Code); writeErr != nil {
 		return writeErr
 	}
-	h.logFailure(req.Action, req.RequestID, err)
+	h.logFailure(req.Action, req.RequestID, resErr)
 	return nil
 }
 
