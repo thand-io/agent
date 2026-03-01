@@ -13,12 +13,18 @@ import (
 )
 
 type stubStore struct {
-	mu     sync.Mutex
-	grants []domain.GrantState
+	mu        sync.Mutex
+	grants    []domain.GrantState
+	listErr   error
+	putErr    error
+	deleteErr error
 }
 
 func (s *stubStore) Put(ctx context.Context, grant domain.GrantState) error {
 	_ = ctx
+	if s.putErr != nil {
+		return s.putErr
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := range s.grants {
@@ -33,6 +39,9 @@ func (s *stubStore) Put(ctx context.Context, grant domain.GrantState) error {
 
 func (s *stubStore) Delete(ctx context.Context, requestID string) error {
 	_ = ctx
+	if s.deleteErr != nil {
+		return s.deleteErr
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	filtered := s.grants[:0]
@@ -47,6 +56,9 @@ func (s *stubStore) Delete(ctx context.Context, requestID string) error {
 
 func (s *stubStore) List(ctx context.Context) ([]domain.GrantState, error) {
 	_ = ctx
+	if s.listErr != nil {
+		return nil, s.listErr
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := make([]domain.GrantState, len(s.grants))
@@ -279,6 +291,25 @@ func TestCleanupRunPeriodicSweep(t *testing.T) {
 	}
 	if engine.revokedCount() == 0 {
 		t.Fatal("expected periodic revoke to occur")
+	}
+}
+
+func TestCleanupRunTreatsCanceledStoreOperationAsGracefulShutdown(t *testing.T) {
+	store := &stubStore{listErr: context.Canceled}
+	engine := &stubGrantEngine{}
+	clock := &stubClock{wall: time.Date(2026, 2, 22, 12, 0, 0, 0, time.UTC)}
+	clock.mono.Store(1)
+
+	runner, err := NewCleanupRunner(store, engine, clock, 10*time.Millisecond, 24*time.Hour, slog.Default())
+	if err != nil {
+		t.Fatalf("NewCleanupRunner failed: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if err := runner.Run(ctx); err != nil {
+		t.Fatalf("expected graceful shutdown on canceled store operation, got %v", err)
 	}
 }
 

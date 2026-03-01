@@ -92,9 +92,18 @@ func (s *stubStateStore) Put(ctx context.Context, grant domain.GrantState) error
 
 func (s *stubStateStore) Delete(ctx context.Context, requestID string) error {
 	_ = ctx
-	_ = requestID
 	s.deleteCalls++
-	return s.deleteErr
+	if s.deleteErr != nil {
+		return s.deleteErr
+	}
+	filtered := s.grants[:0]
+	for _, grant := range s.grants {
+		if grant.RequestID != requestID {
+			filtered = append(filtered, grant)
+		}
+	}
+	s.grants = filtered
+	return nil
 }
 
 func (s *stubStateStore) List(ctx context.Context) ([]domain.GrantState, error) {

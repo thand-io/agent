@@ -61,7 +61,10 @@ func (h *Handler) completeGrantState(ctx context.Context, req domain.RequestFram
 
 	grant.CompletedAtWallUTC = h.clock.NowWallUTC()
 	if err := h.stateStore.Put(ctx, grant); err != nil {
-		return h.writeRequestError(ctx, conn, req, wrapInternal("persist completed grant state", err))
+		if deleteErr := h.stateStore.Delete(ctx, grant.RequestID); deleteErr != nil {
+			return h.writeRequestError(ctx, conn, req, wrapInternal("persist completed grant state", fmt.Errorf("%w; delete fallback failed: %v", err, deleteErr)))
+		}
+		return nil
 	}
 
 	return nil

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -54,6 +55,9 @@ func NewCleanupRunner(store handler.StateStore, grants handler.GrantEngine, cloc
 // Run executes one startup sweep and then continues periodic sweeps until context cancellation.
 func (c *CleanupRunner) Run(ctx context.Context) error {
 	if err := c.runOnce(ctx); err != nil {
+		if isCleanupShutdownError(ctx, err) {
+			return nil
+		}
 		return err
 	}
 
@@ -66,6 +70,9 @@ func (c *CleanupRunner) Run(ctx context.Context) error {
 			return nil
 		case <-ticker.C:
 			if err := c.runOnce(ctx); err != nil {
+				if isCleanupShutdownError(ctx, err) {
+					return nil
+				}
 				return err
 			}
 		}
@@ -166,4 +173,14 @@ func isExpired(grant domain.GrantState, nowMonoNS int64, nowWallUTC time.Time) b
 
 	// Check the monotonic clock to catch expired grants even if the wall clock has been changed.
 	return nowMonoNS-grant.GrantedAtMonoNS >= durationNS
+}
+
+func isCleanupShutdownError(ctx context.Context, err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	return ctx.Err() != nil && errors.Is(err, ctx.Err())
 }

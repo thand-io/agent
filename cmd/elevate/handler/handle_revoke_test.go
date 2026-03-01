@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -47,6 +48,52 @@ func TestHandleConnectionRevokeSuccess(t *testing.T) {
 	}
 	if len(state.grants) != 1 || state.grants[0].CompletedAtWallUTC.IsZero() {
 		t.Fatalf("expected revoke to mark stored grant completed, got %+v", state.grants)
+	}
+	assertChallengeAndResult(t, conn.writeFrames, nonce, req.RequestID, resultStatusOK)
+}
+
+func TestHandleConnectionRevokeDeletesStateWhenCompletionPersistFails(t *testing.T) {
+	req := domain.RequestFrame{
+		Type:       domain.FrameTypeRequest,
+		Action:     domain.ActionRevoke,
+		WorkflowID: "wf-1",
+		RequestID:  "req-2",
+		Username:   "alice",
+	}
+	nonce := "fixed-nonce-revoke-delete-fallback"
+
+	conn := &stubConn{
+		readFrames: [][]byte{
+			mustJSON(t, req),
+			mustJSON(t, signedResponseFor(t, req, nonce)),
+		},
+	}
+	grantEngine := &stubGrantEngine{}
+	state := &stubStateStore{
+		putErr: errors.New("put failed"),
+		grants: []domain.GrantState{{
+			RequestID:        req.RequestID,
+			WorkflowID:       req.WorkflowID,
+			Username:         req.Username,
+			GrantedAtWallUTC: time.Now().UTC(),
+			GrantedAtMonoNS:  1,
+			DurationSeconds:  60,
+		}},
+	}
+	h := New(grantEngine, &stubVerifier{}, state, stubClock{wall: time.Now().UTC()})
+	h.generateNonce = func() (string, error) { return nonce, nil }
+
+	if err := h.HandleConnection(context.Background(), conn); err != nil {
+		t.Fatalf("HandleConnection failed: %v", err)
+	}
+	if grantEngine.revokeCalls != 1 {
+		t.Fatalf("expected 1 revoke call, got %d", grantEngine.revokeCalls)
+	}
+	if state.deleteCalls != 1 {
+		t.Fatalf("expected delete fallback after failed completion put, got %d delete calls", state.deleteCalls)
+	}
+	if len(state.grants) != 0 {
+		t.Fatalf("expected state to be deleted after fallback, got %+v", state.grants)
 	}
 	assertChallengeAndResult(t, conn.writeFrames, nonce, req.RequestID, resultStatusOK)
 }
