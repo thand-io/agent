@@ -253,6 +253,48 @@ func TestHandleConnectionGrantAllowsNewGrantWhenExistingOneIsCompleted(t *testin
 	assertChallengeAndResult(t, conn.writeFrames, nonce, req.RequestID, resultStatusOK)
 }
 
+func TestHandleConnectionGrantAllowsNewGrantWhenExistingOneIsExpired(t *testing.T) {
+	req := domain.RequestFrame{
+		Type:            domain.FrameTypeRequest,
+		Action:          domain.ActionGrant,
+		WorkflowID:      "wf-1",
+		RequestID:       "req-new-expired",
+		Username:        "alice",
+		DurationSeconds: 60,
+	}
+	nonce := "fixed-nonce-user-expired"
+	nowWall := time.Date(2026, 2, 28, 12, 0, 0, 0, time.UTC)
+
+	conn := &stubConn{
+		readFrames: [][]byte{
+			mustJSON(t, req),
+			mustJSON(t, signedResponseFor(t, req, nonce)),
+		},
+	}
+	grantEngine := &stubGrantEngine{grantResult: domain.GrantResult{}}
+	state := &stubStateStore{grants: []domain.GrantState{{
+		RequestID:        "req-old-expired",
+		WorkflowID:       "wf-existing",
+		Username:         req.Username,
+		GrantedAtWallUTC: nowWall.Add(-2 * time.Minute),
+		GrantedAtMonoNS:  int64(time.Minute),
+		DurationSeconds:  60,
+	}}}
+	h := New(grantEngine, &stubVerifier{}, state, stubClock{
+		mono: int64(3 * time.Minute),
+		wall: nowWall,
+	})
+	h.generateNonce = func() (string, error) { return nonce, nil }
+
+	if err := h.HandleConnection(context.Background(), conn); err != nil {
+		t.Fatalf("HandleConnection failed: %v", err)
+	}
+	if grantEngine.grantCalls != 1 {
+		t.Fatalf("expected expired grant not to block new grant, got %d grant calls", grantEngine.grantCalls)
+	}
+	assertChallengeAndResult(t, conn.writeFrames, nonce, req.RequestID, resultStatusOK)
+}
+
 func TestHandleConnectionGrantRejectsUnsafeUsername(t *testing.T) {
 	req := domain.RequestFrame{
 		Type:            domain.FrameTypeRequest,

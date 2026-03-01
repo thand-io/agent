@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/thand-io/agent/cmd/elevate/domain"
 )
@@ -20,7 +21,7 @@ func (h *Handler) handleGrant(ctx context.Context, conn IPCConn, req domain.Requ
 	if err != nil {
 		return h.writeRequestError(ctx, conn, req, wrapInternal("list grant state", err))
 	}
-	stateErr := validateGrantRequestState(grants, req)
+	stateErr := validateGrantRequestState(grants, req, h.clock.NowMonoNS(), h.clock.NowWallUTC())
 	switch {
 	case stateErr.idempotent:
 		return h.writeGrantSuccess(ctx, conn, req)
@@ -72,7 +73,7 @@ func (e grantStateError) responseError() *responseError {
 	}
 }
 
-func validateGrantRequestState(grants []domain.GrantState, req domain.RequestFrame) grantStateError {
+func validateGrantRequestState(grants []domain.GrantState, req domain.RequestFrame, nowMonoNS int64, nowWallUTC time.Time) grantStateError {
 	// Resolve request-id semantics first so exact retries remain idempotent even if
 	// the same user also has another active grant in the state list.
 	for _, grant := range grants {
@@ -87,7 +88,7 @@ func validateGrantRequestState(grants []domain.GrantState, req domain.RequestFra
 		}
 	}
 	for _, grant := range grants {
-		if grant.Username == req.Username && !isCompletedGrantState(grant) {
+		if grant.Username == req.Username && isActiveGrantState(grant, nowMonoNS, nowWallUTC) {
 			return grantStateError{
 				code: ErrorCodeActiveGrantExists,
 				err:  fmt.Errorf("user %q already has an active grant", req.Username),
