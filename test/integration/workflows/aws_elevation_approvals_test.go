@@ -14,6 +14,7 @@ import (
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/workflows/manager"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
+	"github.com/thand-io/agent/test/integration/testinfra"
 	"go.temporal.io/api/enums/v1"
 )
 
@@ -27,7 +28,7 @@ func TestAWSElevationApprovalsWorkflow(t *testing.T) {
 	defer cancel()
 
 	// Setup infrastructure
-	infra := SetupTestInfrastructure(t, ctx)
+	infra := testinfra.SetupTestInfrastructure(t, ctx)
 	defer infra.Teardown()
 
 	// Clear any existing emails
@@ -35,7 +36,7 @@ func TestAWSElevationApprovalsWorkflow(t *testing.T) {
 	require.NoError(t, err, "Failed to clear emails")
 
 	// Load the aws-elevation-approvals test case
-	loader := NewTestCaseLoader(infra)
+	loader := testinfra.NewTestCaseLoader(infra, "testdata")
 	testCase, err := loader.LoadTestCase("aws-elevation-approvals")
 	require.NoError(t, err, "Failed to load aws-elevation-approvals test case")
 

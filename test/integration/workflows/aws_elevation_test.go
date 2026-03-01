@@ -17,6 +17,7 @@ import (
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/workflows/manager"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
+	"github.com/thand-io/agent/test/integration/testinfra"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 )
@@ -32,7 +33,7 @@ func TestAWSElevationWorkflow(t *testing.T) {
 	defer cancel()
 
 	// Setup infrastructure
-	infra := SetupTestInfrastructure(t, ctx)
+	infra := testinfra.SetupTestInfrastructure(t, ctx)
 	defer infra.Teardown()
 
 	// Clear any existing emails
@@ -40,7 +41,7 @@ func TestAWSElevationWorkflow(t *testing.T) {
 	require.NoError(t, err, "Failed to clear emails")
 
 	// Load the aws-elevation test case
-	loader := NewTestCaseLoader(infra)
+	loader := testinfra.NewTestCaseLoader(infra, "testdata")
 	testCase, err := loader.LoadTestCase("aws-elevation")
 	require.NoError(t, err, "Failed to load aws-elevation test case")
 
@@ -167,7 +168,7 @@ func TestAWSElevationWorkflowSimple(t *testing.T) {
 	defer cancel()
 
 	// Setup infrastructure
-	infra := SetupTestInfrastructure(t, ctx)
+	infra := testinfra.SetupTestInfrastructure(t, ctx)
 	defer infra.Teardown()
 
 	// Create IAM client for LocalStack
@@ -252,7 +253,7 @@ func TestAWSElevationWithTemporal(t *testing.T) {
 	defer cancel()
 
 	// Setup infrastructure
-	infra := SetupTestInfrastructure(t, ctx)
+	infra := testinfra.SetupTestInfrastructure(t, ctx)
 	defer infra.Teardown()
 
 	// Clear any existing emails
@@ -260,7 +261,7 @@ func TestAWSElevationWithTemporal(t *testing.T) {
 	require.NoError(t, err, "Failed to clear emails")
 
 	// Load the aws-elevation test case
-	loader := NewTestCaseLoader(infra)
+	loader := testinfra.NewTestCaseLoader(infra, "testdata")
 	testCase, err := loader.LoadTestCase("aws-elevation")
 	require.NoError(t, err, "Failed to load aws-elevation test case")
 

@@ -83,7 +83,7 @@ func TestGetClient_MultipleWaiters(t *testing.T) {
 
 	var unblocked int64
 
-	for i := 0; i < n; i++ {
+	for range n {
 		go func() {
 			defer wg.Done()
 			_ = tc.GetClient()
@@ -133,7 +133,7 @@ func TestMarkReady_ConcurrentSafe(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(n)
 
-	for i := 0; i < n; i++ {
+	for range n {
 		go func() {
 			defer wg.Done()
 			tc.markReady()

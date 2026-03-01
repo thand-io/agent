@@ -9,10 +9,11 @@ import (
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/workflows/manager"
+	"github.com/thand-io/agent/test/integration/testinfra"
 )
 
 // createConfigWithCleanup creates a config from a test case and registers cleanup
-func createConfigWithCleanup(t *testing.T, loader *TestCaseLoader, testCase *TestCase, infra *TestInfrastructure) *config.Config {
+func createConfigWithCleanup(t *testing.T, loader *testinfra.TestCaseLoader, testCase *testinfra.TestCase, infra *testinfra.TestInfrastructure) *config.Config {
 	t.Helper()
 	cfg, err := loader.CreateConfigFromTestCase(testCase)
 	require.NoError(t, err, "Failed to create config")
@@ -38,11 +39,11 @@ func TestHelloWorldWorkflow(t *testing.T) {
 	defer cancel()
 
 	// Setup infrastructure
-	infra := SetupTestInfrastructure(t, ctx)
+	infra := testinfra.SetupTestInfrastructure(t, ctx)
 	defer infra.Teardown()
 
 	// Load the hello-world test case
-	loader := NewTestCaseLoader(infra)
+	loader := testinfra.NewTestCaseLoader(infra, "testdata")
 	testCase, err := loader.LoadTestCase("hello-world")
 	require.NoError(t, err, "Failed to load hello-world test case")
 
