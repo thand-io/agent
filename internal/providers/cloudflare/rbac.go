@@ -30,7 +30,10 @@ func (p *cloudflareProvider) AuthorizeRole(
 		return p.authorizeRoleTemporal(workflowCtx, req)
 	}
 
-	localCtx := ctx.(context.Context)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
 
 	// Check for nil inputs
 	if !req.IsValid() {
@@ -151,7 +154,10 @@ func (p *cloudflareProvider) RevokeRole(
 		return p.revokeRoleTemporal(workflowCtx, req)
 	}
 
-	localCtx := ctx.(context.Context)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
 
 	// Check for nil inputs
 	if !req.IsValid() {

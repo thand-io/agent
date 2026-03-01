@@ -104,7 +104,10 @@ func (p *awsProvider) authorizeRoleIdentityCenter(
 				}
 			} else {
 				provisioned := false
-				localCtx := ctx.(context.Context)
+				localCtx, ok := ctx.(context.Context)
+				if !ok {
+					return nil, fmt.Errorf("invalid context type")
+				}
 				for iter := 0; iter < awsProviderDeleteRoleAssignmentBackoffLimit; iter++ {
 					if err := localCtx.Err(); err != nil {
 						return nil, fmt.Errorf("context cancelled while waiting for permission set provisioning: %w", err)
@@ -755,7 +758,10 @@ func (p *awsProvider) revokeRoleIdentityCenter(ctx models.ProviderContext, req *
 		}
 	}
 
-	localCtx := ctx.(context.Context)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("invalid context type")
+	}
 
 	for iter := 0; iter < awsProviderDeleteRoleAssignmentBackoffLimit; iter++ {
 		if err := localCtx.Err(); err != nil {
@@ -1076,7 +1082,10 @@ func (p *awsProvider) execGetIdentityCenterInstance(
 		}
 		return &resp, nil
 	}
-	localCtx := ctx.(context.Context)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
 	instanceArn, identityStoreId, err := p.getIdentityCenterInstance(localCtx)
 	if err != nil {
 		return nil, err
@@ -1099,7 +1108,10 @@ func (p *awsProvider) execFindOrCreatePermissionSet(
 		}
 		return &resp, nil
 	}
-	localCtx := ctx.(context.Context)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
 	arn, needsUpdate, err := p.findOrCreatePermissionSet(
 		localCtx,
 		req.InstanceArn,
@@ -1130,7 +1142,10 @@ func (p *awsProvider) execFindIdentityCenterUser(
 		}
 		return &resp, nil
 	}
-	localCtx := ctx.(context.Context)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
 	principalId, err := p.findIdentityCenterUser(localCtx, req.IdentityStoreId, req.Email)
 	if err != nil {
 		return nil, err
@@ -1149,7 +1164,10 @@ func (p *awsProvider) execCreateAccountAssignment(
 		})
 		return workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), CreateAccountAssignmentActivityName), req).Get(wfCtx, nil)
 	}
-	localCtx := ctx.(context.Context)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("invalid context type")
+	}
 	return p.createAccountAssignment(localCtx, req.InstanceArn, req.PermissionSetArn, req.PrincipalId, req.TargetAccountID)
 }
 
@@ -1172,7 +1190,10 @@ func (p *awsProvider) execFindPermissionSetByName(
 	if len(req.PermissionSetArn) > 0 {
 		return &FindPermissionSetByNameResponse{PermissionSetArn: req.PermissionSetArn}, nil
 	}
-	localCtx := ctx.(context.Context)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
 	arn, err := p.findPermissionSetByName(localCtx, req.InstanceArn, req.RoleName)
 	if err != nil {
 		return nil, err
@@ -1195,7 +1216,10 @@ func (p *awsProvider) execDeleteAccountAssignment(
 		}
 		return &resp, nil
 	}
-	localCtx := ctx.(context.Context)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
 	requestId, err := p.deleteAccountAssignment(localCtx, req.InstanceArn, req.PermissionSetArn, req.PrincipalId, req.TargetAccountID)
 	if err != nil {
 		return nil, err
@@ -1218,7 +1242,10 @@ func (p *awsProvider) execCheckAssignmentDeletionStatus(
 		}
 		return &resp, nil
 	}
-	localCtx := ctx.(context.Context)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
 	succeeded, err := p.checkAssignmentDeletionStatus(localCtx, req.InstanceArn, req.RequestId, req.PrincipalId, req.TargetAccountID)
 	if err != nil {
 		return nil, err
@@ -1241,7 +1268,10 @@ func (p *awsProvider) execCleanupPermissionSet(
 		_ = workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), CleanupPermissionSetActivityName), req).Get(wfCtx, nil)
 		return
 	}
-	localCtx := ctx.(context.Context)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return
+	}
 	p.tryCleanupPermissionSet(localCtx, req.InstanceArn, req.PermissionSetArn)
 }
 
@@ -1260,7 +1290,10 @@ func (p *awsProvider) execProvisionPermissionSet(
 		}
 		return &resp, nil
 	}
-	localCtx := ctx.(context.Context)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
 	requestId, err := p.provisionPermissionSet(localCtx, req.InstanceArn, req.PermissionSetArn)
 	if err != nil {
 		return nil, err
@@ -1283,7 +1316,10 @@ func (p *awsProvider) execCheckPermissionSetProvisioningStatus(
 		}
 		return &resp, nil
 	}
-	localCtx := ctx.(context.Context)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
 	succeeded, err := p.checkPermissionSetProvisioningStatus(localCtx, req.InstanceArn, req.RequestId)
 	if err != nil {
 		return nil, err

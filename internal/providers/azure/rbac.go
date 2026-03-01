@@ -32,7 +32,10 @@ func (p *azureProvider) AuthorizeRole(
 		return p.authorizeRoleTemporal(workflowCtx, req)
 	}
 
-	localCtx := ctx.(context.Context)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
 
 	if !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to authorize azure role")
@@ -89,7 +92,10 @@ func (p *azureProvider) RevokeRole(
 		return p.revokeRoleTemporal(workflowCtx, req)
 	}
 
-	localCtx := ctx.(context.Context)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
 
 	if !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to revoke azure role")

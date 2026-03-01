@@ -352,7 +352,7 @@ func (r *Role) GetVersion() *version.Version {
 }
 
 // GetVersionString returns the role version as a string suitable for tagging.
-// Returns "0.0.0" when no version is explicitly set.
+// Returns "1.0.0" when no version is explicitly set.
 func (r *Role) GetVersionString() string {
 	if r.Version != nil {
 		return r.Version.String()

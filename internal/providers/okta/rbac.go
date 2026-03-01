@@ -57,7 +57,10 @@ func (p *oktaProvider) AuthorizeRole(
 	if workflowCtx, ok := ctx.(workflow.Context); ok {
 		return p.authorizeRoleTemporal(workflowCtx, req)
 	}
-	localCtx := ctx.(context.Context)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
 	if !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to authorize Okta role")
 	}
@@ -270,7 +273,10 @@ func (p *oktaProvider) RevokeRole(
 	if workflowCtx, ok := ctx.(workflow.Context); ok {
 		return p.revokeRoleTemporal(workflowCtx, req)
 	}
-	localCtx := ctx.(context.Context)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
 
 	if !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to revoke Okta role")

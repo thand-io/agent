@@ -407,7 +407,10 @@ func (p *awsProvider) execGetOrCreateIAMRole(
 		return &resp, nil
 	}
 
-	localCtx := ctx.(context.Context)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
 
 	// Inline (non-Temporal) implementation:
 	// For non-composite roles, check the version tag to determine if policies
@@ -465,7 +468,10 @@ func (p *awsProvider) execTagIAMRole(
 		})
 		return workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), TagIAMRoleActivityName), req).Get(wfCtx, nil)
 	}
-	localCtx := ctx.(context.Context)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("invalid context type")
+	}
 	return p.tagRole(localCtx, req.RoleName, req.Tags)
 }
 
@@ -484,7 +490,10 @@ func (p *awsProvider) execGetIAMRole(
 		}
 		return &resp, nil
 	}
-	localCtx := ctx.(context.Context)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
 	rawRole, err := p.getRole(localCtx, req.RoleName)
 	if err != nil {
 		return nil, fmt.Errorf("IAM role not found: %w", err)
@@ -510,7 +519,10 @@ func (p *awsProvider) execAttachPoliciesToIAMRole(
 		})
 		return workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), AttachPoliciesToIAMRoleActivityName), req).Get(wfCtx, nil)
 	}
-	localCtx := ctx.(context.Context)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("invalid context type")
+	}
 	return p.attachPoliciesToRole(localCtx, req.RoleName, req.Permissions)
 }
 
@@ -525,7 +537,10 @@ func (p *awsProvider) execBindUserToIAMRole(
 		})
 		return workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), BindUserToIAMRoleActivityName), req).Get(wfCtx, nil)
 	}
-	localCtx := ctx.(context.Context)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("invalid context type")
+	}
 	return p.bindUserToRole(localCtx, req.User, req.RoleName, req.TargetAccountID)
 }
 
@@ -540,6 +555,9 @@ func (p *awsProvider) execUnbindUserFromIAMRole(
 		})
 		return workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), UnbindUserFromIAMRoleActivityName), req).Get(wfCtx, nil)
 	}
-	localCtx := ctx.(context.Context)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("invalid context type")
+	}
 	return p.unbindUserFromRole(localCtx, req.User, req.RoleName)
 }

@@ -54,7 +54,7 @@ func CreateChildWorkflowID(parentWorkflowID, operation, provider string, req *Wo
 	// Build composite identifier similar to CompositeRoleWorkflowIdentifier
 	// but using the data available in WorkflowRoleRequest
 	parts := []string{
-		req.WorkflowID,
+		parentWorkflowID,
 		provider,
 	}
 

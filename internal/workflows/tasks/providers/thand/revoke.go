@@ -294,7 +294,7 @@ func (t *thandTask) runRevokeTask(
 	}
 	revokeOut, err := providerCall.RevokeRole(workflowTask.GetContext(), &models.RevokeRoleRequest{
 		AuthorizeRoleRequest:  authRoleReq,
-		AuthorizeRoleResponse: &models.AuthorizeRoleResponse{},
+		AuthorizeRoleResponse: task.AuthorizeResponse,
 	})
 	return revokeResult{
 		Identity: task.Identity,

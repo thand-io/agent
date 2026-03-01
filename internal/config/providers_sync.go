@@ -9,14 +9,13 @@ import (
 
 func (c *Config) synchronizeProvider(p models.Provider) {
 
-	if !c.IsServer() {
-		logrus.Debugln("Not a server instance, skipping provider synchronization")
-		p.SetReady()
+	if p == nil {
+		logrus.Warningln("Provider is nil, cannot synchronize")
 		return
 	}
 
-	if p == nil {
-		logrus.Warningln("Provider is nil, cannot synchronize")
+	if !c.IsServer() {
+		logrus.Debugln("Not a server instance, skipping provider synchronization")
 		p.SetReady()
 		return
 	}
