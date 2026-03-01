@@ -235,11 +235,14 @@ func (t *thandTask) executeAuthorization(
 			d := *req.AuthRequest.Duration
 			dur = &d
 		}
+		// Create a non-composite role from the workflow's base role definition
+		// The role will be resolved properly by the provider if needed
 		requests[req.Identity] = &models.AuthorizeRoleRequest{
 			Identity: &models.Identity{ID: req.AuthRequest.Identity},
 			Tenant:   &models.ProviderTenant{ID: req.AuthRequest.Tenant},
 			Role: &models.CompositeRole{
-				Role: *req.AuthRequest.Role,
+				Role:      *req.AuthRequest.Role,
+				Composite: false, // Explicitly set - this is a base role from workflow
 			},
 			Duration: dur,
 		}

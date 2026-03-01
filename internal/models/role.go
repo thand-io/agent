@@ -61,10 +61,10 @@ type CompositeRole struct {
 	// Composite indicates whether this role is a resolved, flattened composite
 	// that includes inherited thand roles (true) or a non-composite, persistent
 	// role representation without applied inheritance (false).
-	// Defaults to true for composite roles; may be false when representing a non-composite role within CompositeRole.
-	Composite bool `json:"composite" default:"true"`
+	// Defaults to false for non-composite roles; may be true when representing a composite role within CompositeRole.
+	Composite bool `json:"composite" default:"false"`
 
-	Role
+	Role `json:",inline" yaml:",inline"` // Embed the base
 }
 
 // IsComposite returns true when the role was produced by merging inherited

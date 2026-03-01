@@ -666,6 +666,7 @@ func TestGetCompositeRole(t *testing.T) {
 					},
 					Enabled: true,
 				},
+				Composite: false, // No inheritance, not composite
 			},
 			expectError: false,
 		},
@@ -771,6 +772,7 @@ func TestGetCompositeRole(t *testing.T) {
 					},
 					Enabled: true,
 				},
+				Composite: false, // No inheritance, not composite
 			},
 			expectError: false,
 		},
