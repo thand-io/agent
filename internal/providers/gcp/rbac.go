@@ -603,12 +603,12 @@ func validateAndFormatMember(user *models.User) (string, error) {
 func addMemberToPolicy(policy *cloudresourcemanager.Policy, roleName, member string) bool {
 	isPrimitive := isPrimitiveRole(roleName)
 
-	// Warn if using a primitive role since conditions cannot be applied
+	// Log info when using a primitive role since conditions cannot be applied
 	if isPrimitive {
 		logrus.WithFields(logrus.Fields{
 			"role":   roleName,
 			"member": member,
-		}).Warn("Binding to primitive role without IAM condition - GCP does not support conditions on primitive roles. Consider using predefined roles instead for better tracking.")
+		}).Info("Binding to primitive role - IAM conditions are not supported for primitive roles. Tracking via member-scoped matching.")
 	}
 
 	// Check if binding already exists
@@ -644,6 +644,9 @@ func addMemberToPolicy(policy *cloudresourcemanager.Policy, roleName, member str
 
 // removeMemberFromPolicy removes a member from a role binding in the policy
 // Returns true if the member was found and removed, false otherwise
+//
+// For primitive roles: Uses member-scoped matching (removes only the specific member from unconditioned bindings)
+// For other roles: Uses IAM condition-based matching (removes from thand-managed bindings only)
 func removeMemberFromPolicy(policy *cloudresourcemanager.Policy, roleName, member string) bool {
 	isPrimitive := isPrimitiveRole(roleName)
 
@@ -666,6 +669,15 @@ func removeMemberFromPolicy(policy *cloudresourcemanager.Policy, roleName, membe
 			if memberIndex == -1 {
 				return false // Member not found in binding
 			}
+
+			// Log when removing from primitive role (for transparency)
+			if isPrimitive {
+				logrus.WithFields(logrus.Fields{
+					"role":   roleName,
+					"member": member,
+				}).Info("Removing member from primitive role binding - only this specific member will be removed")
+			}
+
 			// Remove the member from the slice (outside the iteration loop)
 			binding.Members = append(binding.Members[:memberIndex], binding.Members[memberIndex+1:]...)
 			// If the binding has no members left, remove the entire binding
@@ -866,11 +878,6 @@ func (p *gcpProvider) bindUserToRoleByName(ctx context.Context, projectID string
 	member, err := validateAndFormatMember(user)
 	if err != nil {
 		return err
-	}
-
-	// Block primitive role bindings unless explicitly permitted in provider config
-	if isPrimitiveRole(roleName) && !p.allowPrimitiveRoles {
-		return fmt.Errorf("binding to primitive role %q is blocked; set allow_primitive_roles: true in provider config to enable", roleName)
 	}
 
 	return p.withIAMPolicyUpdate(ctx, projectID, func(policy *cloudresourcemanager.Policy) (bool, error) {
