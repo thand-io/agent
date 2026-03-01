@@ -88,7 +88,7 @@ func validateGrantRequestState(grants []domain.GrantState, req domain.RequestFra
 		}
 	}
 	for _, grant := range grants {
-		if grant.Username == req.Username && isActiveGrantState(grant, nowMonoNS, nowWallUTC) {
+		if grant.Username == req.Username && domain.IsActiveGrantState(grant, nowMonoNS, nowWallUTC) {
 			return grantStateError{
 				code: ErrorCodeActiveGrantExists,
 				err:  fmt.Errorf("user %q already has an active grant", req.Username),

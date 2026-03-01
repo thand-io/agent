@@ -141,38 +141,7 @@ func isRetentionExpired(grant domain.GrantState, nowWallUTC time.Time, retention
 }
 
 func isExpired(grant domain.GrantState, nowMonoNS int64, nowWallUTC time.Time) bool {
-	// Fail secure on any missing or obviously invalid timing metadata.
-	switch {
-	case grant.DurationSeconds <= 0:
-		return true
-	case grant.GrantedAtMonoNS <= 0:
-		return true
-	case grant.GrantedAtWallUTC.IsZero():
-		return true
-	case nowWallUTC.IsZero():
-		return true
-	}
-
-	durationNS := grant.DurationSeconds * int64(time.Second)
-
-	// Check wall clock expiry first as it should be valid unless the wall clock has been changed.
-	// If the wall clock has been changed, this will be caught by the monotonic clock check below.
-	wallExpiry := grant.GrantedAtWallUTC.Add(time.Duration(durationNS))
-	if wallExpiry.Before(nowWallUTC) {
-		return true
-	}
-
-	// If the current monotonic time is earlier than the stored monotonic grant
-	// time, the machine has likely been restarted since the grant was issued.
-	// In that case, we should not expire the grant based on monotonic time,
-	// because it would be a false positive.
-	isMonoValid := nowMonoNS >= grant.GrantedAtMonoNS
-	if !isMonoValid {
-		return false
-	}
-
-	// Check the monotonic clock to catch expired grants even if the wall clock has been changed.
-	return nowMonoNS-grant.GrantedAtMonoNS >= durationNS
+	return domain.IsExpiredGrantState(grant, nowMonoNS, nowWallUTC)
 }
 
 func isCleanupShutdownError(ctx context.Context, err error) bool {

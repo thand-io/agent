@@ -26,7 +26,7 @@ func (h *Handler) handleRevoke(ctx context.Context, conn IPCConn, req domain.Req
 	username := req.Username
 	if found {
 		username = stored.Username
-		if isCompletedGrantState(stored) {
+		if domain.IsCompletedGrantState(stored) {
 			return h.writeRevokeSuccess(ctx, conn, req, username)
 		}
 		if stored.WasAlreadyPrivileged {
@@ -55,7 +55,7 @@ func (h *Handler) handleRevoke(ctx context.Context, conn IPCConn, req domain.Req
 }
 
 func (h *Handler) completeGrantState(ctx context.Context, req domain.RequestFrame, conn IPCConn, grant domain.GrantState) error {
-	if isCompletedGrantState(grant) {
+	if domain.IsCompletedGrantState(grant) {
 		return nil
 	}
 
@@ -68,10 +68,6 @@ func (h *Handler) completeGrantState(ctx context.Context, req domain.RequestFram
 	}
 
 	return nil
-}
-
-func isCompletedGrantState(grant domain.GrantState) bool {
-	return !grant.CompletedAtWallUTC.IsZero()
 }
 
 func (h *Handler) writeRequestError(ctx context.Context, conn IPCConn, req domain.RequestFrame, err error) error {
