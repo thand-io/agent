@@ -25,6 +25,9 @@ func (h *Handler) handleRevoke(ctx context.Context, conn IPCConn, req domain.Req
 	stored, found := findGrantState(grants, req.RequestID)
 	username := req.Username
 	if found {
+		if stored.WorkflowID != req.WorkflowID || stored.Username != req.Username {
+			return h.writeRequestError(ctx, conn, req, requestConflictErr(fmt.Errorf("request %q conflicts with existing state", req.RequestID)))
+		}
 		username = stored.Username
 		if domain.IsCompletedGrantState(stored) {
 			return h.writeRevokeSuccess(ctx, conn, req, username)

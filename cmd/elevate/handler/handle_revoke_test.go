@@ -169,6 +169,48 @@ func TestHandleConnectionRevokeSkipsPrivilegeRemovalForBaselineGrant(t *testing.
 	assertChallengeAndResult(t, conn.writeFrames, nonce, req.RequestID, resultStatusOK)
 }
 
+func TestHandleConnectionRevokeRejectsStoredIdentityMismatch(t *testing.T) {
+	req := domain.RequestFrame{
+		Type:       domain.FrameTypeRequest,
+		Action:     domain.ActionRevoke,
+		WorkflowID: "wf-request",
+		RequestID:  "req-mismatch",
+		Username:   "alice",
+	}
+	nonce := "fixed-nonce-revoke-mismatch"
+
+	conn := &stubConn{
+		readFrames: [][]byte{
+			mustJSON(t, req),
+			mustJSON(t, signedResponseFor(t, req, nonce)),
+		},
+	}
+	grantEngine := &stubGrantEngine{}
+	state := &stubStateStore{grants: []domain.GrantState{{
+		RequestID:        req.RequestID,
+		WorkflowID:       "wf-stored",
+		Username:         "bob",
+		GrantedAtWallUTC: time.Now().UTC(),
+		GrantedAtMonoNS:  1,
+		DurationSeconds:  60,
+	}}}
+	h := New(grantEngine, &stubVerifier{}, state, stubClock{wall: time.Now().UTC()})
+	h.generateNonce = func() (string, error) { return nonce, nil }
+
+	if err := h.HandleConnection(context.Background(), conn); err != nil {
+		t.Fatalf("HandleConnection failed: %v", err)
+	}
+	if grantEngine.revokeCalls != 0 {
+		t.Fatalf("expected stored-identity mismatch to be rejected before revoke, got %d revoke calls", grantEngine.revokeCalls)
+	}
+	if state.putCalls != 0 {
+		t.Fatalf("expected mismatch not to update state, got %d puts", state.putCalls)
+	}
+
+	assertChallengeAndResult(t, conn.writeFrames, nonce, req.RequestID, resultStatusError)
+	assertResultErrorCode(t, conn.writeFrames[1], ErrorCodeRequestConflict)
+}
+
 func TestHandleConnectionRevokeRejectsUnsafeUsername(t *testing.T) {
 	req := domain.RequestFrame{
 		Type:       domain.FrameTypeRequest,
