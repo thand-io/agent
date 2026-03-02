@@ -2,12 +2,10 @@ package models
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/hashicorp/go-version"
 	"github.com/thand-io/agent/internal/common"
@@ -54,6 +52,17 @@ type ProviderConfig struct {
 	Enabled      bool                  `json:"enabled"`                                                   // Whether this provider is enabled
 }
 
+func (p *ProviderConfig) Validate() error {
+
+	validate := common.GetValidator()
+
+	if err := validate.Struct(p); err != nil {
+		return fmt.Errorf("provider '%s' validation failed: %w", p.Name, err)
+	}
+
+	return nil
+}
+
 func (p *ProviderConfig) ResolveConfig(vars map[string]any) error {
 
 	envs := os.Environ()
@@ -79,21 +88,6 @@ func (p *ProviderConfig) ResolveConfig(vars map[string]any) error {
 	return fmt.Errorf("the traversed config was not a map")
 }
 
-// ProvidersResponse represents the response for a providers query
-type ProvidersResponse struct {
-	Version   string                      `json:"version"`
-	Providers map[string]ProviderResponse `json:"providers"`
-}
-
-type ProviderResponse struct {
-	ID           string                `json:"id"`
-	Name         string                `json:"name"`
-	Description  string                `json:"description"`
-	Provider     string                `json:"provider"` // e.g. aws, gcp, azure
-	Capabilities *ProviderCapabilities `json:"capabilities"`
-	Enabled      bool                  `json:"enabled"`
-}
-
 /*
 A user is assigned a role (e.g., "Manager").
 This role has associated permissions (e.g., "approve reports," "view employee data").
@@ -102,6 +96,7 @@ These permissions, along with access to specific resources (e.g., "company finan
 
 // Interface for provider implementations
 type Provider interface {
+	// Lifecycle methods
 	Initialize(identifier string, provider ProviderConfig) error
 
 	// Form base provider
@@ -116,8 +111,8 @@ type Provider interface {
 	Synchronize(ctx context.Context, temporalClient TemporalImpl, req *SynchronizeRequest) error
 
 	// Temporal
-	RegisterWorkflows(temporalClient TemporalImpl) error
-	RegisterActivities(temporalClient TemporalImpl) error
+	RegisterWorkflows() any
+	RegisterActivities() any
 
 	GetCapabilities() *ProviderCapabilities
 	HasCapability(capability ProviderCapability) bool
@@ -132,6 +127,13 @@ type Provider interface {
 	CanSynchronizeUsers() bool
 	CanSynchronizeGroups() bool
 
+	// Synchronization readiness — providers signal readiness after their
+	// initial role/permission data has been loaded.
+	SetPending()
+	SetReady()
+	IsReady() bool
+	Ready() <-chan struct{}
+
 	// Sub-interfaces
 	ProviderNotifier
 	ProviderWebhook
@@ -143,97 +145,4 @@ type Provider interface {
 
 type AuthorizeSessionResponse struct {
 	Url string `json:"url"`
-}
-
-type RoleRequest struct {
-	Tenant   string         `json:"tenant,omitempty"` // Optional tenant ID for multi-account providers
-	User     *User          `json:"user"`
-	Role     *Role          `json:"role"`
-	Duration *time.Duration `json:"duration,omitempty"` // Optional duration for temporary access
-}
-
-// IsValid checks if any of the fields are nil
-// if they are then it returns false
-func (r *RoleRequest) IsValid() bool {
-	return r.User != nil && r.Role != nil
-}
-
-func (r *RoleRequest) GetUser() *User {
-	return r.User
-}
-
-func (r *RoleRequest) GetRole() *Role {
-	return r.Role
-}
-
-func (r *RoleRequest) GetDuration() *time.Duration {
-	return r.Duration
-}
-
-// ProviderDefinitions represents a collection of provider configurations loaded from a file or other source.
-type ProviderDefinitions struct {
-	Version   *version.Version          `yaml:"version" json:"version"`
-	Providers map[string]ProviderConfig `yaml:"providers" json:"providers"`
-}
-
-// UnmarshalJSON converts Version to string from any type
-func (h *ProviderDefinitions) UnmarshalJSON(data []byte) error {
-	aux := &struct {
-		Version   any                       `json:"version"`
-		Providers map[string]ProviderConfig `json:"providers"`
-	}{
-		Providers: make(map[string]ProviderConfig),
-	}
-
-	if err := json.Unmarshal(data, &aux); err != nil {
-		return err
-	}
-
-	parsedVersion, err := version.NewVersion(ConvertVersionToString(aux.Version))
-	if err != nil {
-		return err
-	}
-
-	h.Version = parsedVersion
-	h.Providers = aux.Providers
-
-	return nil
-}
-
-// UnmarshalYAML converts Version to string from any type
-func (h *ProviderDefinitions) UnmarshalYAML(unmarshal func(any) error) error {
-	aux := &struct {
-		Version   any                       `yaml:"version"`
-		Providers map[string]ProviderConfig `yaml:"providers"`
-	}{
-		Providers: make(map[string]ProviderConfig),
-	}
-
-	if err := unmarshal(&aux); err != nil {
-		return err
-	}
-
-	parsedVersion, err := version.NewVersion(ConvertVersionToString(aux.Version))
-	if err != nil {
-		return err
-	}
-
-	h.Version = parsedVersion
-	h.Providers = aux.Providers
-
-	return nil
-}
-
-// Validate validates all providers in the definition using struct validation tags
-func (h *ProviderDefinitions) Validate() error {
-
-	validate := common.GetValidator()
-
-	for providerKey, provider := range h.Providers {
-		if err := validate.Struct(&provider); err != nil {
-			return fmt.Errorf("provider '%s' validation failed: %w", providerKey, err)
-		}
-	}
-
-	return nil
 }

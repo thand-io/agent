@@ -3,11 +3,14 @@ package daemon
 import (
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hashicorp/go-version"
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
@@ -49,7 +52,7 @@ func (s *Server) getWorkflows(c *gin.Context) {
 	// This is because roles can contain sensitive information
 	// and we want to ensure that only authenticated users can access them
 	if s.Config.IsServer() {
-		_, foundUser, err := s.getUser(c)
+		_, foundUser, err := s.getSession(c)
 		if err != nil {
 			s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of available workflows", err)
 			return
@@ -57,7 +60,7 @@ func (s *Server) getWorkflows(c *gin.Context) {
 		authenticatedUser = foundUser
 	}
 
-	workflows := map[string]models.WorkflowResponse{}
+	workflowResponses := []models.WorkflowResponse{}
 
 	for name, workflow := range s.Config.Workflows.Definitions {
 
@@ -69,16 +72,22 @@ func (s *Server) getWorkflows(c *gin.Context) {
 			continue
 		}
 
-		workflows[name] = models.WorkflowResponse{
-			Name:        name,
+		workflowResponses = append(workflowResponses, models.WorkflowResponse{
+			Identifier:  name,
+			Name:        workflow.Name,
 			Description: workflow.Description,
 			Enabled:     workflow.Enabled,
-		}
+		})
 	}
 
+	// Sort alphabetically by Identifier
+	sort.Slice(workflowResponses, func(i, j int) bool {
+		return workflowResponses[i].Identifier < workflowResponses[j].Identifier
+	})
+
 	response := models.WorkflowsResponse{
-		Version:   "1.0",
-		Workflows: workflows,
+		Version:   version.Must(version.NewVersion("1.0.0")),
+		Workflows: models.ReturnSearchResults(workflowResponses),
 	}
 
 	if s.canAcceptHtml(c) {
@@ -209,7 +218,7 @@ func (s *Server) cancelRunningWorkflow(c *gin.Context) {
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to cancel workflow", nil)
 	}
 
-	_, authenticatedUser, err := s.getUser(c)
+	_, foundSession, err := s.getSession(c)
 	if err != nil {
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for terminating workflow", err)
 		return
@@ -233,14 +242,14 @@ func (s *Server) cancelRunningWorkflow(c *gin.Context) {
 
 	// Check if the workflow is owned by the user
 
-	ownerEmail, foundUser := workflowRun.TypedSearchAttributes.GetKeyword(models.TypedSearchAttributeUser)
+	ownerEmail, foundUser := workflowRun.TypedSearchAttributes.GetKeyword(sdkConstants.TypedSearchAttributeUser)
 
 	if !foundUser {
 		s.getErrorPage(c, http.StatusForbidden, "Unable to determine owner of workflow", nil)
 		return
 	}
 
-	if strings.Compare(ownerEmail, authenticatedUser.User.Email) != 0 {
+	if strings.Compare(ownerEmail, foundSession.User.Email) != 0 {
 		s.getErrorPage(c, http.StatusForbidden, "You do not have permission to terminate this workflow", nil)
 		return
 	}

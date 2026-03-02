@@ -60,6 +60,7 @@ type WorkflowTask struct {
 	state           *WorkflowTaskState  `json:"-"`
 	localExprVars   map[string]any      `json:"-"` // local variables for expressions
 	cancelFunc      workflow.CancelFunc `json:"-"` // cancel function for workflow context
+	taskQueue       string              `json:"-"` // task queue override for routing activities to specific agents
 
 	// Core workfork/task fields
 	WorkflowID   string `json:"id"`
@@ -147,6 +148,17 @@ func (r *WorkflowTask) HasTemporalContext() bool {
 	}
 
 	return r.internalContext.Value(temporalCtxKey) != nil
+}
+
+// GetTaskQueue returns the task queue for activity dispatch.
+// An empty string causes Temporal to default to the workflow's own task queue.
+func (r *WorkflowTask) GetTaskQueue() string {
+	return r.taskQueue
+}
+
+// SetTaskQueue sets the task queue for routing activities to a specific agent.
+func (r *WorkflowTask) SetTaskQueue(taskQueue string) {
+	r.taskQueue = taskQueue
 }
 
 func (wr *WorkflowTask) SetTaskReferenceFromName(taskName string) error {

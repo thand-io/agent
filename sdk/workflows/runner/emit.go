@@ -3,10 +3,12 @@ package runner
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 	"go.temporal.io/sdk/workflow"
 )
@@ -46,14 +48,30 @@ func (r *ResumableWorkflowRunner) ExecuteEmitTask(
 			return nil, fmt.Errorf("failed to get temporal context")
 		}
 
-		// Send the signal to the current workflow using the event signal channel
-		workflow.SignalExternalWorkflow(
+		// WorkflowInfo
+		workflowInfo := workflow.GetInfo(ctx)
+
+		ao := workflow.LocalActivityOptions{
+			StartToCloseTimeout: 10 * time.Minute,
+			RetryPolicy:         DefaultRetryPolicy,
+		}
+
+		ctx = workflow.WithLocalActivityOptions(ctx, ao)
+
+		fut := workflow.ExecuteLocalActivity(
 			ctx,
-			workflowTask.GetWorkflowID(),
-			sdkWorkflowsModel.TemporalEmptyRunId, // empty run ID means current run
+			sdkConstants.TemporalSignalWorkflowActivityName,
+			workflowInfo.WorkflowExecution.ID,
+			workflowInfo.WorkflowExecution.RunID,
 			sdkWorkflowsModel.TemporalEventSignalName,
 			event,
 		)
+
+		err = fut.Get(ctx, nil)
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to emit cloud event: %w", err)
+		}
 
 		log.WithFields(logrus.Fields{
 			"taskName":    taskName,

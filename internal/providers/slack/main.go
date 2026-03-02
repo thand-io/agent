@@ -144,5 +144,5 @@ func (p *slackProvider) getUserIDByUsername(ctx context.Context, username string
 }
 
 func init() {
-	providers.Register(SlackProviderName, &slackProvider{})
+	providers.Register(SlackProviderName, &slackProvider{}, SlackCapabilities, &ConfigSchema{})
 }

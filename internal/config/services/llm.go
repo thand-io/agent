@@ -9,7 +9,7 @@ func (e *localClient) configureLargeLanguageModel() models.LargeLanguageModelImp
 
 	provider := "local"
 
-	llmConfig := e.GetServicesConfig().GetLLMConfig()
+	llmConfig := e.config.GetServicesConfig().GetLargeLanguageModelConfig()
 
 	if llmConfig != nil && len(llmConfig.GetProvider()) > 0 {
 		provider = llmConfig.GetProvider()

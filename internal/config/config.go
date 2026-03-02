@@ -191,6 +191,11 @@ func bindServerEnvVars(v *viper.Viper) {
 	v.BindEnv("server.security.upstream.auth.iap", "THAND_SERVER_SECURITY_UPSTREAM_AUTH_IAP")
 	v.BindEnv("server.security.upstream.auth.ava", "THAND_SERVER_SECURITY_UPSTREAM_AUTH_AVA")
 	v.BindEnv("server.security.upstream.auth.eap", "THAND_SERVER_SECURITY_UPSTREAM_AUTH_EAP")
+
+	// Capabilities environment variables
+	v.BindEnv("server.capabilities.elevations.static.enabled", "THAND_SERVER_CAPABILITIES_ELEVATIONS_STATIC_ENABLED")
+	v.BindEnv("server.capabilities.elevations.dynamic.enabled", "THAND_SERVER_CAPABILITIES_ELEVATIONS_DYNAMIC_ENABLED")
+	v.BindEnv("server.capabilities.elevations.llm.enabled", "THAND_SERVER_CAPABILITIES_ELEVATIONS_LLM_ENABLED")
 }
 
 // bindCloudProviderEnvVars binds cloud provider specific environment variables
@@ -337,24 +342,6 @@ func (c *Config) ReloadConfig() error {
 	var wg sync.WaitGroup
 	var foundErrors []error
 
-	// Load roles in parallel
-	wg.Go(func() {
-		roles, err := c.LoadRoles()
-		if err != nil {
-			logrus.WithError(err).Errorln("Error loading roles")
-			c.mu.Lock()
-			foundErrors = append(foundErrors, fmt.Errorf("loading roles: %w", err))
-			c.mu.Unlock()
-		} else if len(roles) > 0 {
-			logrus.Infoln("Loaded roles from external source:", len(roles))
-			c.mu.Lock()
-			c.Roles.Definitions = roles
-			c.mu.Unlock()
-		} else {
-			logrus.Warningln("No roles loaded from external source")
-		}
-	})
-
 	// Load workflows in parallel
 	wg.Go(func() {
 		workflows, err := c.LoadWorkflows()
@@ -389,6 +376,22 @@ func (c *Config) ReloadConfig() error {
 		} else {
 			logrus.Warningln("No providers loaded from external source")
 		}
+
+		// Roles depend on providers, so we load them in the same goroutine to ensure they are loaded after providers
+		roles, err := c.LoadRoles()
+		if err != nil {
+			logrus.WithError(err).Errorln("Error loading roles")
+			c.mu.Lock()
+			foundErrors = append(foundErrors, fmt.Errorf("loading roles: %w", err))
+			c.mu.Unlock()
+		} else if len(roles) > 0 {
+			logrus.Infoln("Loaded roles from external source:", len(roles))
+			c.mu.Lock()
+			c.Roles.Definitions = roles
+			c.mu.Unlock()
+		} else {
+			logrus.Warningln("No roles loaded from external source")
+		}
 	})
 
 	// Wait for all goroutines to complete
@@ -397,17 +400,6 @@ func (c *Config) ReloadConfig() error {
 	// Return first error if any occurred
 	if len(foundErrors) > 0 {
 		return errors.Join(foundErrors...)
-	}
-
-	if c.GetServices() != nil && c.GetServices().GetTemporal() != nil {
-
-		logrus.Infoln("Setting up temporal services...")
-		err := c.setupTemporalServices()
-
-		if err != nil {
-			return fmt.Errorf("setting up temporal services: %w", err)
-		}
-
 	}
 
 	return nil
@@ -543,6 +535,20 @@ func (c *Config) SyncWithLoginServer() error {
 		logrus.WithError(err).Errorln("Failed to initialize providers after login server sync")
 	}
 
+	if !c.IsClient() {
+
+		// If in agent/server mode then we want to calculate the role indexes in the background.
+		// So that we can correctly serve search requests for roles.
+
+		go func() {
+			err := c.ReloadRoleIndexes()
+			if err != nil {
+				logrus.WithError(err).Errorln("Failed to reload role indexes")
+			}
+		}()
+
+	}
+
 	return nil
 
 }
@@ -627,6 +633,8 @@ func (c *Config) syncWithEndpoint(loginUrl string, authentication *model.Referen
 		Version:    version,
 		Commit:     commit,
 		Identifier: common.GetClientIdentifier(),
+		Endpoint:   c.GetLoginServerUrl(),
+		Origin:     c.GetLocalServerUrl(),
 	})
 
 	if err != nil {
@@ -662,6 +670,8 @@ func (c *Config) syncWithEndpoint(loginUrl string, authentication *model.Referen
 		Version:     version,
 		Commit:      commit,
 		Identifier:  common.GetClientIdentifier(),
+		Endpoint:    c.GetLoginServerUrl(),
+		Origin:      c.GetLocalServerUrl(),
 	})
 
 	if err != nil {
@@ -738,6 +748,29 @@ func (c *Config) syncWithEndpoint(loginUrl string, authentication *model.Referen
 		}
 	}
 
+	if registrationResponse.Services != nil {
+
+		// Setup temporal services if provided
+		if registrationResponse.Services.Temporal != nil {
+			logrus.Infoln("Configuring temporal services from login server configuration")
+			c.mu.Lock()
+			c.Services.Temporal = registrationResponse.Services.Temporal
+			c.mu.Unlock()
+
+			// Check if temporal is enabled and if so shutdown any existing client
+			err := c.GetServices().ReloadTemporal()
+			if err != nil {
+				return nil, fmt.Errorf("reloading temporal service: %w", err)
+			}
+
+			// Re-register temporal workflows and activities now that we have new configuration
+			err = c.SetupTemporal()
+			if err != nil {
+				return nil, fmt.Errorf("setting up temporal services: %w", err)
+			}
+		}
+	}
+
 	return &registrationResponse, nil
 }
 
@@ -787,6 +820,11 @@ func setDefaults(v *viper.Viper) {
 	// Ready defaults
 	v.SetDefault("server.ready.enabled", true)
 	v.SetDefault("server.ready.path", "/ready")
+
+	// Capabilities defaults
+	v.SetDefault("server.capabilities.elevations.static.enabled", true)
+	v.SetDefault("server.capabilities.elevations.dynamic.enabled", true)
+	v.SetDefault("server.capabilities.elevations.llm.enabled", true)
 
 	// Security defaults
 	v.SetDefault("server.security.cors.allowed_origins", []string{"https://thand.io", "https://*.thand.io", "https://app.thand.io", "https://*.app.thand.io"})

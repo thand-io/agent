@@ -7,7 +7,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/identitystore"
-	"github.com/aws/aws-sdk-go-v2/service/ssoadmin"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
 	"go.temporal.io/sdk/temporal"
@@ -21,37 +20,20 @@ func (p *awsProvider) SynchronizeUsers(ctx context.Context, req *models.Synchron
 	}()
 
 	// 1. Get Identity Store ID
-	resp, err := p.ssoAdminService.ListInstances(ctx, &ssoadmin.ListInstancesInput{})
+	_, identityStoreIdStr, err := p.getIdentityCenterInstance(ctx)
 	if err != nil {
-
 		if req.Pagination == nil {
-
 			// This is an initial request. If we've failed to get any users
 			// this is probably a permission error.
-
 			return nil, temporal.NewNonRetryableApplicationError(
 				"Failed to list identity center instances",
 				"IdentityCenterRequest",
 				err,
 			)
 		}
-
 		return nil, fmt.Errorf("failed to list SSO instances: %w", err)
 	}
-
-	if len(resp.Instances) == 0 {
-		logrus.Warn("No SSO instances found, skipping user synchronization")
-		return &models.SynchronizeUsersResponse{}, nil
-	}
-
-	identityStoreId := resp.Instances[0].IdentityStoreId
-	if identityStoreId == nil {
-		return nil, temporal.NewNonRetryableApplicationError(
-			"identity store ID not found in SSO instance",
-			"IdentityCenterRequest",
-			fmt.Errorf("identity store ID is nil"),
-		)
-	}
+	identityStoreId := aws.String(identityStoreIdStr)
 
 	if req.Pagination == nil {
 		req.Pagination = &models.PaginationOptions{

@@ -96,7 +96,7 @@ func (e *ServicesConfig) GetSchedulerConfig() *ServiceConfig {
 	return e.Scheduler
 }
 
-func (e *ServicesConfig) GetLLMConfig() *LargeLanguageModelConfig {
+func (e *ServicesConfig) GetLargeLanguageModelConfig() *LargeLanguageModelConfig {
 	return e.LargeLanguageModel
 }
 
@@ -132,4 +132,12 @@ type ServicesClientImpl interface {
 
 	GetTemporal() TemporalImpl
 	HasTemporal() bool
+
+	ReloadAnalytics() error
+	ReloadEncryption() error
+	ReloadVault() error
+	ReloadScheduler() error
+	ReloadLargeLanguageModel() error
+	ReloadPublicKeyInfrastructure() error
+	ReloadTemporal() error
 }

@@ -78,12 +78,16 @@ func (p *BaseProvider) ListPermissions(ctx context.Context, searchReq *SearchReq
 	// Fallback to simple substring filtering while index is being built
 	var filtered []ProviderPermission
 	filterText := strings.ToLower(strings.Join(searchReq.Terms, " "))
+	limit := searchReq.GetLimit()
 
 	for _, perm := range permissions {
 		// Check if any filter matches the permission name or description
 		if strings.Contains(strings.ToLower(perm.Name), filterText) ||
 			strings.Contains(strings.ToLower(perm.Description), filterText) {
 			filtered = append(filtered, perm)
+			if limit > 0 && len(filtered) >= limit {
+				break
+			}
 		}
 	}
 
@@ -130,6 +134,10 @@ func (p *BaseProvider) SetPermissionsWithKey(
 		p.rbac.permissionsMap[strings.ToLower(keyName)] = perm
 	}
 
+	logrus.WithFields(logrus.Fields{
+		"total_permissions": len(p.rbac.permissions),
+	}).Debug("Set provider permissions")
+
 	// Trigger reindex
 	go func() {
 		err := p.buildPermissionIndices()
@@ -169,5 +177,13 @@ func (p *BaseProvider) AddPermissions(permissions ...ProviderPermission) {
 	p.rbac.mu.RUnlock()
 
 	combined := append(existingCopy, filtered...)
+
+	logrus.WithFields(logrus.Fields{
+		"existing": len(existing),
+		"new":      len(permissions),
+		"added":    len(filtered),
+		"total":    len(combined),
+	}).Debug("Adding permissions to provider")
+
 	p.SetPermissions(combined)
 }

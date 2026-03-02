@@ -7,18 +7,21 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
+	sdkWorkflowsConfig "github.com/thand-io/agent/sdk/workflows/config"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 	"github.com/thand-io/agent/sdk/workflows/tasks"
 )
 
 type thandCollection struct {
-	config models.ConfigImpl
+	config         models.ConfigImpl
+	workflowConfig sdkWorkflowsConfig.Config
 	tasks.TaskCollection
 }
 
-func NewThandCollection(config models.ConfigImpl) *thandCollection {
+func NewThandCollection(config models.ConfigImpl, workflowConfig sdkWorkflowsConfig.Config) *thandCollection {
 	return &thandCollection{
-		config: config,
+		config:         config,
+		workflowConfig: workflowConfig,
 	}
 }
 
@@ -26,18 +29,20 @@ func (c *thandCollection) RegisterTasks(r *tasks.TaskRegistry) {
 
 	// Register tasks
 	r.RegisterTasks(
-		NewThandTask(c.config),
+		NewThandTask(c.config, c.workflowConfig),
 	)
 
 }
 
 type thandTask struct {
-	config models.ConfigImpl
+	config         models.ConfigImpl
+	workflowConfig sdkWorkflowsConfig.Config
 }
 
-func NewThandTask(config models.ConfigImpl) *thandTask {
+func NewThandTask(config models.ConfigImpl, workflowConfig sdkWorkflowsConfig.Config) *thandTask {
 	return &thandTask{
-		config: config,
+		config:         config,
+		workflowConfig: workflowConfig,
 	}
 }
 
@@ -68,7 +73,8 @@ func (t *thandTask) resolveIdentity(identity string) *models.Identity {
 
 	return &models.Identity{
 		User: &models.User{
-			Email: identity,
+			Email:  identity,
+			Source: "thand",
 		},
 	}
 }
@@ -137,6 +143,8 @@ func (t *thandTask) Execute(
 		return t.executeMonitorTask(thandWorkflowTask, taskName, &interpolatedTask, input)
 	case ThandFormTask:
 		return t.executeFormTask(thandWorkflowTask, taskName, &interpolatedTask)
+	case ThandAgentTask:
+		return t.executeAgentTask(thandWorkflowTask, taskName, &interpolatedTask, input)
 	default:
 		return nil, fmt.Errorf("unknown thand task type: %s", interpolatedTask.Thand)
 	}

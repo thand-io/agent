@@ -9,6 +9,8 @@
             <p>Create a custom role by selecting providers, permissions, and scopes. Either role inheritance or specific permissions must be selected to proceed to scopes, but both are not required to create a role.</p>
         </div>
             
+        {{template "session_warning" .}}
+            
         <form action="{{.Config.ApiBasePath}}/elevate" method="POST" enctype="application/x-www-form-urlencoded" class="mt-2 text-left" id="customRoleForm">
                 
             <div  style="display: flex; flex-direction: column; gap: 1rem; max-width: 600px;"></div>
@@ -224,10 +226,21 @@
                 if (identityElement) {
                     identityElement.addEventListener('search', function(e) {
                         clearTimeout(identitySearchTimeout);
-                        const query = e.detail.value.trim();
+                        const query = e.detail.value.trim() || '';
                         identitySearchTimeout = setTimeout(() => {
                             loadIdentities(query);
                         }, 300);
+                    });
+                    
+                    // Listen for input events to catch when search is cleared
+                    identityElement.parentElement.addEventListener('input', function(e) {
+                        if (e.target.classList.contains('choices__input')) {
+                            clearTimeout(identitySearchTimeout);
+                            const query = e.target.value.trim();
+                            identitySearchTimeout = setTimeout(() => {
+                                loadIdentities(query);
+                            }, 300);
+                        }
                     });
                 }
 
@@ -237,10 +250,21 @@
                 if (inheritanceElement) {
                     inheritanceElement.addEventListener('search', function(e) {
                         clearTimeout(inheritanceSearchTimeout);
-                        const query = e.detail.value.trim();
+                        const query = e.detail.value.trim() || '';
                         inheritanceSearchTimeout = setTimeout(() => {
                             loadInheritanceOptions(query);
                         }, 300);
+                    });
+                    
+                    // Listen for input events to catch when search is cleared
+                    inheritanceElement.parentElement.addEventListener('input', function(e) {
+                        if (e.target.classList.contains('choices__input')) {
+                            clearTimeout(inheritanceSearchTimeout);
+                            const query = e.target.value.trim();
+                            inheritanceSearchTimeout = setTimeout(() => {
+                                loadInheritanceOptions(query);
+                            }, 300);
+                        }
                     });
                 }
 
@@ -295,11 +319,11 @@
                 fetch('{{.Config.ApiBasePath}}/providers?capability=provisioning')
                     .then(response => response.json())
                     .then(data => {
-                        const providers = Object.keys(data.providers).map(key => ({
-                            value: key,
-                            label: data.providers[key].name || key,
+                        const providers = data.providers.map(item => ({
+                            value: item._source.identifier,
+                            label: item._source.name || item._source.identifier,
                             customProperties: {
-                                description: data.providers[key].description || ''
+                                description: item._source.description || ''
                             }
                         }));
                         providerChoices.setChoices(providers, 'value', 'label', true);
@@ -315,10 +339,11 @@
                         // Clear existing options except the placeholder
                         workflowSelect.innerHTML = '<option value="" disabled selected>Select a workflow...</option>';
                         
-                        if (data.workflows && typeof data.workflows === 'object') {
-                            // Handle the nested object structure where workflows is an object with workflow IDs as keys
-                            Object.keys(data.workflows).forEach(workflowId => {
-                                const workflow = data.workflows[workflowId];
+                        // Handle array of SearchResult objects
+                        if (Array.isArray(data.workflows)) {
+                            data.workflows.forEach(item => {
+                                const workflow = item._source;
+                                const workflowId = workflow.id || workflow.name;
                                 const option = document.createElement('option');
                                 option.value = workflow.name || workflowId;
                                 option.textContent = workflow.description || workflow.name || workflowId;
@@ -346,7 +371,8 @@
                 .then(response => response.json())
                 .then(identitiesData => {
                     const identities = [];
-                    const currentUserEmail = '{{if .User}}{{.User.Email}}{{end}}';
+                    // Use global store for current user email if available
+                    const currentUserEmail = (window.Alpine && typeof window.Alpine.store === 'function' && window.Alpine.store('auth').user?.email) || '{{if .User}}{{.User.Email}}{{end}}';
                                         
                     // Add other available identities from the API
                     if (identitiesData && identitiesData.identities) {
@@ -772,20 +798,42 @@
                 if (scopesGroupsElement) {
                     scopesGroupsElement.addEventListener('search', function(e) {
                         clearTimeout(scopesGroupsSearchTimeout);
-                        const query = e.detail.value.trim();
+                        const query = e.detail.value.trim() || '';
                         scopesGroupsSearchTimeout = setTimeout(() => {
                             loadScopeData('group', scopes.groups, query);
                         }, 300);
+                    });
+                    
+                    // Listen for input events to catch when search is cleared
+                    scopesGroupsElement.parentElement.addEventListener('input', function(e) {
+                        if (e.target.classList.contains('choices__input')) {
+                            clearTimeout(scopesGroupsSearchTimeout);
+                            const query = e.target.value.trim();
+                            scopesGroupsSearchTimeout = setTimeout(() => {
+                                loadScopeData('group', scopes.groups, query);
+                            }, 300);
+                        }
                     });
                 }
 
                 if (scopesUsersElement) {
                     scopesUsersElement.addEventListener('search', function(e) {
                         clearTimeout(scopesUsersSearchTimeout);
-                        const query = e.detail.value.trim();
+                        const query = e.detail.value.trim() || '';
                         scopesUsersSearchTimeout = setTimeout(() => {
                             loadScopeData('user', scopes.users, query);
                         }, 300);
+                    });
+                    
+                    // Listen for input events to catch when search is cleared
+                    scopesUsersElement.parentElement.addEventListener('input', function(e) {
+                        if (e.target.classList.contains('choices__input')) {
+                            clearTimeout(scopesUsersSearchTimeout);
+                            const query = e.target.value.trim();
+                            scopesUsersSearchTimeout = setTimeout(() => {
+                                loadScopeData('user', scopes.users, query);
+                            }, 300);
+                        }
                     });
                 }
             }

@@ -75,18 +75,24 @@ func TestAWSProviderFunctional(t *testing.T) {
 	}
 
 	// Create test role
-	testRole := &models.Role{
-		Name:        "TestRole",
-		Description: "Test IAM role for functional testing",
-		Permissions: models.Permissions{
-			Allow: []string{
-				"s3:GetObject",
-				"s3:PutObject",
-				"ec2:DescribeInstances",
+	testRole := &models.CompositeRole{
+		Composite: true,
+		Role: models.Role{
+			Identifier:  "test_role",
+			Name:        "TestRole",
+			Description: "Test IAM role for functional testing",
+			Permissions: models.RolePermissions{
+				Allow: models.RoleStatements{{
+					Operations: []string{
+						"s3:GetObject",
+						"s3:PutObject",
+						"ec2:DescribeInstances",
+					}},
+				},
 			},
+			Providers: []string{"aws"},
+			Enabled:   true,
 		},
-		Providers: []string{"aws"},
-		Enabled:   true,
 	}
 
 	// Helper function to check if role exists
@@ -210,7 +216,7 @@ func TestAWSProviderFunctional(t *testing.T) {
 		require.True(t, ok, "Provider should implement GetIamClient method")
 		iamClient := iamClientProvider.GetIamClient()
 
-		roleName := testRole.GetSnakeCaseName() // "test_role"
+		roleName := testRole.GetName() // composite role name with hash suffix
 
 		// Verify role doesn't exist initially
 		assert.False(t, roleExists(iamClient, roleName), "Role should not exist initially")
@@ -218,11 +224,9 @@ func TestAWSProviderFunctional(t *testing.T) {
 		// Test role creation and authorization
 		t.Run("Authorize Role", func(t *testing.T) {
 			metadata, err := providerImpl.AuthorizeRole(ctx, &models.AuthorizeRoleRequest{
-				RoleRequest: &models.RoleRequest{
-					User:     testUser,
-					Role:     testRole,
-					Duration: &testDuration,
-				},
+				Identity: &models.Identity{User: testUser},
+				Role:     testRole,
+				Duration: &testDuration,
 			})
 			assert.NoError(t, err, "Should succeed with LocalStack")
 
@@ -250,9 +254,9 @@ func TestAWSProviderFunctional(t *testing.T) {
 
 			revocationMetadata, err := providerImpl.RevokeRole(ctx,
 				&models.RevokeRoleRequest{
-					RoleRequest: &models.RoleRequest{
-						User: testUser,
-						Role: testRole,
+					AuthorizeRoleRequest: &models.AuthorizeRoleRequest{
+						Identity: &models.Identity{User: testUser},
+						Role:     testRole,
 					},
 					AuthorizeRoleResponse: &models.AuthorizeRoleResponse{
 						Metadata: metadata,
@@ -290,11 +294,9 @@ func TestAWSProviderFunctional(t *testing.T) {
 
 		// Test with nil user - should return an error, not panic
 		_, err = providerImpl.AuthorizeRole(ctx, &models.AuthorizeRoleRequest{
-			RoleRequest: &models.RoleRequest{
-				User:     nil,
-				Role:     testRole,
-				Duration: &testDuration,
-			},
+			Identity: &models.Identity{User: nil},
+			Role:     testRole,
+			Duration: &testDuration,
 		})
 		assert.Error(t, err, "Should fail with nil user")
 		assert.Contains(t, err.Error(), "user and role must be provided", "Error should mention missing user and role")
@@ -308,11 +310,9 @@ func TestAWSProviderFunctional(t *testing.T) {
 
 		// Test with nil role - should return an error, not panic
 		_, err = providerImpl.AuthorizeRole(ctx, &models.AuthorizeRoleRequest{
-			RoleRequest: &models.RoleRequest{
-				User:     testUser,
-				Role:     nil,
-				Duration: &testDuration,
-			},
+			Identity: &models.Identity{User: testUser},
+			Role:     nil,
+			Duration: &testDuration,
 		})
 		assert.Error(t, err, "Should fail with nil role")
 		assert.Contains(t, err.Error(), "user and role must be provided", "Error should mention missing user and role")

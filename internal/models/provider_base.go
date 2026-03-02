@@ -3,9 +3,17 @@ package models
 import (
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/blevesearch/bleve/v2"
 	"github.com/sirupsen/logrus"
+)
+
+// Provider synchronization states.
+const (
+	ProviderStateUninitialized int32 = iota
+	ProviderStatePending
+	ProviderStateReady
 )
 
 type BaseProvider struct {
@@ -17,7 +25,11 @@ type BaseProvider struct {
 	role         *Role
 	capabilities *ProviderCapabilities
 
-	// Add other common fields if necessary
+	// Synchronization readiness: Uninitialized -> Pending -> Ready.
+	// readyCh is closed when the provider transitions to Ready.
+	syncState atomic.Int32
+	readyCh   chan struct{}
+
 	identity *IdentitySupport
 	rbac     *RBACSupport
 	tenants  *TenantsSupport
@@ -102,6 +114,7 @@ func NewBaseProvider(identifier string, provider ProviderConfig, capabilities *P
 		config:       provider.Config,
 		role:         provider.Role,
 		capabilities: capabilities,
+		readyCh:      make(chan struct{}),
 	}
 
 	// Now that our provider has defined capabilities, we need to take
@@ -157,6 +170,30 @@ func (p *BaseProvider) GetConfig() *BasicConfig {
 
 func (p *BaseProvider) SetConfig(config *BasicConfig) {
 	p.config = config
+}
+
+// SetPending marks the provider as synchronization-in-progress.
+func (p *BaseProvider) SetPending() {
+	p.syncState.Store(ProviderStatePending)
+}
+
+// SetReady marks the provider as synchronised and signals any waiters.
+// Safe to call multiple times; only the first call closes the channel.
+func (p *BaseProvider) SetReady() {
+	if p.syncState.Swap(ProviderStateReady) != ProviderStateReady {
+		close(p.readyCh)
+	}
+}
+
+// IsReady returns true once the provider has completed initial synchronization.
+func (p *BaseProvider) IsReady() bool {
+	return p.syncState.Load() == ProviderStateReady
+}
+
+// Ready returns a channel that is closed when the provider becomes ready.
+// Callers can select on this to be notified without polling.
+func (p *BaseProvider) Ready() <-chan struct{} {
+	return p.readyCh
 }
 
 func FilterDuplicates[T any](items []T, existing map[string]*T, keyFunc func(i T) []string) []T {

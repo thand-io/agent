@@ -8,16 +8,21 @@ import (
 func (e *localClient) configureVault() models.VaultImpl {
 
 	provider := "local"
-	vaultConfig := e.GetServicesConfig().GetVaultConfig()
+	servicesConfig := e.config.GetServicesConfig()
+	if servicesConfig == nil {
+		return nil
+	}
+	vaultConfig := servicesConfig.GetVaultConfig()
 
+	environment := e.config.GetEnvironmentConfig()
 	if vaultConfig != nil && len(vaultConfig.GetProvider()) > 0 {
 		provider = vaultConfig.GetProvider()
-	} else if e.environment != nil && len(e.environment.Platform) > 0 {
-		provider = string(e.environment.Platform)
+	} else if environment != nil && len(environment.Platform) > 0 {
+		provider = string(environment.Platform)
 	}
 
 	// This allows us to pass in any config values defined in the environment
-	configValues := e.config.GetVaultConfigWithDefaults(e.GetEnvironmentConfig().Config)
+	configValues := servicesConfig.GetVaultConfigWithDefaults(environment.Config)
 
 	switch provider {
 	case string(models.AWS):

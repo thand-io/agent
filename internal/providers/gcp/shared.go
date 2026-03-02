@@ -62,6 +62,28 @@ func getSharedData(stage string) (*gcpData, error) {
 	return singleton.data, singleton.err
 }
 
+func GetRoles(stage string) ([]models.ProviderRole, error) {
+	if len(stage) == 0 {
+		stage = "GA"
+	}
+	data, err := getSharedData(stage)
+	if err != nil {
+		return nil, err
+	}
+	return data.roles, nil
+}
+
+func GetPermissions(stage string) ([]models.ProviderPermission, error) {
+	if len(stage) == 0 {
+		stage = "GA"
+	}
+	data, err := getSharedData(stage)
+	if err != nil {
+		return nil, err
+	}
+	return data.permissions, nil
+}
+
 type gcpPermissionMap []struct {
 	ApiDisabled           bool   `json:"apiDisabled,omitempty"`
 	Description           string `json:"description,omitempty"`

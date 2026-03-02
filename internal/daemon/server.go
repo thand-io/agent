@@ -32,10 +32,12 @@ import (
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"github.com/goccy/go-yaml"
 	"github.com/sirupsen/logrus"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	_ "github.com/thand-io/agent/docs" // Import generated swagger docs
+	"github.com/thand-io/agent/internal/api"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
@@ -49,13 +51,6 @@ var staticFiles embed.FS
 
 func NewServer(cfg *config.Config) *Server {
 
-	workflows, err := manager.NewThandWorkflowManager(cfg)
-
-	if err != nil {
-		logrus.WithError(err).Fatal("Failed to create workflow manager")
-		return nil
-	}
-
 	// Create template functions
 	funcMap := template.FuncMap{
 		"toJSON": func(v any) string {
@@ -65,19 +60,33 @@ func NewServer(cfg *config.Config) *Server {
 			}
 			return string(jsonBytes)
 		},
+		"toYAML": func(v any) string {
+			yamlBytes, err := yaml.Marshal(v)
+			if err != nil {
+				return fmt.Sprintf("Error: %v", err)
+			}
+			return string(yamlBytes)
+		},
 	}
 
 	// Parse the templates with custom functions
 	tmpl, err := template.New("").Funcs(funcMap).ParseFS(staticFiles, "static/*.html")
 	if err != nil {
 		logrus.WithError(err).Fatal("Failed to parse templates")
+		return nil
+	}
+
+	apiService, err := api.NewApiService(cfg)
+	if err != nil {
+		logrus.WithError(err).Fatal("Failed to create API service")
+		return nil
 	}
 
 	// Create a new server instance with the provided configuration
 	server := &Server{
 		Config:         cfg,
 		TemplateEngine: tmpl,
-		Workflows:      workflows,
+		API:            apiService,
 		StartTime:      time.Now().UTC(),
 	}
 
@@ -90,6 +99,7 @@ type Server struct {
 	TemplateEngine  *template.Template
 	StartTime       time.Time
 	Workflows       *manager.ThandWorkflowManager
+	API             *api.Service
 	TotalRequests   int64
 	ElevateRequests int64
 	server          *http.Server
@@ -114,10 +124,10 @@ func (s *Server) GetTemplateData(c *gin.Context) TemplateData {
 
 	if s.Config.IsServer() {
 
-		provider, session, err := s.getUser(c)
+		provider, foundSession, err := s.getSession(c)
 
 		if err == nil {
-			foundUser = session.User
+			foundUser = foundSession.User
 			foundProvider = provider
 		}
 
@@ -157,6 +167,7 @@ func (s *Server) GetTemplateData(c *gin.Context) TemplateData {
 					Enabled: s.Config.Server.Metrics.Enabled,
 					Path:    s.Config.Server.Metrics.Path,
 				},
+				Capabilities: s.Config.Server.Capabilities,
 			},
 			Services: SimpleServices{
 				HasTemporal:           hasTemporal,
@@ -359,6 +370,7 @@ func (s *Server) setupRoutes(router *gin.Engine) {
 		router.POST("/execution/:id/form", s.submitForm)
 
 		router.GET("/workflow/:name", s.getWorkflowByName)
+		router.GET("/role/:role", s.getRolePage)
 
 	} else if s.Config.IsAgent() || s.Config.IsClient() {
 
@@ -419,6 +431,7 @@ func (s *Server) setupRoutes(router *gin.Engine) {
 
 		api.GET("/logs", s.getLogsPage)
 		api.GET("/sessions", s.getSessions)
+		api.GET("/whoami", s.getWhoami)
 
 		// Agent endpoints
 		if s.Config.IsAgent() || s.Config.IsClient() {
@@ -615,7 +628,11 @@ func (s *Server) apiConfigurationHandler(c *gin.Context) {
 	workflows := []string{}  // TODO: populate workflows list
 	activities := []string{} // TODO: populate activities list
 
+	// For agent / client we show the local server for discvoery.
+	baseUrl := s.Config.GetLocalServerUrl()
+
 	if s.Config.IsServer() {
+
 		services := s.Config.GetServices()
 		capabilities["temporal"] = services.HasTemporal()
 		capabilities["vault"] = services.HasVault()
@@ -623,6 +640,10 @@ func (s *Server) apiConfigurationHandler(c *gin.Context) {
 		capabilities["scheduler"] = services.HasScheduler()
 		capabilities["llm"] = services.HasLargeLanguageModel()
 		capabilities["storage"] = services.HasStorage()
+
+		// However, for server we show the login server as the main
+		// entry point for clients to connect to
+		baseUrl = s.Config.GetLoginServerUrl()
 	}
 
 	response := gin.H{
@@ -632,18 +653,18 @@ func (s *Server) apiConfigurationHandler(c *gin.Context) {
 		"version":     s.GetVersion(),
 
 		// Endpoints
-		"baseUrl":     s.Config.GetLocalServerUrl(),
+		"baseUrl":     baseUrl,
 		"apiBasePath": s.Config.GetApiBasePath(),
 		//"hostname":    s.Config.Environment.Hostname,
 		//"port":        s.Config.Server.Port,
 
 		// Authentication
-		"authEndpoint": s.Config.GetLocalServerUrl() + "/auth",
+		"authEndpoint": baseUrl + "/auth",
 		"authMethods":  []string{"session", "bearer"},
 
 		// Documentation
-		"docsUrl":     s.Config.GetLocalServerUrl() + "/swagger/index.html",
-		"openApiSpec": s.Config.GetLocalServerUrl() + "/swagger/doc.json",
+		"docsUrl":     baseUrl + "/swagger/index.html",
+		"openApiSpec": baseUrl + "/swagger/doc.json",
 
 		// Capabilities
 		"workflows":    workflows,

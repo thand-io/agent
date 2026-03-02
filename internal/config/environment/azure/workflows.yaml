@@ -97,11 +97,9 @@ workflows:
         - denied:
             thand: notify
             with:
-              notifiers:
-                email:
-                  provider: azure-email
-                  to: ${ $context.identities // [$context.user.email] }
-                  subject: "Azure Access Request Denied"
-                  message: >
-                    Your access request has been denied.
+              provider: azure-email
+              to: ${ $context.identities // [$context.user.email] }
+              subject: "Azure Access Request Denied"
+              message: >
+                Your access request has been denied.
             then: end

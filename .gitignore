@@ -92,6 +92,8 @@ roles.yml
 !*.example.yaml
 
 # Ignore local configuration files
+config/environments/*.yaml
+config/environments/*.json
 config/providers/*.yaml
 config/providers/*.json
 config/roles/*.yaml

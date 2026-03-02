@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,8 +12,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/serverlessworkflow/sdk-go/v3/impl/ctx"
+	swfCtx "github.com/serverlessworkflow/sdk-go/v3/impl/ctx"
 	"github.com/sirupsen/logrus"
+	internalapi "github.com/thand-io/agent/internal/api"
 	"github.com/thand-io/agent/internal/daemon/elevate/llm"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/workflows/manager"
@@ -156,6 +158,12 @@ func (s *Server) postElevateJSON(c *gin.Context) {
 
 func (s *Server) handleDynamicRequest(c *gin.Context, dynamicRequest models.ElevateDynamicRequest) {
 
+	// Capability gate: dynamic elevation can be disabled via config
+	if !s.Config.IsDynamicElevationEnabled() {
+		s.getErrorPage(c, http.StatusForbidden, "Dynamic elevation requests are disabled on this server")
+		return
+	}
+
 	// Validate required fields
 	if len(dynamicRequest.Reason) == 0 {
 		s.getErrorPage(c, http.StatusBadRequest, "Reason is required")
@@ -173,26 +181,47 @@ func (s *Server) handleDynamicRequest(c *gin.Context, dynamicRequest models.Elev
 		return
 	}
 
+	// Convert string permissions to Statements (backwards compatibility)
+	allowStatements := make(models.RoleStatements, len(dynamicRequest.Permissions))
+	for i, perm := range dynamicRequest.Permissions {
+		allowStatements[i] = models.Statement{
+			Operations: []string{perm},
+			Targets:    []string{},
+		}
+	}
+
+	// Merge groups and resources into permissions targets
+	var allTargets []string
+	allTargets = append(allTargets, dynamicRequest.Groups...)
+	allTargets = append(allTargets, dynamicRequest.Resources...)
+
+	// Add targets to allowStatements if there are any
+	if len(allTargets) > 0 {
+		if len(allowStatements) > 0 {
+			allowStatements[0].Targets = append(allowStatements[0].Targets, allTargets...)
+		} else {
+			allowStatements = append(allowStatements, models.Statement{
+				Targets: allTargets,
+			})
+		}
+	}
+
 	// Create a dynamic role based on the request
 	dynamicRole := &models.Role{
 		Name:        "dynamic-role-" + time.Now().Format("20060102-150405"),
 		Description: "Dynamically created role: " + dynamicRequest.Reason,
 		Workflows:   []string{dynamicRequest.Workflow},
-		Permissions: models.Permissions{
-			Allow: dynamicRequest.Permissions,
+		Permissions: models.RolePermissions{
+			Allow: allowStatements,
 		},
 		Inherits:  dynamicRequest.Inherits,
 		Providers: dynamicRequest.Providers,
-		Groups: models.Groups{
-			Allow: dynamicRequest.Groups,
-		},
-		Resources: models.Resources{
-			Allow: dynamicRequest.Resources,
-		},
-		Scopes: &models.RoleScopes{
-			Groups:  dynamicRequest.Scopes.Groups,
-			Users:   dynamicRequest.Scopes.Users,
-			Domains: dynamicRequest.Scopes.Domains,
+		Scopes: models.RoleScopes{
+			Allow: models.ScopeIdentities{
+				Groups:  dynamicRequest.Scopes.Groups,
+				Users:   dynamicRequest.Scopes.Users,
+				Domains: dynamicRequest.Scopes.Domains,
+			},
 		},
 		Enabled: true,
 	}
@@ -219,46 +248,22 @@ func (s *Server) elevate(c *gin.Context, request models.ElevateRequest) {
 	// Increment elevate requests counter
 	atomic.AddInt64(&s.ElevateRequests, 1)
 
-	ctx := context.Background()
-
-	// If we have a web session and one hasn't been set then
-	// lets attach a user session to the request.
-	if !s.Config.IsServer() {
-		s.getErrorPage(c, http.StatusBadRequest, "Cannot process elevation request")
-		return
-	}
-
-	if len(request.Workflow) == 0 {
-		s.getErrorPage(c, http.StatusBadRequest, "No workflow specified for elevation request")
-		return
-	}
-
 	authProvider, foundUser, err := s.getUserFromElevationRequest(c, request)
 
 	if err != nil {
+		// You will get this error if the user requesting is NOT allowed to make an elevation request for the provided role
+		// for the role authorisors to determine if a user is allowed to request elevation, they can check the user's identity against the role's allowed identities and scopes.
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of available roles", err)
 		return
 	}
 
-	if foundUser != nil {
-
-		exportableSession := &models.ExportableSession{
-			Session:  foundUser,
-			Provider: authProvider,
-		}
-
-		request.Session = exportableSession.ToLocalSession(
-			s.Config.GetServices().GetEncryption())
-
-		// If no identities were set then use the users email
-		// Self elevate
-		if len(request.Identities) == 0 && foundUser.User != nil && len(foundUser.User.Email) > 0 {
-			request.Identities = []string{foundUser.User.Email}
-		}
+	input := internalapi.ElevationInput{
+		Request:      request,
+		User:         foundUser,
+		AuthProvider: authProvider,
 	}
 
-	workflowTask, err := s.Workflows.CreateElevationWorkflow(ctx, request)
-
+	result, err := s.API.Elevate(c.Request.Context(), input)
 	if err != nil {
 		s.getErrorPage(c, http.StatusBadRequest, "Failed to execute workflow", err)
 		return
@@ -292,7 +297,7 @@ func (s *Server) elevate(c *gin.Context, request models.ElevateRequest) {
 
 	// We now redirect the user to the next workflow step.
 	c.Redirect(http.StatusTemporaryRedirect,
-		workflowTask.GetRedirectURL(),
+		result.GetRedirectURL(),
 	)
 }
 
@@ -437,22 +442,6 @@ func (s *Server) getElevateAuthOAuth2(c *gin.Context) {
 
 	workflowTask.SetUser(session.User)
 
-	// Now that we have a user we need to evaluate our composite role
-
-	newRole, err := s.Config.GetCompositeRole(&models.Identity{
-		ID:    session.User.GetIdentity(),
-		Label: session.User.GetName(),
-		User:  session.User,
-	}, workflowTask.GetRole())
-
-	if err != nil {
-		s.getErrorPage(c, http.StatusInternalServerError,
-			"Failed to evaluate composite role for elevation request", err)
-		return
-	}
-
-	workflowTask.SetRole(newRole)
-
 	exportableSession := &models.ExportableSession{
 		Session:  session,
 		Provider: authProvider,
@@ -478,9 +467,8 @@ func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.ElevateWorkflow
 		return
 	}
 
-	// Get user context
 	// TODO: Validate the provider that we're using?
-	_, foundUser, err := s.getUser(c)
+	_, foundSession, err := s.getSession(c)
 
 	if err != nil {
 		logrus.WithError(err).Error("failed to get user")
@@ -488,58 +476,39 @@ func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.ElevateWorkflow
 		return
 	}
 
-	if foundUser == nil {
+	if foundSession == nil {
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: user not found for elevation")
 		return
 	}
 
-	if foundUser.User == nil {
+	if foundSession.User == nil {
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: user information is missing for elevation")
 		return
 	}
 
-	// Lets check if the workflow has a cloudevent input to process
-	event := workflow.GetInputAsCloudEvent()
-
-	if event != nil {
-
-		// Extensions only support basic types so we need to set the user identity as a string
-		event.SetExtension(models.VarsContextUser, foundUser.User.GetIdentity())
-
-		if len(event.FieldErrors) > 0 {
-			logrus.WithField("errors", event.FieldErrors).
-				Error("failed to set user extension on cloudevent")
-			s.getErrorPage(c, http.StatusBadRequest, "Failed to set user extension on cloudevent")
-			return
-		}
-
-		workflow.SetInput(event)
+	input := internalapi.ResumeInput{
+		Workflow: workflow,
+		User:     foundSession.User,
 	}
 
-	// Provide no input to resume the workflow as it'll use the saved state
-	// inputs are only for signals
-	workflowTask, err := s.Workflows.ResumeWorkflow(
-		workflow,
-	)
-
+	result, err := s.API.Resume(c.Request.Context(), input)
 	if err != nil {
-		s.getErrorPage(c, http.StatusBadRequest, "Failed to resume workflow", err)
-		return
-	}
-
-	if workflowTask == nil {
-		s.getErrorPage(c, http.StatusNotFound, "Workflow not found or already completed", err)
+		if errors.Is(err, internalapi.ErrWorkflowNotFound) {
+			s.getErrorPage(c, http.StatusNotFound, "Workflow not found or already completed")
+		} else {
+			s.getErrorPage(c, http.StatusBadRequest, "Failed to resume workflow", err)
+		}
 		return
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"task_name": workflowTask.GetTaskReference(),
-	}).Info("Workflow is still running, redirecting to resume")
+		"workflow_id": result.GetWorkflowID(),
+	}).Info("Workflow resume complete, returning result to caller")
 
-	if workflowTask.GetStatus() == ctx.RunningStatus {
+	if result.GetStatus() == swfCtx.RunningStatus {
 
 		c.Redirect(http.StatusTemporaryRedirect,
-			s.Config.GetResumeCallbackUrl(workflowTask),
+			s.Config.GetResumeCallbackUrl(result),
 		)
 
 	} else if s.canAcceptHtml(c) {
@@ -551,9 +520,9 @@ func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.ElevateWorkflow
 			TemplateData: s.GetTemplateData(c),
 			ExecutionStatePageResponse: ExecutionStatePageResponse{
 				Execution: &models.WorkflowExecutionInfo{
-					WorkflowID: workflowTask.GetWorkflowID(),
+					WorkflowID: result.GetWorkflowID(),
 				},
-				Workflow: workflowTask.GetWorkflowDef(),
+				Workflow: result.GetWorkflowDef(),
 			},
 		}
 
@@ -562,9 +531,9 @@ func (s *Server) resumeWorkflow(c *gin.Context, workflow *models.ElevateWorkflow
 	} else {
 
 		c.JSON(http.StatusOK, models.ElevateResponse{
-			WorkflowId: workflowTask.GetWorkflowID(),
-			Status:     workflowTask.GetStatus(),
-			Output:     workflowTask.GetOutputAsMap(),
+			WorkflowId: result.GetWorkflowID(),
+			Status:     result.GetStatus(),
+			Output:     result.GetOutputAsMap(),
 		})
 	}
 }
@@ -624,6 +593,11 @@ func (s *Server) postElevateLLM(c *gin.Context) {
 
 func (s *Server) handleLargeLanguageModelRequest(c *gin.Context, elevateRequest models.ElevateLLMRequest) {
 
+	if !s.Config.IsLLMElevationEnabled() {
+		s.getErrorPage(c, http.StatusForbidden, "LLM elevation requests are disabled on this server")
+		return
+	}
+
 	if !s.Config.HasLargeLanguageModel() {
 		s.getErrorPage(c, http.StatusInternalServerError, "Gemini is not initialized")
 		return
@@ -640,7 +614,7 @@ func (s *Server) handleLargeLanguageModelRequest(c *gin.Context, elevateRequest 
 		return
 	}
 
-	_, foundUser, err := s.getUser(c)
+	authorisedProvider, foundSession, err := s.getSession(c)
 
 	if err != nil {
 		logrus.WithError(err).Error("failed to get user")
@@ -648,12 +622,12 @@ func (s *Server) handleLargeLanguageModelRequest(c *gin.Context, elevateRequest 
 		return
 	}
 
-	if foundUser == nil {
+	if foundSession == nil {
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: user not found for elevation")
 		return
 	}
 
-	providers := s.Config.GetProvidersByCapabilityWithUser(foundUser.User, models.ProviderCapabilityProvisioning)
+	providers := s.Config.GetProvidersByCapabilityWithUser(foundSession.User, models.ProviderCapabilityProvisioning)
 
 	if len(providers) == 0 {
 		s.getErrorPage(c, http.StatusBadRequest, "No providers with RBAC capability are configured")
@@ -672,6 +646,8 @@ func (s *Server) handleLargeLanguageModelRequest(c *gin.Context, elevateRequest 
 		s.Config.GetLargeLanguageModel(),
 		providers,
 		workflows,
+		authorisedProvider,
+		foundSession,
 		elevateRequest.Reason,
 	)
 
@@ -728,7 +704,7 @@ func (s *Server) getElevationPagePrefill(c *gin.Context) ElevateStaticPageData {
 
 	if len(validIdentities) == 0 {
 		// Set the current user as the default identity if none are valid
-		_, session, err := s.getUser(c)
+		_, session, err := s.getSession(c)
 		if err == nil && session != nil {
 			user := session.User
 			if user != nil {
@@ -773,13 +749,25 @@ func (s *Server) getElevationPagePrefill(c *gin.Context) ElevateStaticPageData {
 }
 
 func (s *Server) getElevateStaticPage(c *gin.Context) {
+	if !s.Config.IsStaticElevationEnabled() {
+		s.getErrorPage(c, http.StatusForbidden, "Static elevation requests are disabled on this server")
+		return
+	}
 	s.renderHtml(c, "elevate_static.html", s.getElevationPagePrefill(c))
 }
 
 func (s *Server) getElevateDynamicPage(c *gin.Context) {
+	if !s.Config.IsDynamicElevationEnabled() {
+		s.getErrorPage(c, http.StatusForbidden, "Dynamic elevation requests are disabled on this server")
+		return
+	}
 	s.renderHtml(c, "elevate_dynamic.html", s.getElevationPagePrefill(c))
 }
 
 func (s *Server) getElevateLLMPage(c *gin.Context) {
+	if !s.Config.IsLLMElevationEnabled() {
+		s.getErrorPage(c, http.StatusForbidden, "LLM elevation requests are disabled on this server")
+		return
+	}
 	s.renderHtml(c, "elevate_llm.html", s.getElevationPagePrefill(c))
 }

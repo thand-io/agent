@@ -12,43 +12,48 @@
                         <tr>
                             <th>Name</th>
                             <th>Provider Type</th>
-                            <th>Description</th>
                             <th>Status</th>
-                            <th style="width: 360px;">Actions</th>
+                            <th style="width: 420px;">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {{range $key, $provider := .Response.Providers}}
-                        <tr>
-                            <td>
-                                <strong>{{$provider.Name}}</strong>
-                            </td>
-                            <td>
-                                <span class="badge badge-secondary">{{$provider.Provider}}</span>
-                            </td>
-                            <td>
-                                {{if $provider.Description}}
-                                    {{$provider.Description}}
-                                {{else}}
-                                    <span class="text-muted">No description available</span>
+                        {{range $provider := .Response.Providers}}
+                        <tr style="position: relative;">
+                            <td style="position: relative;">
+                                <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background-color: {{if $provider.Result.Ready}}hsl(var(--status-active)){{else}}hsl(38 92% 50%){{end}}; border-radius: 0.25rem 0 0 0.25rem;"></div>
+                                <strong>{{$provider.Result.Name}}</strong>
+                                {{if $provider.Result.Description}}
+                                    <div style="font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin-top: 0.25rem;">{{$provider.Result.Description}}</div>
                                 {{end}}
                             </td>
                             <td>
-                                {{if $provider.Enabled}}
-                                    <span class="badge badge-success">Enabled</span>
+                                <span class="badge badge-secondary">{{$provider.Result.Provider}}</span>
+                            </td>
+                            <td>
+                                {{if $provider.Result.Ready}}
+                                    <span class="badge badge-success">Ready</span>
                                 {{else}}
-                                    <span class="badge badge-warning">Disabled</span>
+                                    <span class="badge badge-warning">Syncing</span>
                                 {{end}}
                             </td>
                             <td>
-                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$key}}/identities" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">View Identities</a>
-                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$key}}/roles" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">View Roles</a>
-                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$key}}/permissions" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">View Permissions</a>
+                                {{if or (and $provider.Result.Capabilities.Identities $provider.Result.Capabilities.Identities.Enabled) (and $provider.Result.Capabilities.Users $provider.Result.Capabilities.Users.Enabled) (and $provider.Result.Capabilities.Groups $provider.Result.Capabilities.Groups.Enabled)}}
+                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$provider.Result.Identifier}}/identities" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">Identities</a>
+                                {{end}}
+                                {{if and $provider.Result.Capabilities.Roles $provider.Result.Capabilities.Roles.Enabled}}
+                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$provider.Result.Identifier}}/roles" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">Roles</a>
+                                {{end}}
+                                {{if and $provider.Result.Capabilities.Permissions $provider.Result.Capabilities.Permissions.Enabled}}
+                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$provider.Result.Identifier}}/permissions" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">Permissions</a>
+                                {{end}}
+                                {{if and $provider.Result.Capabilities.Tenants $provider.Result.Capabilities.Tenants.Enabled}}
+                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$provider.Result.Identifier}}/tenants" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">Tenants</a>
+                                {{end}}
                             </td>
                         </tr>
                         {{else}}
                         <tr>
-                            <td colspan="5" class="text-muted" style="text-align: center; padding: 2rem;">
+                            <td colspan="4" class="text-muted" style="text-align: center; padding: 2rem;">
                                 No providers configured. Or you do not have access to view any providers.
                             </td>
                         </tr>

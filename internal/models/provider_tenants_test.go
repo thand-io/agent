@@ -305,6 +305,82 @@ func TestBaseProvider_ListTenants_Search(t *testing.T) {
 	}
 }
 
+func TestBaseProvider_ListTenants_PartialMatch(t *testing.T) {
+	p := models.NewBaseProvider("test", models.ProviderConfig{
+		Name: "Test Provider",
+	}, models.NewProviderCapabilities().WithDefaultTenantsConfiguration())
+
+	tenants := []models.ProviderTenant{
+		{ID: "aws-123", Name: "Production Account", Type: "account"},
+		{ID: "aws-456", Name: "Development Account", Type: "account"},
+		{ID: "gcp-789", Name: "Staging Environment", Type: "project"},
+	}
+
+	p.SetTenants(tenants)
+	time.Sleep(500 * time.Millisecond)
+
+	ctx := context.Background()
+
+	tests := []struct {
+		name       string
+		searchReq  *models.SearchRequest
+		wantIDs    []string
+		wantAbsent []string
+	}{
+		{
+			name:      "prefix match on Name",
+			searchReq: &models.SearchRequest{Terms: []string{"prod"}},
+			wantIDs:   []string{"aws-123"},
+		},
+		{
+			name:      "prefix match via Query field",
+			searchReq: &models.SearchRequest{Query: "dev"},
+			wantIDs:   []string{"aws-456"},
+		},
+		{
+			name:      "mid-string match on Name",
+			searchReq: &models.SearchRequest{Terms: []string{"duction"}},
+			wantIDs:   []string{"aws-123"},
+		},
+		{
+			name:      "partial ID match",
+			searchReq: &models.SearchRequest{Terms: []string{"aws-1"}},
+			wantIDs:   []string{"aws-123"},
+		},
+		{
+			name:       "partial term returns only matching tenant",
+			searchReq:  &models.SearchRequest{Terms: []string{"stag"}},
+			wantIDs:    []string{"gcp-789"},
+			wantAbsent: []string{"aws-123", "aws-456"},
+		},
+		{
+			name:      "shared suffix across tenants",
+			searchReq: &models.SearchRequest{Terms: []string{"account"}},
+			wantIDs:   []string{"aws-123", "aws-456"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			results, err := p.ListTenants(ctx, tt.searchReq)
+			require.NoError(t, err)
+			require.NotEmpty(t, results, "expected at least one result")
+
+			foundIDs := make([]string, len(results))
+			for i, r := range results {
+				foundIDs[i] = r.Result.ID
+			}
+
+			for _, id := range tt.wantIDs {
+				assert.Contains(t, foundIDs, id, "expected ID %q in results", id)
+			}
+			for _, id := range tt.wantAbsent {
+				assert.NotContains(t, foundIDs, id, "unexpected ID %q in results", id)
+			}
+		})
+	}
+}
+
 // CONCURRENCY TESTS
 
 func TestBaseProvider_SetTenants_Concurrency(t *testing.T) {

@@ -1,18 +1,17 @@
 package services
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/sirupsen/logrus"
-	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/config/services/temporal"
 	"github.com/thand-io/agent/internal/models"
+	"github.com/thand-io/agent/internal/sessions"
 )
 
 type localClient struct {
-	environment *models.EnvironmentConfig
-	config      *models.ServicesConfig
-	secret      *string
+	config models.ConfigImpl
 
 	Analytics models.Analytics
 	encrypt   models.EncryptionImpl
@@ -21,33 +20,26 @@ type localClient struct {
 	llm       models.LargeLanguageModelImpl
 	pki       models.PublicKeyInfrastructure
 	temporal  models.TemporalImpl
+
+	mu sync.Mutex
 }
 
-func NewServicesClient(
-	environment *models.EnvironmentConfig,
-	config *models.ServicesConfig,
-	secret *string,
-) *localClient {
+func NewServicesClient(config models.ConfigImpl) *localClient {
 	return &localClient{
-		environment: environment,
-		config:      config,
-		secret:      secret,
+		config: config,
 	}
 }
 
 func (e *localClient) GetServicesConfig() *models.ServicesConfig {
-	return e.config
+	return e.config.GetServicesConfig()
 }
 
 func (e *localClient) GetEnvironmentConfig() *models.EnvironmentConfig {
-	return e.environment
+	return e.config.GetEnvironmentConfig()
 }
 
 func (e *localClient) GetSecret() string {
-	if e.secret == nil {
-		return common.DefaultServerSecret
-	}
-	return *e.secret
+	return e.config.GetSecret()
 }
 
 func (e *localClient) Initialize() error {
@@ -63,120 +55,41 @@ func (e *localClient) Initialize() error {
 
 	// These are code services and are not dependent on each other
 	// so we can initialise them in parallel
-	analyticsService := e.configureAnalytics()
-	encryptionService := e.configureEncryption()
-	vaultService := e.configureVault()
-	schedulerService := e.configureScheduler()
-
-	// Lets in parallel initialise all the internal services we need
 	var wg sync.WaitGroup
 
 	wg.Go(func() {
-
-		logrus.Infof("Initializing Analytics...")
-
-		if analyticsService != nil {
-			if err := analyticsService.Initialize(); err != nil {
-				logrus.Errorf("Error initializing Analytics: %v", err)
-			} else {
-				e.Analytics = analyticsService
-			}
-		}
+		e.ReloadAnalytics()
 	})
 
 	wg.Go(func() {
-
-		logrus.Infof("Initializing encryption...")
-
-		if encryptionService != nil {
-			if err := encryptionService.Initialize(); err != nil {
-				logrus.Errorf("Error initializing encryption: %v", err)
-			} else {
-				e.encrypt = encryptionService
-			}
-		}
+		e.ReloadEncryption()
 	})
 
 	wg.Go(func() {
-
-		logrus.Infof("Initializing vault...")
-
-		if vaultService != nil {
-			if err := vaultService.Initialize(); err != nil {
-				logrus.Errorf("Error initializing vault: %v", err)
-			} else {
-				e.vault = vaultService
-			}
-		}
+		e.ReloadVault()
 	})
 
 	wg.Go(func() {
-
-		logrus.Infof("Initializing scheduler...")
-
-		if schedulerService != nil {
-			if err := schedulerService.Initialize(); err != nil {
-				logrus.Errorf("Error initializing scheduler: %v", err)
-			} else {
-				e.scheduler = schedulerService
-			}
-		}
+		e.ReloadScheduler()
 	})
 
-	if e.config.LargeLanguageModel != nil {
-
+	servicesConfig := e.config.GetServicesConfig()
+	if servicesConfig != nil && servicesConfig.GetLargeLanguageModelConfig() != nil {
 		wg.Go(func() {
-
-			logrus.Infof("Initializing large language model...")
-
-			llmService := e.configureLargeLanguageModel()
-			if llmService != nil {
-				if err := llmService.Initialize(); err != nil {
-					logrus.Errorf("Error initializing large language model: %v", err)
-				} else {
-					e.llm = llmService
-				}
-			}
+			e.ReloadLargeLanguageModel()
 		})
-
 	}
 
-	if e.config.PublicKeyInfrastructure != nil {
-
+	if servicesConfig != nil && servicesConfig.GetPublicKeyInfrastructureConfig() != nil {
 		wg.Go(func() {
-
-			logrus.Infof("Initializing public key infrastructure...")
-
-			pkiService := e.configurePublicKeyInfrastructure()
-			if pkiService != nil {
-				if err := e.pki.Initialize(e.encrypt, e.vault); err != nil {
-					logrus.Errorf("Error initializing public key infrastructure: %v", err)
-				} else {
-					e.pki = pkiService
-				}
-			}
+			e.ReloadPublicKeyInfrastructure()
 		})
-
 	}
 
-	if e.config.Temporal != nil {
-
+	if servicesConfig != nil && servicesConfig.GetTemporalConfig() != nil {
 		wg.Go(func() {
-
-			logrus.Infof("Initializing temporal...")
-
-			temporalService := temporal.NewTemporalClient(
-				e.config.Temporal,
-				e.environment.GetIdentifier(),
-				e.vault,
-			)
-			if err := temporalService.Initialize(); err != nil {
-				logrus.Errorf("Error initializing temporal: %v", err)
-			} else {
-				e.temporal = temporalService
-			}
+			e.ReloadTemporal()
 		})
-
 	}
 
 	logrus.Infof("Waiting for all services to initialize...")
@@ -196,57 +109,329 @@ func (e *localClient) Shutdown() error {
 }
 
 func (e *localClient) GetAnalytics() models.Analytics {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	return e.Analytics
 }
 
 func (e *localClient) HasAnalytics() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	return e.Analytics != nil
 }
 
 func (e *localClient) GetLargeLanguageModel() models.LargeLanguageModelImpl {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	return e.llm
 }
 
 func (e *localClient) HasLargeLanguageModel() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	return e.llm != nil
 }
 
 func (e *localClient) GetTemporal() models.TemporalImpl {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	return e.temporal
 }
 
 func (e *localClient) HasTemporal() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	return e.temporal != nil
 }
 
 func (e *localClient) GetEncryption() models.EncryptionImpl {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	return e.encrypt
 }
 
 func (e *localClient) HasEncryption() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	return e.encrypt != nil
 }
 
 func (e *localClient) GetVault() models.VaultImpl {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	return e.vault
 }
 
 func (e *localClient) HasVault() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	return e.vault != nil
 }
 
 func (e *localClient) GetStorage() models.StorageImpl {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	return nil
 }
 
 func (e *localClient) HasStorage() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	return false
 }
 
 func (e *localClient) GetScheduler() models.SchedulerImpl {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	return e.scheduler
 }
 
 func (e *localClient) HasScheduler() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	return e.scheduler != nil
+}
+
+func (e *localClient) ReloadAnalytics() error {
+
+	if e.Analytics != nil {
+		logrus.Infoln("Reloading analytics service...")
+		e.mu.Lock()
+		e.Analytics = nil
+		e.mu.Unlock()
+	}
+
+	logrus.Infof("Initializing Analytics...")
+
+	analyticsService := e.configureAnalytics()
+	if analyticsService != nil {
+		if err := analyticsService.Initialize(); err != nil {
+			logrus.Errorf("Error initializing Analytics: %v", err)
+			return err
+		} else {
+			e.mu.Lock()
+			e.Analytics = analyticsService
+			e.mu.Unlock()
+		}
+	}
+
+	return nil
+}
+
+func (e *localClient) ReloadEncryption() error {
+
+	if e.encrypt != nil {
+		logrus.Infoln("Reloading encryption service...")
+		e.mu.Lock()
+		e.encrypt = nil
+		e.mu.Unlock()
+	}
+
+	logrus.Infof("Initializing encryption...")
+
+	encryptionService := e.configureEncryption()
+	if encryptionService != nil {
+		if err := encryptionService.Initialize(); err != nil {
+			logrus.Errorf("Error initializing encryption: %v", err)
+			return err
+		} else {
+			e.mu.Lock()
+			e.encrypt = encryptionService
+			e.mu.Unlock()
+		}
+	}
+
+	return nil
+}
+
+func (e *localClient) ReloadVault() error {
+
+	if e.vault != nil {
+		logrus.Infoln("Reloading vault service...")
+		e.mu.Lock()
+		e.vault = nil
+		e.mu.Unlock()
+	}
+
+	logrus.Infof("Initializing vault...")
+
+	vaultService := e.configureVault()
+	if vaultService != nil {
+		if err := vaultService.Initialize(); err != nil {
+			logrus.Errorf("Error initializing vault: %v", err)
+			return err
+		} else {
+			e.mu.Lock()
+			e.vault = vaultService
+			e.mu.Unlock()
+		}
+	}
+
+	return nil
+}
+
+func (e *localClient) ReloadScheduler() error {
+
+	if e.scheduler != nil {
+		logrus.Infoln("Reloading scheduler service...")
+		e.mu.Lock()
+		e.scheduler = nil
+		e.mu.Unlock()
+	}
+
+	logrus.Infof("Initializing scheduler...")
+
+	schedulerService := e.configureScheduler()
+	if schedulerService != nil {
+		if err := schedulerService.Initialize(); err != nil {
+			logrus.Errorf("Error initializing scheduler: %v", err)
+			return err
+		} else {
+			e.mu.Lock()
+			e.scheduler = schedulerService
+			e.mu.Unlock()
+		}
+	}
+
+	return nil
+}
+
+func (e *localClient) ReloadLargeLanguageModel() error {
+
+	if e.llm != nil {
+		logrus.Infoln("Reloading large language model service...")
+		e.mu.Lock()
+		e.llm = nil
+		e.mu.Unlock()
+	}
+
+	logrus.Infof("Initializing large language model...")
+
+	llmService := e.configureLargeLanguageModel()
+	if llmService != nil {
+		if err := llmService.Initialize(); err != nil {
+			logrus.Errorf("Error initializing large language model: %v", err)
+			return err
+		} else {
+			e.mu.Lock()
+			e.llm = llmService
+			e.mu.Unlock()
+		}
+	}
+
+	return nil
+}
+
+func (e *localClient) ReloadPublicKeyInfrastructure() error {
+
+	if e.pki != nil {
+		logrus.Infoln("Reloading public key infrastructure service...")
+		e.mu.Lock()
+		e.pki = nil
+		e.mu.Unlock()
+	}
+
+	// Fist check that we have encryption and vault services available
+	if !e.HasEncryption() || !e.HasVault() {
+		logrus.Infof("Skipping public key infrastructure initialization as encryption or vault service is not available")
+		return nil
+	}
+
+	logrus.Infof("Initializing public key infrastructure...")
+
+	pkiService := e.configurePublicKeyInfrastructure()
+	if pkiService != nil {
+		if err := pkiService.Initialize(e.GetEncryption(), e.GetVault()); err != nil {
+			logrus.Errorf("Error initializing public key infrastructure: %v", err)
+			return err
+		} else {
+			e.mu.Lock()
+			e.pki = pkiService
+			e.mu.Unlock()
+		}
+	}
+
+	return nil
+}
+
+func (e *localClient) ReloadTemporal() error {
+
+	if e.temporal != nil {
+
+		logrus.Infoln("Reloading temporal service...")
+		err := e.temporal.Shutdown()
+
+		if err != nil {
+			logrus.WithError(err).Errorf("Failed to shutdown existing temporal service: %v", err)
+			return err
+		}
+
+		e.mu.Lock()
+		e.temporal = nil
+		e.mu.Unlock()
+	}
+
+	// Client mode NEVER starts Temporal
+	if e.config.IsClient() {
+		logrus.Info("Skipping Temporal initialization in client mode")
+		return nil
+	}
+
+	logrus.Infof("Initializing temporal...")
+
+	// Determine identities based on mode
+	environment := e.config.GetEnvironment()
+	identities := []string{environment.GetIdentifier()}
+
+	if e.config.IsAgent() {
+		// Agent mode: query session manager for all active identities + hostname
+		sessionMgr := sessions.GetSessionManager()
+		loginServerName := e.config.GetLoginServerHostname()
+
+		loginServer, err := sessionMgr.GetLoginServer(loginServerName)
+
+		if err != nil {
+			logrus.WithError(err).Warn("Failed to get login server, using hostname identity only")
+		} else {
+			activeSessions := loginServer.GetSessions()
+
+			// Add active session providers as identities
+			for providerName, session := range activeSessions {
+				if !session.IsExpired() {
+					identities = append(identities, providerName)
+					logrus.WithFields(logrus.Fields{
+						"provider": providerName,
+						"expiry":   session.Expiry,
+					}).Debug("Adding active session identity to worker pool")
+				}
+			}
+		}
+
+		logrus.WithField("identities", identities).Info("Configuring Temporal workers for agent mode")
+	}
+
+	// Get Temporal config from services
+	servicesConfig := e.config.GetServicesConfig()
+
+	if servicesConfig == nil {
+		return fmt.Errorf("Services config is missing")
+	}
+
+	temporalConfig := servicesConfig.GetTemporalConfig()
+
+	temporalService := temporal.NewTemporalClient(
+		temporalConfig,
+		e.vault,
+		identities...,
+	)
+	if err := temporalService.Initialize(); err != nil {
+		logrus.Errorf("Error initializing temporal: %v", err)
+		return err
+	}
+
+	e.mu.Lock()
+	e.temporal = temporalService
+	e.mu.Unlock()
+
+	return nil
 }

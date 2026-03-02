@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
 )
@@ -57,11 +60,24 @@ func (s *Server) getProviderIdentities(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, models.ProviderIdentitiesResponse{
+	response := models.ProviderIdentitiesResponse{
 		Version:    "1.0",
 		Provider:   providerName,
 		Identities: identities,
-	})
+	}
+
+	if s.canAcceptHtml(c) {
+		data := struct {
+			TemplateData TemplateData
+			Response     models.ProviderIdentitiesResponse
+		}{
+			TemplateData: s.GetTemplateData(c),
+			Response:     response,
+		}
+		s.renderHtml(c, "provider_identities.html", data)
+	} else {
+		c.JSON(http.StatusOK, response)
+	}
 }
 
 // getProviderRoles lists roles available in a provider
@@ -105,12 +121,7 @@ func (s *Server) getProviderRoles(c *gin.Context) {
 	}
 
 	if len(query) > 0 {
-		searchRequest.Terms = []string{query}
-		if !strings.HasSuffix(query, "*") {
-			searchRequest.Query = query + "*"
-		} else {
-			searchRequest.Query = query
-		}
+		searchRequest.Query = query
 	}
 
 	roles, err := provider.ListRoles(context.Background(), searchRequest)
@@ -120,11 +131,24 @@ func (s *Server) getProviderRoles(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, models.ProviderRolesResponse{
+	response := models.ProviderRolesResponse{
 		Version:  "1.0",
 		Provider: providerName,
 		Roles:    roles,
-	})
+	}
+
+	if s.canAcceptHtml(c) {
+		data := struct {
+			TemplateData TemplateData
+			Response     models.ProviderRolesResponse
+		}{
+			TemplateData: s.GetTemplateData(c),
+			Response:     response,
+		}
+		s.renderHtml(c, "provider_roles.html", data)
+	} else {
+		c.JSON(http.StatusOK, response)
+	}
 }
 
 // getProviderByName retrieves a provider by name
@@ -150,7 +174,7 @@ func (s *Server) getProviderByName(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, models.ProviderResponse{
-		ID:           providerName,
+		Identifier:   providerName,
 		Name:         provider.GetName(),
 		Description:  provider.GetDescription(),
 		Provider:     provider.GetProvider(),
@@ -201,12 +225,7 @@ func (s *Server) getProviderPermissions(c *gin.Context) {
 	}
 
 	if len(query) > 0 {
-		searchRequest.Terms = []string{query}
-		if !strings.HasSuffix(query, "*") {
-			searchRequest.Query = query + "*"
-		} else {
-			searchRequest.Query = query
-		}
+		searchRequest.Query = query
 	}
 
 	permissions, err := provider.ListPermissions(context.Background(), searchRequest)
@@ -216,11 +235,24 @@ func (s *Server) getProviderPermissions(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, models.ProviderPermissionsResponse{
+	response := models.ProviderPermissionsResponse{
 		Version:     "1.0",
 		Provider:    providerName,
 		Permissions: permissions,
-	})
+	}
+
+	if s.canAcceptHtml(c) {
+		data := struct {
+			TemplateData TemplateData
+			Response     models.ProviderPermissionsResponse
+		}{
+			TemplateData: s.GetTemplateData(c),
+			Response:     response,
+		}
+		s.renderHtml(c, "provider_permissions.html", data)
+	} else {
+		c.JSON(http.StatusOK, response)
+	}
 }
 
 // getProviderResources lists resources available in a provider
@@ -265,12 +297,7 @@ func (s *Server) getProviderResources(c *gin.Context) {
 	}
 
 	if len(query) > 0 {
-		searchRequest.Terms = []string{query}
-		if !strings.HasSuffix(query, "*") {
-			searchRequest.Query = query + "*"
-		} else {
-			searchRequest.Query = query
-		}
+		searchRequest.Query = query
 	}
 
 	resources, err := provider.ListResources(context.Background(), searchRequest)
@@ -281,7 +308,7 @@ func (s *Server) getProviderResources(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, models.ProviderResourcesResponse{
-		Version:   "1.0",
+		Version:   version.Must(version.NewVersion("1.0.0")),
 		Provider:  providerName,
 		Resources: resources,
 	})
@@ -296,8 +323,10 @@ func (s *Server) getProviderResources(c *gin.Context) {
 //	@Produce		json
 //	@Param			provider	path		string								true	"Provider name"
 //	@Param			q			query		string								false	"Filter query"
+//	@Param			limit		query		int									false	"Maximum number of results to return (default: 100)"
 //	@Success		200			{object}	models.ProviderTenantsResponse		"Provider tenants"
 //	@Failure		404			{object}	map[string]any				"Provider not found"
+//	@Failure		501			{object}	map[string]any				"Provider does not implement tenants"
 //	@Failure		500			{object}	map[string]any				"Internal server error"
 //	@Router			/provider/{provider}/tenants [get]
 //	@Security		BearerAuth
@@ -319,34 +348,51 @@ func (s *Server) getProviderTenants(c *gin.Context) {
 
 	query := c.Query("q")
 
-	searchRequest := &models.SearchRequest{
-		Limit: 10,
-	}
-
-	if len(query) > 0 {
-		searchRequest.Terms = []string{query}
-		if !strings.HasSuffix(query, "*") {
-			searchRequest.Query = query + "*"
-		} else {
-			searchRequest.Query = query
+	// Parse limit parameter, default to 100
+	limit := 100
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+			limit = parsedLimit
 		}
 	}
 
-	tenants, err := provider.ListTenants(context.Background(), searchRequest)
+	// Now get paginated results
+	searchRequest := &models.SearchRequest{
+		Limit: limit,
+	}
+
+	if len(query) > 0 {
+		searchRequest.Query = query
+	}
+
+	tenants, err := provider.ListTenants(c.Request.Context(), searchRequest)
 
 	if err != nil {
 		s.getErrorPage(c, http.StatusInternalServerError, "Failed to list tenants", err)
 		return
 	}
 
-	c.JSON(http.StatusOK, models.ProviderTenantsResponse{
+	response := models.ProviderTenantsResponse{
 		Version:  "1.0",
 		Provider: providerName,
 		Tenants:  tenants,
-	})
+	}
+
+	if s.canAcceptHtml(c) {
+		data := struct {
+			TemplateData TemplateData
+			Response     models.ProviderTenantsResponse
+		}{
+			TemplateData: s.GetTemplateData(c),
+			Response:     response,
+		}
+		s.renderHtml(c, "provider_tenants.html", data)
+	} else {
+		c.JSON(http.StatusOK, response)
+	}
 }
 
-func (s *Server) getAuthProvidersAsProviderResponse(authenticatedUser *models.Session) map[string]models.ProviderResponse {
+func (s *Server) getAuthProvidersAsProviderResponse(authenticatedUser *models.Session) []models.SearchResult[models.ProviderResponse] {
 	return s.getProvidersAsProviderResponse(
 		authenticatedUser,
 		models.ProviderCapabilityAuthorizer)
@@ -355,9 +401,9 @@ func (s *Server) getAuthProvidersAsProviderResponse(authenticatedUser *models.Se
 func (s *Server) getProvidersAsProviderResponse(
 	authenticatedUser *models.Session,
 	capabilities ...models.ProviderCapability,
-) map[string]models.ProviderResponse {
+) []models.SearchResult[models.ProviderResponse] {
 
-	providerResponse := map[string]models.ProviderResponse{}
+	providerResponses := []models.ProviderResponse{}
 
 	for providerKey, provider := range s.Config.GetProvidersByCapability() {
 
@@ -380,17 +426,23 @@ func (s *Server) getProvidersAsProviderResponse(
 			continue
 		}
 
-		providerResponse[providerKey] = models.ProviderResponse{
-			ID:           providerKey,
+		providerResponses = append(providerResponses, models.ProviderResponse{
+			Identifier:   providerKey,
 			Name:         providerName,
 			Description:  provider.GetDescription(),
 			Provider:     provider.GetProvider(),
 			Capabilities: provider.GetCapabilities(),
 			Enabled:      true,
-		}
+			Ready:        provider.IsReady(),
+		})
 	}
 
-	return providerResponse
+	// Sort alphabetically by Identifier
+	sort.Slice(providerResponses, func(i, j int) bool {
+		return providerResponses[i].Identifier < providerResponses[j].Identifier
+	})
+
+	return models.ReturnSearchResults(providerResponses)
 }
 
 // getProviders handles GET /api/v1/providers
@@ -414,7 +466,7 @@ func (s *Server) getProviders(c *gin.Context) {
 	// This is because roles can contain sensitive information
 	// and we want to ensure that only authenticated users can access them
 	if s.Config.IsServer() {
-		_, foundUser, err := s.getUser(c)
+		_, foundUser, err := s.getSession(c)
 		if err != nil {
 			s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of available providers", err)
 			return
@@ -436,7 +488,7 @@ func (s *Server) getProviders(c *gin.Context) {
 	}
 
 	response := models.ProvidersResponse{
-		Version:   "1.0",
+		Version:   version.Must(version.NewVersion("1.0.0")),
 		Providers: s.getProvidersAsProviderResponse(authenticatedUser, capabilities...),
 	}
 
@@ -489,7 +541,7 @@ func (s *Server) providerFunctionHandler(c *gin.Context) {
 
 	// TODO(hugh): Try and use the session for the specified provider
 	// if it supports it
-	_, foundUser, err := s.getUser(c)
+	_, foundUser, err := s.getSession(c)
 	if err != nil {
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: unable to get user for list of available providers", err)
 		return

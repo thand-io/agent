@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -89,6 +90,19 @@ type SessionsResponse struct {
 	Timestamp       time.Time               `json:"timestamp"`       // Timestamp of the response
 	Sessions        map[string]LocalSession `json:"sessions"`        // Map of provider name to session
 	DefaultProvider string                  `json:"defaultProvider"` // Current default provider from cookie
+}
+
+// WhoamiResponse contains information about the currently authenticated user
+type WhoamiResponse struct {
+	User     *User       `json:"user"`     // The authenticated user
+	Provider string      `json:"provider"` // The authentication provider
+	Session  SessionInfo `json:"session"`  // Session metadata
+}
+
+// SessionInfo contains metadata about the current session
+type SessionInfo struct {
+	UUID   uuid.UUID `json:"uuid"`   // Session UUID
+	Expiry time.Time `json:"expiry"` // Session expiry time
 }
 
 // Session stored on the users local system
@@ -194,15 +208,28 @@ func (s *LocalSession) MarshalYAML() (any, error) {
 
 	// Handle endpoint by converting through JSON (which has proper marshaling)
 	if s.Endpoint != nil {
-		// Use the SDK's JSON marshaling which properly handles nested structures
-		endpointMap, err := common.ConvertInterfaceToMap(s.Endpoint)
+		// Marshal the endpoint using its MarshalJSON method
+		endpointJSON, err := s.Endpoint.MarshalJSON()
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal endpoint: %w", err)
 		}
 
-		// Only add if not empty
-		if len(endpointMap) > 0 {
+		// The endpoint can marshal to either a string (simple URI) or an object (full config)
+		// Try to unmarshal as map first (for full endpoint configuration)
+		var endpointMap map[string]any
+		if err := json.Unmarshal(endpointJSON, &endpointMap); err == nil && len(endpointMap) > 0 {
+			// It's an object - use the map
 			result["endpoint"] = endpointMap
+		} else {
+			// Try as string (for simple URI created via model.NewEndpoint(url))
+			var endpointString string
+			if err := json.Unmarshal(endpointJSON, &endpointString); err == nil && endpointString != "" {
+				// It's a string URI - use it directly
+				result["endpoint"] = endpointString
+			} else if string(endpointJSON) != "{}" {
+				// If it's not an empty object, include the raw JSON
+				result["endpoint"] = json.RawMessage(endpointJSON)
+			}
 		}
 	}
 

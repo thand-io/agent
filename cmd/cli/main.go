@@ -133,14 +133,12 @@ func preRunConfigE(cmd *cobra.Command, mode config.Mode) error {
 		// Load local config first before registering with the thand server.
 		// So we can figure out whats missing.
 		err = cfg.ReloadConfig()
-
 		if err != nil {
 			logrus.WithError(err).Errorln("Failed to sync configuration with login server")
 		}
 
 		// Sync with thand server if configured to do so
 		err = cfg.RegisterWithThandServer()
-
 		if err != nil {
 			logrus.WithError(err).Errorln("Failed to register with Thand server")
 		}
@@ -151,6 +149,13 @@ func preRunConfigE(cmd *cobra.Command, mode config.Mode) error {
 			logrus.WithError(err).Errorln("Failed to initialize providers")
 			return fmt.Errorf("failed to initialize providers: %w", err)
 		}
+
+		go func() {
+			err = cfg.ReloadRoleIndexes()
+			if err != nil {
+				logrus.WithError(err).Errorln("Failed to reload role indexes")
+			}
+		}()
 
 	}
 	return nil

@@ -33,14 +33,14 @@ func (c *Config) MergeConfiguration(config *RegistrationResponse) error {
 		return err
 	}
 
-	roles := c.GetRoles()
-	workflows := c.GetWorkflows()
-	providers := c.GetProviders()
+	roles := c.GetRolesConfig()
+	workflows := c.GetWorkflowsConfig()
+	providers := c.GetProvidersConfig()
 
 	existing := ConfigPatchRequest{
-		RoleConfig:     &roles,
-		WorkflowConfig: &workflows,
-		ProviderConfig: &providers,
+		RoleConfig:     roles,
+		WorkflowConfig: workflows,
+		ProviderConfig: providers,
 	}
 
 	existingData, err := json.Marshal(existing)

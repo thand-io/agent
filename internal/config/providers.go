@@ -2,7 +2,6 @@ package config
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -11,6 +10,8 @@ import (
 	"github.com/thand-io/agent/internal/config/environment"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/providers"
+	providerSdk "github.com/thand-io/agent/sdk/providers"
+	"go.temporal.io/sdk/workflow"
 
 	// Load modules
 	_ "github.com/thand-io/agent/internal/providers/aws"
@@ -126,12 +127,12 @@ func (c *Config) processProviderDefinitions(foundProviders []*models.ProviderDef
 
 	for _, provider := range foundProviders {
 
-		if err := provider.Validate(); err != nil {
-			logrus.WithError(err).Errorln("Provider definition validation failed")
-			continue
-		}
-
 		for providerKey, p := range provider.Providers {
+
+			if err := p.Validate(); err != nil {
+				logrus.WithError(err).Errorln("Provider definition validation failed")
+				continue
+			}
 
 			if !c.shouldIncludeProvider(providerKey, p, defs) {
 				continue
@@ -139,7 +140,9 @@ func (c *Config) processProviderDefinitions(foundProviders []*models.ProviderDef
 
 			defs[providerKey] = p
 
-			logrus.Infoln("Found provider:", providerKey, "of type", p.Provider)
+			logrus.WithFields(logrus.Fields{
+				"capabiltiies": p.Capabilities,
+			}).Infoln("Found provider:", providerKey, "of type", p.Provider)
 		}
 	}
 
@@ -154,7 +157,7 @@ func (c *Config) shouldIncludeProvider(
 ) bool {
 
 	if !p.Enabled {
-		logrus.Infoln("Provider disabled (not marked as enabled):", providerKey)
+		logrus.Warningln("Provider disabled (not marked as enabled):", providerKey)
 		return false
 	}
 
@@ -210,8 +213,10 @@ func (c *Config) InitializeProviders() error {
 			continue
 		}
 
+		providerResult := result.provider
+
 		// Check for capabilities for RBAC and Identities
-		if result.provider.HasAnyCapability(
+		if providerResult.HasAnyCapability(
 			models.ProviderCapabilityIdentities,
 			models.ProviderCapabilityUsers,
 			models.ProviderCapabilityGroups,
@@ -232,19 +237,99 @@ func (c *Config) InitializeProviders() error {
 
 					temporalService := c.GetServices().GetTemporal()
 
-					// Register all provider workflows and activities
-					err := result.provider.RegisterWorkflows(temporalService)
-					if err != nil && !errors.Is(err, models.ErrNotImplemented) {
-						logrus.WithError(err).Errorln("Failed to register workflows for provider:", result.key)
+					worker := temporalService.GetWorker()
+
+					if worker == nil {
+						logrus.Errorln("Temporal client is configured but worker is nil, cannot register workflows/activities for provider", result.key)
 						continue
 					}
 
-					err = result.provider.RegisterActivities(temporalService)
-					if err != nil && !errors.Is(err, models.ErrNotImplemented) {
-						logrus.WithError(err).Errorln("Failed to register activities for provider:", result.key)
+					syncWorkflowName := models.CreateTemporalProviderWorkflowName(
+						providerResult.GetIdentifier(),
+						models.TemporalSynchronizeWorkflowName,
+					)
+
+					logrus.WithFields(logrus.Fields{
+						"workflow": syncWorkflowName,
+					}).Infoln("Registering provider synchronize workflow with name", syncWorkflowName)
+
+					// Register the provider Synchronize workflow. This updates roles, permissions,
+					// resources and identities for RBAC. We register this on the provider itself since it's a core part of the provider's functionality, but we register all other workflows and activities separately to allow providers to opt out of Temporal if they want.
+					worker.RegisterWorkflowWithOptions(
+						models.ProviderSynchronizeWorkflow,
+						workflow.RegisterOptions{
+							Name:               syncWorkflowName,
+							VersioningBehavior: workflow.VersioningBehaviorPinned,
+						},
+					)
+
+					if providerResult.HasCapability(models.ProviderCapabilityProvisioning) {
+
+						authWorkflowName := models.CreateTemporalProviderWorkflowName(
+							providerResult.GetIdentifier(),
+							models.TemporalAuthorizeRoleWorkflowName)
+
+						logrus.WithFields(logrus.Fields{
+							"workflow": authWorkflowName,
+						}).Infoln("Registering provider authorize role workflow with name", authWorkflowName)
+
+						// Register the provider-specific authorize and revoke role workflows.
+						// These are closure-based: they capture the live provider instance so the
+						// child workflow can call provider.AuthorizeRole / RevokeRole with a
+						// full workflow.Context, allowing providers to dispatch activities,
+						// use workflow.Go, etc.
+						worker.RegisterWorkflowWithOptions(
+							models.CreateProviderAuthorizeRoleWorkflow(c, providerResult),
+							workflow.RegisterOptions{
+								Name:               authWorkflowName,
+								VersioningBehavior: workflow.VersioningBehaviorPinned,
+							},
+						)
+
+						revokeWorkflowName := models.CreateTemporalProviderWorkflowName(
+							providerResult.GetIdentifier(),
+							models.TemporalRevokeRoleWorkflowName)
+
+						logrus.WithFields(logrus.Fields{
+							"workflow": revokeWorkflowName,
+						}).Infoln("Registering provider revoke role workflow with name", revokeWorkflowName)
+
+						worker.RegisterWorkflowWithOptions(
+							models.CreateProviderRevokeRoleWorkflow(c, providerResult),
+							workflow.RegisterOptions{
+								Name:               revokeWorkflowName,
+								VersioningBehavior: workflow.VersioningBehaviorPinned,
+							},
+						)
+					}
+
+					// Register all custom provider workflows
+					workflowsRegistry := providerResult.RegisterWorkflows()
+					if workflowsRegistry != nil {
+						logrus.Infoln("Registering Temporal workflows for provider", result.key)
+						worker.RegisterWorkflow(workflowsRegistry)
+					}
+
+					// Register default provider activities
+					err := models.RegisterProviderActivities(temporalService, providerResult)
+					if err != nil {
+						logrus.WithError(err).Errorln("Failed to register default activities for provider:", result.key)
 						continue
 					}
 
+					customActivities := providerResult.RegisterActivities()
+					if customActivities != nil {
+						// Now register any custom activities defined by the provider
+						err = models.RegisterActivities(
+							temporalService,
+							providerResult.GetIdentifier(),
+							customActivities,
+						)
+						if err != nil {
+							logrus.WithError(err).Errorln("Failed to register custom activities for provider:", result.key)
+							continue
+						}
+					}
 				}
 
 				logrus.Infoln("Synchronizing provider", result.key)
@@ -252,7 +337,12 @@ func (c *Config) InitializeProviders() error {
 
 			} else {
 				logrus.Infoln("Skipping Temporal registration for provider", result.key, "in non-server mode")
+				// Non-server mode: provider won't be synchronized, mark ready immediately
+				providerResult.SetReady()
 			}
+		} else {
+			// Provider doesn't have RBAC/Identity capabilities, no sync needed
+			result.provider.SetReady()
 		}
 
 		// The provider returned from the goroutine already has the client set
@@ -265,6 +355,7 @@ func (c *Config) InitializeProviders() error {
 	c.mu.Unlock()
 
 	logrus.Debugln("All providers initialized successfully")
+
 	return nil
 }
 
@@ -285,6 +376,12 @@ func (c *Config) initializeSingleProvider(providerKey string, p *models.Provider
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve environment variables for provider %s: %w", providerKey, err)
+	}
+
+	err = providerSdk.ValidateConfig(p.Provider, p.Config)
+
+	if err != nil {
+		return nil, fmt.Errorf("provider config validation failed for provider %s: %w", providerKey, err)
 	}
 
 	if err := impl.Initialize(providerKey, *p); err != nil {
@@ -378,10 +475,14 @@ func (c *Config) GetProvidersByCapabilityWithUser(user *models.User, capability 
 		// Skip providers that don't have a client initialized
 
 		if !provider.HasPermission(user) {
+			logrus.Debugln("Skipping provider", name, "due to missing permissions for user")
 			continue
 		}
 
 		if len(capability) != 0 && !provider.HasAnyCapability(capability...) {
+			logrus.WithFields(logrus.Fields{
+				"capabilities": provider.GetCapabilities(),
+			}).Debugln("Skipping provider", name, "due to missing capability:", capability)
 			continue
 		}
 

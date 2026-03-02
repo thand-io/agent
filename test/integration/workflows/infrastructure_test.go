@@ -2,98 +2,13 @@ package workflows_test
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"regexp"
 	"testing"
 	"time"
 
-	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/stretchr/testify/require"
-	"github.com/thand-io/agent/internal/common"
-	testcommon "github.com/thand-io/agent/test/integration/common"
+	"github.com/thand-io/agent/test/integration/testinfra"
 	"go.temporal.io/api/workflowservice/v1"
 )
-
-// TestInfrastructure extends the common test infrastructure with workflow-specific helpers
-type TestInfrastructure struct {
-	*testcommon.TestInfrastructure
-}
-
-// SetupTestInfrastructure creates and starts Temporal and LocalStack containers
-func SetupTestInfrastructure(t *testing.T, ctx context.Context) *TestInfrastructure {
-	t.Helper()
-
-	baseInfra := testcommon.SetupInfrastructure(t, ctx)
-
-	return &TestInfrastructure{
-		TestInfrastructure: baseInfra,
-	}
-}
-
-// GetEmails retrieves all emails from MailHog using the HTTP invocation method
-func (infra *TestInfrastructure) GetEmails() ([]testcommon.MailHogMessage, error) {
-	url := infra.MailHogAPI + "/api/v2/messages"
-	resp, err := common.InvokeHttpRequest(&model.HTTPArguments{
-		Method:   http.MethodGet,
-		Endpoint: model.NewEndpoint(url),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get emails from MailHog: %w", err)
-	}
-
-	var messages testcommon.MailHogMessages
-	if err := json.Unmarshal(resp.Body(), &messages); err != nil {
-		return nil, fmt.Errorf("failed to parse MailHog response: %w", err)
-	}
-
-	return messages.Items, nil
-}
-
-// GetEmailsForRecipient retrieves emails sent to a specific address
-func (infra *TestInfrastructure) GetEmailsForRecipient(email string) ([]testcommon.MailHogMessage, error) {
-	allEmails, err := infra.GetEmails()
-	if err != nil {
-		return nil, err
-	}
-
-	var filtered []testcommon.MailHogMessage
-	for _, msg := range allEmails {
-		for _, to := range msg.To {
-			if fmt.Sprintf("%s@%s", to.Mailbox, to.Domain) == email {
-				filtered = append(filtered, msg)
-				break
-			}
-		}
-	}
-	return filtered, nil
-}
-
-// WaitForEmail waits for an email to arrive for a specific recipient
-func (infra *TestInfrastructure) WaitForEmail(recipient string, timeout time.Duration) (*testcommon.MailHogMessage, error) {
-	deadline := time.Now().Add(timeout)
-
-	for time.Now().Before(deadline) {
-		emails, err := infra.GetEmailsForRecipient(recipient)
-		if err != nil {
-			return nil, err
-		}
-		if len(emails) > 0 {
-			return &emails[0], nil
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-
-	return nil, fmt.Errorf("timeout waiting for email to %s", recipient)
-}
-
-// ExtractLinksFromEmail extracts all URLs from an email body
-func (infra *TestInfrastructure) ExtractLinksFromEmail(msg *testcommon.MailHogMessage) []string {
-	// Match URLs in the email body
-	urlRegex := regexp.MustCompile(`https?://[^\s<>"]+`)
-	return urlRegex.FindAllString(msg.Content.Body, -1)
-}
 
 // TestTemporalAndLocalStackSetup verifies that all containers start correctly
 func TestTemporalAndLocalStackSetup(t *testing.T) {
@@ -106,7 +21,7 @@ func TestTemporalAndLocalStackSetup(t *testing.T) {
 	defer cancel()
 
 	// Setup infrastructure
-	infra := SetupTestInfrastructure(t, ctx)
+	infra := testinfra.SetupTestInfrastructure(t, ctx)
 	defer infra.Teardown()
 
 	// Verify LocalStack is accessible
@@ -135,7 +50,7 @@ func TestTemporalAndLocalStackSetup(t *testing.T) {
 
 		// Try to list workflows to verify connection
 		_, err := infra.TemporalClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: testcommon.TemporalTestNamespace,
+			Namespace: testinfra.TemporalTestNamespace,
 			PageSize:  1,
 		})
 		require.NoError(t, err, "Should be able to list workflows")

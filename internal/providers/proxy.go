@@ -35,15 +35,10 @@ func (p *remoteProviderProxy) Initialize(identifier string, provider models.Prov
 	p.BaseProvider = models.NewBaseProvider(
 		identifier,
 		provider,
-		models.NewProviderCapabilities().
-			WithRolesConfiguration(models.RolesConfiguration{
-				Enabled:        true,
-				Synchronizable: false,
-			}).
-			WithPermissionsConfiguration(models.PermissionsConfiguration{
-				Enabled:        true,
-				Synchronizable: false,
-			}),
+		// We have to forceablly set the incoming provider capabilities here so they
+		// are enabled by default. Since any changes to capabilities cannot enable
+		// previoslly disabled capabilities.
+		provider.Capabilities,
 	)
 
 	return nil

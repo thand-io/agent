@@ -9,8 +9,11 @@ var GcpCapabilities = models.NewProviderCapabilities().
 		Synchronizable: false,
 	}).
 	WithPermissionsConfiguration(models.PermissionsConfiguration{
-		Enabled:        true,
-		Synchronizable: false,
+		SynchronizableConfiguration: models.SynchronizableConfiguration{
+			Enabled:        true,
+			Synchronizable: false,
+		},
+		// SupportsWildcards defaults to false — GCP IAM requires exact permission names
 	}).
 	WithDefaultProvisioningConfiguration().
 	WithDefaultTenantsConfiguration()

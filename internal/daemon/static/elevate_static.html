@@ -1,6 +1,21 @@
 {{template "header" .}}
 <!-- Choices.js JS (CSS loaded in head.html) -->
 <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/scripts/choices.min.js"></script>
+<style>
+    /* Ensure single-select Choices.js dropdowns have normal height */
+    .choice-wrapper-single {
+        margin-bottom: 0px;
+    }
+    .choice-wrapper-single .choices__inner {
+        min-height: auto;
+        padding: 0.5rem;
+        background: hsl(var(--background));
+        color: hsl(var(--foreground));
+    }
+    .choice-wrapper-single .choices__list--single {
+        padding: 0px 5px 0px 0px;
+    }
+</style>
 
 <main>
     <div class="container">
@@ -9,8 +24,10 @@
             <p>Request temporary elevated privileges for a specific role and reason. Only providers with RBAC support are available for elevation.</p>
         </div>
 
+        {{template "session_warning" .}}
+
         <form action="{{.Config.ApiBasePath}}/elevate" method="GET" class="mt-2 text-left" id="elevate-form">
-            <div class="form-section" style="max-width: 600px; margin: 0 auto;">
+            <div class="form-section">
                 
                 <!-- Identity Selection (managed by Choices.js, outside Alpine scope) -->
                 <h3>Select Identities to Assign Role</h3>
@@ -40,36 +57,39 @@
                         </template>
                     </select>
 
-                    <!-- Tenant Select -->
-                    <select name="tenants" 
-                            x-model="selectedTenant" 
-                            x-show="tenants && Object.keys(tenants).length > 0"
-                            class="form-select" 
-                            :disabled="!selectedProvider || loadingTenants" 
-                            :style="{ opacity: (!selectedProvider || loadingTenants) ? '0.5' : '1' }">
-                        <option value="" x-show="loadingTenants">Loading tenants...</option>
-                        <option value="" x-show="!loadingTenants">Select a Tenant (optional)</option>
-                        <template x-for="(tenant, key) in tenants" :key="key">
-                            <option :value="key" x-text="tenant.name || key"></option>
-                        </template>
-                    </select>
+                    <!-- Tenant Select with Choices.js -->
+                    <div class="choice-wrapper choice-wrapper-single" x-show="selectedProvider">
+                        <select name="tenants" 
+                                id="elevate-tenants"
+                                data-placeholder="Select a Tenant (optional)">
+                            <!-- Options populated dynamically via Choices.js -->
+                        </select>
+                        <div class="choice-help" x-show="selectedProvider && loadingTenants">
+                            Loading tenants...
+                        </div>
+                        <div class="choice-help" x-show="selectedProvider && !loadingTenants && Object.keys(tenants).length === 0">
+                            No tenants available for this provider.
+                        </div>
+                    </div>
 
-                    <!-- Role Select -->
-                    <select name="role" 
-                            x-model="selectedRole" 
-                            @change="evaluateRole()"
-                            required 
-                            class="form-select" 
-                            :disabled="!selectedProvider || loadingRoles" 
-                            :style="{ opacity: (!selectedProvider || loadingRoles) ? '0.5' : '1' }">
-                        <option value="" x-show="!selectedProvider">Select a Provider First</option>
-                        <option value="" x-show="selectedProvider && loadingRoles">Loading roles...</option>
-                        <option value="" x-show="selectedProvider && !loadingRoles && Object.keys(roles).length === 0">No roles available</option>
-                        <option value="" x-show="selectedProvider && !loadingRoles && Object.keys(roles).length > 0">Select a Role</option>
-                        <template x-for="(role, key) in roles" :key="key">
-                            <option :value="key" x-text="role.name || key"></option>
-                        </template>
-                    </select>
+                    <!-- Role Select with Choices.js -->
+                    <div class="choice-wrapper choice-wrapper-single">
+                        <select name="role" 
+                                id="elevate-roles"
+                                data-placeholder="Select a Role"
+                                required>
+                            <!-- Options populated dynamically via Choices.js -->
+                        </select>
+                        <div class="choice-help" x-show="!selectedProvider">
+                            Select a provider first to load available roles.
+                        </div>
+                        <div class="choice-help" x-show="selectedProvider && loadingRoles">
+                            Loading roles...
+                        </div>
+                        <div class="choice-help" x-show="selectedProvider && !loadingRoles && Object.keys(roles).length === 0">
+                            No roles available for this provider.
+                        </div>
+                    </div>
 
                     <!-- Duration Select -->
                     <select name="duration" x-model="duration" required class="form-select">
@@ -109,13 +129,20 @@
                             <span x-show="loadingEvaluatedRole" style="font-size: 0.8rem; color: var(--text-muted, #666); font-weight: normal;"> (loading...)</span>
                         </h3>
                         
+                        <!-- Error message -->
+                        <div x-show="evaluationError" style="background-color: #fee; border: 1px solid #fcc; border-radius: 4px; padding: 1rem; margin-bottom: 1rem;">
+                            <p style="margin: 0; font-size: 0.875rem; color: #c00;">
+                                <strong>⚠️ Error:</strong> <span x-text="evaluationError"></span>
+                            </p>
+                        </div>
+                        
                         <!-- Info about evaluation -->
-                        <p x-show="!evaluatedRole && selectedRole" style="font-size: 0.8rem; color: var(--text-muted, #666); margin-bottom: 1rem; font-style: italic;">
+                        <p x-show="!evaluatedRole && !evaluationError && selectedRole" style="font-size: 0.8rem; color: var(--text-muted, #666); margin-bottom: 1rem; font-style: italic;">
                             Select exactly one identity to see the fully evaluated role with resolved inheritance.
                         </p>
 
                         <!-- Use evaluatedRole if available, otherwise fall back to base role -->
-                        <template x-if="(evaluatedRole || roles[selectedRole])">
+                        <template x-if="!evaluationError && (evaluatedRole || roles[selectedRole])">
                             <div>
                                 <!-- Inherits -->
                                 <template x-if="(evaluatedRole?.inherits?.length > 0) || (!evaluatedRole && roles[selectedRole]?.inherits?.length > 0)">
@@ -139,45 +166,88 @@
                                         <h4 style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-muted, #666);">
                                             <span style="margin-right: 0.5rem;">🔑</span>Permissions
                                         </h4>
-                                        <ul style="margin: 0; padding-left: 1.5rem; list-style-type: disc;">
-                                            <template x-for="perm in (evaluatedRole?.permissions?.allow || roles[selectedRole]?.permissions?.allow || [])" :key="perm">
-                                                <li style="font-size: 0.875rem; margin-bottom: 0.25rem;">
-                                                    <code x-text="perm" style="background: var(--code-bg, #f5f5f5); padding: 0.125rem 0.375rem; border-radius: 3px; font-size: 0.8rem;"></code>
-                                                </li>
-                                            </template>
-                                        </ul>
+                                        <template x-for="(stmt, idx) in (evaluatedRole?.permissions?.allow || roles[selectedRole]?.permissions?.allow || [])" :key="idx">
+                                            <div style="margin-bottom: 0.75rem; padding: 0.5rem; background: var(--code-bg, #f5f5f5); border-radius: 4px;">
+                                                <!-- Operations -->
+                                                <template x-if="stmt.operations?.length > 0">
+                                                    <div style="margin-bottom: 0.5rem;">
+                                                        <span style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted, #666);">Operations:</span>
+                                                        <ul style="margin: 0.25rem 0 0 0; padding-left: 1.25rem; list-style-type: disc;">
+                                                            <template x-for="op in stmt.operations" :key="op">
+                                                                <li style="font-size: 0.8rem; margin-bottom: 0.125rem;">
+                                                                    <code x-text="op" style="background: var(--code-bg-dark, #e8e8e8); padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.75rem;"></code>
+                                                                </li>
+                                                            </template>
+                                                        </ul>
+                                                    </div>
+                                                </template>
+                                                <!-- Targets -->
+                                                <template x-if="stmt.targets?.length > 0">
+                                                    <div>
+                                                        <span style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted, #666);">Targets:</span>
+                                                        <ul style="margin: 0.25rem 0 0 0; padding-left: 1.25rem; list-style-type: disc;">
+                                                            <template x-for="target in stmt.targets" :key="target">
+                                                                <li style="font-size: 0.8rem; margin-bottom: 0.125rem;">
+                                                                    <code x-text="target" style="background: var(--code-bg-dark, #e8e8e8); padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.75rem;"></code>
+                                                                </li>
+                                                            </template>
+                                                        </ul>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </template>
                                     </div>
                                 </template>
 
-                                <!-- Resources -->
-                                <template x-if="(evaluatedRole?.resources?.allow?.length > 0) || (!evaluatedRole && roles[selectedRole]?.resources?.allow?.length > 0)">
-                                    <div class="summary-section" style="margin-bottom: 1rem;">
-                                        <h4 style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-muted, #666);">
-                                            <span style="margin-right: 0.5rem;">📦</span>Resources
-                                        </h4>
-                                        <ul style="margin: 0; padding-left: 1.5rem; list-style-type: disc;">
-                                            <template x-for="res in (evaluatedRole?.resources?.allow || roles[selectedRole]?.resources?.allow || [])" :key="res">
-                                                <li style="font-size: 0.875rem; margin-bottom: 0.25rem;">
-                                                    <code x-text="res" style="background: var(--code-bg, #f5f5f5); padding: 0.125rem 0.375rem; border-radius: 3px; font-size: 0.8rem;"></code>
-                                                </li>
-                                            </template>
-                                        </ul>
-                                    </div>
-                                </template>
 
-                                <!-- Groups -->
-                                <template x-if="(evaluatedRole?.groups?.allow?.length > 0) || (!evaluatedRole && roles[selectedRole]?.groups?.allow?.length > 0)">
+
+                                <!-- Scopes -->
+                                <template x-if="hasScopeDetails()">
                                     <div class="summary-section" style="margin-bottom: 1rem;">
                                         <h4 style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-muted, #666);">
-                                            <span style="margin-right: 0.5rem;">👥</span>Groups
+                                            <span style="margin-right: 0.5rem;">🎯</span>Scopes (Who Can Be Assigned)
                                         </h4>
-                                        <ul style="margin: 0; padding-left: 1.5rem; list-style-type: disc;">
-                                            <template x-for="grp in (evaluatedRole?.groups?.allow || roles[selectedRole]?.groups?.allow || [])" :key="grp">
-                                                <li style="font-size: 0.875rem; margin-bottom: 0.25rem;">
-                                                    <code x-text="grp" style="background: var(--code-bg, #f5f5f5); padding: 0.125rem 0.375rem; border-radius: 3px; font-size: 0.8rem;"></code>
-                                                </li>
+                                        <div style="padding: 0.5rem; background: var(--code-bg, #f5f5f5); border-radius: 4px;">
+                                            <!-- Allowed Users -->
+                                            <template x-if="(evaluatedRole?.scopes?.allow?.users?.length > 0) || (!evaluatedRole && roles[selectedRole]?.scopes?.allow?.users?.length > 0)">
+                                                <div style="margin-bottom: 0.5rem;">
+                                                    <span style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted, #666);">👤 Allowed Users:</span>
+                                                    <ul style="margin: 0.25rem 0 0 0; padding-left: 1.25rem; list-style-type: disc;">
+                                                        <template x-for="user in (evaluatedRole?.scopes?.allow?.users || roles[selectedRole]?.scopes?.allow?.users || [])" :key="user">
+                                                            <li style="font-size: 0.8rem; margin-bottom: 0.125rem;">
+                                                                <code x-text="user" style="background: var(--code-bg-dark, #e8e8e8); padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.75rem;"></code>
+                                                            </li>
+                                                        </template>
+                                                    </ul>
+                                                </div>
                                             </template>
-                                        </ul>
+                                            <!-- Allowed Groups -->
+                                            <template x-if="(evaluatedRole?.scopes?.allow?.groups?.length > 0) || (!evaluatedRole && roles[selectedRole]?.scopes?.allow?.groups?.length > 0)">
+                                                <div style="margin-bottom: 0.5rem;">
+                                                    <span style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted, #666);">👥 Allowed Groups:</span>
+                                                    <ul style="margin: 0.25rem 0 0 0; padding-left: 1.25rem; list-style-type: disc;">
+                                                        <template x-for="group in (evaluatedRole?.scopes?.allow?.groups || roles[selectedRole]?.scopes?.allow?.groups || [])" :key="group">
+                                                            <li style="font-size: 0.8rem; margin-bottom: 0.125rem;">
+                                                                <code x-text="group" style="background: var(--code-bg-dark, #e8e8e8); padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.75rem;"></code>
+                                                            </li>
+                                                        </template>
+                                                    </ul>
+                                                </div>
+                                            </template>
+                                            <!-- Allowed Domains -->
+                                            <template x-if="(evaluatedRole?.scopes?.allow?.domains?.length > 0) || (!evaluatedRole && roles[selectedRole]?.scopes?.allow?.domains?.length > 0)">
+                                                <div>
+                                                    <span style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted, #666);">🌐 Allowed Domains:</span>
+                                                    <ul style="margin: 0.25rem 0 0 0; padding-left: 1.25rem; list-style-type: disc;">
+                                                        <template x-for="domain in (evaluatedRole?.scopes?.allow?.domains || roles[selectedRole]?.scopes?.allow?.domains || [])" :key="domain">
+                                                            <li style="font-size: 0.8rem; margin-bottom: 0.125rem;">
+                                                                <code x-text="domain" style="background: var(--code-bg-dark, #e8e8e8); padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.75rem;"></code>
+                                                            </li>
+                                                        </template>
+                                                    </ul>
+                                                </div>
+                                            </template>
+                                        </div>
                                     </div>
                                 </template>
 
@@ -245,11 +315,13 @@
         PREFILLED_DURATION = '{{.Duration}}' || '';
         PREFILLED_REASON = '{{.Reason}}' || '';
         
-        // Choices.js instance (kept outside Alpine to avoid reactivity issues)
+        // Choices.js instances (kept outside Alpine to avoid reactivity issues)
         let identityChoicesInstance = null;
+        let roleChoicesInstance = null;
+        let tenantChoicesInstance = null;
 
         /**
-         * Initialize the identity selector using Choices.js
+         * Initialize the identity and role selectors using Choices.js
          * This runs on DOMContentLoaded to ensure it executes before Alpine.js
          */
         document.addEventListener('DOMContentLoaded', function() {
@@ -259,13 +331,83 @@
                 removeItemButton: true,
                 searchEnabled: true,
                 placeholder: true,
-                placeholderValue: 'Search identities...',
+                placeholderValue: 'Select identities to assign the role to',
+                searchPlaceholderValue: 'Search identities...',
                 noResultsText: 'No identities found',
                 shouldSort: false,
                 searchResultLimit: 50,
                 searchFields: ['label', 'value'],
                 duplicateItemsAllowed: false,
             });
+
+            // Initialize Choices.js for roles select
+            roleChoicesInstance = new Choices('#elevate-roles', {
+                searchEnabled: true,
+                placeholder: true,
+                placeholderValue: 'Select a Role',
+                searchPlaceholderValue: 'Search roles...',
+                noResultsText: 'No roles found',
+                shouldSort: false,
+                searchResultLimit: 1000,
+                searchFields: ['label', 'value'],
+                // Disable client-side search - we'll handle it via backend
+                searchFloor: 0,
+                searchChoices: false,
+            });
+
+            // Disable roles selector initially (no provider selected)
+            roleChoicesInstance.setChoices([{ value: '', label: 'Select a provider first', disabled: true, selected: true }]);
+
+            // Initialize Choices.js for tenant select
+            tenantChoicesInstance = new Choices('#elevate-tenants', {
+                searchEnabled: true,
+                placeholder: true,
+                placeholderValue: 'Select a Tenant (optional)',
+                searchPlaceholderValue: 'Search tenants...',
+                noResultsText: 'No tenants found',
+                shouldSort: false,
+                searchResultLimit: 1000,
+                searchFields: ['label', 'value'],
+                // Disable client-side search - we handle it via backend
+                searchFloor: 0,
+                searchChoices: false,
+            });
+
+            // Disable tenant selector initially (no provider selected)
+            tenantChoicesInstance.setChoices([{ value: '', label: 'Select a provider first', disabled: true, selected: true }]);
+
+            // Set up tenant search and selection listeners
+            const tenantElement = document.getElementById('elevate-tenants');
+            let tenantSearchTimeout;
+
+            if (tenantElement) {
+                // Listen for search events from Choices.js
+                tenantElement.addEventListener('search', function(e) {
+                    clearTimeout(tenantSearchTimeout);
+                    const query = e.detail.value.trim() || '';
+
+                    tenantSearchTimeout = setTimeout(() => {
+                        const elevateFormElement = document.querySelector('[x-data*="elevateForm"]');
+                        if (elevateFormElement && Alpine) {
+                            const alpineComponent = Alpine.$data(elevateFormElement);
+                            if (alpineComponent && alpineComponent.selectedProvider) {
+                                alpineComponent.loadTenants(query);
+                            }
+                        }
+                    }, 300);
+                });
+
+                // Listen for selection changes
+                tenantElement.addEventListener('change', function(e) {
+                    const elevateFormElement = document.querySelector('[x-data*="elevateForm"]');
+                    if (elevateFormElement && Alpine) {
+                        const alpineComponent = Alpine.$data(elevateFormElement);
+                        if (alpineComponent) {
+                            alpineComponent.selectedTenant = e.target.value;
+                        }
+                    }
+                });
+            }
 
             // Initialize Choices.js with backend identities
             const identityChoices = buildIdentityChoices(PREFILLED_IDENTITIES, true);
@@ -274,17 +416,51 @@
             // Initial fetch of identities to populate the selector
             fetchIdentities();
 
-            // Set up search event listener using Choices.js event
+            // Set up search event listener for identities
             const identityElement = document.getElementById('elevate-identities');
-            let searchTimeout;
+            let identitySearchTimeout;
             
             if (identityElement) {
                 identityElement.addEventListener('search', function(e) {
-                    clearTimeout(searchTimeout);
+                    clearTimeout(identitySearchTimeout);
                     const query = e.detail.value.trim();
-                    searchTimeout = setTimeout(() => {
+                    identitySearchTimeout = setTimeout(() => {
                         fetchIdentities(query);
                     }, 300);
+                });
+            }
+
+            // Set up role search and selection listeners
+            const roleElement = document.getElementById('elevate-roles');
+            let roleSearchTimeout;
+            
+            if (roleElement) {
+                // Listen for search events from Choices.js
+                roleElement.addEventListener('search', function(e) {
+                    clearTimeout(roleSearchTimeout);
+                    const query = e.detail.value.trim() || '';
+                    
+                    roleSearchTimeout = setTimeout(() => {
+                        const elevateFormElement = document.querySelector('[x-data*="elevateForm"]');
+                        if (elevateFormElement && Alpine) {
+                            const alpineComponent = Alpine.$data(elevateFormElement);
+                            if (alpineComponent && alpineComponent.selectedProvider) {
+                                alpineComponent.loadRoles(query);
+                            }
+                        }
+                    }, 300);
+                });
+                
+                // Listen for selection changes
+                roleElement.addEventListener('change', function(e) {
+                    const elevateFormElement = document.querySelector('[x-data*="elevateForm"]');
+                    if (elevateFormElement && Alpine) {
+                        const alpineComponent = Alpine.$data(elevateFormElement);
+                        if (alpineComponent && typeof alpineComponent.evaluateRole === 'function') {
+                            alpineComponent.selectedRole = e.target.value;
+                            alpineComponent.evaluateRole();
+                        }
+                    }
                 });
             }
 
@@ -401,6 +577,7 @@
                 selectedTenant: '',
                 selectedRole: '',
                 evaluatedRole: null,
+                evaluationError: null,
                 loadingEvaluatedRole: false,
                 duration: 'PT1M',
                 reason: '',
@@ -470,6 +647,7 @@
                 async evaluateRole() {
                     if (!this.selectedRole || !identityChoicesInstance) {
                         this.evaluatedRole = null;
+                        this.evaluationError = null;
                         return;
                     }
 
@@ -478,33 +656,56 @@
                     // Only evaluate if exactly one identity is selected
                     if (selectedIdentities.length !== 1) {
                         this.evaluatedRole = null;
+                        this.evaluationError = null;
                         return;
                     }
 
                     const identityId = selectedIdentities[0].value;
                     this.loadingEvaluatedRole = true;
+                    this.evaluationError = null;
 
                     try {
+                        const requestBody = {
+                            role: this.selectedRole,
+                            identities: [identityId],
+                        };
+                        if (this.selectedProvider) {
+                            requestBody.providers = [this.selectedProvider];
+                        }
+
                         const response = await fetch(`${this.apiBasePath}/roles/evaluate`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
                             },
-                            body: JSON.stringify({
-                                role: this.selectedRole,
-                                identity: identityId,
-                            }),
+                            body: JSON.stringify(requestBody),
                         });
 
                         if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
+                            let errorMessage = `Failed to evaluate role (${response.status})`;
+                            
+                            try {
+                                const errorData = await response.json();
+                                if (errorData.title) {
+                                    errorMessage = errorData.title;
+                                }
+                                if (errorData.message) {
+                                    errorMessage += `: ${errorData.message}`;
+                                }
+                            } catch (parseError) {
+                                // If response isn't JSON, use status text
+                                errorMessage += `: ${response.statusText}`;
+                            }
+                            
+                            throw new Error(errorMessage);
                         }
 
                         const data = await response.json();
-                        this.evaluatedRole = data.role || null;
+                        this.evaluatedRole = (data.results && data.results[identityId]) || null;
                     } catch (error) {
                         console.error('Error evaluating role:', error);
                         this.evaluatedRole = null;
+                        this.evaluationError = error.message;
                     } finally {
                         this.loadingEvaluatedRole = false;
                     }
@@ -519,8 +720,20 @@
                     
                     return (role.inherits?.length > 0) ||
                            (role.permissions?.allow?.length > 0) ||
-                           (role.resources?.allow?.length > 0) ||
-                           (role.groups?.allow?.length > 0);
+                           this.hasScopeDetails();
+                },
+
+                /**
+                 * Check if the current role has any scope details to display
+                 */
+                hasScopeDetails() {
+                    const role = this.evaluatedRole || this.roles[this.selectedRole];
+                    if (!role) return false;
+                    
+                    const scopes = role.scopes?.allow;
+                    return (scopes?.users?.length > 0) ||
+                           (scopes?.groups?.length > 0) ||
+                           (scopes?.domains?.length > 0);
                 },
 
                 /**
@@ -558,7 +771,12 @@
                         }
                         
                         const data = await response.json();
-                        this.providers = data.providers || {};
+                        // Convert array format to object format for Alpine.js template compatibility
+                        this.providers = {};
+                        const rawProviders = data.providers || [];
+                        rawProviders.forEach(item => {
+                            this.providers[item._source.identifier] = item._source;
+                        });
 
                         // Pre-select provider from URL params if valid
                         if (this.prefilledProviders && this.prefilledProviders.length > 0) {
@@ -585,7 +803,17 @@
                     this.evaluatedRole = null;
                     this.roles = {};
                     this.tenants = {};
-                    
+
+                    // Reset Choices.js instances
+                    if (roleChoicesInstance) {
+                        roleChoicesInstance.clearChoices();
+                        roleChoicesInstance.setChoices([{ value: '', label: 'Loading roles...', disabled: true, selected: true }]);
+                    }
+                    if (tenantChoicesInstance) {
+                        tenantChoicesInstance.clearChoices();
+                        tenantChoicesInstance.setChoices([{ value: '', label: 'Loading tenants...', disabled: true, selected: true }]);
+                    }
+
                     if (this.selectedProvider) {
                         await Promise.all([
                             this.loadTenants(),
@@ -596,26 +824,83 @@
 
                 /**
                  * Load roles for the selected provider
+                 * @param {string} query - Optional search query for backend filtering
                  */
-                async loadRoles() {
-                    if (!this.selectedProvider) return;
+                async loadRoles(query = '') {
+                    if (!this.selectedProvider) {
+                        // Clear roles in Choices.js when no provider selected
+                        if (roleChoicesInstance) {
+                            roleChoicesInstance.clearChoices();
+                            roleChoicesInstance.setChoices([{ value: '', label: 'Select a provider first', disabled: true, selected: true }]);
+                        }
+                        return;
+                    }
                     
                     this.loadingRoles = true;
-                    
+                                        
                     try {
-                        // Get all composite roles for a given provider
-                        const response = await fetch(`${this.apiBasePath}/roles?provider=${encodeURIComponent(this.selectedProvider)}`);
+                        // Build URL with query parameter for backend filtering if provided
+                        let url = `${this.apiBasePath}/roles?provider=${encodeURIComponent(this.selectedProvider)}`;
+                        if (query) {
+                            url += `&q=${encodeURIComponent(query)}`;
+                        }
+
+                        const response = await fetch(url);
                         
                         if (!response.ok) {
                             throw new Error(`HTTP error! status: ${response.status}`);
                         }
                         
                         const data = await response.json();
-                        this.roles = data.roles || {};
+                        
+                        // Convert array format to object format for Alpine.js template compatibility
+                        this.roles = {};
+                        const rawRoles = data.roles || [];
+                        rawRoles.forEach(item => {
+                            const roleResponse = item._source;
+                            const roleKey = roleResponse.identifier || item._id;
+                            this.roles[roleKey] = roleResponse;
+                        });
+
+                        // Convert roles object to Choices.js format
+                        const roleChoices = Object.keys(this.roles).map(key => {
+                            const role = this.roles[key].role || this.roles[key];
+                            return {
+                                value: key,
+                                label: role.name || key,
+                                customProperties: {
+                                    description: role.description || ''
+                                }
+                            };
+                        });
+
+                        // Update Choices.js instance
+                        if (roleChoicesInstance) {
+                            // Clear and set new choices
+                            roleChoicesInstance.clearChoices();
+                            if (roleChoices.length > 0) {
+                                roleChoicesInstance.setChoices([
+                                    { value: '', label: 'Select a Role', placeholder: true, selected: true },
+                                    ...roleChoices
+                                ], 'value', 'label', true);
+                                roleChoicesInstance.enable();
+                            } else {
+                                roleChoicesInstance.setChoices([
+                                    { value: '', label: 'No roles available', disabled: true, selected: true }
+                                ]);
+                            }
+                        }
 
                         this.preselectRole();
                     } catch (error) {
                         console.error('Error fetching roles:', error);
+                        // Show error in Choices.js
+                        if (roleChoicesInstance) {
+                            roleChoicesInstance.clearChoices();
+                            roleChoicesInstance.setChoices([
+                                { value: '', label: 'Error loading roles', disabled: true, selected: true }
+                            ]);
+                        }
                     } finally {
                         this.loadingRoles = false;
                     }
@@ -623,46 +908,90 @@
 
                 /**
                  * Load tenants for the selected provider
+                 * @param {string} query - Optional search query for backend filtering
                  */
-                async loadTenants() {
-                    if (!this.selectedProvider) return;
-                    
+                async loadTenants(query = '') {
+                    if (!this.selectedProvider) {
+                        // Clear tenants in Choices.js when no provider selected
+                        if (tenantChoicesInstance) {
+                            tenantChoicesInstance.clearChoices();
+                            tenantChoicesInstance.setChoices([{ value: '', label: 'Select a provider first', disabled: true, selected: true }]);
+                        }
+                        return;
+                    }
+
                     this.loadingTenants = true;
-                    
+
                     try {
-                        // Get a list of tenants for the selected provider
-                        const response = await fetch(`${this.apiBasePath}/provider/${encodeURIComponent(this.selectedProvider)}/tenants`);
-                        
+                        // Build URL with optional search query
+                        let url = `${this.apiBasePath}/provider/${encodeURIComponent(this.selectedProvider)}/tenants?limit=100`;
+                        if (query) {
+                            url += `&q=${encodeURIComponent(query)}`;
+                        }
+
+                        const response = await fetch(url);
+
                         if (!response.ok) {
-                            // If the endpoint returns 404 or error, just skip tenant loading
                             // Some providers may not support tenants
                             console.log('No tenants available for this provider');
+                            if (tenantChoicesInstance) {
+                                tenantChoicesInstance.clearChoices();
+                                tenantChoicesInstance.setChoices([{ value: '', label: 'No tenants available', disabled: true, selected: true }]);
+                            }
                             this.tenants = {};
                             return;
                         }
-                        
+
                         const data = await response.json();
-                        let tenantsData = data.tenants || {};
-                        // Normalize tenants: API may return an array, but the UI expects an object/map.
-                        if (Array.isArray(tenantsData)) {
-                            const tenantsMap = {};
-                            tenantsData.forEach((tenant, index) => {
-                                // Unwrap _source if present
-                                if (tenant._source) {
-                                    tenant = tenant._source;
-                                }
-                                // Prefer stable identifiers as keys; fall back to index if needed.
-                                const key = tenant.id || tenant.key || tenant.name || String(index);
-                                tenantsMap[key] = tenant;
-                            });
-                            tenantsData = tenantsMap;
+                        const rawTenants = data.tenants || [];
+
+                        // Normalize tenants into an object map
+                        const tenantsMap = {};
+                        rawTenants.forEach((tenant, index) => {
+                            if (tenant._source) {
+                                tenant = tenant._source;
+                            }
+                            const key = tenant.id || tenant.key || tenant.name || String(index);
+                            tenantsMap[key] = tenant;
+                        });
+
+                        this.tenants = tenantsMap;
+
+                        // Convert tenants map to Choices.js format
+                        const tenantChoices = Object.keys(this.tenants).map(key => {
+                            const tenant = this.tenants[key];
+                            return {
+                                value: key,
+                                label: tenant.name || key,
+                            };
+                        });
+
+                        // Update Choices.js instance
+                        if (tenantChoicesInstance) {
+                            tenantChoicesInstance.clearChoices();
+                            if (tenantChoices.length > 0) {
+                                tenantChoicesInstance.setChoices([
+                                    { value: '', label: 'Select a Tenant (optional)', placeholder: true, selected: true },
+                                    ...tenantChoices
+                                ], 'value', 'label', true);
+                                tenantChoicesInstance.enable();
+                            } else {
+                                tenantChoicesInstance.setChoices([
+                                    { value: '', label: 'No tenants available', disabled: true, selected: true }
+                                ]);
+                            }
                         }
-                        this.tenants = tenantsData;
 
                         this.preselectTenant();
                     } catch (error) {
                         console.error('Error fetching tenants:', error);
                         this.tenants = {};
+                        if (tenantChoicesInstance) {
+                            tenantChoicesInstance.clearChoices();
+                            tenantChoicesInstance.setChoices([
+                                { value: '', label: 'Error loading tenants', disabled: true, selected: true }
+                            ]);
+                        }
                     } finally {
                         this.loadingTenants = false;
                     }
@@ -674,23 +1003,27 @@
                  */
                 preselectTenant() {
                     if (!this.prefilledTenants || this.prefilledTenants.length === 0) return;
-                    
+
                     const tenantToSelect = this.prefilledTenants[0];
-                    
+                    let tenantKeyToSelect = null;
+
                     // Try exact key match first
                     if (this.tenants[tenantToSelect]) {
-                        this.selectedTenant = tenantToSelect;
-                        return;
+                        tenantKeyToSelect = tenantToSelect;
+                    } else {
+                        // Try case-insensitive name match
+                        tenantKeyToSelect = Object.keys(this.tenants).find(key => {
+                            const tenant = this.tenants[key];
+                            return tenant.name && tenant.name.toLowerCase() === tenantToSelect.toLowerCase();
+                        });
                     }
-                    
-                    // Try case-insensitive name match
-                    const tenantKey = Object.keys(this.tenants).find(key => {
-                        const tenant = this.tenants[key];
-                        return tenant.name && tenant.name.toLowerCase() === tenantToSelect.toLowerCase();
-                    });
-                    
-                    if (tenantKey) {
-                        this.selectedTenant = tenantKey;
+
+                    if (tenantKeyToSelect) {
+                        this.selectedTenant = tenantKeyToSelect;
+                        // Sync with Choices.js component
+                        if (tenantChoicesInstance) {
+                            tenantChoicesInstance.setChoiceByValue(tenantKeyToSelect);
+                        }
                     }
                 },
 
@@ -702,22 +1035,25 @@
                     if (!this.prefilledRoles || this.prefilledRoles.length === 0) return;
                     
                     const roleToSelect = this.prefilledRoles[0];
+                    let roleKeyToSelect = null;
                     
                     // Try exact key match first
                     if (this.roles[roleToSelect]) {
-                        this.selectedRole = roleToSelect;
-                        this.evaluateRole();
-                        return;
+                        roleKeyToSelect = roleToSelect;
+                    } else {
+                        // Try case-insensitive name match
+                        roleKeyToSelect = Object.keys(this.roles).find(key => {
+                            const role = this.roles[key];
+                            return role.name && role.name.toLowerCase() === roleToSelect.toLowerCase();
+                        });
                     }
                     
-                    // Try case-insensitive name match
-                    const roleKey = Object.keys(this.roles).find(key => {
-                        const role = this.roles[key];
-                        return role.name && role.name.toLowerCase() === roleToSelect.toLowerCase();
-                    });
-                    
-                    if (roleKey) {
-                        this.selectedRole = roleKey;
+                    if (roleKeyToSelect) {
+                        this.selectedRole = roleKeyToSelect;
+                        // Sync with Choices.js component
+                        if (roleChoicesInstance) {
+                            roleChoicesInstance.setChoiceByValue(roleKeyToSelect);
+                        }
                         this.evaluateRole();
                     }
                 },

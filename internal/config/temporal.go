@@ -8,27 +8,6 @@ import (
 	"go.temporal.io/sdk/activity"
 )
 
-func (c *Config) setupTemporalServices() error {
-
-	if !c.IsServer() {
-		return fmt.Errorf("temporal services can only be set up in server mode")
-	}
-
-	// Register workflows
-	err := c.registerTemporalWorkflows()
-	if err != nil {
-		return fmt.Errorf("registering temporal workflows: %w", err)
-	}
-
-	// Register activities
-	err = c.registerTemporalActivities()
-	if err != nil {
-		return fmt.Errorf("registering temporal activities: %w", err)
-	}
-
-	return nil
-}
-
 // Register temporal workflows and activities
 func (c *Config) registerTemporalWorkflows() error {
 

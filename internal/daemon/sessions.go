@@ -226,6 +226,43 @@ func (s *Server) getSessions(c *gin.Context) {
 	}
 }
 
+// getWhoami retrieves the current authenticated user
+//
+//	@Summary		Get current user
+//	@Description	Get information about the currently authenticated user
+//	@Tags			sessions
+//	@Accept			json
+//	@Produce		json
+//	@Success		200	{object}	models.WhoamiResponse	"Current user information"
+//	@Failure		401	{object}	map[string]any	"Unauthorized"
+//	@Router			/whoami [get]
+//	@Security		BearerAuth
+func (s *Server) getWhoami(c *gin.Context) {
+	// Get authenticated session
+	provider, session, err := s.getSession(c)
+	if err != nil {
+		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized", err)
+		return
+	}
+
+	if session == nil || session.User == nil {
+		s.getErrorPage(c, http.StatusUnauthorized, "No user session found")
+		return
+	}
+
+	// Return user information
+	response := models.WhoamiResponse{
+		User:     session.User,
+		Provider: provider,
+		Session: models.SessionInfo{
+			UUID:   session.UUID,
+			Expiry: session.Expiry,
+		},
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
 // getSessionByProvider retrieves a session for a specific provider
 //
 //	@Summary		Get session by provider

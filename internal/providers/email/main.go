@@ -52,6 +52,7 @@ func (p *emailProvider) Initialize(identifier string, provider models.ProviderCo
 
 	return p.proxy.Initialize(identifier, provider)
 }
+
 func (p *emailProvider) SendNotification(
 	ctx context.Context, notification models.NotificationRequest,
 ) error {
@@ -64,5 +65,5 @@ func (p *emailProvider) SendNotification(
 }
 
 func init() {
-	providers.Register(EmailProviderName, &emailProvider{})
+	providers.Register(EmailProviderName, &emailProvider{}, EmailCapabilities, &ConfigSchema{})
 }

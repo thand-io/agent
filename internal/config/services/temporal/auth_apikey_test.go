@@ -38,10 +38,11 @@ func TestConfigureAPIKeyAuth(t *testing.T) {
 			}
 			config.ApiKey = tt.apiKey
 
-			temporalClient := &TemporalClient{
-				config:   config,
-				identity: "test-identity",
-			}
+			temporalClient := NewTemporalClient(
+				config,
+				nil,
+				"test-identity",
+			)
 
 			// Configure client options
 			options := &client.Options{}
@@ -57,7 +58,7 @@ func TestConfigureAPIKeyAuth(t *testing.T) {
 			// If API key is provided, verify configuration
 			if len(tt.apiKey) > 0 {
 				assert.NotNil(t, options.ConnectionOptions.TLS)
-			assert.Equal(t, uint16(tls.VersionTLS12), options.ConnectionOptions.TLS.MinVersion)
+				assert.Equal(t, uint16(tls.VersionTLS12), options.ConnectionOptions.TLS.MinVersion)
 				assert.NotNil(t, options.Credentials)
 			} else {
 				// Empty API key should not configure anything
@@ -91,9 +92,10 @@ func TestHasAPIKeyAuth(t *testing.T) {
 			config := &models.TemporalConfig{}
 			config.ApiKey = tt.apiKey
 
-			temporalClient := &TemporalClient{
-				config: config,
-			}
+			temporalClient := NewTemporalClient(
+				config,
+				nil,
+			)
 
 			got := temporalClient.hasAPIKeyAuth()
 			assert.Equal(t, tt.want, got)

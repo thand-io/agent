@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/search"
 	"github.com/sirupsen/logrus"
 )
@@ -60,7 +62,7 @@ func (p *BaseProvider) GetTenant(ctx context.Context, tenant string) (*ProviderT
 	return nil, fmt.Errorf("tenant not found")
 }
 
-func (p *BaseProvider) ListTenants(ctx context.Context, searchReq *SearchRequest) ([]SearchResult[ProviderTenant], error) {
+func (p *BaseProvider) ListTenants(ctx context.Context, searchRequest *SearchRequest) ([]SearchResult[ProviderTenant], error) {
 
 	if p.tenants == nil || !p.HasCapability(
 		ProviderCapabilityTenants,
@@ -70,7 +72,7 @@ func (p *BaseProvider) ListTenants(ctx context.Context, searchReq *SearchRequest
 	}
 
 	// If no filters, return all tenants
-	if searchReq == nil || searchReq.IsEmpty() {
+	if searchRequest == nil || searchRequest.IsEmpty() {
 		p.tenants.mu.RLock()
 		tenants := p.tenants.tenants
 		p.tenants.mu.RUnlock()
@@ -80,30 +82,29 @@ func (p *BaseProvider) ListTenants(ctx context.Context, searchReq *SearchRequest
 	// Check if search index is ready
 	p.tenants.mu.RLock()
 	tenantsIndex := p.tenants.tenantsIndex
+	tenants := p.tenants.tenants
 	p.tenants.mu.RUnlock()
 
 	if tenantsIndex != nil {
 		// Use Bleve search for better search capabilities
-		p.tenants.mu.RLock()
-		tenants := p.tenants.tenants
-		p.tenants.mu.RUnlock()
 		return BleveListSearch(ctx, tenantsIndex, func(a *search.DocumentMatch, b ProviderTenant) bool {
-			return strings.EqualFold(a.ID, b.Name)
-		}, tenants, searchReq)
+			return strings.EqualFold(a.ID, b.ID)
+		}, tenants, searchRequest)
 	}
 
 	// Fallback to simple substring filtering while index is being built
-	p.tenants.mu.RLock()
-	tenants := p.tenants.tenants
-	p.tenants.mu.RUnlock()
-
 	var filtered []ProviderTenant
-	filterText := strings.ToLower(strings.Join(searchReq.Terms, " "))
+	filterText := strings.ToLower(strings.Join(searchRequest.Terms, " "))
+	limit := searchRequest.GetLimit()
 
-	for _, tnt := range tenants {
-		// Check if any filter matches the tenant name or description
-		if strings.Contains(strings.ToLower(tnt.Name), filterText) {
-			filtered = append(filtered, tnt)
+	for _, tenant := range tenants {
+		// Check if any filter matches the tenant name or ID
+		if strings.Contains(strings.ToLower(tenant.Name), filterText) ||
+			strings.Contains(strings.ToLower(tenant.ID), filterText) {
+			filtered = append(filtered, tenant)
+			if limit > 0 && len(filtered) >= limit {
+				break
+			}
 		}
 	}
 
@@ -153,6 +154,10 @@ func (p *BaseProvider) SetTenantsWithKey(
 		}
 	}
 
+	logrus.WithFields(logrus.Fields{
+		"total_tenants": len(p.tenants.tenants),
+	}).Debug("Set provider tenants")
+
 	// Trigger reindex
 	go func() {
 		err := p.buildTenantIndices()
@@ -189,5 +194,66 @@ func (p *BaseProvider) AddTenants(tenants ...ProviderTenant) {
 	p.tenants.mu.RUnlock()
 
 	combined := append(existingCopy, filtered...)
+
+	logrus.WithFields(logrus.Fields{
+		"existing": len(existing),
+		"new":      len(tenants),
+		"added":    len(filtered),
+		"total":    len(combined),
+	}).Debug("Adding tenants to provider")
+
 	p.SetTenants(combined)
+}
+
+func (p *BaseProvider) buildTenantIndices() error {
+	// Placeholder for building tenant indices
+	startTime := time.Now()
+	defer func() {
+		elapsed := time.Since(startTime)
+		logrus.Debugf("Built tenant search indices in %s", elapsed)
+	}()
+
+	tenantsMapping := bleve.NewIndexMapping()
+
+	// Create a document mapping for the Tenant
+	tenantDocMapping := bleve.NewDocumentMapping()
+
+	// Field: ID (keyword — preserved as-is for exact/prefix/wildcard matching)
+	idFieldMapping := bleve.NewTextFieldMapping()
+	idFieldMapping.Analyzer = "keyword"
+	tenantDocMapping.AddFieldMappingsAt("ID", idFieldMapping)
+
+	// Field: Name (standard analyzer — tokenises and lowercases so partial
+	// word queries like "prod" match "Production Account")
+	nameFieldMapping := bleve.NewTextFieldMapping()
+	nameFieldMapping.Analyzer = "standard"
+	tenantDocMapping.AddFieldMappingsAt("Name", nameFieldMapping)
+
+	tenantsMapping.DefaultMapping = tenantDocMapping
+
+	tenantsIndex, err := bleve.NewMemOnly(tenantsMapping)
+	if err != nil {
+		return fmt.Errorf("failed to create tenants search index: %v", err)
+	}
+
+	// Index tenants
+	p.tenants.mu.RLock()
+	tenants := p.tenants.tenants
+	p.tenants.mu.RUnlock()
+
+	for _, tenant := range tenants {
+		if err := tenantsIndex.Index(tenant.ID, tenant); err != nil {
+			return fmt.Errorf("failed to index tenant %s: %v", tenant.ID, err)
+		}
+	}
+
+	p.tenants.mu.Lock()
+	p.tenants.tenantsIndex = tenantsIndex
+	p.tenants.mu.Unlock()
+
+	logrus.WithFields(logrus.Fields{
+		"tenants": len(tenants),
+	}).Debug("Tenant search indices ready")
+
+	return nil
 }

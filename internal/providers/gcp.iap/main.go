@@ -204,7 +204,21 @@ func (p *gcpIAPProvider) VerifyIAPJWT(ctx context.Context, tokenString string) (
 	logrus.Debugln("Calling idtoken.Validate")
 	payload, err := idtoken.Validate(ctx, tokenString, p.audience)
 	if err != nil {
+
 		logrus.WithError(err).WithField("audience", p.audience).Errorln("idtoken.Validate failed")
+
+		// The validation has failed so lets parse the JWT to check if there is an audience missmatch
+		tokenResult, err := idtoken.ParsePayload(tokenString)
+
+		if err != nil {
+			logrus.WithError(err).Errorln("Failed to parse JWT payload after validation failure")
+		} else if tokenResult.Audience != p.audience {
+			logrus.WithFields(logrus.Fields{
+				"parsed_audience":   tokenResult.Audience,
+				"expected_audience": p.audience,
+			}).Errorln("Parsed JWT audience after validation failure")
+		}
+
 		return nil, time.Time{}, fmt.Errorf("failed to validate IAP JWT: %w", err)
 	}
 
@@ -273,7 +287,7 @@ func (p *gcpIAPProvider) VerifyIAPJWT(ctx context.Context, tokenString string) (
 		"email":   claims.Email,
 		"subject": claims.Subject,
 		"hd":      claims.HostedDomain,
-	}).Infoln("JWT verification successful")
+	}).Debugln("JWT verification successful")
 
 	return claims, expiryTime, nil
 }
@@ -343,5 +357,5 @@ func (p *gcpIAPProvider) GetAudience() string {
 }
 
 func init() {
-	providers.Register(GcpIAPProviderName, &gcpIAPProvider{})
+	providers.Register(GcpIAPProviderName, &gcpIAPProvider{}, GcpIAPCapabilities, &ConfigSchema{})
 }

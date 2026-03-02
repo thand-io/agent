@@ -9,15 +9,24 @@ import (
 	"github.com/simpleforce/simpleforce"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
+	sdkWorkflowsRunner "github.com/thand-io/agent/sdk/workflows/runner"
 	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 )
 
 const MetadataPriorProfileKey = "prior_profile"
 
 func (p *salesForceProvider) AuthorizeRole(
-	ctx context.Context,
+	ctx models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		return p.authorizeRoleTemporal(workflowCtx, req)
+	}
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
 
 	if !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to authorize salesforce role")
@@ -37,7 +46,7 @@ func (p *salesForceProvider) AuthorizeRole(
 	profileName := strings.TrimPrefix(
 		role.Inherits[0], fmt.Sprintf("%s:", p.GetProvider()))
 
-	profileResult, err := p.GetRole(ctx, profileName)
+	profileResult, err := p.GetRole(localCtx, profileName)
 
 	if err != nil {
 		return nil, temporal.NewApplicationErrorWithOptions(
@@ -130,9 +139,17 @@ func (p *salesForceProvider) AuthorizeRole(
 
 // Revoke removes access for a user from a role by reverting to the prior profile
 func (p *salesForceProvider) RevokeRole(
-	ctx context.Context,
+	ctx models.ProviderContext,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		return p.revokeRoleTemporal(workflowCtx, req)
+	}
+	_, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
+
 	client := p.client
 
 	user := req.GetUser()
@@ -221,6 +238,123 @@ func (p *salesForceProvider) RevokeRole(
 		MetadataPriorProfileKey: priorProfileId,
 		"current_profile":       currentProfileId,
 	}).Info("Successfully revoked Salesforce role and reverted to prior profile")
+
+	return &models.RevokeRoleResponse{}, nil
+}
+
+// authorizeRoleTemporal sequences Salesforce role authorization as three Temporal activities.
+func (p *salesForceProvider) authorizeRoleTemporal(
+	wfCtx workflow.Context,
+	req *models.AuthorizeRoleRequest,
+) (*models.AuthorizeRoleResponse, error) {
+	if !req.IsValid() {
+		return nil, fmt.Errorf("user and role must be provided to authorize salesforce role")
+	}
+
+	identifier := p.GetIdentifier()
+	ao := workflow.ActivityOptions{
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+	}
+	wfCtx = workflow.WithActivityOptions(wfCtx, ao)
+
+	user := req.GetUser()
+	role := req.GetRole()
+
+	if len(role.Inherits) == 0 {
+		return nil, fmt.Errorf("salesforce roles (profiles) must inherit at least one role")
+	}
+	if len(role.Inherits) > 1 {
+		return nil, fmt.Errorf("salesforce roles (profiles) can only inherit one role")
+	}
+
+	// Step 1 — resolve the Salesforce profile ID
+	var profileResp GetSalesforceRoleProfileResponse
+	if err := workflow.ExecuteActivity(
+		wfCtx,
+		models.CreateTemporalProviderWorkflowName(identifier, GetSalesforceRoleProfileActivityName),
+		&GetSalesforceRoleProfileRequest{RoleInherits: role.Inherits[0]},
+	).Get(wfCtx, &profileResp); err != nil {
+		return nil, fmt.Errorf("GetSalesforceRoleProfile activity failed: %w", err)
+	}
+
+	// Step 2 — find or create the Salesforce user
+	var userResp FindOrCreateSalesforceUserResponse
+	if err := workflow.ExecuteActivity(
+		wfCtx,
+		models.CreateTemporalProviderWorkflowName(identifier, FindOrCreateSalesforceUserActivityName),
+		&FindOrCreateSalesforceUserRequest{
+			User:      user,
+			ProfileID: profileResp.ProfileID,
+		},
+	).Get(wfCtx, &userResp); err != nil {
+		return nil, fmt.Errorf("FindOrCreateSalesforceUser activity failed: %w", err)
+	}
+
+	// Step 3 — update the user's profile (only if needed)
+	if userResp.CurrentProfileID != profileResp.ProfileID {
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(identifier, UpdateSalesforceUserProfileActivityName),
+			&UpdateSalesforceUserProfileRequest{
+				SalesforceUserID: userResp.SalesforceUserID,
+				ProfileID:        profileResp.ProfileID,
+			},
+		).Get(wfCtx, nil); err != nil {
+			return nil, fmt.Errorf("UpdateSalesforceUserProfile activity failed: %w", err)
+		}
+	}
+
+	return &models.AuthorizeRoleResponse{
+		UserId: userResp.SalesforceUserID,
+		Roles:  []string{profileResp.ProfileID},
+		Metadata: map[string]any{
+			MetadataPriorProfileKey: userResp.CurrentProfileID,
+		},
+	}, nil
+}
+
+// revokeRoleTemporal sequences Salesforce role revocation as two Temporal activities.
+func (p *salesForceProvider) revokeRoleTemporal(
+	wfCtx workflow.Context,
+	req *models.RevokeRoleRequest,
+) (*models.RevokeRoleResponse, error) {
+	identifier := p.GetIdentifier()
+	ao := workflow.ActivityOptions{
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+	}
+	wfCtx = workflow.WithActivityOptions(wfCtx, ao)
+
+	user := req.GetUser()
+
+	var priorProfileID string
+	if req.AuthorizeRoleResponse != nil && req.AuthorizeRoleResponse.Metadata != nil {
+		priorProfileID, _ = req.AuthorizeRoleResponse.Metadata[MetadataPriorProfileKey].(string)
+	}
+
+	// Step 1 — find the Salesforce user
+	var userResp FindSalesforceUserResponse
+	if err := workflow.ExecuteActivity(
+		wfCtx,
+		models.CreateTemporalProviderWorkflowName(identifier, FindSalesforceUserActivityName),
+		&FindSalesforceUserRequest{UserEmail: user.Email},
+	).Get(wfCtx, &userResp); err != nil {
+		return nil, fmt.Errorf("FindSalesforceUser activity failed: %w", err)
+	}
+
+	// Step 2 — revert the user's profile
+	if err := workflow.ExecuteActivity(
+		wfCtx,
+		models.CreateTemporalProviderWorkflowName(identifier, RevertSalesforceUserProfileActivityName),
+		&RevertSalesforceUserProfileRequest{
+			SalesforceUserID: userResp.SalesforceUserID,
+			CurrentProfileID: userResp.CurrentProfileID,
+			PriorProfileID:   priorProfileID,
+		},
+	).Get(wfCtx, nil); err != nil {
+		return nil, fmt.Errorf("RevertSalesforceUserProfile activity failed: %w", err)
+	}
 
 	return &models.RevokeRoleResponse{}, nil
 }

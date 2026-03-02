@@ -8,11 +8,26 @@ import (
 
 	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/search"
+	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
 )
 
+type ProviderResource struct {
+	ID          string `json:"id"`
+	Tenant      string `json:"tenant,omitempty"`
+	Type        string `json:"type"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+
+	// Store additional metadata if needed
+	Metadata map[string]any `json:"metadata,omitempty"`
+
+	// Store the underlying provider-specific resource object if needed
+	Resource any `json:"-"`
+}
+
 type ProviderResourcesResponse struct {
-	Version   string                           `json:"version"`
+	Version   *version.Version                 `json:"version"`
 	Provider  string                           `json:"provider"`
 	Resources []SearchResult[ProviderResource] `json:"resources"`
 }
@@ -78,11 +93,15 @@ func (p *BaseProvider) ListResources(ctx context.Context, searchRequest *SearchR
 	// Fallback to simple substring filtering while index is being built
 	var filtered []ProviderResource
 	filterText := strings.ToLower(strings.Join(searchRequest.Terms, " "))
+	limit := searchRequest.GetLimit()
 
 	for _, resource := range resources {
 		// Check if any filter matches the resource name
 		if strings.Contains(strings.ToLower(resource.Name), filterText) {
 			filtered = append(filtered, resource)
+			if limit > 0 && len(filtered) >= limit {
+				break
+			}
 		}
 	}
 
@@ -162,6 +181,10 @@ func (p *BaseProvider) SetResourcesWithKey(
 		}
 	}
 
+	logrus.WithFields(logrus.Fields{
+		"total_resources": len(p.rbac.resources),
+	}).Debug("Set provider resources")
+
 	// Trigger reindex
 	go func() {
 		err := p.buildResourceIndices()
@@ -198,5 +221,13 @@ func (p *BaseProvider) AddResources(resources ...ProviderResource) {
 	p.rbac.mu.RUnlock()
 
 	combined := append(existingCopy, filtered...)
+
+	logrus.WithFields(logrus.Fields{
+		"existing": len(existing),
+		"new":      len(resources),
+		"added":    len(filtered),
+		"total":    len(combined),
+	}).Debug("Adding resources to provider")
+
 	p.SetResources(combined)
 }

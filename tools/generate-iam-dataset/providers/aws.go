@@ -1,14 +1,16 @@
-package main
+package providers
 
 import (
 	"encoding/json"
 	"os"
+	"strings"
 
+	md "github.com/JohannesKaufmann/html-to-markdown"
 	flatbuffers "github.com/google/flatbuffers/go"
 	"github.com/thand-io/agent/internal/data/iam-dataset/generated/aws"
 )
 
-func generateAWSFlatBuffers() error {
+func GenerateAWSFlatBuffers() error {
 	// Generate AWS Permissions FlatBuffer
 	if err := generateAWSPermissions(); err != nil {
 		return err
@@ -34,14 +36,33 @@ func generateAWSPermissions() error {
 		return err
 	}
 
+	// Create HTML to Markdown converter
+	converter := md.NewConverter("", true, nil)
+
 	// Create FlatBuffer
 	builder := flatbuffers.NewBuilder(1024)
 
 	// Create permissions
 	var permissions []flatbuffers.UOffsetT
-	for name, description := range docs {
+	for rawName, description := range docs {
+		// Convert EC2.AllocateAddress → ec2:AllocateAddress (lowercase service prefix, colon separator)
+		colonIdx := strings.Index(rawName, ".")
+		var name string
+		if colonIdx >= 0 {
+			name = strings.ToLower(rawName[:colonIdx]) + ":" + rawName[colonIdx+1:]
+		} else {
+			name = rawName
+		}
+
+		// Convert HTML description to markdown
+		markdownDesc, err := converter.ConvertString(description)
+		if err != nil {
+			// If conversion fails, use original description
+			markdownDesc = description
+		}
+
 		nameOffset := builder.CreateString(name)
-		descOffset := builder.CreateString(description)
+		descOffset := builder.CreateString(markdownDesc)
 
 		aws.PermissionStart(builder)
 		aws.PermissionAddName(builder, nameOffset)

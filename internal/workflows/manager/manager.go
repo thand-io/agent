@@ -10,7 +10,6 @@ import (
 	swctx "github.com/serverlessworkflow/sdk-go/v3/impl/ctx"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
-	"github.com/thand-io/agent/internal/config"
 	models "github.com/thand-io/agent/internal/models"
 	workflowConfig "github.com/thand-io/agent/internal/workflows/config"
 	providerAws "github.com/thand-io/agent/internal/workflows/functions/providers/aws"
@@ -29,20 +28,34 @@ import (
 	"go.temporal.io/sdk/worker"
 )
 
+// ThandWorkflowBroker is the minimal interface that Service requires from the
+// underlying workflow engine. The concrete implementation is
+// *manager.ThandWorkflowManager; the interface exists so tests can supply a
+// lightweight double without spinning up a real Temporal connection.
+type ThandWorkflowBroker interface {
+	// CreateElevationWorkflow starts a new elevation workflow and returns the
+	// initial task descriptor.
+	CreateElevationWorkflow(ctx context.Context, request models.ElevateRequest) (*models.WorkflowRequest, error)
+
+	// ResumeWorkflow continues a paused workflow task.
+	// Returns nil, nil when the task no longer exists or has already completed.
+	ResumeWorkflow(workflow *models.ElevateWorkflowTask) (*models.ElevateWorkflowTask, error)
+}
+
 // WorkflowManager manages workflow lifecycle and execution using the official SDK
 type ThandWorkflowManager struct {
-	config          *config.Config
+	config          models.ConfigImpl
 	workflowManager *workflowSdk.WorkflowManager
 }
 
 // NewWorkflowManager creates a new workflow manager
-func NewThandWorkflowManager(cfg *config.Config) (*ThandWorkflowManager, error) {
+func NewThandWorkflowManager(cfg models.ConfigImpl) (*ThandWorkflowManager, error) {
 
 	workflowConfig := workflowConfig.NewThandWorkflowConfig(cfg)
 
 	// Register all custom tasks
 	for _, task := range []tasks.TaskCollection{
-		taskThand.NewThandCollection(cfg),
+		taskThand.NewThandCollection(cfg, workflowConfig),
 	} {
 		task.RegisterTasks(workflowConfig.GetTaskRegistry())
 	}
@@ -87,7 +100,7 @@ func (m *ThandWorkflowManager) GetWorkflowManager() *workflowSdk.WorkflowManager
 	return m.workflowManager
 }
 
-func (m *ThandWorkflowManager) GetThandConfig() *config.Config {
+func (m *ThandWorkflowManager) GetThandConfig() models.ConfigImpl {
 	return m.config
 }
 
@@ -239,19 +252,7 @@ func (m *ThandWorkflowManager) executeElevationWorkflow(
 			if err == nil {
 
 				workflowTask.SetUser(decodedSession.User)
-
-				// Now that we have a user we need to evaluate our composite role
-				newRole, err := m.config.GetCompositeRole(&models.Identity{
-					ID:    decodedSession.User.GetIdentity(),
-					Label: decodedSession.User.GetName(),
-					User:  decodedSession.User,
-				}, workflowTask.GetRole())
-
-				if err != nil {
-					return nil, fmt.Errorf("failed to evaluate composite role for elevation request: %w", err)
-				}
-
-				workflowTask.SetRole(newRole)
+				workflowTask.SetRole(request.Role)
 
 				redirectUrl := m.config.GetResumeCallbackUrl(workflowTask)
 
@@ -299,7 +300,7 @@ func (m *ThandWorkflowManager) ResumeWorkflow(
 	}
 
 	ctx := workflowTask.GetContext()
-	
+
 	// Check if workfow has already been registered on temporal
 	serviceClient := m.config.GetServices()
 
@@ -407,14 +408,14 @@ func (m *ThandWorkflowManager) createTemporalWorkflow(workflowTask *models.Eleva
 		ID:        workflowTask.WorkflowID,
 		TaskQueue: temporalService.GetTaskQueue(),
 		TypedSearchAttributes: temporal.NewSearchAttributes(
-			models.TypedSearchAttributeUser.ValueSet(userEmail),
-			models.TypedSearchAttributeRole.ValueSet(roleName),
-			models.TypedSearchAttributeProviders.ValueSet(elevationRequest.Providers),
-			models.TypedSearchAttributeWorkflow.ValueSet(elevationRequest.Workflow),
-			models.TypedSearchAttributeStatus.ValueSet(strings.ToUpper(string(swctx.PendingStatus))),
-			models.TypedSearchAttributeDuration.ValueSet(int64(duration.Seconds())),
-			models.TypedSearchAttributeReason.ValueSet(elevationRequest.Reason),
-			models.TypedSearchAttributeIdentities.ValueSet(elevationRequest.Identities),
+			sdkConstants.TypedSearchAttributeUser.ValueSet(userEmail),
+			sdkConstants.TypedSearchAttributeRole.ValueSet(roleName),
+			sdkConstants.TypedSearchAttributeProviders.ValueSet(elevationRequest.Providers),
+			sdkConstants.TypedSearchAttributeWorkflow.ValueSet(elevationRequest.Workflow),
+			sdkConstants.TypedSearchAttributeStatus.ValueSet(strings.ToUpper(string(swctx.PendingStatus))),
+			sdkConstants.TypedSearchAttributeDuration.ValueSet(int64(duration.Seconds())),
+			sdkConstants.TypedSearchAttributeReason.ValueSet(elevationRequest.Reason),
+			sdkConstants.TypedSearchAttributeIdentities.ValueSet(elevationRequest.Identities),
 		),
 	}
 

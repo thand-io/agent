@@ -128,6 +128,104 @@ func TestWorkflowDefinitions_UnmarshalJSON(t *testing.T) {
 			}`,
 			expectError: true,
 		},
+		{
+			name: "WorkflowsResponse format with SearchResult array",
+			jsonInput: `{
+				"version": "1.0",
+				"workflows": [
+					{
+						"_id": "deploy",
+						"_score": 1.0,
+						"_source": {
+							"identifier": "deploy",
+							"name": "Deploy Workflow",
+							"description": "Deploys the application",
+							"enabled": true,
+							"version": "1.0.0"
+						}
+					},
+					{
+						"_id": "test",
+						"_score": 0.9,
+						"_source": {
+							"identifier": "test",
+							"name": "Test Workflow",
+							"description": "Runs tests",
+							"enabled": false,
+							"version": "1.0.0"
+						}
+					}
+				],
+				"meta": {
+					"total": 2,
+					"page": 1,
+					"page_size": 10
+				}
+			}`,
+			expectError:   false,
+			expectedVer:   "1.0.0",
+			workflowCount: 2,
+			validateFunc: func(t *testing.T, def *WorkflowDefinitions) {
+				deploy, exists := def.Workflows["deploy"]
+				assert.True(t, exists, "deploy workflow should exist")
+				assert.Equal(t, "Deploy Workflow", deploy.Name)
+				assert.Equal(t, "Deploys the application", deploy.Description)
+				assert.Equal(t, "deploy", deploy.Identifier)
+				assert.True(t, deploy.Enabled)
+
+				test, exists := def.Workflows["test"]
+				assert.True(t, exists, "test workflow should exist")
+				assert.Equal(t, "Test Workflow", test.Name)
+				assert.Equal(t, "test", test.Identifier)
+				assert.False(t, test.Enabled)
+
+				// Check meta was parsed
+				assert.Equal(t, int64(2), def.Meta.Total)
+				assert.Equal(t, 1, def.Meta.Page)
+				assert.Equal(t, 10, def.Meta.PageSize)
+			},
+		},
+		{
+			name: "WorkflowsResponse format with empty array",
+			jsonInput: `{
+				"version": "1.0",
+				"workflows": [],
+				"meta": {
+					"total": 0
+				}
+			}`,
+			expectError:   false,
+			expectedVer:   "1.0.0",
+			workflowCount: 0,
+			validateFunc: func(t *testing.T, def *WorkflowDefinitions) {
+				assert.Equal(t, int64(0), def.Meta.Total)
+			},
+		},
+		{
+			name: "WorkflowsResponse format with minimal SearchResult",
+			jsonInput: `{
+				"version": "2.0",
+				"workflows": [
+					{
+						"_source": {
+							"identifier": "build",
+							"name": "Build Workflow",
+							"description": "Build project",
+							"enabled": true
+						}
+					}
+				]
+			}`,
+			expectError:   false,
+			expectedVer:   "2.0.0",
+			workflowCount: 1,
+			validateFunc: func(t *testing.T, def *WorkflowDefinitions) {
+				build, exists := def.Workflows["build"]
+				assert.True(t, exists)
+				assert.Equal(t, "Build Workflow", build.Name)
+				assert.Equal(t, "build", build.Identifier)
+			},
+		},
 	}
 
 	for _, tt := range tests {

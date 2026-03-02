@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -13,7 +15,37 @@ import (
 )
 
 type AuthorizeRoleRequest struct {
-	*RoleRequest
+	Tenant   *ProviderTenant `json:"tenant,omitempty"`   // Optional tenant ID for multi-account providers
+	Identity *Identity       `json:"identity,omitempty"` // User or group identifier
+	Role     *CompositeRole  `json:"role,omitempty"`
+	Duration *time.Duration  `json:"duration,omitempty"` // Optional duration for temporary access
+}
+
+func (r *AuthorizeRoleRequest) IsValid() bool {
+	return r.Identity != nil && r.Identity.User != nil && r.Role != nil
+}
+
+func (r *AuthorizeRoleRequest) GetUser() *User {
+	if r.Identity == nil {
+		return nil
+	}
+	return r.Identity.User
+}
+
+func (r *AuthorizeRoleRequest) GetRole() *CompositeRole {
+	return r.Role
+}
+
+func (r *AuthorizeRoleRequest) GetTenant() *ProviderTenant {
+	return r.Tenant
+}
+
+func (r *AuthorizeRoleRequest) GetDuration() *time.Duration {
+	return r.Duration
+}
+
+func (r *AuthorizeRoleRequest) HasTenant() bool {
+	return r.Tenant != nil && len(r.Tenant.ID) > 0
 }
 
 type AuthorizeRoleResponse struct {
@@ -26,7 +58,7 @@ type AuthorizeRoleResponse struct {
 }
 
 type RevokeRoleRequest struct {
-	*RoleRequest
+	*AuthorizeRoleRequest
 	AuthorizeRoleResponse *AuthorizeRoleResponse `json:"response,omitempty"`
 }
 
@@ -137,6 +169,14 @@ func (r SynchronizeIdentitiesResponse) GetPagination() *PaginationOptions  { ret
 func (r *SynchronizeTenantsRequest) SetPagination(p *PaginationOptions) { r.Pagination = p }
 func (r SynchronizeTenantsResponse) GetPagination() *PaginationOptions  { return r.Pagination }
 
+// ProviderContext is the execution context passed to provider RBAC operations.
+// It is an alias for WorkflowTaskSupport so providers receive both the plain
+// Go context and, when inside a Temporal workflow coroutine, the workflow.Context
+// needed to schedule sub-activities with proper retries.
+type ProviderContext interface {
+	Deadline() (deadline time.Time, ok bool)
+}
+
 // ProviderRoleBasedAccessControl defines the interface for providers that support RBAC
 type ProviderRoleBasedAccessControl interface {
 
@@ -177,7 +217,7 @@ type ProviderRoleBasedAccessControl interface {
 
 	// Authorize a role for a user (Bind a user to a role)
 	AuthorizeRole(
-		ctx context.Context,
+		ctx ProviderContext,
 		req *AuthorizeRoleRequest,
 	) (
 		*AuthorizeRoleResponse, // Return any custom metadata the provider wants to store
@@ -186,7 +226,7 @@ type ProviderRoleBasedAccessControl interface {
 
 	// Revoke a role from a user
 	RevokeRole(
-		ctx context.Context,
+		ctx ProviderContext,
 		req *RevokeRoleRequest, // Any metadata returned from AuthorizeRole
 	) (*RevokeRoleResponse, error)
 
@@ -199,7 +239,7 @@ type ProviderRoleBasedAccessControl interface {
 }
 
 func (p *BaseProvider) AuthorizeRole(
-	ctx context.Context,
+	ctx ProviderContext,
 	req *AuthorizeRoleRequest,
 ) (*AuthorizeRoleResponse, error) {
 	// Default implementation does nothing
@@ -207,7 +247,7 @@ func (p *BaseProvider) AuthorizeRole(
 }
 
 func (p *BaseProvider) RevokeRole(
-	ctx context.Context,
+	ctx ProviderContext,
 	req *RevokeRoleRequest,
 ) (*RevokeRoleResponse, error) {
 	// Default implementation does nothing
@@ -236,8 +276,11 @@ func ValidateRole(
 	elevateRequest ElevateRequestInternal,
 ) (map[string]any, error) {
 
-	// Check the user has access to the required scopes etc
+	if elevateRequest.User == nil {
+		return nil, fmt.Errorf("user information is required for role validation")
+	}
 
+	// Check the user has access to the required scopes etc
 	identity := Identity{
 		ID:    elevateRequest.User.GetIdentity(),
 		Label: elevateRequest.User.GetName(),
@@ -291,12 +334,8 @@ func validateRole(provider Provider, _ *Identity, role *Role) error {
 func validateRoleNotEmpty(role *Role) error {
 	if len(role.Permissions.Allow) == 0 &&
 		len(role.Permissions.Deny) == 0 &&
-		len(role.Resources.Allow) == 0 &&
-		len(role.Resources.Deny) == 0 &&
-		len(role.Groups.Allow) == 0 &&
-		len(role.Groups.Deny) == 0 &&
 		len(role.Inherits) == 0 {
-		return fmt.Errorf("role %s has no permissions, inherits, groups or resources", role.Name)
+		return fmt.Errorf("role %s has no permissions or inherits", role.Name)
 	}
 	return nil
 }
@@ -348,6 +387,19 @@ func validateInheritedRolesExist(provider Provider, role *Role, providerRoles []
 	return nil
 }
 
+// ValidateRolePermissions expands wildcard permissions in a role's Allow and Deny lists
+// against the given provider's known permission set, then conditionally re-condenses them.
+//
+// This is the final step of the expand→resolve→condense pipeline: after allow/deny
+// conflict resolution, wildcards like "bigquery.datasets.*" are expanded into their
+// concrete individual permissions. For providers where SupportsWildcards is true
+// (e.g. AWS, Azure) the original wildcard patterns are then restored. For providers
+// where SupportsWildcards is false (e.g. GCP, Okta) the permissions remain expanded
+// so the cloud API receives fully-qualified permission names.
+func ValidateRolePermissions(provider Provider, role *Role) error {
+	return validateRolePermissions(provider, role)
+}
+
 // validateRolePermissions validates that role permissions exist in the provider
 func validateRolePermissions(provider Provider, role *Role) error {
 
@@ -369,23 +421,31 @@ func validateRolePermissions(provider Provider, role *Role) error {
 		return nil
 	}
 
-	return validateRolePermissionLists(role, providerPermissions)
+	// Determine whether this provider's API accepts wildcard patterns.
+	supportsWildcards := false
+	if caps := provider.GetCapabilities(); caps != nil && caps.Permissions != nil {
+		supportsWildcards = caps.Permissions.SupportsWildcards
+	}
+
+	return validateRolePermissionLists(role, providerPermissions, supportsWildcards)
 }
 
-// validateRolePermissionLists validates both allow and deny permission lists
-func validateRolePermissionLists(role *Role, providerPermissions []SearchResult[ProviderPermission]) error {
+// validateRolePermissionLists validates both allow and deny permission lists.
+// When supportsWildcards is true, validated wildcards are condensed back to
+// their original patterns; otherwise they remain fully expanded.
+func validateRolePermissionLists(role *Role, providerPermissions []SearchResult[ProviderPermission], supportsWildcards bool) error {
 	if role == nil {
 		return fmt.Errorf("role is nil")
 	}
 
 	var err error
 
-	role.Permissions.Allow, err = validatePermissions(providerPermissions, role.Permissions.Allow)
+	role.Permissions.Allow, err = validatePermissions(providerPermissions, role.Permissions.Allow, supportsWildcards)
 	if err != nil {
 		return err
 	}
 
-	role.Permissions.Deny, err = validatePermissions(providerPermissions, role.Permissions.Deny)
+	role.Permissions.Deny, err = validatePermissions(providerPermissions, role.Permissions.Deny, supportsWildcards)
 	if err != nil {
 		return err
 	}
@@ -393,90 +453,222 @@ func validateRolePermissionLists(role *Role, providerPermissions []SearchResult[
 	return nil
 }
 
-func validatePermissions(providerPermissions []SearchResult[ProviderPermission], permissions []string) ([]string, error) {
+func validatePermissions(providerPermissions []SearchResult[ProviderPermission], statements RoleStatements, supportsWildcards bool) (RoleStatements, error) {
 
-	validatedPermissions := []string{}
+	validatedStatements := RoleStatements{}
 
-	// Now lets check are remove permissions that don't exist
-	for _, perm := range permissions {
-
-		if strings.HasSuffix(perm, ":*") || strings.HasSuffix(perm, ".*") {
-			// Permission ends with a wildcard. Lets expand this
-			// out to include all permissions. As some IAMs do not
-			// support wildcarding.
-			validatedPermissions = append(validatedPermissions,
-				expandPermissionsWildcard(providerPermissions, perm)...)
-
-		} else if permission := getCondensedActions(perm); permission != nil {
-
-			// If the last part is delimited by comma, e.g., k8s:pods:get,list,watch
-			// lets use a more complex parsing with regex and then expand those
-			// into individual permissions
-			validatedPermissions = append(validatedPermissions, permission...)
-			// We have a match, now expand it
-
-		} else if !slices.ContainsFunc(providerPermissions, func(p SearchResult[ProviderPermission]) bool {
-			found := strings.Compare(p.Result.Name, perm) == 0
-			if found {
-				validatedPermissions = append(validatedPermissions, p.Result.Name)
-			}
-			return found
-		}) {
-			return nil, fmt.Errorf("the requested permission: %s was not found", perm)
-		}
+	// Build a set of all known provider permissions once for O(1) lookups.
+	providerPermSet := make(map[string]bool, len(providerPermissions))
+	for _, p := range providerPermissions {
+		providerPermSet[p.Result.Name] = true
 	}
 
-	return validatedPermissions, nil
+	// Validate each statement
+	for _, stmt := range statements {
+
+		validatedOperations := []string{}
+
+		// Track original wildcard patterns so we can condense back after
+		// validation.  Without this, "ec2:*" would remain expanded into
+		// ~500 individual permissions in the validated output.
+		originalWildcards := []string{}
+
+		for _, perm := range stmt.Operations {
+
+			if strings.Contains(perm, "*") {
+				originalWildcards = append(originalWildcards, perm)
+				// Permission contains a wildcard. Expand it against the provider
+				// permission list using glob matching so that all delimiter styles
+				// are handled: Azure (/), GCP (.), AWS/k8s (:), and mid-path
+				// wildcards such as Microsoft.Compute/*/read.
+				expanded, err := expandPermissionsWildcard(providerPermissions, perm)
+				if err != nil {
+					return nil, err
+				}
+				if len(expanded) == 0 {
+					return nil, fmt.Errorf("the wildcard permission: %s matched no permissions", perm)
+				}
+				validatedOperations = append(validatedOperations, expanded...)
+
+			} else if strings.Contains(perm, ":") {
+
+				// If the permission contains a colon, it may use a condensed
+				// format like k8s:pods:get,list,watch — expand those into
+				// individual permissions.  Each expanded permission is validated
+				// against the provider permission set.
+				expanded := ExpandCondensedActions(perm)
+				for _, ep := range expanded {
+					if !providerPermSet[ep] {
+						return nil, fmt.Errorf("the requested permission: %s was not found", ep)
+					}
+				}
+				validatedOperations = append(validatedOperations, expanded...)
+
+			} else if !providerPermSet[perm] {
+				return nil, fmt.Errorf("the requested permission: %s was not found", perm)
+			} else {
+				validatedOperations = append(validatedOperations, perm)
+			}
+		}
+
+		// Condense validated operations back to their original wildcard
+		// patterns when the provider's API supports them.  For providers
+		// that do not (e.g. GCP, Okta), leave the expanded list so the
+		// individual permissions are sent to the cloud API.
+		if supportsWildcards {
+			validatedOperations = condenseToOriginalWildcards(validatedOperations, originalWildcards)
+		}
+
+		// Create validated statement with expanded operations
+		validatedStatements = append(validatedStatements, Statement{
+			Operations: validatedOperations,
+			Targets:    stmt.Targets,
+			Conditions: stmt.Conditions,
+		})
+	}
+
+	return validatedStatements, nil
 }
 
-func expandPermissionsWildcard(providerPermissions []SearchResult[ProviderPermission], permission string) []string {
-
-	if strings.HasSuffix(permission, ":*") {
-		permission = strings.TrimSuffix(permission, ":*")
-	} else if strings.HasSuffix(permission, ".*") {
-		permission = strings.TrimSuffix(permission, ".*")
-	}
+func expandPermissionsWildcard(providerPermissions []SearchResult[ProviderPermission], permission string) ([]string, error) {
 
 	expandedPermissions := []string{}
 
 	for _, providerPerm := range providerPermissions {
-		if strings.HasPrefix(providerPerm.Result.Name, permission) {
+		matched, err := path.Match(permission, providerPerm.Result.Name)
+		if err != nil {
+			return nil, fmt.Errorf("invalid wildcard pattern %q: %w", permission, err)
+		}
+		if matched {
 			expandedPermissions = append(expandedPermissions, providerPerm.Result.Name)
 		}
 	}
 
-	return expandedPermissions
+	return expandedPermissions, nil
 }
 
-/*
-k8s:pods:get,list,watch
-*/
-func getCondensedActions(permission string) []string {
+// ValidatePermissionsPublic is the exported counterpart of validatePermissions,
+// intended for use in external test packages (e.g. integration tests that need
+// to import both models and a provider package without creating a cycle).
+// supportsWildcards controls whether validated wildcards are condensed back to
+// their original patterns (true for AWS/Azure) or left expanded (false for GCP/Okta).
+func ValidatePermissionsPublic(providerPermissions []SearchResult[ProviderPermission], statements RoleStatements, supportsWildcards bool) (RoleStatements, error) {
+	return validatePermissions(providerPermissions, statements, supportsWildcards)
+}
 
-	// split on the last colon
-	idx := strings.LastIndex(permission, ":")
+// ExpandRolePermissionsForProvider expands wildcard permissions in a role's Allow and Deny
+// lists against the given provider's known permission set, respecting the provider's
+// SupportsWildcards capability flag.
+//
+// For providers where SupportsWildcards is false (e.g. GCP, Okta), wildcards like
+// "bigquery.datasets.*" are expanded into their individual concrete permissions before
+// the role is sent to the cloud API. For providers where SupportsWildcards is true
+// (e.g. AWS, Azure), the original wildcard patterns are preserved.
+//
+// This is the exported counterpart of validateRolePermissions, intended for use
+// during role assembly (e.g. in GetCompositeRoleForWorkflow) so that the correct
+// permission set reaches the provider at authorization time.
+func ExpandRolePermissionsForProvider(provider Provider, role *Role) error {
+	return validateRolePermissions(provider, role)
+}
 
-	if idx == -1 {
-		return nil
+// ExpandWildcardPermissionsForProvider expands wildcard operations (those containing "*")
+// in a role's Allow and Deny lists against the given provider's known permission set.
+// Unlike ValidateRolePermissions, non-wildcard operations are never checked against the
+// provider dataset — they pass through exactly as-is. This makes it safe to call on
+// composite roles that contain generic or cross-provider permissions alongside the
+// provider-specific wildcards that need expanding.
+//
+// A wildcard that matches no permissions in the provider dataset is logged and silently
+// dropped from the list.
+func ExpandWildcardPermissionsForProvider(provider Provider, role *Role) {
+	if provider == nil || role == nil {
+		return
 	}
 
-	resource := permission[:idx]
-	actions := permission[idx+1:]
-
-	// Check if the second part contains a comma
-	actionParts := strings.Split(actions, ",")
-
-	if len(actionParts) == 0 {
-		return nil
+	providerPermissions, err := provider.ListPermissions(context.TODO(), &SearchRequest{})
+	if err != nil || len(providerPermissions) == 0 {
+		return
 	}
 
-	permissions := []string{}
-
-	for _, action := range actionParts {
-		permissions = append(permissions, fmt.Sprintf("%s:%s", resource, action))
+	expand := func(stmts RoleStatements) RoleStatements {
+		result := make(RoleStatements, 0, len(stmts))
+		for _, stmt := range stmts {
+			var ops []string
+			for _, op := range stmt.Operations {
+				if !strings.Contains(op, "*") {
+					ops = append(ops, op)
+					continue
+				}
+				expanded, expErr := expandPermissionsWildcard(providerPermissions, op)
+				if expErr != nil || len(expanded) == 0 {
+					logrus.WithField("permission", op).
+						WithField("provider", provider.GetIdentifier()).
+						Warn("Wildcard permission matched no provider permissions, dropping")
+					continue
+				}
+				ops = append(ops, expanded...)
+			}
+			if len(ops) > 0 {
+				result = append(result, Statement{
+					Operations: ops,
+					Targets:    stmt.Targets,
+					Conditions: stmt.Conditions,
+				})
+			}
+		}
+		return result
 	}
 
-	return permissions
+	role.Permissions.Allow = expand(role.Permissions.Allow)
+	role.Permissions.Deny = expand(role.Permissions.Deny)
+}
+
+// condenseToOriginalWildcards replaces individually-expanded permissions with
+// their original wildcard patterns.  Any permission in operations that matches
+// an original wildcard (via path.Match) is removed and the wildcard is added
+// back in its place — even if some expansions were removed during validation.
+// It only restores wildcards that appeared in the original input; it never
+// discovers new wildcard groupings.
+func condenseToOriginalWildcards(operations []string, originalWildcards []string) []string {
+	if len(originalWildcards) == 0 {
+		return operations
+	}
+
+	// Build a set of current operations for efficient lookup.
+	opSet := make(map[string]bool, len(operations))
+	for _, op := range operations {
+		opSet[op] = true
+	}
+
+	for _, wildcard := range originalWildcards {
+		// Collect every individual permission that this wildcard covers.
+		var covered []string
+		for op := range opSet {
+			matched, err := path.Match(wildcard, op)
+			if err != nil {
+				continue
+			}
+			if matched {
+				covered = append(covered, op)
+			}
+		}
+		if len(covered) > 0 {
+			// Remove the individual permissions and add back the wildcard.
+			for _, op := range covered {
+				delete(opSet, op)
+			}
+			opSet[wildcard] = true
+		}
+	}
+
+	// Convert back to a sorted slice.
+	result := make([]string, 0, len(opSet))
+	for op := range opSet {
+		result = append(result, op)
+	}
+	sort.Strings(result)
+	return result
 }
 
 func (p *BaseProvider) buildPermissionIndices() error {
@@ -568,58 +760,6 @@ func (p *BaseProvider) buildRoleIndices() error {
 		"permissions": len(permissions),
 		"roles":       len(roles),
 	}).Debug("RBAC search indices ready")
-
-	return nil
-}
-
-func (p *BaseProvider) buildTenantIndices() error {
-	// Placeholder for building tenant indices
-	startTime := time.Now()
-	defer func() {
-		elapsed := time.Since(startTime)
-		logrus.Debugf("Built tenant search indices in %s", elapsed)
-	}()
-
-	tenantsMapping := bleve.NewIndexMapping()
-
-	// Create a document mapping for the Tenant
-	tenantDocMapping := bleve.NewDocumentMapping()
-
-	// Field: ID (Exact match or case-insensitive keyword)
-	idFieldMapping := bleve.NewTextFieldMapping()
-	idFieldMapping.Analyzer = "keyword"
-	tenantDocMapping.AddFieldMappingsAt("ID", idFieldMapping)
-
-	// Field: Name (Exact match or case-insensitive keyword)
-	nameFieldMapping := bleve.NewTextFieldMapping()
-	nameFieldMapping.Analyzer = "keyword"
-	tenantDocMapping.AddFieldMappingsAt("Name", nameFieldMapping)
-
-	tenantsMapping.DefaultMapping = tenantDocMapping
-
-	tenantsIndex, err := bleve.NewMemOnly(tenantsMapping)
-	if err != nil {
-		return fmt.Errorf("failed to create tenants search index: %v", err)
-	}
-
-	// Index tenants
-	p.tenants.mu.RLock()
-	tenants := p.tenants.tenants
-	p.tenants.mu.RUnlock()
-
-	for _, tenant := range tenants {
-		if err := tenantsIndex.Index(tenant.Name, tenant); err != nil {
-			return fmt.Errorf("failed to index tenant %s: %v", tenant.Name, err)
-		}
-	}
-
-	p.tenants.mu.Lock()
-	p.tenants.tenantsIndex = tenantsIndex
-	p.tenants.mu.Unlock()
-
-	logrus.WithFields(logrus.Fields{
-		"tenants": len(tenants),
-	}).Debug("Tenant search indices ready")
 
 	return nil
 }

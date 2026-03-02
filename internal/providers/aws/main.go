@@ -28,6 +28,28 @@ const (
 	awsProviderDeleteRoleAssignmentBackoffLimit    = 15
 )
 
+const (
+	// SSO / Identity Center activity names
+	GetIdentityCenterInstanceActivityName            = "GetIdentityCenterInstance"
+	FindOrCreatePermissionSetActivityName            = "FindOrCreatePermissionSet"
+	FindIdentityCenterUserActivityName               = "FindIdentityCenterUser"
+	CreateAccountAssignmentActivityName              = "CreateAccountAssignment"
+	FindPermissionSetByNameActivityName              = "FindPermissionSetByName"
+	DeleteAccountAssignmentActivityName              = "DeleteAccountAssignment"
+	CheckAssignmentDeletionStatusActivityName        = "CheckAssignmentDeletionStatus"
+	CleanupPermissionSetActivityName                 = "CleanupPermissionSet"
+	ProvisionPermissionSetActivityName               = "ProvisionPermissionSet"
+	CheckPermissionSetProvisioningStatusActivityName = "CheckPermissionSetProvisioningStatus"
+
+	// IAM activity names
+	GetOrCreateIAMRoleActivityName      = "GetOrCreateIAMRole"
+	GetIAMRoleActivityName              = "GetIAMRole"
+	AttachPoliciesToIAMRoleActivityName = "AttachPoliciesToIAMRole"
+	BindUserToIAMRoleActivityName       = "BindUserToIAMRole"
+	UnbindUserFromIAMRoleActivityName   = "UnbindUserFromIAMRole"
+	TagIAMRoleActivityName              = "TagIAMRole"
+)
+
 // awsProvider implements the ProviderImpl interface for AWS
 type awsProvider struct {
 	*models.BaseProvider
@@ -186,5 +208,5 @@ type AwsConfigurationProvider struct {
 }
 
 func init() {
-	providers.Register(AwsProviderName, &awsProvider{})
+	providers.Register(AwsProviderName, &awsProvider{}, AwsCapabilities, &ConfigSchema{})
 }

@@ -9,6 +9,15 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
+// collectOpsProvider collects all operations from statements into a single slice
+func collectOpsProvider(stmts models.RoleStatements) []string {
+	var result []string
+	for _, stmt := range stmts {
+		result = append(result, stmt.Operations...)
+	}
+	return result
+}
+
 // TestProviderSpecificInheritance tests provider-specific role inheritance
 // with complex role names containing multiple colons (AWS ARNs, GCP service accounts, etc.)
 func TestProviderSpecificInheritance(t *testing.T) {
@@ -16,20 +25,20 @@ func TestProviderSpecificInheritance(t *testing.T) {
 		roles := map[string]models.Role{
 			"app-role": {
 				Name: "AWS Test Role",
-				Permissions: models.Permissions{
-					Allow: []string{
+				Permissions: models.RolePermissions{
+					Allow: stmts(
 						"s3:GetObject",
 						"s3:ListBucket",
 						"ec2:DescribeInstances",
-					},
+					),
 				},
 				Enabled: true,
 			},
 			"app-role-two": {
 				Name:     "Application Role",
 				Inherits: []string{"app-role"},
-				Permissions: models.Permissions{
-					Allow: []string{"app:deploy"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("app:deploy"),
 				},
 				Enabled: true,
 			},
@@ -62,27 +71,27 @@ func TestProviderSpecificInheritance(t *testing.T) {
 			"s3:GetObject,ListBucket",
 			"ec2:DescribeInstances",
 		}
-		assert.ElementsMatch(t, expectedPerms, result.Permissions.Allow)
+		assert.ElementsMatch(t, expectedPerms, collectOpsProvider(result.Permissions.Allow))
 	})
 
 	t.Run("gcp service account inheritance", func(t *testing.T) {
 		roles := map[string]models.Role{
 			"service-role": {
 				Name: "GCP Service Account",
-				Permissions: models.Permissions{
-					Allow: []string{
+				Permissions: models.RolePermissions{
+					Allow: stmts(
 						"compute.instances.get",
 						"compute.instances.list",
 						"storage.objects.get",
-					},
+					),
 				},
 				Enabled: true,
 			},
 			"developer-role": {
 				Name:     "Developer Role",
 				Inherits: []string{"service-role"},
-				Permissions: models.Permissions{
-					Allow: []string{"cloudrun.services.deploy"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("cloudrun.services.deploy"),
 				},
 				Enabled: true,
 			},
@@ -116,27 +125,27 @@ func TestProviderSpecificInheritance(t *testing.T) {
 			"compute.instances.list",
 			"storage.objects.get",
 		}
-		assert.ElementsMatch(t, expectedPerms, result.Permissions.Allow)
+		assert.ElementsMatch(t, expectedPerms, collectOpsProvider(result.Permissions.Allow))
 	})
 
 	t.Run("azure resource id inheritance", func(t *testing.T) {
 		roles := map[string]models.Role{
 			"azure-role": {
 				Name: "Custom Azure Role",
-				Permissions: models.Permissions{
-					Allow: []string{
+				Permissions: models.RolePermissions{
+					Allow: stmts(
 						"Microsoft.Compute/virtualMachines/read",
 						"Microsoft.Compute/virtualMachines/start/action",
 						"Microsoft.Storage/storageAccounts/listKeys/action",
-					},
+					),
 				},
 				Enabled: true,
 			},
 			"ops-role": {
 				Name:     "Operations Role",
 				Inherits: []string{"azure-role"},
-				Permissions: models.Permissions{
-					Allow: []string{"ops.deploy"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("ops.deploy"),
 				},
 				Enabled: true,
 			},
@@ -170,23 +179,23 @@ func TestProviderSpecificInheritance(t *testing.T) {
 			"Microsoft.Compute/virtualMachines/start/action",
 			"Microsoft.Storage/storageAccounts/listKeys/action",
 		}
-		assert.ElementsMatch(t, expectedPerms, result.Permissions.Allow)
+		assert.ElementsMatch(t, expectedPerms, collectOpsProvider(result.Permissions.Allow))
 	})
 
 	t.Run("provider not found fallback", func(t *testing.T) {
 		roles := map[string]models.Role{
 			"nonexistent:arn:aws:iam::123456789012:role/TestRole": {
 				Name: "Fallback Role",
-				Permissions: models.Permissions{
-					Allow: []string{"fallback:action"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("fallback:action"),
 				},
 				Enabled: true,
 			},
 			"parent-role": {
 				Name:     "Parent Role",
 				Inherits: []string{"nonexistent:arn:aws:iam::123456789012:role/TestRole"},
-				Permissions: models.Permissions{
-					Allow: []string{"parent:action"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("parent:action"),
 				},
 				Enabled: true,
 			},
@@ -215,7 +224,7 @@ func TestProviderSpecificInheritance(t *testing.T) {
 			"parent:action",
 			"fallback:action",
 		}
-		assert.ElementsMatch(t, expectedPerms, result.Permissions.Allow)
+		assert.ElementsMatch(t, expectedPerms, collectOpsProvider(result.Permissions.Allow))
 	})
 }
 
@@ -305,16 +314,16 @@ func TestProviderParsingLogicConsolidated(t *testing.T) {
 		roles := map[string]models.Role{
 			"inc-role": {
 				Name: "AWS Role",
-				Permissions: models.Permissions{
-					Allow: []string{"s3:GetObject"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("s3:GetObject"),
 				},
 				Enabled: true,
 			},
 			"test-role": {
 				Name:     "Test Role",
 				Inherits: []string{"inc-role"},
-				Permissions: models.Permissions{
-					Allow: []string{"test:action"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("test:action"),
 				},
 				Enabled: true,
 			},
@@ -347,7 +356,7 @@ func TestProviderParsingLogicConsolidated(t *testing.T) {
 			"test:action",
 			"s3:GetObject",
 		}
-		assert.ElementsMatch(t, expectedPerms, result.Permissions.Allow)
+		assert.ElementsMatch(t, expectedPerms, collectOpsProvider(result.Permissions.Allow))
 	})
 }
 
@@ -359,8 +368,8 @@ func TestProviderRoleLookup(t *testing.T) {
 				Name:      "Custom Admin Role",
 				Inherits:  []string{"aws-prod:AdministratorAccess"},
 				Providers: []string{"aws-prod"},
-				Permissions: models.Permissions{
-					Allow: []string{"internal:check"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("internal:check"),
 				},
 				Enabled: true,
 			},
@@ -390,7 +399,7 @@ func TestProviderRoleLookup(t *testing.T) {
 		require.NotNil(t, result)
 
 		assert.Contains(t, result.Inherits, "AdministratorAccess")
-		assert.Contains(t, result.Permissions.Allow, "internal:check")
+		assert.Contains(t, collectOpsProvider(result.Permissions.Allow), "internal:check")
 	})
 
 	t.Run("lookup by provider type as name", func(t *testing.T) {
@@ -516,8 +525,8 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 				Name:      "Admin Role",
 				Inherits:  []string{"aws-prod:AdministratorAccess"},
 				Providers: []string{"aws-prod"},
-				Permissions: models.Permissions{
-					Allow: []string{"admin:all"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("admin:all"),
 				},
 				Enabled: true,
 			},
@@ -530,8 +539,10 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 				Enabled:  true,
 				// Provider-level role scoping: only "admins" and "sre" groups can access this provider
 				Role: &models.Role{
-					Scopes: &models.RoleScopes{
-						Groups: []string{"admins", "sre"},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Groups: []string{"admins", "sre"},
+						},
 					},
 				},
 			},
@@ -555,7 +566,7 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 
 		// Should have the provider role in inherits since user is in allowed group
 		assert.Contains(t, result.Inherits, "AdministratorAccess")
-		assert.Contains(t, result.Permissions.Allow, "admin:all")
+		assert.Contains(t, collectOpsProvider(result.Permissions.Allow), "admin:all")
 	})
 
 	t.Run("provider with role scopes - user NOT in allowed groups", func(t *testing.T) {
@@ -564,8 +575,8 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 				Name:      "Admin Role",
 				Inherits:  []string{"aws-prod:AdministratorAccess"},
 				Providers: []string{"aws-prod"},
-				Permissions: models.Permissions{
-					Allow: []string{"admin:all"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("admin:all"),
 				},
 				Enabled: true,
 			},
@@ -578,8 +589,10 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 				Enabled:  true,
 				// Provider-level role scoping: only "admins" and "sre" groups can access
 				Role: &models.Role{
-					Scopes: &models.RoleScopes{
-						Groups: []string{"admins", "sre"},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Groups: []string{"admins", "sre"},
+						},
 					},
 				},
 			},
@@ -604,7 +617,7 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 		// Should NOT have the provider role since user is not in allowed group
 		assert.NotContains(t, result.Inherits, "AdministratorAccess")
 		// Should still have the base role's permissions
-		assert.Contains(t, result.Permissions.Allow, "admin:all")
+		assert.Contains(t, collectOpsProvider(result.Permissions.Allow), "admin:all")
 	})
 
 	t.Run("provider with role scopes - specific user allowed", func(t *testing.T) {
@@ -624,8 +637,10 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 				Enabled:  true,
 				// Provider-level role scoping: only specific users can access
 				Role: &models.Role{
-					Scopes: &models.RoleScopes{
-						Users: []string{"special-user", "vip@example.com"},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Users: []string{"special-user", "vip@example.com"},
+						},
 					},
 				},
 			},
@@ -693,8 +708,10 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 				Enabled:  true,
 				// Provider-level role scoping: only users from specific domains
 				Role: &models.Role{
-					Scopes: &models.RoleScopes{
-						Domains: []string{"company.com", "subsidiary.com"},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Domains: []string{"company.com", "subsidiary.com"},
+						},
 					},
 				},
 			},
@@ -739,12 +756,14 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 				Name:      "Restricted Admin",
 				Inherits:  []string{"aws-secure:AdministratorAccess"},
 				Providers: []string{"aws-secure"},
-				Permissions: models.Permissions{
-					Allow: []string{"base:permission"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("base:permission"),
 				},
 				// Role-level scopes: only admins group
-				Scopes: &models.RoleScopes{
-					Groups: []string{"admins"},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"admins"},
+					},
 				},
 				Enabled: true,
 			},
@@ -757,8 +776,10 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 				Enabled:  true,
 				// Provider-level scopes: only users from secure domain
 				Role: &models.Role{
-					Scopes: &models.RoleScopes{
-						Domains: []string{"secure.company.com"},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Domains: []string{"secure.company.com"},
+						},
 					},
 				},
 			},
@@ -781,7 +802,7 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 		require.NotNil(t, result1)
 		// Should have provider role because user is from secure domain
 		assert.Contains(t, result1.Inherits, "AdministratorAccess")
-		assert.Contains(t, result1.Permissions.Allow, "base:permission")
+		assert.Contains(t, collectOpsProvider(result1.Permissions.Allow), "base:permission")
 
 		// User in admins group but NOT from secure domain - role applies but no provider role
 		adminWrongDomain := &models.Identity{
@@ -799,11 +820,10 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 		// Should NOT have provider role because user is not from secure domain
 		assert.NotContains(t, result2.Inherits, "AdministratorAccess")
 		// Should still have the base role's permissions
-		assert.Contains(t, result2.Permissions.Allow, "base:permission")
+		assert.Contains(t, collectOpsProvider(result2.Permissions.Allow), "base:permission")
 
 		// User from secure domain but NOT in admins group - role doesn't apply
-		// Note: Since the role has scopes and user doesn't match, GetCompositeRoleByName
-		// still returns the role but inherited scoped roles won't apply
+		// The base role has scopes requiring admins group, so user cannot access this role at all
 		wrongGroupUser := &models.Identity{
 			ID: "dev1",
 			User: &models.User{
@@ -814,10 +834,9 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 		}
 
 		result3, err := config.GetCompositeRoleByName(wrongGroupUser, "restricted-admin")
-		require.NoError(t, err)
-		require.NotNil(t, result3)
-		// Should have provider role because user is from secure domain (provider scope passes)
-		assert.Contains(t, result3.Inherits, "AdministratorAccess")
+		require.Error(t, err)
+		assert.Nil(t, result3)
+		assert.Contains(t, err.Error(), "not applicable to identity")
 	})
 
 	t.Run("multiple providers with different scopes", func(t *testing.T) {
@@ -840,8 +859,10 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 				Enabled:  true,
 				// Dev is open to all developers
 				Role: &models.Role{
-					Scopes: &models.RoleScopes{
-						Groups: []string{"developers", "admins"},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Groups: []string{"developers", "admins"},
+						},
 					},
 				},
 			},
@@ -851,8 +872,10 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 				Enabled:  true,
 				// Prod is restricted to admins only
 				Role: &models.Role{
-					Scopes: &models.RoleScopes{
-						Groups: []string{"admins"},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Groups: []string{"admins"},
+						},
 					},
 				},
 			},
@@ -950,8 +973,10 @@ func TestProviderRoleWithIdentityScopes(t *testing.T) {
 				Provider: "aws",
 				Enabled:  true,
 				Role: &models.Role{
-					Scopes: &models.RoleScopes{
-						Groups: []string{"required-group"},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Groups: []string{"required-group"},
+						},
 					},
 				},
 			},

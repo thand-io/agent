@@ -3,9 +3,9 @@ package thand
 import (
 	"errors"
 	"fmt"
-	"time"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
@@ -209,10 +209,9 @@ func (t *thandTask) executeNotifyTemporalParallel(
 	}).Info("Starting executeNotifyTemporalParallel")
 
 	temporalContext := workflowTask.GetTemporalContext()
-	serviceClient := t.config.GetServices()
 
 	ao := workflow.ActivityOptions{
-		TaskQueue:           serviceClient.GetTemporal().GetTaskQueue(),
+		TaskQueue:           workflowTask.GetTaskQueue(),
 		StartToCloseTimeout: 10 * time.Minute,
 		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 	}

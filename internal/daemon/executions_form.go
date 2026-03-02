@@ -14,10 +14,10 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/slack-go/slack"
 	"github.com/thand-io/agent/internal/common"
-	"github.com/thand-io/agent/internal/models"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
 
 	thandProvider "github.com/thand-io/agent/internal/workflows/tasks/providers/thand"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 	"go.temporal.io/api/enums/v1"
 )
@@ -139,7 +139,7 @@ func (s *Server) getFormPage(c *gin.Context) {
 		return
 	}
 
-	_, _, err := s.getUser(c)
+	_, _, err := s.getSession(c)
 	if err != nil {
 		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: please log in to access this form", err)
 		return
@@ -188,7 +188,7 @@ func (s *Server) submitForm(c *gin.Context) {
 		return
 	}
 
-	_, foundUser, err := s.getUser(c)
+	_, foundUser, err := s.getSession(c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, FormSubmissionResponse{
 			Success: false,
@@ -240,7 +240,7 @@ func (s *Server) submitForm(c *gin.Context) {
 
 	// Set user extension
 	if foundUser != nil && foundUser.User != nil {
-		event.SetExtension(models.VarsContextUser, foundUser.User.GetIdentity())
+		event.SetExtension(sdkConstants.VarsContextUser, foundUser.User.GetIdentity())
 	}
 
 	// Set form data
@@ -309,13 +309,13 @@ func (s *Server) getFormDataFromWorkflow(c *gin.Context, workflowID string) (*Fo
 	}
 
 	// Get workflow name from search attributes
-	workflowName, found := workflowRun.TypedSearchAttributes.GetKeyword(models.TypedSearchAttributeWorkflow)
+	workflowName, found := workflowRun.TypedSearchAttributes.GetKeyword(sdkConstants.TypedSearchAttributeWorkflow)
 	if !found || len(workflowName) == 0 {
 		return nil, fmt.Errorf("workflow name not found in search attributes")
 	}
 
 	// Get current task from search attributes
-	currentTask, found := workflowRun.TypedSearchAttributes.GetKeyword(models.TypedSearchAttributeTask)
+	currentTask, found := workflowRun.TypedSearchAttributes.GetKeyword(sdkConstants.TypedSearchAttributeTask)
 	if !found || len(currentTask) == 0 {
 		return nil, fmt.Errorf("no active task in workflow")
 	}
@@ -611,7 +611,9 @@ func convertBlockElement(elem slack.BlockElement) *FormElement {
 		formElem.Style = string(e.Style)
 
 	case *slack.ImageBlockElement:
-		formElem.ImageURL = e.ImageURL
+		if e.ImageURL != nil {
+			formElem.ImageURL = *e.ImageURL
+		}
 		formElem.AltText = e.AltText
 
 	case *slack.OverflowBlockElement:
@@ -635,9 +637,13 @@ func convertMixedElement(elem slack.MixedElement) *FormElement {
 			Text: convertTextBlockObject(e),
 		}
 	case *slack.ImageBlockElement:
+		var imageURL string
+		if e.ImageURL != nil {
+			imageURL = *e.ImageURL
+		}
 		return &FormElement{
 			Type:     string(e.Type),
-			ImageURL: e.ImageURL,
+			ImageURL: imageURL,
 			AltText:  e.AltText,
 		}
 	}

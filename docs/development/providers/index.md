@@ -89,6 +89,17 @@ func (p *MyProvider) Initialize(identifier string, provider models.Provider) err
             Synchronizable: true,
             Interval:       60, // Default sync interval in minutes
         },
+        Permissions: &models.PermissionsConfiguration{
+            SynchronizableConfiguration: models.SynchronizableConfiguration{
+                Enabled:        true,
+                Synchronizable: true,
+            },
+            // Set to true if the provider's API natively supports
+            // wildcard permission patterns (e.g., "ec2:*").
+            // When false (default), wildcards in role definitions are
+            // expanded to individual permissions during validation.
+            SupportsWildcards: false,
+        },
         // Add other capabilities...
     }
 
@@ -97,11 +108,11 @@ func (p *MyProvider) Initialize(identifier string, provider models.Provider) err
         provider,
         capabilities,
     )
-    
+
     // Parse custom configuration if needed
     // config := &MyProviderConfig{}
     // if err := provider.Config.Parse(config); err != nil { ... }
-    
+
     return nil
 }
 ```

@@ -95,8 +95,11 @@ func (m *SessionManager) AddSession(loginServer string, provider string, session
 
 	m.createLoginServer(loginServer)
 
+	m.lock.Lock()
 	m.Servers[loginServer].Sessions[provider] = session
+	m.lock.Unlock()
 
+	// Commit holds a lock
 	return m.Commit(loginServer)
 }
 
@@ -430,12 +433,22 @@ func loadSessionFile(logonServerHostName string) *os.File {
 
 func (m *SessionManager) createLoginServer(loginServer string) {
 
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
 	// check if logon server exists
 	if _, ok := m.Servers[loginServer]; !ok {
 		m.Servers[loginServer] = LoginServer{
 			Version:   "1.0",
 			Timestamp: time.Now().UTC(),
 			Sessions:  make(map[string]models.LocalSession),
+		}
+	} else {
+		// Ensure Sessions map is initialized even if LoginServer exists
+		server := m.Servers[loginServer]
+		if server.Sessions == nil {
+			server.Sessions = make(map[string]models.LocalSession)
+			m.Servers[loginServer] = server
 		}
 	}
 }

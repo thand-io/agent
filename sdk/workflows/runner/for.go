@@ -80,7 +80,7 @@ func (r *ResumableWorkflowRunner) processForItem(forTask *model.ForTask, idx int
 	var err error
 
 	// NewDoTaskRunner.Run() = executeTaskList
-	forOutput, err = r.executeTaskList(forTask.Do, forOutput)
+	forOutput, err = r.ExecuteTaskList(forTask.Do, forOutput)
 	if err != nil {
 		return nil, err
 	}

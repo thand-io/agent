@@ -11,6 +11,16 @@ import (
 	"github.com/thand-io/agent/internal/providers"
 )
 
+const SalesforceProviderName = "salesforce"
+
+const (
+	GetSalesforceRoleProfileActivityName     = "GetSalesforceRoleProfile"
+	FindOrCreateSalesforceUserActivityName   = "FindOrCreateSalesforceUser"
+	UpdateSalesforceUserProfileActivityName  = "UpdateSalesforceUserProfile"
+	FindSalesforceUserActivityName           = "FindSalesforceUser"
+	RevertSalesforceUserProfileActivityName  = "RevertSalesforceUserProfile"
+)
+
 // salesForceProvider implements the ProviderImpl interface for Salesforce
 type salesForceProvider struct {
 	*models.BaseProvider
@@ -133,5 +143,5 @@ func CreateSalesforceClient(salesForceConfig *models.BasicConfig) (*simpleforce.
 }
 
 func init() {
-	providers.Register("salesforce", &salesForceProvider{})
+	providers.Register(SalesforceProviderName, &salesForceProvider{}, SalesforceCapabilities, &ConfigSchema{})
 }

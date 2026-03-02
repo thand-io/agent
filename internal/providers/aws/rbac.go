@@ -10,7 +10,7 @@ import (
 
 // Authorize grants access for a user to a role
 func (p *awsProvider) AuthorizeRole(
-	ctx context.Context,
+	ctx models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
 
@@ -22,15 +22,15 @@ func (p *awsProvider) AuthorizeRole(
 	// Determine target account: selected account or configured default
 	targetAccountID := p.GetAccountID()
 
-	if len(req.Tenant) > 0 {
+	if req.HasTenant() {
 		// If a tenant is specified, use it as the target account ID
-		targetAccountID = req.Tenant
+		targetAccountID = req.GetTenant().ID
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"req_user_email":    req.User.Email,
-		"req_user_source":   req.User.Source,
-		"req_user_username": req.User.Username,
+		"req_user_email":    req.GetUser().Email,
+		"req_user_source":   req.GetUser().Source,
+		"req_user_username": req.GetUser().Username,
 		"account_id":        targetAccountID,
 	}).Info("AWS AuthorizeRole called")
 
@@ -47,7 +47,7 @@ func (p *awsProvider) AuthorizeRole(
 
 // Revoke removes access for a user from a role
 func (p *awsProvider) RevokeRole(
-	ctx context.Context,
+	ctx models.ProviderContext,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
 	// Check for nil inputs
@@ -61,16 +61,16 @@ func (p *awsProvider) RevokeRole(
 	// Determine target account: selected account or configured default
 	targetAccountID := p.GetAccountID()
 
-	if len(req.Tenant) > 0 {
+	if req.HasTenant() {
 		// If a tenant is specified, use it as the target account ID
-		targetAccountID = req.Tenant
+		targetAccountID = req.GetTenant().ID
 	}
 
 	// Determine if we should use IAM Identity Center or traditional IAM
 	useIdentityCenter := p.shouldUseIdentityCenter(user)
 
 	if useIdentityCenter {
-		err := p.revokeRoleIdentityCenter(ctx, user, role, targetAccountID)
+		err := p.revokeRoleIdentityCenter(ctx, req, targetAccountID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to revoke Identity Center role: %w", err)
 		}
@@ -99,8 +99,8 @@ func (p *awsProvider) shouldUseIdentityCenter(user *models.User) bool {
 	if len(user.Email) == 0 && len(user.Username) > 0 {
 		// We only have a username, likely IAM
 		useIC = false
-	} else if user.Source == "iam" || len(user.Source) == 0 {
-		// If the source is 'iam' or empty (default to traditional IAM)
+	} else if user.Source == "iam" && len(user.Username) > 0 {
+		// If the source is 'iam' (default to traditional IAM)
 		useIC = false
 	}
 	logrus.WithFields(logrus.Fields{
@@ -120,8 +120,62 @@ type PolicyDocument struct {
 
 // Statement represents a policy statement
 type Statement struct {
-	Effect    string `json:"Effect"`
-	Action    any    `json:"Action,omitempty"`    // Can be string or []string
-	Resource  any    `json:"Resource,omitempty"`  // Can be string or []string
-	Principal any    `json:"Principal,omitempty"` // For assume role policies
+	Effect    string         `json:"Effect"`
+	Action    any            `json:"Action,omitempty"`    // Can be string or []string
+	Resource  any            `json:"Resource,omitempty"`  // Can be string or []string
+	Principal any            `json:"Principal,omitempty"` // For assume role policies
+	Condition map[string]any `json:"Condition,omitempty"` // IAM policy conditions
+}
+
+// permissionsToAwsPolicy converts CSP-agnostic Permissions to AWS PolicyDocument
+// The effect (Allow/Deny) comes from the parent Permissions.Allow or Permissions.Deny
+func permissionsToAwsPolicy(permissions models.RolePermissions) PolicyDocument {
+	awsStatements := []Statement{}
+
+	// Process Allow statements
+	for _, stmt := range permissions.Allow {
+		// Skip statements with no operations - AWS requires at least one Action
+		if len(stmt.Operations) == 0 {
+			continue
+		}
+
+		// Default resource to "*" if no targets specified (backwards compatibility)
+		var resource any = "*"
+		if len(stmt.Targets) > 0 {
+			resource = stmt.Targets
+		}
+
+		awsStatements = append(awsStatements, Statement{
+			Effect:    "Allow",
+			Action:    stmt.Operations,
+			Resource:  resource,
+			Condition: stmt.Conditions,
+		})
+	}
+
+	// Process Deny statements
+	for _, stmt := range permissions.Deny {
+		// Skip statements with no operations - AWS requires at least one Action
+		if len(stmt.Operations) == 0 {
+			continue
+		}
+
+		// Default resource to "*" if no targets specified (backwards compatibility)
+		var resource any = "*"
+		if len(stmt.Targets) > 0 {
+			resource = stmt.Targets
+		}
+
+		awsStatements = append(awsStatements, Statement{
+			Effect:    "Deny",
+			Action:    stmt.Operations,
+			Resource:  resource,
+			Condition: stmt.Conditions,
+		})
+	}
+
+	return PolicyDocument{
+		Version:   "2012-10-17",
+		Statement: awsStatements,
+	}
 }

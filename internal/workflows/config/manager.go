@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
-	"github.com/thand-io/agent/internal/config"
 	models "github.com/thand-io/agent/internal/models"
 	sdkWorkflowsConfig "github.com/thand-io/agent/sdk/workflows/config"
 	"github.com/thand-io/agent/sdk/workflows/functions"
@@ -14,13 +13,13 @@ import (
 )
 
 type thandWorkflowConfig struct {
-	config    *config.Config
+	config    models.ConfigImpl
 	functions *functions.FunctionRegistry
 	tasks     *tasks.TaskRegistry
 }
 
 func NewThandWorkflowConfig(
-	cfg *config.Config,
+	cfg models.ConfigImpl,
 ) *thandWorkflowConfig {
 	return &thandWorkflowConfig{
 		config:    cfg,
@@ -33,7 +32,7 @@ func (r *thandWorkflowConfig) CreateRunner(sdkM sdkWorkflowsModel.WorkflowTaskSu
 	return NewthandRunner(r, sdkM)
 }
 
-func (c *thandWorkflowConfig) GetConfig() *config.Config {
+func (c *thandWorkflowConfig) GetConfig() models.ConfigImpl {
 	return c.config
 }
 

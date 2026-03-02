@@ -13,6 +13,11 @@ import (
 
 const CloudflareProviderName = "cloudflare"
 
+const (
+	AuthorizeAccountMemberActivityName = "AuthorizeAccountMember"
+	RevokeAccountMemberActivityName    = "RevokeAccountMember"
+)
+
 // cloudflareProvider implements the ProviderImpl interface for Cloudflare
 type cloudflareProvider struct {
 	*models.BaseProvider
@@ -109,5 +114,5 @@ type CloudflareConfigurationProvider struct {
 }
 
 func init() {
-	providers.Register(CloudflareProviderName, &cloudflareProvider{})
+	providers.Register(CloudflareProviderName, &cloudflareProvider{}, CloudflareCapabilities, &ConfigSchema{})
 }

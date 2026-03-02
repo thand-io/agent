@@ -12,6 +12,8 @@ import (
 )
 
 const TemporalSynchronizeWorkflowName = "synchronize"
+const TemporalAuthorizeRoleWorkflowName = "authorize-role"
+const TemporalRevokeRoleWorkflowName = "revoke-role"
 const TemporalPatchProviderUpstreamActivityName = "patch-provider-upstream"
 
 func CreateTemporalProviderWorkflowIdentifier(identifier, base string) string {
@@ -22,51 +24,37 @@ func CreateTemporalProviderWorkflowName(identifier, base string) string {
 	return strings.ToLower(fmt.Sprintf("%s-%s", identifier, base))
 }
 
-// BaseProvider provides a base implementation of the ProviderImpl interface
-func (b *BaseProvider) RegisterWorkflows(temporalClient TemporalImpl) error {
-
+// RegisterActivitiesForStruct registers all public methods of an arbitrary struct as Temporal
+// activities using the naming pattern "<identifier>-<MethodName>". This enables provider-specific
+// activity structs (e.g. awsProviderActivities) to be registered alongside the generic
+// ProviderActivities without duplicating the reflection loop.
+func RegisterActivities(temporalClient TemporalImpl, identifier string, s any) error {
 	if temporalClient == nil {
 		return ErrNotImplemented
 	}
 
 	worker := temporalClient.GetWorker()
-
 	if worker == nil {
 		return ErrNotImplemented
 	}
 
-	// Register the provider Synchronize workflow. This updates roles, permissions,
-	// resources and identities for RBAC
-	worker.RegisterWorkflowWithOptions(ProviderSynchronizeWorkflow, workflow.RegisterOptions{
-		Name:               CreateTemporalProviderWorkflowName(b.GetIdentifier(), TemporalSynchronizeWorkflowName),
-		VersioningBehavior: workflow.VersioningBehaviorPinned,
-	})
-
-	return nil
-
-}
-
-func RegisterActivities(temporalClient TemporalImpl, providerActivities *ProviderActivities) error {
-
-	if temporalClient == nil {
-		return ErrNotImplemented
+	if len(identifier) == 0 {
+		return fmt.Errorf("identifier cannot be empty")
 	}
 
-	worker := temporalClient.GetWorker()
-
-	if worker == nil {
-		return ErrNotImplemented
+	if s == nil {
+		return fmt.Errorf("cannot register activities for a nil struct")
 	}
 
-	structValue := reflect.ValueOf(providerActivities)
+	structValue := reflect.ValueOf(s)
 	structType := structValue.Type()
 	count := 0
 
 	for i := 0; i < structValue.NumMethod(); i++ {
-
 		methodValue := structValue.Method(i)
 		method := structType.Method(i)
-		// skip private method
+
+		// skip unexported methods
 		if len(method.PkgPath) != 0 {
 			continue
 		}
@@ -77,8 +65,7 @@ func RegisterActivities(temporalClient TemporalImpl, providerActivities *Provide
 			return fmt.Errorf("method %s of %s: %w", name, structType.Name(), err)
 		}
 
-		p := providerActivities.provider
-		activityName := CreateTemporalProviderWorkflowName(p.GetIdentifier(), name)
+		activityName := CreateTemporalProviderWorkflowName(identifier, name)
 
 		worker.RegisterActivityWithOptions(
 			methodValue.Interface(),
@@ -87,7 +74,7 @@ func RegisterActivities(temporalClient TemporalImpl, providerActivities *Provide
 			},
 		)
 
-		logrus.Debugf("Registered activity: %s for provider: %s", activityName, p.GetIdentifier())
+		logrus.Debugf("Registered activity: %s", activityName)
 		count++
 	}
 

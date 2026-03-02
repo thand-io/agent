@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 )
 
@@ -12,17 +11,6 @@ const TemporalExecuteElevationWorkflowName = "ExecuteElevationWorkflow"
 
 const TemporalIsApprovedQueryName = "isApproved"
 const TemporalGetWorkflowTaskQueryName = "getWorkflowTask"
-
-var TypedSearchAttributeStatus = temporal.NewSearchAttributeKeyKeyword("status")
-var TypedSearchAttributeTask = temporal.NewSearchAttributeKeyKeyword("task")
-var TypedSearchAttributeUser = temporal.NewSearchAttributeKeyKeyword(VarsContextUser)
-var TypedSearchAttributeRole = temporal.NewSearchAttributeKeyKeyword(VarsContextRole)
-var TypedSearchAttributeWorkflow = temporal.NewSearchAttributeKeyKeyword(VarsContextWorkflow)
-var TypedSearchAttributeProviders = temporal.NewSearchAttributeKeyKeywordList(VarsContextProviders)
-var TypedSearchAttributeReason = temporal.NewSearchAttributeKeyString("reason") // Description or reason for the workflow
-var TypedSearchAttributeDuration = temporal.NewSearchAttributeKeyInt64("duration")
-var TypedSearchAttributeIdentities = temporal.NewSearchAttributeKeyKeywordList("identities")
-var TypedSearchAttributeApproved = temporal.NewSearchAttributeKeyBool(VarsContextApproved)
 
 // TemporalAuthAPIKey represents API Key authentication configuration
 type TemporalAuthAPIKey struct {
@@ -78,7 +66,9 @@ type TemporalImpl interface {
 	GetClient() client.Client
 	HasClient() bool
 
-	GetWorker() worker.Worker
+	// GetWorker returns a synthetic worker that broadcasts registration calls
+	// across all (or a filtered subset of) identity-specific workers.
+	GetWorker(identities ...string) worker.Worker
 	HasWorker() bool
 
 	GetHostPort() string

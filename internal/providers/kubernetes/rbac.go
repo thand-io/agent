@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
+	sdkWorkflowsRunner "github.com/thand-io/agent/sdk/workflows/runner"
+	"go.temporal.io/sdk/workflow"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,9 +17,17 @@ import (
 
 // AuthorizeRole grants access for a user to a role
 func (p *kubernetesProvider) AuthorizeRole(
-	ctx context.Context,
+	ctx models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		return p.authorizeRoleTemporal(workflowCtx, req)
+	}
+
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
 
 	if !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to authorize kubernetes role")
@@ -26,22 +37,30 @@ func (p *kubernetesProvider) AuthorizeRole(
 	role := req.GetRole()
 
 	// Determine scope based on role configuration
-	namespace := p.getNamespaceFromRole(role)
+	namespace := p.getNamespaceFromRole(&role.Role)
 
 	if len(namespace) > 0 {
 		// Create namespaced Role and RoleBinding
-		return p.authorizeNamespacedRole(ctx, user, role, namespace)
+		return p.authorizeNamespacedRole(localCtx, user, &role.Role, namespace)
 	} else {
 		// Create cluster-wide ClusterRole and ClusterRoleBinding
-		return p.authorizeClusterRole(ctx, user, role)
+		return p.authorizeClusterRole(localCtx, user, &role.Role)
 	}
 }
 
 // RevokeRole removes access for a user from a role
 func (p *kubernetesProvider) RevokeRole(
-	ctx context.Context,
+	ctx models.ProviderContext,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		return p.revokeRoleTemporal(workflowCtx, req)
+	}
+
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
 
 	if !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to revoke kubernetes role")
@@ -50,12 +69,12 @@ func (p *kubernetesProvider) RevokeRole(
 	user := req.GetUser()
 	role := req.GetRole()
 
-	namespace := p.getNamespaceFromRole(role)
+	namespace := p.getNamespaceFromRole(&role.Role)
 
 	if len(namespace) > 0 {
-		return p.revokeNamespacedRole(ctx, user, role, namespace)
+		return p.revokeNamespacedRole(localCtx, user, &role.Role, namespace)
 	} else {
-		return p.revokeClusterRole(ctx, user, role)
+		return p.revokeClusterRole(localCtx, user, &role.Role)
 	}
 }
 
@@ -72,6 +91,88 @@ func (p *kubernetesProvider) GetAuthorizedAccessUrl(
 
 }
 
+// authorizeRoleTemporal dispatches a single Temporal activity for role creation.
+func (p *kubernetesProvider) authorizeRoleTemporal(
+	wfCtx workflow.Context,
+	req *models.AuthorizeRoleRequest,
+) (*models.AuthorizeRoleResponse, error) {
+	if !req.IsValid() {
+		return nil, fmt.Errorf("user and role must be provided to authorize kubernetes role")
+	}
+
+	identifier := p.GetIdentifier()
+	ao := workflow.ActivityOptions{
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+	}
+	wfCtx = workflow.WithActivityOptions(wfCtx, ao)
+
+	user := req.GetUser()
+	role := req.GetRole()
+	namespace := p.getNamespaceFromRole(&role.Role)
+
+	var resp models.AuthorizeRoleResponse
+	if len(namespace) > 0 {
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(identifier, AuthorizeNamespacedRoleActivityName),
+			&AuthorizeNamespacedRoleRequest{User: user, Role: &role.Role, Namespace: namespace},
+		).Get(wfCtx, &resp); err != nil {
+			return nil, fmt.Errorf("AuthorizeNamespacedRole activity failed: %w", err)
+		}
+	} else {
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(identifier, AuthorizeClusterRoleActivityName),
+			&AuthorizeClusterRoleRequest{User: user, Role: &role.Role},
+		).Get(wfCtx, &resp); err != nil {
+			return nil, fmt.Errorf("AuthorizeClusterRole activity failed: %w", err)
+		}
+	}
+	return &resp, nil
+}
+
+// revokeRoleTemporal dispatches a single Temporal activity for role removal.
+func (p *kubernetesProvider) revokeRoleTemporal(
+	wfCtx workflow.Context,
+	req *models.RevokeRoleRequest,
+) (*models.RevokeRoleResponse, error) {
+	if !req.IsValid() {
+		return nil, fmt.Errorf("user and role must be provided to revoke kubernetes role")
+	}
+
+	identifier := p.GetIdentifier()
+	ao := workflow.ActivityOptions{
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+	}
+	wfCtx = workflow.WithActivityOptions(wfCtx, ao)
+
+	user := req.GetUser()
+	role := req.GetRole()
+	namespace := p.getNamespaceFromRole(&role.Role)
+
+	var resp models.RevokeRoleResponse
+	if len(namespace) > 0 {
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(identifier, RevokeNamespacedRoleActivityName),
+			&RevokeNamespacedRoleRequest{User: user, Role: &role.Role, Namespace: namespace},
+		).Get(wfCtx, &resp); err != nil {
+			return nil, fmt.Errorf("RevokeNamespacedRole activity failed: %w", err)
+		}
+	} else {
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(identifier, RevokeClusterRoleActivityName),
+			&RevokeClusterRoleRequest{User: user, Role: &role.Role},
+		).Get(wfCtx, &resp); err != nil {
+			return nil, fmt.Errorf("RevokeClusterRole activity failed: %w", err)
+		}
+	}
+	return &resp, nil
+}
+
 // authorizeNamespacedRole creates Role and RoleBinding for namespace-scoped access
 func (p *kubernetesProvider) authorizeNamespacedRole(
 	ctx context.Context,
@@ -81,7 +182,7 @@ func (p *kubernetesProvider) authorizeNamespacedRole(
 ) (*models.AuthorizeRoleResponse, error) {
 
 	client := p.GetClient()
-	roleName := role.GetSnakeCaseName()
+	roleName := role.GetName()
 
 	// Create or update Role
 	k8sRole := &rbacv1.Role{
@@ -93,7 +194,7 @@ func (p *kubernetesProvider) authorizeNamespacedRole(
 				"thand.io/role":    roleName,
 			},
 		},
-		Rules: p.convertPermissionsToRules(role.Permissions.Allow),
+		Rules: p.convertPermissionsToRules(role.Permissions),
 	}
 
 	_, err := client.RbacV1().Roles(namespace).Create(ctx, k8sRole, metav1.CreateOptions{})
@@ -186,7 +287,7 @@ func (p *kubernetesProvider) authorizeClusterRole(
 ) (*models.AuthorizeRoleResponse, error) {
 
 	client := p.GetClient()
-	roleName := role.GetSnakeCaseName()
+	roleName := role.GetName()
 
 	// Create or update ClusterRole
 	clusterRole := &rbacv1.ClusterRole{
@@ -197,7 +298,7 @@ func (p *kubernetesProvider) authorizeClusterRole(
 				"thand.io/role":    roleName,
 			},
 		},
-		Rules: p.convertPermissionsToRules(role.Permissions.Allow),
+		Rules: p.convertPermissionsToRules(role.Permissions),
 	}
 
 	_, err := client.RbacV1().
@@ -283,24 +384,32 @@ func (p *kubernetesProvider) authorizeClusterRole(
 }
 
 // convertPermissionsToRules converts thand permissions to Kubernetes RBAC rules
-func (p *kubernetesProvider) convertPermissionsToRules(permissions []string) []rbacv1.PolicyRule {
+func (p *kubernetesProvider) convertPermissionsToRules(permissions models.RolePermissions) []rbacv1.PolicyRule {
 	var rules []rbacv1.PolicyRule
 
 	// Group permissions by API group and resource
 	ruleMap := make(map[string]*rbacv1.PolicyRule)
 
-	for _, permission := range permissions {
-		rule := p.parsePermission(permission)
-		if rule != nil {
-			key := fmt.Sprintf("%s:%s", strings.Join(rule.APIGroups, ","), strings.Join(rule.Resources, ","))
-			if existingRule, exists := ruleMap[key]; exists {
-				// Merge verbs
-				existingRule.Verbs = append(existingRule.Verbs, rule.Verbs...)
-				existingRule.Verbs = p.deduplicateSlice(existingRule.Verbs)
-			} else {
-				ruleMap[key] = rule
+	// Process Allow statements (Kubernetes RBAC is allow-only)
+	for _, stmt := range permissions.Allow {
+		for _, operation := range stmt.Operations {
+			rule := p.parsePermission(operation)
+			if rule != nil {
+				key := fmt.Sprintf("%s:%s", strings.Join(rule.APIGroups, ","), strings.Join(rule.Resources, ","))
+				if existingRule, exists := ruleMap[key]; exists {
+					// Merge verbs
+					existingRule.Verbs = append(existingRule.Verbs, rule.Verbs...)
+					existingRule.Verbs = p.deduplicateSlice(existingRule.Verbs)
+				} else {
+					ruleMap[key] = rule
+				}
 			}
 		}
+	}
+
+	// Log warning for Deny statements (Kubernetes RBAC doesn't support deny)
+	if len(permissions.Deny) > 0 {
+		logrus.Warnf("Kubernetes RBAC doesn't support deny permissions, skipping %d deny statements", len(permissions.Deny))
 	}
 
 	// Convert map back to slice
@@ -413,12 +522,14 @@ func (p *kubernetesProvider) sanitizeUserIdentifier(user *models.User) string {
 }
 
 func (p *kubernetesProvider) getNamespaceFromRole(role *models.Role) string {
-	// Check if role has namespace-specific resources
-	for _, resource := range role.Resources.Allow {
-		if strings.Contains(resource, "namespace:") {
-			parts := strings.Split(resource, ":")
-			if len(parts) >= 2 {
-				return parts[1]
+	// Check if role has namespace-specific targets in permission statements
+	for _, stmt := range role.Permissions.Allow {
+		for _, target := range stmt.Targets {
+			if strings.Contains(target, "namespace:") {
+				parts := strings.Split(target, ":")
+				if len(parts) >= 2 {
+					return parts[1]
+				}
 			}
 		}
 	}
@@ -448,7 +559,7 @@ func (p *kubernetesProvider) revokeNamespacedRole(
 ) (*models.RevokeRoleResponse, error) {
 
 	client := p.GetClient()
-	bindingName := fmt.Sprintf("%s-%s", role.GetSnakeCaseName(), p.sanitizeUserIdentifier(user))
+	bindingName := role.GetName()
 
 	// Check if RoleBinding exists before attempting to delete
 	_, err := client.RbacV1().
@@ -493,7 +604,7 @@ func (p *kubernetesProvider) revokeClusterRole(
 ) (*models.RevokeRoleResponse, error) {
 
 	client := p.GetClient()
-	bindingName := fmt.Sprintf("%s-%s", role.GetSnakeCaseName(), p.sanitizeUserIdentifier(user))
+	bindingName := role.GetName()
 
 	// Check if ClusterRoleBinding exists before attempting to delete
 	_, err := client.RbacV1().

@@ -11,6 +11,17 @@ type ConfigImpl interface {
 	// Core
 	GetServices() ServicesClientImpl
 	GetEnvironment() EnvironmentConfig
+	GetSecret() string
+	GetLoginServerHostname() string
+
+	// Mode checking
+	IsServer() bool
+	IsAgent() bool
+	IsClient() bool
+
+	// Config structures
+	GetServicesConfig() *ServicesConfig
+	GetEnvironmentConfig() *EnvironmentConfig
 
 	GetResumeCallbackUrl(workflowTask *ElevateWorkflowTask) string
 	GetAuthCallbackUrl(providerName string) string
@@ -19,7 +30,12 @@ type ConfigImpl interface {
 	GetLocalServerUrl() string
 
 	// Roles
-	GetCompositeRole(identity *Identity, baseRole *Role) (*Role, error)
+	GetCompositeRole(identity *Identity, baseRole *Role, providers ...Provider) (*CompositeRole, error)
+	GetCompositeRoleForWorkflow(
+		identity *Identity,
+		baseRole *Role,
+		workflowID string,
+		providers ...Provider) (*CompositeRole, error)
 
 	// Identities
 	GetIdentity(byEmail string) (*Identity, error)
@@ -38,13 +54,46 @@ type ConfigImpl interface {
 }
 
 type ServerConfig struct {
-	Host     string             `json:"host" yaml:"host" mapstructure:"host"`
-	Port     int                `json:"port" yaml:"port" mapstructure:"port"`
-	Limits   ServerLimitsConfig `json:"limits" yaml:"limits" mapstructure:"limits"`
-	Metrics  MetricsConfig      `json:"metrics" yaml:"metrics" mapstructure:"metrics"`
-	Health   HealthConfig       `json:"health" yaml:"health" mapstructure:"health"`
-	Ready    ReadyConfig        `json:"ready" yaml:"ready" mapstructure:"ready"`
-	Security SecurityConfig     `json:"security" yaml:"security" mapstructure:"security"`
+	Host         string             `json:"host" yaml:"host" mapstructure:"host"`
+	Port         int                `json:"port" yaml:"port" mapstructure:"port"`
+	Limits       ServerLimitsConfig `json:"limits" yaml:"limits" mapstructure:"limits"`
+	Metrics      MetricsConfig      `json:"metrics" yaml:"metrics" mapstructure:"metrics"`
+	Health       HealthConfig       `json:"health" yaml:"health" mapstructure:"health"`
+	Ready        ReadyConfig        `json:"ready" yaml:"ready" mapstructure:"ready"`
+	Security     SecurityConfig     `json:"security" yaml:"security" mapstructure:"security"`
+	Capabilities CapabilitiesConfig `json:"capabilities" yaml:"capabilities" mapstructure:"capabilities"`
+}
+
+// CapabilitiesConfig groups server-side feature toggles.
+// Add new capability sub-structs here as the feature set grows.
+type CapabilitiesConfig struct {
+	Elevations ElevationsConfig `json:"elevations" yaml:"elevations" mapstructure:"elevations"`
+}
+
+// ElevationsConfig controls which elevation modes are available on this server.
+type ElevationsConfig struct {
+	Static             StaticElevationsConfig             `json:"static" yaml:"static" mapstructure:"static"`
+	Dynamic            DynamicElevationsConfig            `json:"dynamic" yaml:"dynamic" mapstructure:"dynamic"`
+	LargeLanguageModel LargeLanguageModelElevationsConfig `json:"llm" yaml:"llm" mapstructure:"llm"`
+}
+
+// StaticElevationsConfig controls whether pre-defined role-based elevation requests are permitted.
+// When Enabled is false, GET /elevate/static returns 403 and the Static option is hidden in the web UI.
+type StaticElevationsConfig struct {
+	Enabled bool `json:"enabled" yaml:"enabled" mapstructure:"enabled" default:"true"`
+}
+
+// DynamicElevationsConfig controls whether runtime dynamic elevation requests are permitted.
+// When Enabled is false, POST /elevate with a dynamic payload and GET /elevate/dynamic both return 403
+// and the Dynamic option is hidden in the web UI.
+type DynamicElevationsConfig struct {
+	Enabled bool `json:"enabled" yaml:"enabled" mapstructure:"enabled" default:"true"`
+}
+
+// LargeLanguageModelElevationsConfig controls whether LLM-assisted elevation requests are permitted.
+// When Enabled is false, GET/POST /elevate/llm returns 403 and the AI option is hidden in the web UI.
+type LargeLanguageModelElevationsConfig struct {
+	Enabled bool `json:"enabled" yaml:"enabled" mapstructure:"enabled" default:"true"`
 }
 
 type ServerLimitsConfig struct {

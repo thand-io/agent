@@ -12,6 +12,7 @@ import (
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/providers"
+	providerSdk "github.com/thand-io/agent/sdk/providers"
 )
 
 var (
@@ -213,15 +214,34 @@ func validateAsProvider(path string, data []byte) validationResult {
 		return result
 	}
 
-	// If not dry-run, try to initialize the providers
-	if !dryRun {
-		// Initialize each provider
-		for providerKey, provider := range providerDef.Providers {
-			if !provider.Enabled {
-				logrus.Debugf("  Provider '%s' is disabled, skipping initialization", providerKey)
-				continue
-			}
+	// Initialize each provider
+	for providerKey, provider := range providerDef.Providers {
+		if !provider.Enabled {
+			logrus.Debugf("  Provider '%s' is disabled, skipping initialization", providerKey)
+			continue
+		}
 
+		// Validate the provider configuration against its schema (without initialization) --- IGNORE ---
+
+		// Resolve environment variables in config
+		err := provider.ResolveConfig(map[string]any{})
+
+		if err != nil {
+			result.Success = false
+			result.Error = fmt.Errorf("failed to resolve config for provider '%s': %w", providerKey, err)
+			return result
+		}
+
+		err = providerSdk.ValidateConfig(provider.Provider, provider.Config)
+
+		if err != nil {
+			result.Success = false
+			result.Error = fmt.Errorf("config validation failed for provider '%s': %w", providerKey, err)
+			return result
+		}
+
+		// If not dry-run, try to initialize the providers
+		if !dryRun {
 			if err := initializeProvider(providerKey, &provider); err != nil {
 				result.Success = false
 				result.Error = fmt.Errorf("provider '%s' failed initialization: %w", providerKey, err)
@@ -302,16 +322,11 @@ func validateAsWorkflow(path string, data []byte) validationResult {
 
 // initializeProvider initializes a single provider for testing
 func initializeProvider(providerKey string, provider *models.ProviderConfig) error {
+
 	// Create provider implementation instance
 	impl, err := providers.CreateInstance(strings.ToLower(provider.Provider))
 	if err != nil {
 		return fmt.Errorf("failed to create provider instance: %w", err)
-	}
-
-	// Resolve environment variables in config
-	err = provider.ResolveConfig(map[string]any{})
-	if err != nil {
-		return fmt.Errorf("failed to resolve config: %w", err)
 	}
 
 	// Initialize the provider

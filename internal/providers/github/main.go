@@ -14,6 +14,11 @@ import (
 
 var GithubProviderName = "github"
 
+const (
+	AuthorizeResourceActivityName = "AuthorizeResource"
+	RevokeResourceActivityName    = "RevokeResource"
+)
+
 // githubProvider implements the ProviderImpl interface for GitHub
 type githubProvider struct {
 	*models.BaseProvider
@@ -102,5 +107,5 @@ func (p *githubProvider) Initialize(identifier string, provider models.ProviderC
 }
 
 func init() {
-	providers.Register(GithubProviderName, &githubProvider{})
+	providers.Register(GithubProviderName, &githubProvider{}, GithubCapabilities, &ConfigSchema{})
 }

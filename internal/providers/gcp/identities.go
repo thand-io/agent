@@ -9,6 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
+	"go.temporal.io/sdk/temporal"
 	"google.golang.org/api/cloudresourcemanager/v1"
 )
 
@@ -38,7 +39,14 @@ func (p *gcpProvider) SynchronizeIdentities(ctx context.Context, req *models.Syn
 	}).Do()
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to get IAM policy: %w", err)
+		// A failure here most likely indicates a misconfigured project_id or missing credential
+		// scopes rather than a transient error, so mark it non-retryable to avoid burning
+		// the Temporal retry budget on a broken configuration.
+		return nil, temporal.NewNonRetryableApplicationError(
+			fmt.Sprintf("failed to get GCP IAM policy for project %q: %v", projectId, err),
+			"GcpIdentityConfigurationError",
+			err,
+		)
 	}
 
 	var identities []models.Identity
@@ -125,6 +133,7 @@ func parseMemberToIdentity(member string) (*models.Identity, string) {
 
 	default:
 		// Skip service accounts, domains, allUsers, allAuthenticatedUsers, etc.
+		logrus.Debugf("skipping unsupported GCP IAM member type %q (value: %s)", memberType, memberValue)
 		return nil, ""
 	}
 }

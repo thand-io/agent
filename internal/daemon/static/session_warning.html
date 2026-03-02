@@ -1,0 +1,87 @@
+{{define "session_warning"}}
+<!-- Session Warning Banner -->
+<div x-data x-show="$store.auth.loaded && !$store.auth.hasActiveSessions" 
+     class="session-warning-banner">
+    <div class="session-warning-content">
+        <svg class="warning-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+        <div class="warning-text">
+            <strong>No Active Sessions</strong>
+            <p>Your session has expired. Please re-authenticate to continue.</p>
+        </div>
+    </div>
+    <a href="/auth" class="button button-primary button-sm">
+        Re-authenticate
+    </a>
+</div>
+
+<style>
+    .session-warning-banner {
+        background-color: hsl(var(--card));
+        border: 1px solid hsl(var(--border));
+        border-left: 4px solid hsl(var(--destructive));
+        border-radius: 0.5rem;
+        padding: 1rem 1.5rem;
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1.5rem;
+        box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+    }
+
+    .session-warning-content {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        flex: 1;
+    }
+
+    .warning-icon {
+        color: hsl(var(--destructive));
+        flex-shrink: 0;
+        margin: 10px 5px;
+    }
+
+    .warning-text {
+        flex: 1;
+    }
+
+    .warning-text strong {
+        display: block;
+        color: hsl(var(--destructive));
+        font-size: 0.95rem;
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+
+    .warning-text p {
+        margin: 0;
+        color: hsl(var(--muted-foreground));
+        font-size: 0.875rem;
+        line-height: 1.4;
+    }
+
+    .button-sm {
+        padding: 0.5rem 1rem;
+        font-size: 0.875rem;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    @media (max-width: 768px) {
+        .session-warning-banner {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .button-sm {
+            width: 100%;
+            text-align: center;
+        }
+    }
+</style>
+{{end}}

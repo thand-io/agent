@@ -44,7 +44,7 @@ func (p *BaseProvider) SynchronizeGroups(ctx context.Context, req *SynchronizeGr
 func (p *BaseProvider) GetIdentity(ctx context.Context, identity string) (*Identity, error) {
 
 	if p.identity == nil || !p.HasAnyCapability(
-		IdentityCapabilities...
+		IdentityCapabilities...,
 	) {
 		logrus.Warningln("provider does not support identities capability")
 		return nil, fmt.Errorf("provider does not support identities capability")
@@ -75,7 +75,7 @@ func (p *BaseProvider) GetIdentity(ctx context.Context, identity string) (*Ident
 func (p *BaseProvider) ListIdentities(ctx context.Context, searchRequest *SearchRequest) ([]SearchResult[Identity], error) {
 
 	if p.identity == nil || !p.HasAnyCapability(
-		IdentityCapabilities...
+		IdentityCapabilities...,
 	) {
 		logrus.Warningln("provider does not support identities capability")
 		return nil, fmt.Errorf("provider does not support identities capability")
@@ -85,6 +85,7 @@ func (p *BaseProvider) ListIdentities(ctx context.Context, searchRequest *Search
 	identities := p.identity.identities
 	p.identity.mu.RUnlock()
 
+	// If no filters, return all identities
 	if searchRequest == nil || searchRequest.IsEmpty() {
 		return ReturnSearchResults(identities), nil
 	}
@@ -104,6 +105,7 @@ func (p *BaseProvider) ListIdentities(ctx context.Context, searchRequest *Search
 	// Apply filters
 	var filtered []Identity
 	filterText := strings.ToLower(strings.Join(searchRequest.Terms, " "))
+	limit := searchRequest.GetLimit()
 
 	for _, identity := range identities {
 		// Check if any filter matches the identity
@@ -114,6 +116,9 @@ func (p *BaseProvider) ListIdentities(ctx context.Context, searchRequest *Search
 			(identity.Group != nil && strings.Contains(strings.ToLower(identity.Group.Name), filterText)) ||
 			(identity.Group != nil && strings.Contains(strings.ToLower(identity.Group.Email), filterText)) {
 			filtered = append(filtered, identity)
+			if limit > 0 && len(filtered) >= limit {
+				break
+			}
 		}
 	}
 
@@ -203,13 +208,16 @@ func (p *BaseProvider) SetIdentitiesWithKey(
 	for i := range identities {
 
 		identity := identities[i]
-
 		keys := keyFunc(identity)
 
 		for _, key := range keys {
 			p.identity.identitiesMap[strings.ToLower(key)] = &identity
 		}
 	}
+
+	logrus.WithFields(logrus.Fields{
+		"total_identities": len(p.identity.identities),
+	}).Debug("Set provider identities")
 
 	// Trigger reindex
 	go func() {
@@ -246,5 +254,13 @@ func (p *BaseProvider) AddIdentities(identities ...Identity) {
 	p.identity.mu.RUnlock()
 
 	combined := append(existingCopy, filtered...)
+
+	logrus.WithFields(logrus.Fields{
+		"existing": len(existing),
+		"new":      len(identities),
+		"added":    len(filtered),
+		"total":    len(combined),
+	}).Debug("Adding identities to provider")
+
 	p.SetIdentities(combined)
 }

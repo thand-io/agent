@@ -16,9 +16,24 @@ var (
 	validatorInstance *validator.Validate
 	validatorOnce     sync.Once
 
+	// validatorRegistrations holds custom validator registration functions
+	// These are called when the validator is first initialized
+	validatorRegistrations   []func(*validator.Validate) error
+	validatorRegistrationsMu sync.Mutex
+
 	// semanticVersionPattern for semver validation
 	semanticVersionPattern = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$`)
 )
+
+// RegisterCustomValidator registers a custom validator registration function.
+// The function will be called when GetValidator() initializes the validator instance.
+// This allows packages to register their validators without creating circular imports.
+// Must be called before GetValidator() is first invoked (typically in init()).
+func RegisterCustomValidator(fn func(*validator.Validate) error) {
+	validatorRegistrationsMu.Lock()
+	defer validatorRegistrationsMu.Unlock()
+	validatorRegistrations = append(validatorRegistrations, fn)
+}
 
 // GetValidator returns a singleton validator instance with all custom validators registered
 func GetValidator() *validator.Validate {
@@ -44,6 +59,17 @@ func GetValidator() *validator.Validate {
 			return matched
 		}); err != nil {
 			// Log error but don't panic
+		}
+
+		// Call all registered custom validator functions
+		validatorRegistrationsMu.Lock()
+		registrations := validatorRegistrations
+		validatorRegistrationsMu.Unlock()
+
+		for _, fn := range registrations {
+			if err := fn(validatorInstance); err != nil {
+				// Log error but don't panic
+			}
 		}
 	})
 

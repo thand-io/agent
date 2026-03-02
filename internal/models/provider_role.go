@@ -23,6 +23,7 @@ type ProviderRolesResponse struct {
 
 type ProviderRole struct {
 	ID          string `json:"id,omitempty"`
+	Tenant      string `json:"tenant,omitempty"`
 	Name        string `json:"name"`
 	Title       string `json:"title,omitempty"`
 	Description string `json:"description,omitempty"`
@@ -99,11 +100,15 @@ func (p *BaseProvider) ListRoles(
 	// Fallback to simple substring filtering while index is being built
 	var filtered []ProviderRole
 	filterText := strings.ToLower(strings.Join(searchRequest.Terms, " "))
+	limit := searchRequest.GetLimit()
 
 	for _, role := range roles {
 		// Check if any filter matches the role name
 		if strings.Contains(strings.ToLower(role.Name), filterText) {
 			filtered = append(filtered, role)
+			if limit > 0 && len(filtered) >= limit {
+				break
+			}
 		}
 	}
 
@@ -146,6 +151,10 @@ func (p *BaseProvider) SetRolesWithKey(
 		}
 	}
 
+	logrus.WithFields(logrus.Fields{
+		"total_roles": len(p.rbac.roles),
+	}).Debug("Set provider roles")
+
 	// Trigger reindex
 	go func() {
 		err := p.buildRoleIndices()
@@ -182,5 +191,13 @@ func (p *BaseProvider) AddRoles(roles ...ProviderRole) {
 	p.rbac.mu.RUnlock()
 
 	combined := append(existingCopy, filtered...)
+
+	logrus.WithFields(logrus.Fields{
+		"existing": len(existing),
+		"new":      len(roles),
+		"added":    len(filtered),
+		"total":    len(combined),
+	}).Debug("Adding roles to provider")
+
 	p.SetRoles(combined)
 }

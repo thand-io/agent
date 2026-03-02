@@ -11,13 +11,23 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
+	sdkWorkflowsRunner "github.com/thand-io/agent/sdk/workflows/runner"
+	"go.temporal.io/sdk/workflow"
 )
 
 // Authorize grants access for a user to a role
 func (p *githubProvider) AuthorizeRole(
-	ctx context.Context,
+	ctx models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		return p.authorizeRoleTemporal(workflowCtx, req)
+	}
+
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
 
 	if !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to authorize github role")
@@ -28,10 +38,12 @@ func (p *githubProvider) AuthorizeRole(
 
 	username := user.Name
 
-	// Process each resource in the role
-	for _, resource := range role.Resources.Allow {
-		if err := p.authorizeResource(ctx, username, resource, role); err != nil {
-			return nil, fmt.Errorf("failed to authorize resource %s: %w", resource, err)
+	// Process each target in the role's permission statements
+	for _, stmt := range role.Permissions.Allow {
+		for _, target := range stmt.Targets {
+			if err := p.authorizeResource(localCtx, username, target, &role.Role); err != nil {
+				return nil, fmt.Errorf("failed to authorize resource %s: %w", target, err)
+			}
 		}
 	}
 
@@ -40,9 +52,17 @@ func (p *githubProvider) AuthorizeRole(
 
 // Revoke removes access for a user from a role
 func (p *githubProvider) RevokeRole(
-	ctx context.Context,
+	ctx models.ProviderContext,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		return p.revokeRoleTemporal(workflowCtx, req)
+	}
+
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
 
 	if !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to authorize github role")
@@ -53,10 +73,12 @@ func (p *githubProvider) RevokeRole(
 
 	username := user.Name
 
-	// Process each resource in the role
-	for _, resource := range role.Resources.Allow {
-		if err := p.revokeResource(ctx, username, resource); err != nil {
-			return nil, fmt.Errorf("failed to revoke resource %s: %w", resource, err)
+	// Process each target in the role's permission statements
+	for _, stmt := range role.Permissions.Allow {
+		for _, target := range stmt.Targets {
+			if err := p.revokeResource(localCtx, username, target); err != nil {
+				return nil, fmt.Errorf("failed to revoke resource %s: %w", target, err)
+			}
 		}
 	}
 
@@ -71,6 +93,79 @@ func (p *githubProvider) GetAuthorizedAccessUrl(
 
 	return p.GetConfig().GetStringWithDefault(
 		"sso_start_url", "https://github.com/login")
+}
+
+// authorizeRoleTemporal fires an AuthorizeResource activity per target in sequence.
+func (p *githubProvider) authorizeRoleTemporal(
+	wfCtx workflow.Context,
+	req *models.AuthorizeRoleRequest,
+) (*models.AuthorizeRoleResponse, error) {
+	if !req.IsValid() {
+		return nil, fmt.Errorf("user and role must be provided to authorize github role")
+	}
+
+	identifier := p.GetIdentifier()
+	ao := workflow.ActivityOptions{
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+	}
+	wfCtx = workflow.WithActivityOptions(wfCtx, ao)
+
+	user := req.GetUser()
+	role := req.GetRole()
+
+	for _, stmt := range role.Permissions.Allow {
+		for _, target := range stmt.Targets {
+			if err := workflow.ExecuteActivity(
+				wfCtx,
+				models.CreateTemporalProviderWorkflowName(identifier, AuthorizeResourceActivityName),
+				&AuthorizeResourceRequest{
+					Username: user.Name,
+					Resource: target,
+					Role:     &role.Role,
+				},
+			).Get(wfCtx, nil); err != nil {
+				return nil, fmt.Errorf("AuthorizeResource activity failed for %s: %w", target, err)
+			}
+		}
+	}
+	return nil, nil
+}
+
+// revokeRoleTemporal fires a RevokeResource activity per target in sequence.
+func (p *githubProvider) revokeRoleTemporal(
+	wfCtx workflow.Context,
+	req *models.RevokeRoleRequest,
+) (*models.RevokeRoleResponse, error) {
+	if !req.IsValid() {
+		return nil, fmt.Errorf("user and role must be provided to revoke github role")
+	}
+
+	identifier := p.GetIdentifier()
+	ao := workflow.ActivityOptions{
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+	}
+	wfCtx = workflow.WithActivityOptions(wfCtx, ao)
+
+	user := req.GetUser()
+	role := req.GetRole()
+
+	for _, stmt := range role.Permissions.Allow {
+		for _, target := range stmt.Targets {
+			if err := workflow.ExecuteActivity(
+				wfCtx,
+				models.CreateTemporalProviderWorkflowName(identifier, RevokeResourceActivityName),
+				&RevokeResourceRequest{
+					Username: user.Name,
+					Resource: target,
+				},
+			).Get(wfCtx, nil); err != nil {
+				return nil, fmt.Errorf("RevokeResource activity failed for %s: %w", target, err)
+			}
+		}
+	}
+	return nil, nil
 }
 
 // authorizeResource handles authorization for a single resource

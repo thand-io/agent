@@ -25,13 +25,17 @@ roles:
     
     permissions:
       allow:
-        - ec2:DescribeInstances
-        - s3:GetObject
-        - s3:ListBuckets
+        - operations:
+            - ec2:DescribeInstances
+            - s3:GetObject
+            - s3:ListBuckets
+          targets:
+            - "arn:aws:s3:::dev-bucket/*"
     
     scopes:
-      groups:
-        - developers
+      allow:
+        groups:
+          - developers
 ```
 
 ## Core Concepts
@@ -39,11 +43,10 @@ roles:
 ### What is a Role?
 
 A Thand role is a configuration template that defines:
-- **Permissions**: What actions can be performed (allow/deny rules)
-- **Resources**: Which resources can be accessed (with allow/deny rules)  
+- **Permissions**: What actions can be performed and which resources can be targeted (via statements with operations, targets, and optional conditions)
 - **Inheritance**: Which other roles this role builds upon
 - **Providers**: Which provider instances can be used with this role
-- **Scopes**: Who can request this role (users/groups)
+- **Scopes**: Who can request this role (with allow/deny rules for users, groups, and domains)
 - **Workflows**: How access requests are processed and approved
 
 ### Role vs Provider Roles
@@ -53,6 +56,19 @@ It's important to distinguish between:
 - **Provider Roles**: Native roles in external systems (AWS IAM roles, Azure roles, etc.)
 
 Thand roles can **inherit** from other roles and provider roles to leverage existing cloud IAM configurations.
+
+### Composite Roles
+
+When a role inherits from other locally-defined Thand roles, it becomes a **composite role** at runtime. The `composite` field on a role is **system-managed** — you do not set it yourself. During inheritance resolution, Thand automatically:
+
+1. Resolves the full inheritance chain (with cycle detection and depth limits)
+2. Filters inherited permissions by the role's configured providers
+3. Validates identity scopes at each level of the chain
+4. Merges all permissions using intelligent conflict resolution
+5. Marks the resulting role as `composite: true`
+
+{: .note}
+You will see `composite: true` on roles returned by the API or in debug output. This indicates that the role's permissions were assembled from multiple source roles. You should never set this field manually in your configuration files.
 
 ### Intelligent Permission Merging
 
@@ -69,15 +85,14 @@ Thand Agent features intelligent permission merging that:
 ## Table of Contents
 
 1. [Role Structure](#role-structure)
-2. [Permissions](#permissions)
-3. [Resources](#resources)
-4. [Inheritance](#inheritance)
-5. [Scopes & Access Control](#scopes--access-control)
-6. [Provider Integration](#provider-integration)
-7. [Workflow Integration](#workflow-integration)
-8. [Configuration Management](#configuration-management)
-9. [Best Practices](#best-practices)
-10. [Troubleshooting](#troubleshooting)
+2. [Permissions & Statements](#permissions--statements)
+3. [Inheritance](#inheritance)
+4. [Scopes & Access Control](#scopes--access-control)
+5. [Provider Integration](#provider-integration)
+6. [Workflow Integration](#workflow-integration)
+7. [Configuration Management](#configuration-management)
+8. [Best Practices](#best-practices)
+9. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -94,19 +109,22 @@ roles:
     enabled: true                    # Optional, defaults to true
     
     # Core role definition
-    permissions:     # What actions are allowed/denied
-      allow: []
-      deny: []
-    resources:       # What resources can be accessed
+    permissions:     # What actions are allowed/denied (using statements)
       allow: []
       deny: []
     inherits: []     # What other roles to inherit from
     providers: []    # Which providers can be used
     
     # Access control
-    scopes:          # Who can request this role
-      users: []
-      groups: []
+    scopes:          # Who can request this role (allow/deny)
+      allow:
+        users: []
+        groups: []
+        domains: []
+      deny:
+        users: []
+        groups: []
+        domains: []
     
     # Process control  
     workflows: []         # How requests are processed
@@ -128,35 +146,37 @@ roles:
       - aws-basic-user                    # Local role
       - aws-dev:arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess  # AWS managed policy
     
-    # Explicit permissions with intelligent merging
+    # Explicit permissions using statements
     permissions:
       allow:
-        - ec2:DescribeInstances,StartInstances,StopInstances  # Condensed actions
-        - s3:GetObject,PutObject          # Multiple S3 actions
-        - logs:DescribeLogGroups,DescribeLogStreams
+        - operations:
+            - ec2:DescribeInstances,StartInstances,StopInstances  # Condensed actions
+            - s3:GetObject,PutObject          # Multiple S3 actions
+            - logs:DescribeLogGroups,DescribeLogStreams
+          targets:
+            - "arn:aws:ec2:us-east-1:123456789012:instance/*"
+            - "arn:aws:s3:::dev-bucket/*"
       deny:
-        - ec2:TerminateInstances          # Explicit denial
-    
-    # Resource restrictions
-    resources:
-      allow:
-        - "arn:aws:ec2:us-east-1:123456789012:instance/*"
-        - "arn:aws:s3:::dev-bucket/*"
-      deny:
-        - "arn:aws:s3:::prod-bucket/*"
+        - operations:
+            - ec2:TerminateInstances          # Explicit denial
+          targets:
+            - "arn:aws:ec2:us-east-1:123456789012:instance/*"
     
     # Provider restrictions
     providers:
       - aws-dev
       - aws-staging
     
-    # Who can request this role
+    # Who can request this role (allow/deny with users, groups, and domains)
     scopes:
-      users:
-        - developer@example.com
-      groups:
-        - developers
-        - engineering
+      allow:
+        users:
+          - developer@example.com
+        groups:
+          - developers
+          - engineering
+        domains:
+          - example.com
     
     # Approval process
     workflows:
@@ -176,47 +196,72 @@ roles:
 | `name` | string | Yes | Human-readable role name |
 | `description` | string | Yes | Description of role purpose |
 | `enabled` | boolean | No | Whether role is active (default: true) |
-| `permissions` | object | No | Allow/deny permission rules |
-| `resources` | object | No | Allow/deny resource rules |
+| `permissions` | object | No | Allow/deny permission rules using statements |
 | `inherits` | array | No | List of roles to inherit from |
 | `providers` | array | No | List of provider instances this role can use |
-| `scopes` | object | No | User/group access restrictions |
+| `scopes` | object | No | Allow/deny access rules for users, groups, and domains |
 | `workflows` | array | No | Approval workflows to execute |
 | `authenticators` | array | No | Valid authentication providers |
+| `composite` | boolean | No | **System-managed.** Set to `true` when the role is assembled from inherited local roles at runtime. Do not set manually. |
 
 ---
 
-## Permissions
+## Permissions & Statements
 
-Permissions define **what actions** can be performed when a role is activated. Thand Agent supports intelligent permission merging that handles condensed actions, inheritance conflicts, and provider-specific permission formats.
+Permissions define **what actions** can be performed and **which resources** can be targeted when a role is activated. Permissions are expressed as **statements** — objects that combine operations, targets, and optional conditions into a single unit.
 
-### Basic Permission Structure
+### Statement Structure
 
-```yaml
-permissions:
-  allow:    # List of allowed actions
-    - action1
-    - action2
-  deny:     # List of explicitly denied actions  
-    - action3
-    - action4
-```
+Each permission statement is an object with the following fields:
 
-### Condensed Actions
-
-Thand Agent intelligently handles condensed actions where multiple related actions are specified in a single permission string:
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `operations` | array | Yes | Actions that can be performed (provider-specific) |
+| `targets` | array | No | Resources the operations apply to (provider-specific) |
+| `conditions` | object | No | Provider-specific conditions that must be met |
 
 ```yaml
 permissions:
   allow:
-    # Condensed format - multiple actions in one string
-    - "k8s:pods:get,list,watch,create,update,delete"
-    - "s3:GetObject,PutObject,ListBucket"
-    - "ec2:DescribeInstances,StartInstances,StopInstances"
+    - operations:          # What actions to allow
+        - action1
+        - action2
+      targets:             # Which resources these actions apply to
+        - resource1
+        - resource2
+      conditions:          # Optional provider-specific conditions
+        ConditionOperator:
+          ConditionKey: ConditionValue
+  deny:
+    - operations:
+        - action3
+      targets:
+        - resource3
+```
+
+{: .note}
+**Backwards compatibility:** Permissions also accept simple strings (e.g., `- "ec2:DescribeInstances"`) for the `allow` and `deny` lists. These are automatically converted to statements with a single operation and no targets or conditions. See the [migration guide](migration/) for details.
+
+### Condensed Actions
+
+Thand Agent intelligently handles condensed actions where multiple related actions are specified in a single operation string:
+
+```yaml
+permissions:
+  allow:
+    - operations:
+        # Condensed format - multiple actions in one string
+        - "k8s:pods:get,list,watch,create,update,delete"
+        - "s3:GetObject,PutObject,ListBucket"
+        - "ec2:DescribeInstances,StartInstances,StopInstances"
+      targets:
+        - "arn:aws:ec2:us-east-1:*:instance/*"
+        - "arn:aws:s3:::dev-bucket/*"
     
-    # Individual format - also supported
-    - "logs:DescribeLogGroups"
-    - "logs:DescribeLogStreams"
+    - operations:
+        # Individual format - also supported
+        - "logs:DescribeLogGroups"
+        - "logs:DescribeLogStreams"
 ```
 
 #### Intelligent Merging
@@ -228,16 +273,18 @@ When roles are inherited or merged, condensed actions are intelligently combined
 base-role:
   permissions:
     allow:
-      - "k8s:pods:get,list,watch"
-      - "s3:GetObject,ListBucket"
+      - operations:
+          - "k8s:pods:get,list,watch"
+          - "s3:GetObject,ListBucket"
 
 # Child role
 child-role:
   inherits: [base-role]
   permissions:
     allow:
-      - "k8s:pods:create,update,delete"  # Will merge with base
-      - "s3:PutObject,DeleteObject"      # Will merge with base
+      - operations:
+          - "k8s:pods:create,update,delete"  # Will merge with base
+          - "s3:PutObject,DeleteObject"      # Will merge with base
 
 # Resulting merged permissions:
 # - "k8s:pods:create,delete,get,list,update,watch"  (merged and sorted)
@@ -250,25 +297,32 @@ child-role:
 ```yaml
 permissions:
   allow:
-    - "ec2:*"                          # All EC2 actions
-    - "s3:GetObject,PutObject"         # Specific S3 actions
-    - "iam:PassRole"                   # IAM role assumption
-    - "logs:DescribeLogGroups,DescribeLogStreams,CreateLogStream"
+    - operations:
+        - "ec2:*"                          # All EC2 actions
+        - "s3:GetObject,PutObject"         # Specific S3 actions
+        - "iam:PassRole"                   # IAM role assumption
+        - "logs:DescribeLogGroups,DescribeLogStreams,CreateLogStream"
+      targets:
+        - "arn:aws:ec2:us-east-1:123456789012:instance/*"
+        - "arn:aws:s3:::app-bucket/*"
   deny:
-    - "ec2:TerminateInstances"         # Explicit denial
-    - "s3:DeleteBucket"                # Protect against deletion
+    - operations:
+        - "ec2:TerminateInstances"         # Explicit denial
+        - "s3:DeleteBucket"                # Protect against deletion
 ```
 
 #### Azure Permissions
 ```yaml
 permissions:
   allow:
-    - "Microsoft.Compute/virtualMachines/read,start,restart"
-    - "Microsoft.Storage/storageAccounts/read"
-    - "Microsoft.Authorization/roleAssignments/read"
+    - operations:
+        - "Microsoft.Compute/virtualMachines/read,start,restart"
+        - "Microsoft.Storage/storageAccounts/read"
+        - "Microsoft.Authorization/roleAssignments/read"
   deny:
-    - "Microsoft.Compute/virtualMachines/delete"
-    - "Microsoft.Storage/storageAccounts/delete"
+    - operations:
+        - "Microsoft.Compute/virtualMachines/delete"
+        - "Microsoft.Storage/storageAccounts/delete"
 ```
 
 #### GCP Permissions
@@ -280,14 +334,16 @@ permissions:
 permissions:
   allow:
     # GCP permissions are NOT condensed - each is kept separate
-    - "gcp-prod:compute.instances.get"
-    - "gcp-prod:compute.instances.list"
-    - "gcp-prod:compute.instances.start"
-    - "gcp-prod:storage.buckets.list"
-    - "gcp-prod:iam.serviceAccounts.get"
+    - operations:
+        - "gcp-prod:compute.instances.get"
+        - "gcp-prod:compute.instances.list"
+        - "gcp-prod:compute.instances.start"
+        - "gcp-prod:storage.buckets.list"
+        - "gcp-prod:iam.serviceAccounts.get"
   deny:
-    - "gcp-prod:compute.instances.delete"
-    - "gcp-prod:storage.buckets.delete"
+    - operations:
+        - "gcp-prod:compute.instances.delete"
+        - "gcp-prod:storage.buckets.delete"
 ```
 
 {: .note}
@@ -297,14 +353,144 @@ The system automatically detects GCP-style permissions by checking if the last s
 ```yaml
 permissions:
   allow:
-    - "k8s:pods:get,list,watch,create,update,patch"
-    - "k8s:services:get,list,create,update,delete"
-    - "k8s:configmaps:get,list,create,update,delete"
-    - "k8s:secrets:get,list"  # Read-only for secrets
+    - operations:
+        - "k8s:pods:get,list,watch,create,update,patch"
+        - "k8s:services:get,list,create,update,delete"
+        - "k8s:configmaps:get,list,create,update,delete"
+        - "k8s:secrets:get,list"  # Read-only for secrets
   deny:
-    - "k8s:secrets:create,update,delete"  # No secret modifications
-    - "k8s:pods:delete"                   # Cannot delete pods
+    - operations:
+        - "k8s:secrets:create,update,delete"  # No secret modifications
+        - "k8s:pods:delete"                   # Cannot delete pods
 ```
+
+### Targets
+
+Targets define **which resources** the operations in a statement apply to. They use provider-specific resource identifiers such as AWS ARNs, Azure resource IDs, GCP resource paths, or Kubernetes namespace selectors.
+
+#### AWS Targets (ARNs)
+```yaml
+permissions:
+  allow:
+    - operations:
+        - "ec2:DescribeInstances,StartInstances,StopInstances"
+      targets:
+        - "arn:aws:ec2:*:*:instance/*"           # All EC2 instances
+        - "arn:aws:ec2:us-east-1:123456789012:instance/*"  # Specific region/account
+    - operations:
+        - "s3:GetObject,PutObject"
+      targets:
+        - "arn:aws:s3:::dev-bucket/*"            # Specific bucket contents
+        - "arn:aws:s3:::app-*/*"                 # Pattern-based bucket access
+  deny:
+    - operations:
+        - "s3:*"
+      targets:
+        - "arn:aws:s3:::prod-bucket/*"           # Sensitive production data
+        - "arn:aws:s3:::audit-*/*"               # Audit data
+```
+
+#### Azure Targets
+```yaml
+permissions:
+  allow:
+    - operations:
+        - "Microsoft.Compute/virtualMachines/read,start,restart"
+      targets:
+        - "/subscriptions/*/resourceGroups/dev-*/providers/Microsoft.Compute/virtualMachines/*"
+        - "/subscriptions/12345/resourceGroups/app-*/providers/Microsoft.Compute/*"
+    - operations:
+        - "Microsoft.Storage/storageAccounts/read"
+      targets:
+        - "/subscriptions/*/resourceGroups/*/providers/Microsoft.Storage/storageAccounts/dev*"
+```
+
+#### GCP Targets
+```yaml
+permissions:
+  allow:
+    - operations:
+        - "gcp-prod:compute.instances.get"
+        - "gcp-prod:compute.instances.list"
+      targets:
+        - "projects/dev-project/zones/*/instances/*"
+        - "projects/*/zones/us-central1-*/instances/app-*"
+    - operations:
+        - "gcp-prod:storage.buckets.list"
+      targets:
+        - "projects/*/global/buckets/dev-*"
+        - "projects/my-project/global/buckets/staging-*"
+```
+
+#### Kubernetes Targets
+```yaml
+permissions:
+  allow:
+    - operations:
+        - "k8s:pods:get,list,watch,create,update,patch"
+      targets:
+        - "namespace:development"
+        - "namespace:staging"
+        - "namespace:feature-*"
+  deny:
+    - operations:
+        - "k8s:*:*"
+      targets:
+        - "namespace:production"           # No production namespace
+        - "namespace:kube-system"          # No system namespace
+```
+
+### Conditions
+
+Conditions add provider-specific constraints to a statement. They are **preserved as-is** through permission merging and inheritance resolution but are **not evaluated by Thand** — they are passed through to the target provider for enforcement.
+
+{: .important}
+Currently, only **AWS** maps conditions to IAM policy `Condition` blocks. Other providers (Azure, GCP, Kubernetes) do not use conditions. If you add conditions to non-AWS statements, they will be preserved in the data model but will have no effect at the provider level.
+
+#### AWS Condition Examples
+
+```yaml
+permissions:
+  allow:
+    # Restrict by source IP
+    - operations:
+        - "s3:GetObject"
+        - "s3:PutObject"
+      targets:
+        - "arn:aws:s3:::sensitive-bucket/*"
+      conditions:
+        IpAddress:
+          "aws:SourceIp": "10.0.0.0/8"
+    
+    # Require encryption
+    - operations:
+        - "s3:PutObject"
+      targets:
+        - "arn:aws:s3:::encrypted-bucket/*"
+      conditions:
+        StringEquals:
+          "s3:x-amz-server-side-encryption": "AES256"
+    
+    # Restrict by tag
+    - operations:
+        - "ec2:StartInstances"
+        - "ec2:StopInstances"
+      targets:
+        - "arn:aws:ec2:*:*:instance/*"
+      conditions:
+        StringEquals:
+          "ec2:ResourceTag/Environment": "development"
+    
+    # MFA required
+    - operations:
+        - "iam:*"
+      conditions:
+        Bool:
+          "aws:MultiFactorAuthPresent": "true"
+```
+
+{: .note}
+Conditions follow the same structure as AWS IAM policy conditions. The outer key is the condition operator (e.g., `StringEquals`, `IpAddress`, `Bool`), and the inner key-value pair is the condition key and expected value. Refer to the [AWS IAM Condition documentation](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_condition.html) for the full list of supported operators and keys.
 
 ### Allow/Deny Conflict Resolution
 
@@ -316,9 +502,11 @@ When the same action appears in both `allow` and `deny` lists, the system resolv
 role:
   permissions:
     allow:
-      - "k8s:pods:get,list,create,update,delete"
+      - operations:
+          - "k8s:pods:get,list,create,update,delete"
     deny:
-      - "k8s:pods:delete"  # Removes 'delete' from the allow list
+      - operations:
+          - "k8s:pods:delete"  # Removes 'delete' from the allow list
 
 # Resolves to:
 # allow: ["k8s:pods:create,get,list,update"]
@@ -336,15 +524,19 @@ In inheritance chains, the **parent role (the one doing the inheriting) takes pr
 # Child role (the inherited role)
 child-role:
   permissions:
-    allow: ["ec2:StartInstances", "ec2:DescribeInstances"]
-    deny: ["ec2:TerminateInstances"]
+    allow:
+      - operations: ["ec2:StartInstances", "ec2:DescribeInstances"]
+    deny:
+      - operations: ["ec2:TerminateInstances"]
 
 # Parent role (the role doing the inheriting)
 parent-role:
   inherits: [child-role]
   permissions:
-    allow: ["ec2:TerminateInstances"]  # Overrides child's deny
-    deny: ["ec2:StartInstances"]       # Overrides child's allow
+    allow:
+      - operations: ["ec2:TerminateInstances"]  # Overrides child's deny
+    deny:
+      - operations: ["ec2:StartInstances"]       # Overrides child's allow
 
 # Final resolved permissions:
 # allow: ["ec2:DescribeInstances", "ec2:TerminateInstances"]  
@@ -358,200 +550,57 @@ This allows you to build restrictive roles that inherit permissive ones, or perm
 
 ### Wildcard Permissions
 
-Support for wildcard patterns varies by provider. Wildcards automatically subsume more specific permissions:
+You can use wildcard patterns (glob syntax using `*`) in role permission definitions for any provider. However, the way wildcards are handled depends on whether the provider's API natively supports wildcard permissions:
+
+| Provider    | Supports Wildcards | Behavior                                                    |
+|-------------|:------------------:|-------------------------------------------------------------|
+| AWS         | ✅                 | Wildcards kept in condensed form after validation           |
+| Azure       | ✅                 | Wildcards kept in condensed form after validation           |
+| Kubernetes  | ✅                 | Wildcards kept in condensed form after validation           |
+| GCP         | ❌                 | Wildcards expanded to individual permissions automatically  |
+| Okta        | ❌                 | Wildcards expanded to individual permissions automatically  |
+
+- **Providers that support wildcards** (AWS, Azure, Kubernetes): Wildcard patterns are validated by expanding them against the provider's known permission set, then re-condensed back to their original wildcard form in the final output. Invalid wildcards that match no known permissions produce a validation error.
+- **Providers that do not support wildcards** (GCP, Okta): Wildcard patterns are expanded to the full list of matching individual permissions during validation. The expanded permissions are kept as-is in the final output because the provider's API requires explicit permission names.
 
 ```yaml
 permissions:
   allow:
-    # AWS wildcards
-    - "ec2:*"                    # All EC2 actions
-    - "s3:*Object*"              # All object-related S3 actions
-    
-    # Kubernetes wildcards  
-    - "k8s:*:*"                  # All Kubernetes actions
-    - "k8s:pods:*"               # All pod actions
-    
-    # Azure wildcards
-    - "Microsoft.Compute/*"      # All compute actions
+    - operations:
+        # AWS wildcards (kept as wildcards)
+        - "ec2:*"                    # All EC2 actions
+        - "s3:*Object*"              # All object-related S3 actions
+
+        # Kubernetes wildcards (kept as wildcards)
+        - "k8s:*:*"                  # All Kubernetes actions
+        - "k8s:pods:*"               # All pod actions
+
+        # Azure wildcards (kept as wildcards)
+        - "Microsoft.Compute/*"      # All compute actions
+
+        # GCP wildcards (expanded to individual permissions)
+        - "compute.instances.*"      # Expanded to compute.instances.get, etc.
 ```
 
 #### Wildcard Subsumption
 
-When wildcards are present, more specific permissions under that wildcard are automatically removed (subsumed):
+For providers that support wildcards, more specific permissions under a wildcard are automatically removed (subsumed):
 
 ```yaml
 permissions:
   allow:
-    - "ec2:*"                    # Wildcard
-    - "ec2:DescribeInstances"    # Will be removed (subsumed by ec2:*)
-    - "ec2:StartInstances"       # Will be removed (subsumed by ec2:*)
-    - "s3:GetObject"             # Kept (not under ec2:*)
+    - operations:
+        - "ec2:*"                    # Wildcard
+        - "ec2:DescribeInstances"    # Will be removed (subsumed by ec2:*)
+        - "ec2:StartInstances"       # Will be removed (subsumed by ec2:*)
+        - "s3:GetObject"             # Kept (not under ec2:*)
 
 # After condensing, becomes:
 # allow: ["ec2:*", "s3:GetObject"]
 ```
 
 {: .note}
-A wildcard does NOT subsume itself. For example, `ec2:*` is kept even when other `ec2:*` wildcards exist. Only more specific permissions (like `ec2:DescribeInstances`) are subsumed.
-
----
-
-## Resources
-
-Resources define **what resources** the permissions can be applied to. They provide fine-grained control over which specific cloud resources, files, databases, or other assets can be accessed.
-
-### Basic Resource Structure
-
-```yaml
-resources:
-  allow:    # List of allowed resources
-    - resource1
-    - resource2
-  deny:     # List of explicitly denied resources
-    - resource3
-    - resource4
-```
-
-### Cloud Provider Resource Patterns
-
-#### AWS Resources (ARNs)
-```yaml
-resources:
-  allow:
-    # EC2 resources
-    - "arn:aws:ec2:*:*:instance/*"           # All EC2 instances
-    - "arn:aws:ec2:us-east-1:123456789012:instance/*"  # Specific region/account
-    
-    # S3 resources
-    - "arn:aws:s3:::dev-bucket/*"            # Specific bucket contents
-    - "arn:aws:s3:::app-*/*"                 # Pattern-based bucket access
-    
-    # IAM resources
-    - "arn:aws:iam::123456789012:role/app-*" # Application roles only
-    
-    # RDS resources
-    - "arn:aws:rds:*:*:db:dev-*"            # Development databases
-  deny:
-    - "arn:aws:s3:::prod-bucket/*"          # Sensitive production data
-    - "arn:aws:iam::*:role/admin-*"         # Administrative roles
-```
-
-#### Azure Resources
-```yaml
-resources:
-  allow:
-    # Virtual machines
-    - "/subscriptions/*/resourceGroups/dev-*/providers/Microsoft.Compute/virtualMachines/*"
-    - "/subscriptions/12345/resourceGroups/app-*/providers/Microsoft.Compute/*"
-    
-    # Storage accounts
-    - "/subscriptions/*/resourceGroups/*/providers/Microsoft.Storage/storageAccounts/dev*"
-    
-    # Resource groups
-    - "/subscriptions/*/resourceGroups/development-*"
-    - "/subscriptions/*/resourceGroups/staging-*"
-  deny:
-    - "/subscriptions/*/resourceGroups/production-*"  # No production access
-    - "/subscriptions/*/resourceGroups/*/providers/Microsoft.Storage/storageAccounts/prod*"
-```
-
-#### GCP Resources
-```yaml
-resources:
-  allow:
-    # Compute instances
-    - "projects/dev-project/zones/*/instances/*"
-    - "projects/*/zones/us-central1-*/instances/app-*"
-    
-    # Storage buckets
-    - "projects/*/global/buckets/dev-*"
-    - "projects/my-project/global/buckets/staging-*"
-    
-    # Networks
-    - "projects/*/global/networks/default"
-    - "projects/*/regions/*/subnetworks/dev-*"
-  deny:
-    - "projects/prod-project/*"               # No production project access
-    - "projects/*/global/buckets/sensitive-*" # Sensitive buckets
-```
-
-#### Kubernetes Resources
-```yaml
-resources:
-  allow:
-    # Namespace-scoped resources
-    - "namespace:development"
-    - "namespace:staging"
-    - "namespace:feature-*"
-    
-    # Specific resource types
-    - "namespace:dev/pods/*"
-    - "namespace:dev/services/*"
-    - "namespace:*/configmaps/app-*"
-  deny:
-    - "namespace:production"           # No production namespace
-    - "namespace:*/secrets/*"          # No secret access
-    - "namespace:kube-system"          # No system namespace
-```
-
-### Resource Inheritance and Merging
-
-Resources from inherited roles are merged using the same intelligent system as permissions:
-
-```yaml
-# Base role
-base-role:
-  resources:
-    allow:
-      - "arn:aws:s3:::app-bucket/*"
-      - "arn:aws:ec2:*:*:instance/i-dev-*"
-    deny:
-      - "arn:aws:s3:::app-bucket/sensitive/*"
-
-# Child role
-child-role:
-  inherits: [base-role]
-  resources:
-    allow:
-      - "arn:aws:s3:::logs-bucket/*"     # Additional resource
-      - "arn:aws:ec2:*:*:instance/i-staging-*"
-    deny:
-      - "arn:aws:s3:::logs-bucket/audit/*"  # Additional restriction
-
-# Merged result:
-# allow: 
-#   - "arn:aws:s3:::app-bucket/*"
-#   - "arn:aws:s3:::logs-bucket/*"  
-#   - "arn:aws:ec2:*:*:instance/i-dev-*"
-#   - "arn:aws:ec2:*:*:instance/i-staging-*"
-# deny:
-#   - "arn:aws:s3:::app-bucket/sensitive/*"
-#   - "arn:aws:s3:::logs-bucket/audit/*"
-```
-
-### Resource Pattern Matching
-
-#### Wildcards
-```yaml
-resources:
-  allow:
-    - "arn:aws:s3:::*-dev/*"           # Any bucket ending with '-dev'
-    - "arn:aws:ec2:*:*:instance/*"     # All instances in any region
-    - "projects/*/zones/us-*/*"        # US zones only
-```
-
-#### Path-based Patterns
-```yaml
-resources:
-  allow:
-    # Hierarchical access
-    - "projects/my-project/zones/us-central1-a/*"
-    - "/subscriptions/12345/resourceGroups/dev-*/providers/*"
-    
-    # File-system style paths
-    - "/app/data/dev/*"
-    - "/shared/logs/application-*"
-```
+A wildcard does NOT subsume itself. For example, `ec2:*` is kept even when other `ec2:*` wildcards exist. Only more specific permissions (like `ec2:DescribeInstances`) are subsumed. Subsumption only applies to providers where `supports_wildcards` is `true`.
 
 ---
 
@@ -563,7 +612,7 @@ Role inheritance is a powerful feature that allows roles to build upon each othe
 
 When a role inherits from other roles:
 
-1. **Provider Filtering**: Inherited permissions/resources/groups with provider prefixes are filtered to only include those matching the parent role's `providers` list. **Matching prefixes are stripped** from the output.
+1. **Provider Filtering**: Inherited permissions with provider prefixes are filtered to only include those matching the parent role's `providers` list. **Matching prefixes are stripped** from the output.
 2. **Permission Expansion**: Condensed actions (e.g., `k8s:pods:get,list`) are expanded to individual permissions for merging
 3. **GCP Permission Detection**: Permissions with dots in the action (e.g., `compute.instances.get`) are detected and kept atomic
 4. **Intelligent Merging**: All `allow` and `deny` lists are combined with proper conflict resolution
@@ -583,8 +632,9 @@ roles:
     name: Base User
     permissions:
       allow:
-        - "ec2:DescribeInstances,DescribeImages"
-        - "s3:ListBuckets,GetBucketLocation"
+        - operations:
+            - "ec2:DescribeInstances,DescribeImages"
+            - "s3:ListBuckets,GetBucketLocation"
   
   power-user:
     name: Power User
@@ -592,8 +642,9 @@ roles:
       - base-user  # Inherits base-user permissions
     permissions:
       allow:
-        - "ec2:StartInstances,StopInstances,RebootInstances"  # Additional permissions
-        - "s3:GetObject,PutObject"
+        - operations:
+            - "ec2:StartInstances,StopInstances,RebootInstances"  # Additional permissions
+            - "s3:GetObject,PutObject"
 
 # Resulting power-user permissions (intelligently merged):
 # allow:
@@ -626,7 +677,8 @@ roles:
       - "gcp-prod:roles/compute.viewer"
     permissions:
       allow:
-        - "compute.instances.start,stop"  # Additional specific permissions
+        - operations:
+            - "compute.instances.start,stop"  # Additional specific permissions
 
   azure-contributor:
     name: Azure Contributor
@@ -665,7 +717,8 @@ roles:
       - "azure-prod:Reader"
     permissions:
       allow:
-        - "custom:audit,monitor"     # Additional custom permissions
+        - operations:
+            - "custom:audit,monitor"     # Additional custom permissions
 ```
 
 #### 4. Mixed Inheritance with Intelligent Merging
@@ -678,30 +731,35 @@ roles:
     name: Base Kubernetes
     permissions:
       allow:
-        - "k8s:pods:get,list,watch"
-        - "k8s:services:get,list"
+        - operations:
+            - "k8s:pods:get,list,watch"
+            - "k8s:services:get,list"
 
   k8s-developer:
     name: Kubernetes Developer
     inherits: [base-k8s]
     permissions:
       allow:
-        - "k8s:pods:create,update,patch"      # Merges with inherited get,list,watch
-        - "k8s:services:create,update,delete" # Merges with inherited get,list
-        - "k8s:configmaps:get,list,create,update,delete"
+        - operations:
+            - "k8s:pods:create,update,patch"      # Merges with inherited get,list,watch
+            - "k8s:services:create,update,delete" # Merges with inherited get,list
+            - "k8s:configmaps:get,list,create,update,delete"
       deny:
-        - "k8s:pods:delete"                   # Prevents pod deletion
+        - operations:
+            - "k8s:pods:delete"                   # Prevents pod deletion
 
   k8s-admin:
     name: Kubernetes Administrator  
     inherits: [k8s-developer]
     permissions:
       allow:
-        - "k8s:pods:delete"                   # Overrides parent deny
-        - "k8s:secrets:get,list,create"
-        - "k8s:*:*"                          # Admin access to all
+        - operations:
+            - "k8s:pods:delete"                   # Overrides parent deny
+            - "k8s:secrets:get,list,create"
+            - "k8s:*:*"                          # Admin access to all
       deny:
-        - "k8s:secrets:delete"                # Even admins can't delete secrets
+        - operations:
+            - "k8s:secrets:delete"                # Even admins can't delete secrets
 
 # Final k8s-admin permissions after intelligent merging:
 # allow:
@@ -746,21 +804,17 @@ inherits:
 
 ### Provider Filtering and Prefix Stripping
 
-When permissions, resources, or groups have provider prefixes, they are automatically filtered based on the role's `providers` list. **Matching prefixes are stripped** from the output:
+When permissions have provider prefixes, they are automatically filtered based on the role's `providers` list. **Matching prefixes are stripped** from the output:
 
 ```yaml
-# Base role with provider-prefixed permissions and resources
+# Base role with provider-prefixed permissions
 base-cloud-role:
   permissions:
     allow:
-      - "aws-prod:ec2:DescribeInstances"
-      - "gcp-prod:compute.instances.get"
-      - "azure-prod:Microsoft.Compute/virtualMachines/read"
-  resources:
-    allow:
-      - "aws:*"      # Provider engine type prefix
-      - "gcp:*"      # Provider engine type prefix
-      - "azure:*"    # Provider engine type prefix
+      - operations:
+          - "aws-prod:ec2:DescribeInstances"
+          - "gcp-prod:compute.instances.get"
+          - "azure-prod:Microsoft.Compute/virtualMachines/read"
 
 # Role that only uses AWS providers
 aws-only-role:
@@ -768,8 +822,6 @@ aws-only-role:
   providers: [aws-prod, aws-dev]  # Only AWS providers
   # Resulting permissions (prefix stripped):
   #   - "ec2:DescribeInstances"  (was "aws-prod:ec2:DescribeInstances")
-  # Resulting resources (prefix stripped):
-  #   - "*"  (was "aws:*" - "aws" matches aws-prod's engine type)
   # GCP and Azure items are filtered out completely
 
 # Role that uses multiple providers
@@ -779,8 +831,6 @@ multi-cloud-role:
   # Resulting permissions (prefixes stripped):
   #   - "ec2:DescribeInstances"      (was "aws-prod:ec2:DescribeInstances")
   #   - "compute.instances.get"      (was "gcp-prod:compute.instances.get")
-  # Resulting resources (prefixes stripped):
-  #   - "*"  (from both "aws:*" and "gcp:*")
   # Azure items are filtered out completely
 ```
 
@@ -791,7 +841,7 @@ multi-cloud-role:
 - Items without a provider prefix are always included as-is
 
 {: .note}
-Provider prefixes are stripped when they match, leaving clean permission/resource strings without provider annotations. This allows the same base role to be used across different provider configurations.
+Provider prefixes are stripped when they match, leaving clean permission strings without provider annotations. This allows the same base role to be used across different provider configurations.
 
 ### Inheritance Validation
 
@@ -820,12 +870,14 @@ my-role:
 # Inherited role must be applicable to the requesting user
 admin-role:
   scopes:
-    groups: [admins]
+    allow:
+      groups: [admins]
     
 developer-role:
   inherits: [admin-role]  # Will fail if user is not in 'admins' group
   scopes:
-    groups: [developers]
+    allow:
+      groups: [developers]
 ```
 
 ### Inheritance Best Practices
@@ -835,19 +887,23 @@ developer-role:
 # Base roles with minimal permissions
 readonly-base:
   permissions:
-    allow: ["*:Describe*", "*:List*", "*:Get*"]
+    allow:
+      - operations: ["*:Describe*", "*:List*", "*:Get*"]
 
 # Specialized roles building on base
 ec2-readonly:
   inherits: [readonly-base]
-  resources:
-    allow: ["arn:aws:ec2:*:*:*"]
+  permissions:
+    allow:
+      - operations: ["ec2:*"]
+        targets: ["arn:aws:ec2:*:*:*"]
 
 # Team-specific roles
 dev-team-ec2:
   inherits: [ec2-readonly]
   scopes:
-    groups: [developers]
+    allow:
+      groups: [developers]
 ```
 
 #### 2. Use Provider Managed Roles
@@ -857,9 +913,12 @@ aws-power-user:
   inherits:
     - "aws-prod:arn:aws:iam::aws:policy/PowerUserAccess"
   # Add company-specific restrictions
-  resources:
+  permissions:
     deny:
-      - "arn:aws:s3:::sensitive-*"
+      - operations:
+          - "s3:*"
+        targets:
+          - "arn:aws:s3:::sensitive-*"
 ```
 
 #### 3. Layer Security Controls
@@ -871,59 +930,100 @@ restrictive-admin:
   # Add explicit denials even for admins
   permissions:
     deny:
-      - "iam:DeleteUser"
-      - "iam:DeleteRole"
-      - "s3:DeleteBucket"
-  resources:
-    deny:
-      - "arn:aws:s3:::critical-*"
+      - operations:
+          - "iam:DeleteUser"
+          - "iam:DeleteRole"
+          - "s3:DeleteBucket"
 ```
 
 ---
 
 ## Scopes & Access Control
 
-Scopes control **who** can request a role. This enables role-based access control at the user/group level, ensuring that only authorized identities can request specific roles.
+Scopes control **who** can request a role. Scopes use an **allow/deny** model with three identity types: users, groups, and domains. This enables fine-grained role-based access control at the identity level.
 
 ### Scope Structure
 
 ```yaml
 scopes:
-  users:    # Specific user identities
-    - user1@example.com
-    - user2@example.com
-  groups:   # Group memberships
-    - group1
-    - group2
+  allow:         # Identities permitted to request this role
+    users:
+      - user1@example.com
+    groups:
+      - group1
+    domains:
+      - example.com
+  deny:          # Identities explicitly blocked from this role
+    users:
+      - restricted-user@example.com
+    groups:
+      - contractors
+    domains:
+      - external.com
 ```
 
-### User Scopes
+### Allow Scopes
 
-Grant access to specific users using various identity formats:
+Define which identities are permitted to request the role:
+
+#### User Scopes
 
 ```yaml
 scopes:
-  users:
-    - alice@example.com           # Email address
-    - bob.smith@company.com       # Full name email
-    - service-account@project.iam.gserviceaccount.com  # Service account
-    - "123456789"                 # User ID
-    - "alice.smith"               # Username
+  allow:
+    users:
+      - alice@example.com           # Email address
+      - bob.smith@company.com       # Full name email
+      - service-account@project.iam.gserviceaccount.com  # Service account
+      - "123456789"                 # User ID
+      - "alice.smith"               # Username
 ```
 
-### Group Scopes
-
-Grant access to groups (depends on identity provider):
+#### Group Scopes
 
 ```yaml
 scopes:
-  groups:
-    - developers                  # Simple group name
-    - engineering                 # Department
-    - on-call                     # Role-based group
-    - team-alpha                  # Team designation
-    - contractors                 # Employment type
+  allow:
+    groups:
+      - developers                  # Simple group name
+      - engineering                 # Department
+      - on-call                     # Role-based group
+      - team-alpha                  # Team designation
+      - contractors                 # Employment type
 ```
+
+#### Domain Scopes
+
+Domain scopes allow or deny access based on the domain portion of a user's email address:
+
+```yaml
+scopes:
+  allow:
+    domains:
+      - example.com               # All users with @example.com emails
+      - subsidiary.example.com    # Specific subdomain
+```
+
+### Deny Scopes
+
+Deny scopes explicitly block identities from requesting a role, even if they match an allow rule. **Deny always takes precedence over allow.**
+
+```yaml
+scopes:
+  allow:
+    groups:
+      - engineering               # Allow all engineers
+    domains:
+      - example.com               # Allow all company users
+  deny:
+    groups:
+      - interns                   # Block interns even if in engineering
+    users:
+      - suspended-user@example.com  # Block specific user
+```
+
+{: .important}
+**Deny takes precedence**: If an identity matches both an allow and a deny rule, the deny rule wins. This applies across all identity types — a user denied by any deny rule (user, group, or domain) will be blocked regardless of allow rules.
 
 ### Identity Provider Integration
 
@@ -931,36 +1031,45 @@ Different identity providers may have different group formats:
 
 ```yaml
 scopes:
-  groups:
-    # Active Directory groups
-    - "DOMAIN\\Domain Users"
-    - "CORP\\Engineering"
-    
-    # OIDC/OAuth groups  
-    - "developers"
-    - "admin-users"
-    
-    # SAML groups
-    - "cn=developers,ou=groups,dc=company,dc=com"
-    
-    # GitHub teams
-    - "my-org/developers"
-    - "my-org/admin-team"
+  allow:
+    groups:
+      # Active Directory groups
+      - "DOMAIN\\Domain Users"
+      - "CORP\\Engineering"
+      
+      # OIDC/OAuth groups  
+      - "developers"
+      - "admin-users"
+      
+      # SAML groups
+      - "cn=developers,ou=groups,dc=company,dc=com"
+      
+      # GitHub teams
+      - "my-org/developers"
+      - "my-org/admin-team"
 ```
 
 ### Mixed Scopes
 
-Combine users and groups for flexible access control:
+Combine users, groups, and domains for flexible access control:
 
 ```yaml
 scopes:
-  users:
-    - emergency-admin@example.com     # Emergency access user
-    - service-bot@example.com         # Automated service
-  groups:
-    - on-call                         # On-call team members
-    - security-team                   # Security personnel
-    - senior-engineers                # Senior staff
+  allow:
+    users:
+      - emergency-admin@example.com     # Emergency access user
+      - service-bot@example.com         # Automated service
+    groups:
+      - on-call                         # On-call team members
+      - security-team                   # Security personnel
+      - senior-engineers                # Senior staff
+    domains:
+      - example.com                     # All company users
+  deny:
+    groups:
+      - contractors                     # Exclude contractors
+    domains:
+      - external-vendor.com             # Block external vendor domain
 ```
 
 ### Public Roles
@@ -975,9 +1084,10 @@ roles:
     # No 'scopes' field - available to all users
     permissions:
       allow:
-        - "*:Describe*"
-        - "*:List*"
-        - "*:Get*"
+        - operations:
+            - "*:Describe*"
+            - "*:List*"
+            - "*:Get*"
 ```
 
 ### Scope Inheritance
@@ -989,17 +1099,21 @@ roles:
   admin-base:
     name: Admin Base
     scopes:
-      groups: [admins]
+      allow:
+        groups: [admins]
     permissions:
-      allow: ["*:*"]
+      allow:
+        - operations: ["*:*"]
   
   senior-admin:
     name: Senior Admin
     inherits: [admin-base]          # User must be in 'admins' group
     scopes:
-      groups: [senior-staff]        # AND in 'senior-staff' group
+      allow:
+        groups: [senior-staff]      # AND in 'senior-staff' group
     permissions:
-      allow: ["sensitive:*"]
+      allow:
+        - operations: ["sensitive:*"]
 
 # For senior-admin role to work, user must be in BOTH groups:
 # - 'admins' (required by admin-base)
@@ -1013,14 +1127,15 @@ roles:
 # Role definition
 developer-role:
   scopes:
-    groups: [developers, engineering]
+    allow:
+      groups: [developers, engineering]
 
 # User identity
 user:
   email: alice@example.com
   groups: [developers, qa-team]
 
-# Result: ✅ Access granted (user in 'developers' group)
+# Result: Access granted (user in 'developers' group)
 ```
 
 #### Failed Access
@@ -1028,15 +1143,34 @@ user:
 # Role definition  
 admin-role:
   scopes:
-    users: [admin@example.com]
-    groups: [administrators]
+    allow:
+      users: [admin@example.com]
+      groups: [administrators]
 
 # User identity
 user:
   email: alice@example.com
   groups: [developers]
 
-# Result: ❌ Access denied (user not in allowed users or groups)
+# Result: Access denied (user not in allowed users or groups)
+```
+
+#### Denied by Deny Rule
+```yaml
+# Role definition
+team-role:
+  scopes:
+    allow:
+      groups: [engineering]
+    deny:
+      groups: [interns]
+
+# User identity
+user:
+  email: intern@example.com
+  groups: [engineering, interns]
+
+# Result: Access denied (user matches deny rule 'interns', which takes precedence)
 ```
 
 ---
@@ -1057,8 +1191,9 @@ roles:
       - aws-dev  # Only the aws-dev provider instance
     permissions:
       allow:
-        - "ec2:*"
-        - "s3:*"
+        - operations:
+            - "ec2:*"
+            - "s3:*"
 ```
 
 ### Multi-Provider
@@ -1075,9 +1210,10 @@ roles:
       - gcp-prod
     permissions:
       allow:
-        - "*:Describe*"
-        - "*:List*"
-        - "*:Get*"
+        - operations:
+            - "*:Describe*"
+            - "*:List*"
+            - "*:Get*"
 ```
 
 ### Environment-Specific Providers
@@ -1094,7 +1230,8 @@ roles:
       - gcp-dev
       - k8s-dev
     permissions:
-      allow: ["*:*"]
+      allow:
+        - operations: ["*:*"]
   
   production-readonly:
     name: Production Read-Only
@@ -1104,9 +1241,10 @@ roles:
       - gcp-prod
     permissions:
       allow:
-        - "*:Describe*"
-        - "*:List*"
-        - "*:Get*"
+        - operations:
+            - "*:Describe*"
+            - "*:List*"
+            - "*:Get*"
 ```
 
 ### Provider Inheritance Compatibility
@@ -1170,7 +1308,8 @@ roles:
       - manager-approval     # Requires manager approval
       - security-review      # Additional security review
     permissions:
-      allow: ["*:*"]
+      allow:
+        - operations: ["*:*"]
 ```
 
 ### Multiple Workflows
@@ -1190,11 +1329,12 @@ roles:
       - security-approval        # Step 3: Security team approval
       - time-limit               # Step 4: Apply time limits
     permissions:
-      allow: ["*:*"]
+      allow:
+        - operations: ["*:*"]
 ```
 
 #### Scoped Workflows
-Different workflows can be scoped to specific resources, users, teams, or permissions:
+Different workflows can be scoped to specific users, teams, or permissions:
 
 ```yaml
 roles:
@@ -1204,21 +1344,20 @@ roles:
       # Base approval for all requests
       - manager-approval
       
-      # Additional security review for sensitive resources
-      - security-review          # Scoped to sensitive resources
+      # Additional security review for sensitive operations
+      - security-review
       
       # Emergency bypass for on-call team
-      - emergency-bypass         # Scoped to on-call users
+      - emergency-bypass
       
       # Extended approval for high-privilege actions
-      - ciso-approval           # Scoped to admin permissions
+      - ciso-approval
       
       # Audit logging for all actions
-      - audit-trail             # Applied to all requests
+      - audit-trail
     permissions:
-      allow: ["*:*"]
-    resources:
-      allow: ["*"]
+      allow:
+        - operations: ["*:*"]
 ```
 
 #### Resource-Scoped Workflow Example
@@ -1228,27 +1367,29 @@ roles:
     name: Database Administrator
     workflows:
       # Standard approval for read operations
-      - team-lead-approval      # Scoped to read-only permissions
+      - team-lead-approval
       
       # DBA approval for schema changes
-      - dba-approval           # Scoped to DDL operations
+      - dba-approval
       
       # CISO approval for production databases
-      - ciso-approval          # Scoped to production resources
+      - ciso-approval
       
       # Immediate notification for all access
-      - security-notification  # Applied to all requests
+      - security-notification
     permissions:
       allow:
-        - "rds:Describe*,List*"           # Read operations
-        - "rds:CreateDBSnapshot"          # Backup operations
-        - "rds:ModifyDBInstance"          # Configuration changes
-        - "rds:CreateDBInstance"          # New instance creation
-    resources:
-      allow:
-        - "arn:aws:rds:*:*:db:dev-*"     # Development databases
-        - "arn:aws:rds:*:*:db:staging-*" # Staging databases  
-        - "arn:aws:rds:*:*:db:prod-*"    # Production databases
+        - operations:
+            - "rds:Describe*,List*"           # Read operations
+            - "rds:CreateDBSnapshot"          # Backup operations
+          targets:
+            - "arn:aws:rds:*:*:db:dev-*"     # Development databases
+            - "arn:aws:rds:*:*:db:staging-*" # Staging databases
+        - operations:
+            - "rds:ModifyDBInstance"          # Configuration changes
+            - "rds:CreateDBInstance"          # New instance creation
+          targets:
+            - "arn:aws:rds:*:*:db:dev-*"     # Development only
 ```
 
 #### Team-Scoped Workflow Example
@@ -1258,22 +1399,24 @@ roles:
     name: Escalated Support Access
     workflows:
       # Different approval chains for different teams
-      - l2-approval            # Scoped to L2 support team
-      - security-approval      # Scoped to security team members
-      - manager-approval       # Scoped to engineering managers
-      - emergency-access       # Scoped to on-call personnel
+      - l2-approval
+      - security-approval
+      - manager-approval
+      - emergency-access
       
       # Universal workflows
-      - access-logging         # Applied to all users
-      - time-restriction       # Applied to all requests
+      - access-logging
+      - time-restriction
     scopes:
-      groups:
-        - l2-support           # L2 support team
-        - security-team        # Security personnel
-        - engineering-managers # Engineering managers
-        - on-call             # On-call rotation
+      allow:
+        groups:
+          - l2-support
+          - security-team
+          - engineering-managers
+          - on-call
     permissions:
-      allow: ["*:*"]
+      allow:
+        - operations: ["*:*"]
 ```
 
 #### Permission-Scoped Workflow Example
@@ -1283,27 +1426,28 @@ roles:
     name: Cloud Engineer
     workflows:
       # Light approval for read operations
-      - self-approval          # Scoped to read-only permissions
+      - self-approval
       
       # Team approval for standard operations
-      - peer-review           # Scoped to create/update operations
+      - peer-review
       
       # Management approval for destructive operations
-      - manager-approval      # Scoped to delete operations
+      - manager-approval
       
       # Security review for IAM operations
-      - security-review       # Scoped to IAM/security permissions
+      - security-review
       
       # Audit trail for all actions
-      - comprehensive-audit   # Applied to all permissions
+      - comprehensive-audit
     permissions:
       allow:
-        - "ec2:Describe*,List*,Get*"     # Read operations
-        - "ec2:Start*,Stop*,Reboot*"     # Management operations
-        - "ec2:Create*,Update*,Modify*"  # Creation operations
-        - "ec2:Terminate*,Delete*"       # Destructive operations
-        - "iam:List*,Get*,Describe*"     # IAM read operations
-        - "iam:Create*,Update*,Delete*"  # IAM write operations
+        - operations:
+            - "ec2:Describe*,List*,Get*"     # Read operations
+            - "ec2:Start*,Stop*,Reboot*"     # Management operations
+            - "ec2:Create*,Update*,Modify*"  # Creation operations
+            - "ec2:Terminate*,Delete*"       # Destructive operations
+            - "iam:List*,Get*,Describe*"     # IAM read operations
+            - "iam:Create*,Update*,Delete*"  # IAM write operations
 ```
 
 ### Conditional Workflows
@@ -1316,7 +1460,7 @@ roles:
     name: Adaptive Access Control
     workflows:
       # Risk-based routing workflow
-      - risk-assessment        # Analyzes request context and routes accordingly
+      - risk-assessment
       
       # Conditional workflows based on risk assessment:
       # - Low risk: automatic approval
@@ -1324,15 +1468,16 @@ roles:
       # - High risk: security team + CISO approval + enhanced monitoring
       
       # Time-based workflows
-      - business-hours-check   # Different approval paths for after-hours access
+      - business-hours-check
       
       # Location-based workflows  
-      - geo-validation        # Additional verification for non-standard locations
+      - geo-validation
       
       # Frequency-based workflows
-      - usage-pattern-check   # Escalated approval for unusual access patterns
+      - usage-pattern-check
     permissions:
-      allow: ["*:*"]
+      allow:
+        - operations: ["*:*"]
 ```
 
 ### Dynamic Workflow Selection
@@ -1349,21 +1494,22 @@ roles:
       
       # Available sub-workflows (selected by dynamic-router):
       # For emergency situations:
-      - emergency-fast-track    # Immediate approval with post-review
+      - emergency-fast-track
       
       # For business hours, standard requests:
-      - standard-approval      # Manager approval within business hours
+      - standard-approval
       
       # For after-hours requests:
-      - extended-approval      # Manager + security team approval
+      - extended-approval
       
       # For high-risk operations:
-      - enhanced-security      # Multi-level approval + monitoring
+      - enhanced-security
       
       # For audit/compliance requests:
-      - compliance-track       # Compliance team approval + audit trail
+      - compliance-track
     permissions:
-      allow: ["*:*"]
+      allow:
+        - operations: ["*:*"]
 ```
 
 ### Workflow Context
@@ -1375,7 +1521,7 @@ Workflows receive rich context about the role request, enabling intelligent rout
 - **User identity**: Who is requesting access (user ID, email, groups)
 - **Duration**: How long access is requested for
 - **Justification**: User-provided reason for access
-- **Requested resources**: Specific resources if applicable
+- **Requested targets**: Specific resources if applicable
 - **Provider instance**: Which provider instance will be used
 - **Time context**: Request time, business hours, timezone
 - **Location context**: User's IP address, geolocation
@@ -1384,7 +1530,7 @@ Workflows receive rich context about the role request, enabling intelligent rout
 #### Permission Context
 - **Requested permissions**: Specific actions being requested
 - **Permission risk level**: Classification of permission sensitivity
-- **Resource sensitivity**: Classification of target resources
+- **Target sensitivity**: Classification of target resources
 - **Blast radius**: Potential impact of the requested access
 
 #### Historical Context
@@ -1403,14 +1549,15 @@ roles:
       - intelligent-router
       
       # Context-specific workflows:
-      - first-time-access      # For users with no access history
-      - repeat-access          # For users with established patterns
-      - anomaly-detected       # For unusual access patterns
-      - high-risk-resource     # For sensitive resource access
-      - compliance-required    # For regulated environments
-      - incident-response      # For emergency/incident scenarios
+      - first-time-access
+      - repeat-access
+      - anomaly-detected
+      - high-risk-resource
+      - compliance-required
+      - incident-response
     permissions:
-      allow: ["*:*"]
+      allow:
+        - operations: ["*:*"]
 ```
 
 ### Integration Examples
@@ -1422,24 +1569,26 @@ roles:
     name: Emergency Break Glass Access
     workflows:
       # Immediate notification workflows
-      - emergency-notification   # Immediately notify security team
-      - incident-tracking        # Create incident ticket automatically
+      - emergency-notification
+      - incident-tracking
       
       # Approval workflows (can run in parallel)
-      - on-call-approval         # On-call engineer approval (fastest)
-      - security-notification    # Security team real-time notification
+      - on-call-approval
+      - security-notification
       
       # Monitoring and control workflows
-      - enhanced-monitoring      # Real-time activity monitoring
-      - time-enforcement         # Strict time limits (1-2 hours max)
+      - enhanced-monitoring
+      - time-enforcement
       
       # Post-access workflows
-      - post-incident-review     # Schedule mandatory follow-up review
-      - access-report           # Generate detailed access report
+      - post-incident-review
+      - access-report
     scopes:
-      groups: [on-call, security-team, incident-commanders]
+      allow:
+        groups: [on-call, security-team, incident-commanders]
     permissions:
-      allow: ["*:*"]
+      allow:
+        - operations: ["*:*"]
 ```
 
 #### Development Access with Tiered Approval
@@ -1449,27 +1598,28 @@ roles:
     name: Development Access
     workflows:
       # Automated workflows for low-risk operations
-      - self-approval           # Automatic approval for dev environments
-      - usage-tracking          # Track usage patterns and anomalies
+      - self-approval
+      - usage-tracking
       
       # Peer review for moderate-risk operations
-      - peer-review            # Another developer reviews the request
+      - peer-review
       
       # Management approval for high-risk operations
-      - tech-lead-approval     # Technical lead approval for prod access
+      - tech-lead-approval
       
       # Governance workflows
-      - compliance-check       # Automated compliance validation
-      - audit-logging          # Comprehensive audit trail
+      - compliance-check
+      - audit-logging
     scopes:
-      groups: [developers, qa-engineers]
+      allow:
+        groups: [developers, qa-engineers]
     permissions:
-      allow: ["*:*"]
-    resources:
-      allow: 
-        - "*dev*"              # Development resources (self-approval)
-        - "*staging*"          # Staging resources (peer-review)
-        - "*prod*"             # Production resources (tech-lead-approval)
+      allow:
+        - operations: ["*:*"]
+          targets:
+            - "*dev*"              # Development resources (self-approval)
+            - "*staging*"          # Staging resources (peer-review)
+            - "*prod*"             # Production resources (tech-lead-approval)
 ```
 
 #### Audit Access with Enhanced Oversight
@@ -1479,26 +1629,26 @@ roles:
     name: Audit Access
     workflows:
       # Pre-approval workflows
-      - compliance-team-approval # Compliance team must approve
-      - legal-review            # Legal team review for sensitive audits
+      - compliance-team-approval
+      - legal-review
       
       # Access control workflows
-      - just-in-time           # Activate access only when needed
-      - session-recording      # Record all activities during access
+      - just-in-time
+      - session-recording
       
       # Oversight workflows
-      - dual-control           # Require two auditors for sensitive operations
-      - supervisor-monitoring  # Audit supervisor real-time monitoring
+      - dual-control
+      - supervisor-monitoring
       
       # Post-access workflows  
-      - access-summary         # Generate summary of all actions taken
-      - evidence-preservation  # Preserve audit evidence securely
+      - access-summary
+      - evidence-preservation
     scopes:
-      groups: [auditors, compliance-team, legal-team]
+      allow:
+        groups: [auditors, compliance-team, legal-team]
     permissions:
-      allow: ["*:List*", "*:Describe*", "*:Get*", "*:Read*"]
-    resources:
-      allow: ["*"]  # Auditors may need access to any resource
+      allow:
+        - operations: ["*:List*", "*:Describe*", "*:Get*", "*:Read*"]
 ```
 
 #### Service Account Access with Automation Controls
@@ -1508,33 +1658,36 @@ roles:
     name: CI/CD Deployment Access
     workflows:
       # Automated approval workflows
-      - ci-validation          # Validate CI/CD context and credentials
-      - deployment-window      # Check if within allowed deployment window
+      - ci-validation
+      - deployment-window
       
       # Safety workflows
-      - canary-deployment      # Gradual rollout for production deployments
-      - rollback-preparation   # Prepare automatic rollback mechanisms
+      - canary-deployment
+      - rollback-preparation
       
       # Monitoring workflows
-      - deployment-monitoring  # Monitor deployment health
-      - security-scanning      # Real-time security scanning of deployments
+      - deployment-monitoring
+      - security-scanning
       
       # Notification workflows
-      - team-notification      # Notify relevant teams of deployments
-      - stakeholder-update     # Update stakeholders on deployment status
+      - team-notification
+      - stakeholder-update
     scopes:
-      users:
-        - ci-service@example.com
-        - deployment-bot@example.com
+      allow:
+        users:
+          - ci-service@example.com
+          - deployment-bot@example.com
     permissions:
       allow:
-        - "ec2:*Instance*"
-        - "s3:GetObject,PutObject"
-        - "ecs:*Service*"
-        - "lambda:UpdateFunctionCode"
+        - operations:
+            - "ec2:*Instance*"
+            - "s3:GetObject,PutObject"
+            - "ecs:*Service*"
+            - "lambda:UpdateFunctionCode"
       deny:
-        - "*:Delete*"             # No deletion permissions for automation
-        - "*:Create*User*"        # No user creation
+        - operations:
+            - "*:Delete*"             # No deletion permissions for automation
+            - "*:Create*User*"        # No user creation
 ```
 
 ---
@@ -1579,13 +1732,15 @@ roles:
     name: AWS EC2 Administrator
     providers: [aws-prod, aws-dev]
     permissions:
-      allow: ["ec2:*"]
+      allow:
+        - operations: ["ec2:*"]
   
   aws-s3-readonly:
     name: AWS S3 Read-Only
     providers: [aws-prod]
     permissions:
-      allow: ["s3:Get*", "s3:List*"]
+      allow:
+        - operations: ["s3:Get*", "s3:List*"]
 ```
 
 #### Multiple Files by Team/Function
@@ -1605,16 +1760,20 @@ roles:
   frontend-developer:
     name: Frontend Developer
     scopes:
-      groups: [frontend-team]
+      allow:
+        groups: [frontend-team]
     permissions:
-      allow: ["s3:GetObject", "cloudfront:*"]
+      allow:
+        - operations: ["s3:GetObject", "cloudfront:*"]
   
   backend-developer:
     name: Backend Developer
     scopes:
-      groups: [backend-team]
+      allow:
+        groups: [backend-team]
     permissions:
-      allow: ["ec2:*", "rds:Describe*"]
+      allow:
+        - operations: ["ec2:*", "rds:Describe*"]
 ```
 
 ### Loading Configuration
@@ -1657,11 +1816,13 @@ roles:
   admin:
     name: Administrator
     permissions:
-      allow: ["*:*"]
+      allow:
+        - operations: ["*:*"]
   readonly:
     name: Read-Only User
     permissions:
-      allow: ["*:Describe*", "*:List*", "*:Get*"]
+      allow:
+        - operations: ["*:Describe*", "*:List*", "*:Get*"]
 ```
 
 #### Combined Loading
@@ -1693,11 +1854,11 @@ The agent validates role configurations on startup:
 - Inheritance cycle detection
 - Provider compatibility
 - Permission format validation
-- Resource pattern validation
+- Statement structure validation
 
 #### Runtime Validation
 - Provider role existence
-- User/group scope resolution
+- User/group/domain scope resolution
 - Workflow availability
 - Authentication provider integration
 
@@ -1729,22 +1890,23 @@ roles:
 
 #### Principle of Least Privilege
 ```yaml
-# ✅ Good - specific permissions
+# Good - specific permissions with targeted resources
 ec2-restart-role:
   name: EC2 Instance Restart
   permissions:
     allow:
-      - "ec2:DescribeInstances,StartInstances,StopInstances,RebootInstances"
-      - "ec2:DescribeInstanceStatus"
-  resources:
-    allow:
-      - "arn:aws:ec2:*:*:instance/i-app-*"  # Only app instances
+      - operations:
+          - "ec2:DescribeInstances,StartInstances,StopInstances,RebootInstances"
+          - "ec2:DescribeInstanceStatus"
+        targets:
+          - "arn:aws:ec2:*:*:instance/i-app-*"  # Only app instances
 
-# ❌ Avoid - overly broad permissions  
+# Avoid - overly broad permissions  
 ec2-admin-role:
   name: EC2 Admin
   permissions:
-    allow: ["ec2:*"]  # Too broad
+    allow:
+      - operations: ["ec2:*"]  # Too broad, no target restrictions
 ```
 
 #### Time-Bounded Access
@@ -1755,12 +1917,13 @@ time-limited-admin:
   workflows:
     - time-limited-approval  # Implements max 2-hour access
   permissions:
-    allow: ["*:*"]
+    allow:
+      - operations: ["*:*"]
 ```
 
 #### Clear Naming and Documentation
 ```yaml
-# ✅ Good - descriptive names and documentation
+# Good - descriptive names and documentation
 aws-rds-backup-operator:
   name: AWS RDS Backup Operator
   description: |
@@ -1775,7 +1938,7 @@ aws-rds-backup-operator:
     - Modifying database configurations
     - Creating new database instances
   
-# ❌ Avoid - unclear names
+# Avoid - unclear names
 role1:
   name: Some Database Access
   description: Database stuff
@@ -1789,7 +1952,8 @@ role1:
 cloud-readonly-base:
   name: Cloud Read-Only Base
   permissions:
-    allow: ["*:Describe*", "*:List*", "*:Get*"]
+    allow:
+      - operations: ["*:Describe*", "*:List*", "*:Get*"]
 
 # Service-specific roles
 aws-readonly:
@@ -1801,34 +1965,36 @@ ec2-readonly:
   name: EC2 Read-Only
   inherits: [aws-readonly]
   permissions:
-    allow: ["ec2:*"]
-  resources:
-    allow: ["arn:aws:ec2:*:*:*"]
+    allow:
+      - operations: ["ec2:*"]
+        targets: ["arn:aws:ec2:*:*:*"]
 
 # Team-specific roles
 dev-team-ec2:
   name: Development Team EC2 Access
   inherits: [ec2-readonly]
   scopes:
-    groups: [developers]
+    allow:
+      groups: [developers]
   permissions:
-    allow: ["ec2:StartInstances", "ec2:StopInstances"]
-  resources:
-    allow: ["arn:aws:ec2:*:*:instance/i-dev-*"]
+    allow:
+      - operations: ["ec2:StartInstances", "ec2:StopInstances"]
+        targets: ["arn:aws:ec2:*:*:instance/i-dev-*"]
 ```
 
 #### Leverage Provider Managed Roles
 ```yaml
-# ✅ Good - use existing cloud roles as foundation
+# Good - use existing cloud roles as foundation
 aws-power-user:
   name: AWS Power User
   inherits:
     - "aws-prod:arn:aws:iam::aws:policy/PowerUserAccess"
   # Add company-specific restrictions
   permissions:
-    deny: ["iam:*User*", "iam:*Role*"]  # No user/role management
-  resources:
-    deny: ["arn:aws:s3:::sensitive-*"]   # No sensitive buckets
+    deny:
+      - operations: ["iam:*User*", "iam:*Role*"]  # No user/role management
+      - operations: ["s3:*"]
+        targets: ["arn:aws:s3:::sensitive-*"]      # No sensitive buckets
 ```
 
 ### 3. Security Patterns
@@ -1848,22 +2014,23 @@ production-admin:
   
   # Strict scope limitation
   scopes:
-    users: [emergency-admin@example.com]
-    groups: [senior-sre, security-team]
-  
-  # Explicit resource restrictions even for admin
-  resources:
-    allow: ["arn:aws:*:us-east-1:123456789012:*"]  # Single region only
-    deny: 
-      - "arn:aws:s3:::audit-*"                      # No audit data
-      - "arn:aws:kms:*:*:key/*"                     # No key access
+    allow:
+      users: [emergency-admin@example.com]
+      groups: [senior-sre, security-team]
   
   permissions:
-    allow: ["*:*"]
+    allow:
+      - operations: ["*:*"]
+        targets: ["arn:aws:*:us-east-1:123456789012:*"]  # Single region only
     deny:
-      - "iam:DeleteUser"                            # No user deletion
-      - "iam:DeleteRole"                            # No role deletion
-      - "s3:DeleteBucket"                           # No bucket deletion
+      - operations:
+          - "iam:DeleteUser"
+          - "iam:DeleteRole"
+          - "s3:DeleteBucket"
+      - operations: ["*"]
+        targets:
+          - "arn:aws:s3:::audit-*"         # No audit data
+          - "arn:aws:kms:*:*:key/*"        # No key access
 ```
 
 #### Explicit Denials for High-Risk Actions
@@ -1872,22 +2039,24 @@ developer-access:
   name: Developer Access
   permissions:
     allow:
-      - "ec2:*"
-      - "s3:*"
-      - "rds:*"
+      - operations:
+          - "ec2:*"
+          - "s3:*"
+          - "rds:*"
     deny:
-      # Explicit denials for dangerous actions
-      - "ec2:TerminateInstances"
-      - "s3:DeleteBucket"
-      - "rds:DeleteDBInstance"
-      - "iam:*"                                     # No IAM access at all
+      - operations:
+          # Explicit denials for dangerous actions
+          - "ec2:TerminateInstances"
+          - "s3:DeleteBucket"
+          - "rds:DeleteDBInstance"
+          - "iam:*"                         # No IAM access at all
 ```
 
 ### 4. Operational Patterns
 
 #### Environment Separation
 ```yaml
-# ✅ Good - clear environment separation
+# Good - clear environment separation
 development-admin:
   name: Development Administrator
   providers: [aws-dev, azure-dev, gcp-dev]
@@ -1903,7 +2072,8 @@ production-readonly:
   providers: [aws-prod, azure-prod, gcp-prod]
   workflows: [manager-approval, audit-logging]      # Strict controls for prod
   permissions:
-    allow: ["*:Describe*", "*:List*", "*:Get*"]
+    allow:
+      - operations: ["*:Describe*", "*:List*", "*:Get*"]
 ```
 
 #### Emergency Access Patterns
@@ -1916,21 +2086,24 @@ break-glass-access:
     All usage is heavily audited and requires post-incident review.
   
   workflows:
-    - emergency-notification     # Immediate alerts
-    - break-glass-logging        # Enhanced audit logging
-    - post-incident-review       # Mandatory follow-up
+    - emergency-notification
+    - break-glass-logging
+    - post-incident-review
   
   scopes:
-    groups: [on-call, incident-commanders]
+    allow:
+      groups: [on-call, incident-commanders]
   
   permissions:
-    allow: ["*:*"]
+    allow:
+      - operations: ["*:*"]
     
-  # Even emergency access has some limits
-  resources:
-    deny: 
-      - "arn:aws:s3:::customer-data-*"             # Customer data protection
-      - "arn:aws:kms:*:*:key/*"                     # Encryption key protection
+    # Even emergency access has some limits
+    deny:
+      - operations: ["*"]
+        targets:
+          - "arn:aws:s3:::customer-data-*"   # Customer data protection
+          - "arn:aws:kms:*:*:key/*"          # Encryption key protection
 ```
 
 #### Service Account Patterns
@@ -1940,23 +2113,26 @@ ci-cd-deployment:
   description: Automated deployment service access
   
   scopes:
-    users:
-      - ci-service@example.com
-      - deployment-bot@example.com
+    allow:
+      users:
+        - ci-service@example.com
+        - deployment-bot@example.com
   
   workflows:
-    - automated-approval        # No human approval needed
-    - deployment-logging        # Track all deployments
+    - automated-approval
+    - deployment-logging
   
   permissions:
     allow:
-      - "ec2:*Instance*"
-      - "s3:GetObject,PutObject"
-      - "ecs:*Service*"
-      - "lambda:UpdateFunctionCode"
+      - operations:
+          - "ec2:*Instance*"
+          - "s3:GetObject,PutObject"
+          - "ecs:*Service*"
+          - "lambda:UpdateFunctionCode"
     deny:
-      - "*:Delete*"             # No deletion permissions for automation
-      - "*:Create*User*"        # No user creation
+      - operations:
+          - "*:Delete*"             # No deletion permissions for automation
+          - "*:Create*User*"        # No user creation
 ```
 
 ### 5. Maintenance Patterns
@@ -1984,10 +2160,10 @@ developer-role:
     Version: 2.1.0
     Last modified: 2025-01-15
     Modified by: alice@example.com
-    Change reason: Added S3 read access for new logging requirements
+    Change reason: Migrated to statement-based permissions
     
     Change log:
-    - 2.1.0: Added S3 read permissions
+    - 2.1.0: Migrated to statement format with targets and conditions
     - 2.0.0: Migrated to intelligent permission merging
     - 1.0.0: Initial role definition
 ```
@@ -2006,17 +2182,19 @@ developer-role:
 
 **Solution:**
 ```yaml
-# ✅ Ensure base roles are defined before child roles
+# Ensure base roles are defined before child roles
 base-user:
   name: Base User
   permissions:
-    allow: ["*:Describe*", "*:List*"]
+    allow:
+      - operations: ["*:Describe*", "*:List*"]
 
 admin-user:
   name: Administrator
   inherits: [base-user]  # Now this will work
   permissions:
-    allow: ["*:*"]
+    allow:
+      - operations: ["*:*"]
 ```
 
 #### 2. Provider Role Not Found
@@ -2048,13 +2226,14 @@ az role definition list --name "Virtual Machine Contributor"
 
 **Solutions:**
 ```yaml
-# ✅ Use correct AWS permission names
+# Use correct AWS permission names
 permissions:
   allow:
-    - "ec2:DescribeInstances"     # Correct
-    # - "ec2:ListInstances"       # Incorrect - no such permission
+    - operations:
+        - "ec2:DescribeInstances"     # Correct
+        # - "ec2:ListInstances"       # Incorrect - no such permission
 
-# ✅ Check provider documentation for correct names
+# Check provider documentation for correct names
 # AWS: https://docs.aws.amazon.com/service-authorization/
 # Azure: https://docs.microsoft.com/en-us/azure/role-based-access-control/
 # GCP: https://cloud.google.com/iam/docs/understanding-roles
@@ -2064,17 +2243,21 @@ permissions:
 
 **Error:** `user alice@example.com cannot access role admin`
 
-**Cause:** User not included in role scopes
+**Cause:** User not included in role scopes, or denied by a deny rule
 
 **Solutions:**
 ```yaml
-# ✅ Check role scopes include the user
+# Check role scopes include the user in allow (and not in deny)
 admin-role:
   scopes:
-    users: [alice@example.com]  # Direct user access
-    groups: [administrators]    # Or group membership
+    allow:
+      users: [alice@example.com]  # Direct user access
+      groups: [administrators]    # Or group membership
+    # Ensure no deny rules block this user
+    # deny:
+    #   groups: [some-group-user-is-in]  # This would block access
 
-# ✅ Verify user's group memberships
+# Verify user's group memberships
 # Check identity provider for user's group assignments
 ```
 
@@ -2086,14 +2269,14 @@ admin-role:
 
 **Solutions:**
 ```yaml
-# ✅ Ensure role is in the correct account
+# Ensure role is in the correct account
 aws-role:
   providers: [aws-prod]
   inherits:
     # Use role from same account as provider
     - "aws-prod:arn:aws:iam::123456789012:role/MyRole"  # Correct account
 
-# ✅ Set up cross-account trust if needed
+# Set up cross-account trust if needed
 # In the target role's trust policy:
 {
   "Version": "2012-10-17",
@@ -2117,16 +2300,18 @@ aws-role:
 
 **Solutions:**
 ```yaml
-# ❌ Incorrect - trailing comma
+# Incorrect - trailing comma
 permissions:
   allow:
-    - "k8s:pods:get,list,"     # Trailing comma
+    - operations:
+        - "k8s:pods:get,list,"     # Trailing comma
 
-# ✅ Correct format
+# Correct format
 permissions:
   allow:
-    - "k8s:pods:get,list"      # No trailing comma
-    - "k8s:services:create,delete,get,list,update"  # Properly formatted
+    - operations:
+        - "k8s:pods:get,list"      # No trailing comma
+        - "k8s:services:create,delete,get,list,update"  # Properly formatted
 ```
 
 #### 7. GCP Permissions Being Condensed
@@ -2139,16 +2324,18 @@ permissions:
 ```yaml
 permissions:
   allow:
-    # These GCP-style permissions are NEVER condensed
-    - "gcp-prod:compute.instances.get"
-    - "gcp-prod:compute.instances.list"
-    - "gcp-prod:compute.instances.start"
-    # They remain as separate entries, not merged like:
-    # - "gcp-prod:compute.instances:get,list,start"  # This is NOT how GCP works
+    - operations:
+        # These GCP-style permissions are NEVER condensed
+        - "gcp-prod:compute.instances.get"
+        - "gcp-prod:compute.instances.list"
+        - "gcp-prod:compute.instances.start"
+        # They remain as separate entries, not merged like:
+        # - "gcp-prod:compute.instances:get,list,start"  # This is NOT how GCP works
 
-    # These AWS/K8s permissions CAN be condensed
-    - "ec2:DescribeInstances,StartInstances"   # Condensable (no dots in action)
-    - "k8s:pods:get,list,watch"                # Condensable (no dots in action)
+    - operations:
+        # These AWS/K8s permissions CAN be condensed
+        - "ec2:DescribeInstances,StartInstances"   # Condensable (no dots in action)
+        - "k8s:pods:get,list,watch"                # Condensable (no dots in action)
 ```
 
 **Detection Rule:** If the last segment (after the final colon) contains a dot, the permission is treated as atomic and never condensed.
@@ -2161,17 +2348,66 @@ permissions:
 
 **Solutions:**
 ```yaml
-# ❌ Incorrect - provider prefix doesn't match providers list
+# Incorrect - provider prefix doesn't match providers list
 my-role:
   providers: [aws-production]  # Note: "aws-production"
   inherits: [base-role]        # base-role has "aws-prod:ec2:*"
   # "aws-prod" != "aws-production", so permission is filtered out
 
-# ✅ Correct - provider prefixes match
+# Correct - provider prefixes match
 my-role:
   providers: [aws-prod]        # Matches the prefix
   inherits: [base-role]        # base-role has "aws-prod:ec2:*"
   # "aws-prod" == "aws-prod", so permission is included
+```
+
+#### 9. Statement Format Issues
+
+**Error:** `invalid permission statement: missing operations field`
+
+**Cause:** Permission statements must include at least the `operations` field
+
+**Solutions:**
+```yaml
+# Incorrect - missing operations
+permissions:
+  allow:
+    - targets:                     # Missing 'operations'
+        - "arn:aws:s3:::bucket/*"
+
+# Correct - operations is required
+permissions:
+  allow:
+    - operations:
+        - "s3:GetObject"
+      targets:
+        - "arn:aws:s3:::bucket/*"
+
+# Also correct - targets and conditions are optional
+permissions:
+  allow:
+    - operations:
+        - "s3:GetObject"
+```
+
+#### 10. Deny Scope Confusion
+
+**Error:** User can't access a role despite being in an allowed group
+
+**Cause:** A deny scope rule is blocking access. Deny always takes precedence over allow.
+
+**Solutions:**
+```yaml
+# Check for deny rules that might match the user
+my-role:
+  scopes:
+    allow:
+      groups: [engineering]       # User is in this group
+    deny:
+      groups: [contractors]       # But also in this group - DENIED!
+      domains: [external.com]     # Or has this email domain - DENIED!
+
+# Remove the conflicting deny rule, or remove the user from the denied group
 ```
 
 ### Debugging Tools and Techniques
@@ -2190,10 +2426,7 @@ logging:
 #### Use CLI Tools for Testing
 ```bash
 # Test role resolution (hypothetical CLI commands)
-thand roles list                                    # List all available roles
-thand roles describe aws-developer                  # Show role details
-thand roles test alice@example.com aws-developer    # Test user access
-thand roles inheritance aws-developer               # Show inheritance chain
+thand roles                                    # List all roles
 ```
 
 #### Validate Configuration
@@ -2210,7 +2443,8 @@ debug-inheritance:
   name: Debug Inheritance Test
   inherits: [problematic-role]
   permissions:
-    allow: ["debug:test"]
+    allow:
+      - operations: ["debug:test"]
   # This will show inheritance resolution issues
 ```
 

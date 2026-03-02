@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	msgraphsdk "github.com/microsoftgraph/msgraph-sdk-go"
 	"github.com/microsoftgraph/msgraph-sdk-go/groups"
 	graphmodels "github.com/microsoftgraph/msgraph-sdk-go/models"
 	"github.com/sirupsen/logrus"
@@ -21,55 +20,48 @@ func (p *azureProvider) SynchronizeGroups(ctx context.Context, req *models.Synch
 		logrus.Debugf("Refreshed Azure AD groups in %s", elapsed)
 	}()
 
-	// Create Microsoft Graph client
-	graphClient, err := msgraphsdk.NewGraphServiceClientWithCredentials(p.cred.Token, []string{"https://graph.microsoft.com/.default"})
-	if err != nil {
-		if req.Pagination == nil {
-			// This is an initial request. If we've failed to get any groups,
-			// this is probably a permission error.
-			return nil, temporal.NewNonRetryableApplicationError(
-				"Failed to create Microsoft Graph client",
-				"GraphClientRequest",
-				err,
-			)
-		}
-		return nil, fmt.Errorf("failed to create Microsoft Graph client: %w", err)
-	}
-
 	if req.Pagination == nil {
 		req.Pagination = &models.PaginationOptions{
 			PageSize: 100,
 		}
 	}
 
-	// Build request configuration
-	requestConfig := &groups.GroupsRequestBuilderGetRequestConfiguration{
-		QueryParameters: &groups.GroupsRequestBuilderGetQueryParameters{
-			Top:    int32Ptr(int32(req.Pagination.PageSize)),
-			Select: []string{"id", "displayName", "mail", "description", "groupTypes"},
-		},
+	// Fetch one page of results. When a continuation token (nextLink URL) from a
+	// previous call is present, resume directly from that URL so we don't
+	// re-fetch the first page on every call.
+	var groupsResult interface {
+		GetValue() []graphmodels.Groupable
+		GetOdataNextLink() *string
+	}
+	var fetchErr error
+
+	if len(req.Pagination.Token) > 0 {
+		// Resume from the nextLink URL returned by the previous page.
+		groupsResult, fetchErr = p.graphClient.Groups().WithUrl(req.Pagination.Token).Get(ctx, nil)
+	} else {
+		requestConfig := &groups.GroupsRequestBuilderGetRequestConfiguration{
+			QueryParameters: &groups.GroupsRequestBuilderGetQueryParameters{
+				Top:    int32Ptr(int32(req.Pagination.PageSize)),
+				Select: []string{"id", "displayName", "mail", "description", "groupTypes"},
+			},
+		}
+		groupsResult, fetchErr = p.graphClient.Groups().Get(ctx, requestConfig)
 	}
 
-	var groupsList []graphmodels.Groupable
-	var nextLink *string
-
-	result, err := graphClient.Groups().Get(ctx, requestConfig)
-	if err != nil {
-		if req.Pagination == nil || len(req.Pagination.Token) == 0 {
-			// This is an initial request
+	if fetchErr != nil {
+		if len(req.Pagination.Token) == 0 {
+			// Initial request failure is likely a permanent permission issue.
 			return nil, temporal.NewNonRetryableApplicationError(
 				"Failed to list groups from Azure AD",
 				"GraphGroupsRequest",
-				err,
+				fetchErr,
 			)
 		}
-		return nil, fmt.Errorf("failed to list groups: %w", err)
+		return nil, fmt.Errorf("failed to list groups: %w", fetchErr)
 	}
-	groupsList = result.GetValue()
-	nextLink = result.GetOdataNextLink()
 
 	var identities []models.Identity
-	for _, group := range groupsList {
+	for _, group := range groupsResult.GetValue() {
 		if group == nil {
 			continue
 		}
@@ -109,8 +101,8 @@ func (p *azureProvider) SynchronizeGroups(ctx context.Context, req *models.Synch
 		Identities: identities,
 	}
 
-	// Handle pagination
-	if nextLink != nil && len(*nextLink) > 0 {
+	// Handle pagination — store the nextLink URL as the token for the next call.
+	if nextLink := groupsResult.GetOdataNextLink(); nextLink != nil && len(*nextLink) > 0 {
 		response.Pagination = &models.PaginationOptions{
 			Token:    *nextLink,
 			PageSize: req.Pagination.PageSize,

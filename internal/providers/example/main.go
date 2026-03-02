@@ -67,7 +67,7 @@ func (p *exampleProvider) RenewSession(ctx context.Context, session *models.Sess
 
 // Authorize grants access for a user to a role
 func (p *exampleProvider) AuthorizeRole(
-	ctx context.Context,
+	ctx models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
 	return &models.AuthorizeRoleResponse{}, nil
@@ -75,7 +75,7 @@ func (p *exampleProvider) AuthorizeRole(
 
 // Revoke removes access for a user from a role
 func (p *exampleProvider) RevokeRole(
-	ctx context.Context,
+	ctx models.ProviderContext,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
 	return &models.RevokeRoleResponse{}, nil
@@ -106,5 +106,5 @@ func (p *exampleProvider) ListRoles(ctx context.Context, searchRequest *models.S
 }
 
 func init() {
-	providers.Register(ExampleProviderName, &exampleProvider{})
+	providers.Register(ExampleProviderName, &exampleProvider{}, ExampleCapabilities, &ConfigSchema{})
 }

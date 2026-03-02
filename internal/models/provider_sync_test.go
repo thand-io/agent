@@ -12,17 +12,29 @@ import (
 // mockProviderForSync wraps a BaseProvider with custom sync methods for testing
 type mockProviderForSync struct {
 	*BaseProvider
-	usersCalled      bool
-	groupsCalled     bool
-	identitiesCalled bool
-	usersResponse    *SynchronizeUsersResponse
-	groupsResponse   *SynchronizeGroupsResponse
-	identitiesResp   *SynchronizeIdentitiesResponse
-	usersError       error
-	groupsError      error
-	identitiesError  error
-	usersCallCount   int
-	usersFunc        func(ctx context.Context, req *SynchronizeUsersRequest) (*SynchronizeUsersResponse, error)
+	usersCalled         bool
+	groupsCalled        bool
+	identitiesCalled    bool
+	resourcesCalled     bool
+	rolesCalled         bool
+	permissionsCalled   bool
+	tenantsCalled       bool
+	usersResponse       *SynchronizeUsersResponse
+	groupsResponse      *SynchronizeGroupsResponse
+	identitiesResp      *SynchronizeIdentitiesResponse
+	resourcesResponse   *SynchronizeResourcesResponse
+	rolesResponse       *SynchronizeRolesResponse
+	permissionsResponse *SynchronizePermissionsResponse
+	tenantsResponse     *SynchronizeTenantsResponse
+	usersError          error
+	groupsError         error
+	identitiesError     error
+	resourcesError      error
+	rolesError          error
+	permissionsError    error
+	tenantsError        error
+	usersCallCount      int
+	usersFunc           func(ctx context.Context, req *SynchronizeUsersRequest) (*SynchronizeUsersResponse, error)
 }
 
 func newMockProviderForSync(name string) *mockProviderForSync {
@@ -51,12 +63,12 @@ func (m *mockProviderForSync) Initialize(identifier string, provider ProviderCon
 func (m *mockProviderForSync) SynchronizeUsers(ctx context.Context, req *SynchronizeUsersRequest) (*SynchronizeUsersResponse, error) {
 	m.usersCalled = true
 	m.usersCallCount++
-	
+
 	// Use custom function if provided
 	if m.usersFunc != nil {
 		return m.usersFunc(ctx, req)
 	}
-	
+
 	if m.usersError != nil {
 		return nil, m.usersError
 	}
@@ -147,6 +159,66 @@ func (m *mockProviderForSync) SynchronizeIdentities(ctx context.Context, req *Sy
 					Source:   "mock",
 				},
 			},
+		},
+	}, nil
+}
+
+func (m *mockProviderForSync) SynchronizeResources(ctx context.Context, req *SynchronizeResourcesRequest) (*SynchronizeResourcesResponse, error) {
+	m.resourcesCalled = true
+	if m.resourcesError != nil {
+		return nil, m.resourcesError
+	}
+	if m.resourcesResponse != nil {
+		return m.resourcesResponse, nil
+	}
+	return &SynchronizeResourcesResponse{
+		Resources: []ProviderResource{
+			{ID: "resource1", Name: "Test Resource 1", Type: "bucket"},
+		},
+	}, nil
+}
+
+func (m *mockProviderForSync) SynchronizeRoles(ctx context.Context, req *SynchronizeRolesRequest) (*SynchronizeRolesResponse, error) {
+	m.rolesCalled = true
+	if m.rolesError != nil {
+		return nil, m.rolesError
+	}
+	if m.rolesResponse != nil {
+		return m.rolesResponse, nil
+	}
+	return &SynchronizeRolesResponse{
+		Roles: []ProviderRole{
+			{ID: "role1", Name: "Test Role 1"},
+		},
+	}, nil
+}
+
+func (m *mockProviderForSync) SynchronizePermissions(ctx context.Context, req *SynchronizePermissionsRequest) (*SynchronizePermissionsResponse, error) {
+	m.permissionsCalled = true
+	if m.permissionsError != nil {
+		return nil, m.permissionsError
+	}
+	if m.permissionsResponse != nil {
+		return m.permissionsResponse, nil
+	}
+	return &SynchronizePermissionsResponse{
+		Permissions: []ProviderPermission{
+			{ID: "permission1", Name: "Test Permission 1"},
+		},
+	}, nil
+}
+
+func (m *mockProviderForSync) SynchronizeTenants(ctx context.Context, req *SynchronizeTenantsRequest) (*SynchronizeTenantsResponse, error) {
+	m.tenantsCalled = true
+	if m.tenantsError != nil {
+		return nil, m.tenantsError
+	}
+	if m.tenantsResponse != nil {
+		return m.tenantsResponse, nil
+	}
+	return &SynchronizeTenantsResponse{
+		Tenants: []ProviderTenant{
+			{ID: "tenant1", Name: "Test Tenant 1"},
 		},
 	}, nil
 }
@@ -402,4 +474,131 @@ func TestSynchronize_ConcurrentSyncs(t *testing.T) {
 	identities, err := provider.ListIdentities(ctx, nil)
 	require.NoError(t, err)
 	assert.NotEmpty(t, identities, "Should have identities after concurrent syncs")
+}
+
+func TestSynchronize_StorePopulation(t *testing.T) {
+	ctx := context.Background()
+
+	newMockWith := func(name string, caps *ProviderCapabilities) *mockProviderForSync {
+		return &mockProviderForSync{
+			BaseProvider: NewBaseProvider(name, ProviderConfig{
+				Name:     name,
+				Provider: "mock",
+				Enabled:  true,
+			}, caps),
+		}
+	}
+
+	t.Run("resources are stored after sync", func(t *testing.T) {
+		mock := newMockWith("resources-provider",
+			NewProviderCapabilities().WithDefaultResourcesConfiguration())
+
+		err := Synchronize(ctx, nil, mock, nil)
+		require.NoError(t, err)
+
+		assert.True(t, mock.resourcesCalled, "SynchronizeResources should have been called")
+		assert.False(t, mock.usersCalled, "SynchronizeUsers should NOT have been called")
+		assert.False(t, mock.rolesCalled, "SynchronizeRoles should NOT have been called")
+		assert.False(t, mock.permissionsCalled, "SynchronizePermissions should NOT have been called")
+
+		resources, err := mock.ListResources(ctx, nil)
+		require.NoError(t, err)
+		assert.Len(t, resources, 1, "Should have 1 resource")
+		assert.Equal(t, "resource1", resources[0].Result.ID)
+	})
+
+	t.Run("roles are stored after sync", func(t *testing.T) {
+		mock := newMockWith("roles-provider",
+			NewProviderCapabilities().WithDefaultRolesConfiguration())
+
+		err := Synchronize(ctx, nil, mock, nil)
+		require.NoError(t, err)
+
+		assert.True(t, mock.rolesCalled, "SynchronizeRoles should have been called")
+		assert.False(t, mock.usersCalled, "SynchronizeUsers should NOT have been called")
+		assert.False(t, mock.resourcesCalled, "SynchronizeResources should NOT have been called")
+		assert.False(t, mock.permissionsCalled, "SynchronizePermissions should NOT have been called")
+
+		roles, err := mock.ListRoles(ctx, nil)
+		require.NoError(t, err)
+		assert.Len(t, roles, 1, "Should have 1 role")
+		assert.Equal(t, "role1", roles[0].Result.ID)
+	})
+
+	t.Run("permissions are stored after sync", func(t *testing.T) {
+		mock := newMockWith("permissions-provider",
+			NewProviderCapabilities().WithDefaultPermissionsConfiguration())
+
+		err := Synchronize(ctx, nil, mock, nil)
+		require.NoError(t, err)
+
+		assert.True(t, mock.permissionsCalled, "SynchronizePermissions should have been called")
+		assert.False(t, mock.usersCalled, "SynchronizeUsers should NOT have been called")
+		assert.False(t, mock.resourcesCalled, "SynchronizeResources should NOT have been called")
+		assert.False(t, mock.rolesCalled, "SynchronizeRoles should NOT have been called")
+
+		permissions, err := mock.ListPermissions(ctx, nil)
+		require.NoError(t, err)
+		assert.Len(t, permissions, 1, "Should have 1 permission")
+		assert.Equal(t, "permission1", permissions[0].Result.ID)
+	})
+
+	t.Run("tenants are stored after sync", func(t *testing.T) {
+		mock := newMockWith("tenants-provider",
+			NewProviderCapabilities().WithDefaultTenantsConfiguration())
+
+		err := Synchronize(ctx, nil, mock, nil)
+		require.NoError(t, err)
+
+		assert.True(t, mock.tenantsCalled, "SynchronizeTenants should have been called")
+		assert.False(t, mock.usersCalled, "SynchronizeUsers should NOT have been called")
+		assert.False(t, mock.resourcesCalled, "SynchronizeResources should NOT have been called")
+		assert.False(t, mock.rolesCalled, "SynchronizeRoles should NOT have been called")
+
+		tenants, err := mock.ListTenants(ctx, nil)
+		require.NoError(t, err)
+		assert.Len(t, tenants, 1, "Should have 1 tenant")
+		assert.Equal(t, "tenant1", tenants[0].Result.ID)
+	})
+
+	t.Run("all capabilities populate their stores independently", func(t *testing.T) {
+		mock := newMockWith("all-capabilities-provider",
+			NewProviderCapabilities().
+				WithDefaultUsersConfiguration().
+				WithDefaultGroupsConfiguration().
+				WithDefaultResourcesConfiguration().
+				WithDefaultRolesConfiguration().
+				WithDefaultPermissionsConfiguration().
+				WithDefaultTenantsConfiguration())
+
+		err := Synchronize(ctx, nil, mock, nil)
+		require.NoError(t, err)
+
+		assert.True(t, mock.usersCalled)
+		assert.True(t, mock.groupsCalled)
+		assert.True(t, mock.resourcesCalled)
+		assert.True(t, mock.rolesCalled)
+		assert.True(t, mock.permissionsCalled)
+		assert.True(t, mock.tenantsCalled)
+
+		identities, err := mock.ListIdentities(ctx, nil)
+		require.NoError(t, err)
+		assert.Len(t, identities, 4, "Should have 2 users + 2 groups")
+
+		resources, err := mock.ListResources(ctx, nil)
+		require.NoError(t, err)
+		assert.Len(t, resources, 1, "Should have 1 resource")
+
+		roles, err := mock.ListRoles(ctx, nil)
+		require.NoError(t, err)
+		assert.Len(t, roles, 1, "Should have 1 role")
+
+		permissions, err := mock.ListPermissions(ctx, nil)
+		require.NoError(t, err)
+		assert.Len(t, permissions, 1, "Should have 1 permission")
+
+		tenants, err := mock.ListTenants(ctx, nil)
+		require.NoError(t, err)
+		assert.Len(t, tenants, 1, "Should have 1 tenant")
+	})
 }

@@ -1,4 +1,4 @@
-package main
+package providers
 
 import (
 	"encoding/json"
@@ -8,7 +8,7 @@ import (
 	"github.com/thand-io/agent/internal/data/iam-dataset/generated/azure"
 )
 
-func generateAzureFlatBuffers() error {
+func GenerateAzureFlatBuffers() error {
 	// Generate Azure Roles FlatBuffer
 	if err := generateAzureRoles(); err != nil {
 		return err
@@ -81,12 +81,18 @@ func generateAzurePermissions() error {
 		return err
 	}
 
+	type Operation struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+
 	type AzureResourceProvider struct {
-		Namespace  string `json:"namespace"`
-		Operations []struct {
-			Name        string `json:"name"`
-			Description string `json:"description"`
-		} `json:"operations"`
+		Namespace     string      `json:"namespace"`
+		Operations    []Operation `json:"operations"`
+		ResourceTypes []struct {
+			Name       string      `json:"name"`
+			Operations []Operation `json:"operations"`
+		} `json:"resourceTypes"`
 	}
 
 	var providers []AzureResourceProvider
@@ -100,9 +106,17 @@ func generateAzurePermissions() error {
 	// Create providers
 	var azureProviders []flatbuffers.UOffsetT
 	for _, provider := range providers {
+		// Flatten top-level provider operations and all resourceType operations
+		// into a single list so callers get the full permission set.
+		allOps := make([]Operation, 0, len(provider.Operations))
+		allOps = append(allOps, provider.Operations...)
+		for _, rt := range provider.ResourceTypes {
+			allOps = append(allOps, rt.Operations...)
+		}
+
 		// Create operations for this provider
 		var operations []flatbuffers.UOffsetT
-		for _, op := range provider.Operations {
+		for _, op := range allOps {
 			nameOffset := builder.CreateString(op.Name)
 			descOffset := builder.CreateString(op.Description)
 

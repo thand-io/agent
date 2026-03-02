@@ -15,6 +15,14 @@ import (
 	"github.com/thand-io/agent/internal/common"
 )
 
+// ResponseMeta contains pagination metadata
+type ResponseMeta struct {
+	Page       int   `json:"page"`
+	PageSize   int   `json:"page_size"`
+	Total      int64 `json:"total"`
+	TotalPages int   `json:"total_pages"`
+}
+
 type EncodingWrapper struct {
 	Type string `json:"type"`
 	// The Identifier field is temporarily disabled for debugging purposes.

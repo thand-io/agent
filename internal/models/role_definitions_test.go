@@ -11,6 +11,18 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// statementsContainOperation checks if any Statement in the RoleStatements contains the given operation
+func statementsContainOperation(stmts models.RoleStatements, operation string) bool {
+	for _, stmt := range stmts {
+		for _, op := range stmt.Operations {
+			if op == operation {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // TestRoleDefinitions_UnmarshalJSON tests the JSON unmarshaling with various version formats
 func TestRoleDefinitions_UnmarshalJSON(t *testing.T) {
 	tests := []struct {
@@ -51,13 +63,13 @@ func TestRoleDefinitions_UnmarshalJSON(t *testing.T) {
 				assert.True(t, exists)
 				assert.Equal(t, "Administrator", admin.Name)
 				assert.Equal(t, "Full access role", admin.Description)
-				assert.Contains(t, admin.Permissions.Allow, "*")
+				assert.True(t, statementsContainOperation(admin.Permissions.Allow, "*"), "admin should have * permission")
 
 				viewer, exists := def.Roles["viewer"]
 				assert.True(t, exists)
 				assert.Equal(t, "Viewer", viewer.Name)
-				assert.Contains(t, viewer.Permissions.Allow, "read")
-				assert.Contains(t, viewer.Permissions.Deny, "write")
+				assert.True(t, statementsContainOperation(viewer.Permissions.Allow, "read"), "viewer should have read permission")
+				assert.True(t, statementsContainOperation(viewer.Permissions.Deny, "write"), "viewer should deny write permission")
 			},
 		},
 		{
@@ -132,6 +144,107 @@ func TestRoleDefinitions_UnmarshalJSON(t *testing.T) {
 			}`,
 			expectError: true,
 		},
+		{
+			name: "RolesResponse format with SearchResult array",
+			jsonInput: `{
+				"version": "1.0",
+				"roles": [
+					{
+						"_id": "admin",
+						"_score": 1.0,
+						"_source": {
+							"identifier": "admin",
+							"name": "Administrator",
+							"description": "Full access role",
+							"permissions": {
+								"allow": ["*"]
+							}
+						}
+					},
+					{
+						"_id": "viewer",
+						"_score": 0.9,
+						"_source": {
+							"identifier": "viewer",
+							"name": "Viewer",
+							"description": "Read-only access",
+							"permissions": {
+								"allow": ["read"],
+								"deny": ["write"]
+							}
+						}
+					}
+				],
+				"meta": {
+					"total": 2,
+					"page": 1,
+					"page_size": 10
+				}
+			}`,
+			expectError: false,
+			expectedVer: "1.0.0",
+			roleCount:   2,
+			validateFunc: func(t *testing.T, def *models.RoleDefinitions) {
+				admin, exists := def.Roles["admin"]
+				assert.True(t, exists, "admin role should exist")
+				assert.Equal(t, "Administrator", admin.Name)
+				assert.Equal(t, "Full access role", admin.Description)
+				assert.Equal(t, "admin", admin.Identifier)
+				assert.True(t, statementsContainOperation(admin.Permissions.Allow, "*"), "admin should have * permission")
+
+				viewer, exists := def.Roles["viewer"]
+				assert.True(t, exists, "viewer role should exist")
+				assert.Equal(t, "Viewer", viewer.Name)
+				assert.Equal(t, "viewer", viewer.Identifier)
+				assert.True(t, statementsContainOperation(viewer.Permissions.Allow, "read"), "viewer should have read permission")
+				assert.True(t, statementsContainOperation(viewer.Permissions.Deny, "write"), "viewer should deny write permission")
+
+				// Check meta was parsed
+				assert.Equal(t, int64(2), def.Meta.Total)
+				assert.Equal(t, 1, def.Meta.Page)
+				assert.Equal(t, 10, def.Meta.PageSize)
+			},
+		},
+		{
+			name: "RolesResponse format with empty array",
+			jsonInput: `{
+				"version": "1.0",
+				"roles": [],
+				"meta": {
+					"total": 0
+				}
+			}`,
+			expectError: false,
+			expectedVer: "1.0.0",
+			roleCount:   0,
+			validateFunc: func(t *testing.T, def *models.RoleDefinitions) {
+				assert.Equal(t, int64(0), def.Meta.Total)
+			},
+		},
+		{
+			name: "RolesResponse format with minimal SearchResult",
+			jsonInput: `{
+				"version": "2.0",
+				"roles": [
+					{
+						"_source": {
+							"identifier": "developer",
+							"name": "Developer",
+							"description": "Dev role"
+						}
+					}
+				]
+			}`,
+			expectError: false,
+			expectedVer: "2.0.0",
+			roleCount:   1,
+			validateFunc: func(t *testing.T, def *models.RoleDefinitions) {
+				dev, exists := def.Roles["developer"]
+				assert.True(t, exists)
+				assert.Equal(t, "Developer", dev.Name)
+				assert.Equal(t, "developer", dev.Identifier)
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -178,13 +291,17 @@ roles:
     name: "Administrator"
     description: "Full access role"
     permissions:
-      allow: ["*"]
+      allow:
+        - operations: ["*"]
   viewer:
     name: "Viewer"
     description: "Read-only access"
     permissions:
-      allow: ["read"]
-      deny: ["write", "delete"]`,
+      allow:
+        - operations: ["read"]
+      deny:
+        - operations: ["write"]
+        - operations: ["delete"]`,
 			expectError: false,
 			expectedVer: "1.0.0",
 			roleCount:   2,
@@ -322,8 +439,8 @@ func TestRoleDefinitions_RoundTrip(t *testing.T) {
 				"admin": {
 					Name:        "Admin",
 					Description: "Admin role",
-					Permissions: models.Permissions{
-						Allow: []string{"*"},
+					Permissions: models.RolePermissions{
+						Allow: models.RoleStatements{{Operations: []string{"*"}}},
 					},
 				},
 			},
@@ -368,5 +485,93 @@ func TestRoleDefinitions_RoundTrip(t *testing.T) {
 		assert.Equal(t, original.Version.String(), unmarshaled.Version.String())
 		assert.Len(t, unmarshaled.Roles, 1)
 		assert.Equal(t, original.Roles["viewer"].Name, unmarshaled.Roles["viewer"].Name)
+	})
+}
+
+// TestRoleDefinitions_BothFormats tests that both RoleDefinitions and RolesResponse formats work
+func TestRoleDefinitions_BothFormats(t *testing.T) {
+	t.Run("RoleDefinitions map format", func(t *testing.T) {
+		jsonInput := `{
+			"version": "1.0",
+			"roles": {
+				"admin": {
+					"identifier": "admin",
+					"name": "Administrator",
+					"description": "Admin role"
+				},
+				"viewer": {
+					"identifier": "viewer",
+					"name": "Viewer",
+					"description": "View role"
+				}
+			}
+		}`
+
+		var def models.RoleDefinitions
+		err := json.Unmarshal([]byte(jsonInput), &def)
+		require.NoError(t, err)
+
+		assert.Equal(t, "1.0.0", def.Version.String())
+		assert.Len(t, def.Roles, 2)
+		assert.Equal(t, "Administrator", def.Roles["admin"].Name)
+		assert.Equal(t, "Viewer", def.Roles["viewer"].Name)
+	})
+
+	t.Run("RolesResponse array format", func(t *testing.T) {
+		jsonInput := `{
+			"version": "1.0",
+			"roles": [
+				{
+					"_source": {
+						"identifier": "admin",
+						"name": "Administrator",
+						"description": "Admin role"
+					}
+				},
+				{
+					"_source": {
+						"identifier": "viewer",
+						"name": "Viewer",
+						"description": "View role"
+					}
+				}
+			]
+		}`
+
+		var def models.RoleDefinitions
+		err := json.Unmarshal([]byte(jsonInput), &def)
+		require.NoError(t, err)
+
+		assert.Equal(t, "1.0.0", def.Version.String())
+		assert.Len(t, def.Roles, 2)
+		assert.Equal(t, "Administrator", def.Roles["admin"].Name)
+		assert.Equal(t, "Viewer", def.Roles["viewer"].Name)
+	})
+
+	t.Run("RolesResponse with missing identifier skipped", func(t *testing.T) {
+		jsonInput := `{
+			"version": "1.0",
+			"roles": [
+				{
+					"_source": {
+						"identifier": "valid",
+						"name": "Valid Role"
+					}
+				},
+				{
+					"_source": {
+						"name": "Invalid Role - No Identifier"
+					}
+				}
+			]
+		}`
+
+		var def models.RoleDefinitions
+		err := json.Unmarshal([]byte(jsonInput), &def)
+		require.NoError(t, err)
+
+		// Should only have the role with an identifier
+		assert.Len(t, def.Roles, 1)
+		assert.Equal(t, "Valid Role", def.Roles["valid"].Name)
 	})
 }

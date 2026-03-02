@@ -10,7 +10,7 @@ func (e *localClient) configureAnalytics() models.Analytics {
 
 	provider := "posthog"
 
-	analyticsConfig := e.GetServicesConfig().GetAnalyticsConfig()
+	analyticsConfig := e.config.GetServicesConfig().GetAnalyticsConfig()
 
 	if analyticsConfig != nil && len(analyticsConfig.GetProvider()) > 0 {
 		provider = analyticsConfig.GetProvider()

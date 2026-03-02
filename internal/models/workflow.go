@@ -10,9 +10,16 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// Validatable is an interface for tasks that support custom validation.
+// Tasks implementing this interface will have their Validate method called
+// during workflow validation.
+type Validatable interface {
+	Validate() error
+}
+
 type Workflow struct {
 	Version     *version.Version `json:"version,omitempty"`
-	Identifier  string           `json:"-"`
+	Identifier  string           `json:"identifier"` // To be set by the system
 	Name        string           `json:"name" validate:"required,min=1,max=100"`
 	Description string           `json:"description" validate:"max=500"`
 	Workflow    *model.Workflow  `json:"workflow,omitempty" validate:"required"`
@@ -54,6 +61,83 @@ func (w *Workflow) GetWorkflow() *model.Workflow {
 	return w.Workflow
 }
 
+func (w *Workflow) Validate() error {
+
+	if len(w.Name) == 0 {
+		return fmt.Errorf("workflow is missing required field 'name'")
+	}
+
+	// Validate individual tasks within the workflow
+	if w.Workflow != nil && w.Workflow.Do != nil {
+		if err := validateTaskList(w.GetName(), *w.Workflow.Do); err != nil {
+			return err
+		}
+	}
+
+	return nil
+
+}
+
+// validateTaskList validates all tasks in a task list
+func validateTaskList(workflowKey string, tasks model.TaskList) error {
+	for _, taskItem := range tasks {
+
+		if taskItem == nil || taskItem.Task == nil {
+			continue
+		}
+
+		// Check if the task implements Validatable interface
+		if validatable, ok := taskItem.Task.(Validatable); ok {
+			if err := validatable.Validate(); err != nil {
+				return fmt.Errorf("workflow '%s' task '%s': %w", workflowKey, taskItem.Key, err)
+			}
+		}
+
+		// Recursively validate nested task lists (e.g., in DoTask, TryTask, etc.)
+		if err := validateNestedTasks(workflowKey, taskItem); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateNestedTasks validates tasks nested within other tasks (e.g., do, try/catch blocks)
+func validateNestedTasks(workflowKey string, taskItem *model.TaskItem) error {
+	if taskItem == nil || taskItem.Task == nil {
+		return nil
+	}
+
+	// Check for DoTask which contains a nested Do list
+	if doTask, ok := taskItem.Task.(*model.DoTask); ok && doTask.Do != nil {
+		if err := validateTaskList(workflowKey, *doTask.Do); err != nil {
+			return err
+		}
+	}
+
+	// Check for TryTask which contains Try and Catch blocks
+	if tryTask, ok := taskItem.Task.(*model.TryTask); ok {
+		if tryTask.Try != nil {
+			if err := validateTaskList(workflowKey, *tryTask.Try); err != nil {
+				return err
+			}
+		}
+		if tryTask.Catch != nil && tryTask.Catch.Do != nil {
+			if err := validateTaskList(workflowKey, *tryTask.Catch.Do); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Check for ForkTask which contains branches
+	if forkTask, ok := taskItem.Task.(*model.ForkTask); ok && forkTask.Fork.Branches != nil {
+		if err := validateTaskList(workflowKey, *forkTask.Fork.Branches); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // Create a clone of the workflow to avoid mutations
 func (w *Workflow) GetWorkflowClone() *model.Workflow {
 	if w.Workflow == nil {
@@ -78,18 +162,6 @@ func (w *Workflow) GetWorkflowClone() *model.Workflow {
 
 func (w *Workflow) GetEnabled() bool {
 	return w.Enabled
-}
-
-// WorkflowsResponse represents the response for /workflows endpoint
-type WorkflowsResponse struct {
-	Version   string                      `json:"version"`
-	Workflows map[string]WorkflowResponse `json:"workflows"`
-}
-
-type WorkflowResponse struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Enabled     bool   `json:"enabled"`
 }
 
 type WorkflowRequest struct {
@@ -173,76 +245,4 @@ func (w *WorkflowExecutionInfo) GetAuthorizationTime() *time.Time {
 	}
 
 	return &approvalTime
-}
-
-// WorkflowDefinitions represents the structure for workflows YAML/JSON
-type WorkflowDefinitions struct {
-	Version   *version.Version    `yaml:"version" json:"version"`
-	Workflows map[string]Workflow `yaml:"workflows" json:"workflows"`
-}
-
-// UnmarshalJSON converts Version to string from any type
-func (h *WorkflowDefinitions) UnmarshalJSON(data []byte) error {
-	aux := &struct {
-		Version   any                 `json:"version"`
-		Workflows map[string]Workflow `json:"workflows"`
-	}{
-		Workflows: make(map[string]Workflow),
-	}
-
-	if err := json.Unmarshal(data, &aux); err != nil {
-		return err
-	}
-
-	parsedVersion, err := version.NewVersion(ConvertVersionToString(aux.Version))
-	if err != nil {
-		return err
-	}
-
-	h.Version = parsedVersion
-	h.Workflows = aux.Workflows
-
-	return nil
-}
-
-// UnmarshalYAML converts Version to string from any type
-func (h *WorkflowDefinitions) UnmarshalYAML(unmarshal func(any) error) error {
-	aux := &struct {
-		Version   any                 `yaml:"version"`
-		Workflows map[string]Workflow `yaml:"workflows"`
-	}{
-		Workflows: make(map[string]Workflow),
-	}
-
-	if err := unmarshal(&aux); err != nil {
-		return err
-	}
-
-	parsedVersion, err := version.NewVersion(ConvertVersionToString(aux.Version))
-	if err != nil {
-		return err
-	}
-
-	h.Version = parsedVersion
-	h.Workflows = aux.Workflows
-
-	return nil
-}
-
-// Validate validates all workflows in the definition
-// Note: Workflows use serverless workflow SDK with complex validation,
-// so we only perform basic structural validation here
-func (h *WorkflowDefinitions) Validate() error {
-	// Basic validation without struct tags (workflows have complex SDK requirements)
-
-	for workflowKey, workflow := range h.Workflows {
-		if workflow.Workflow == nil {
-			return fmt.Errorf("workflow '%s' is missing workflow definition", workflowKey)
-		}
-		if workflow.Name == "" {
-			return fmt.Errorf("workflow '%s' is missing required field 'name'", workflowKey)
-		}
-	}
-
-	return nil
 }

@@ -9,7 +9,7 @@ func (e *localClient) configurePublicKeyInfrastructure() models.PublicKeyInfrast
 
 	provider := "local"
 
-	pkiConfig := e.GetServicesConfig().GetPublicKeyInfrastructureConfig()
+	pkiConfig := e.config.GetServicesConfig().GetPublicKeyInfrastructureConfig()
 
 	if pkiConfig != nil && len(pkiConfig.GetProvider()) > 0 {
 		provider = pkiConfig.GetProvider()

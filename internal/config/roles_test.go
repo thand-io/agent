@@ -1,12 +1,31 @@
 package config
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/thand-io/agent/internal/models"
 )
+
+// stmts converts a []string to models.RoleStatements for test convenience
+func stmts(ops ...string) models.RoleStatements {
+	if len(ops) == 0 {
+		return nil
+	}
+	return models.RoleStatements{{Operations: ops}}
+}
+
+// collectAllOps collects all operations from statements into a single slice
+func collectAllOps(stmts models.RoleStatements) []string {
+	var result []string
+	for _, stmt := range stmts {
+		result = append(result, stmt.Operations...)
+	}
+	return result
+}
 
 // Test GetCompositeRole functionality
 func TestGetCompositeRole(t *testing.T) {
@@ -16,7 +35,7 @@ func TestGetCompositeRole(t *testing.T) {
 		providers     map[string]models.Provider
 		identity      *models.Identity
 		roleName      string
-		expected      *models.Role
+		expected      *models.CompositeRole
 		expectError   bool
 		errorContains string
 	}{
@@ -26,9 +45,9 @@ func TestGetCompositeRole(t *testing.T) {
 				"basic": {
 					Name:        "basic",
 					Description: "Basic role",
-					Permissions: models.Permissions{
-						Allow: []string{"read"},
-						Deny:  []string{"delete"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("read"),
+						Deny:  stmts("delete"),
 					},
 					Enabled: true,
 				},
@@ -41,14 +60,17 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "basic",
-			expected: &models.Role{
-				Name:        "basic",
-				Description: "Basic role",
-				Permissions: models.Permissions{
-					Allow: []string{"read"},
-					Deny:  []string{"delete"},
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "basic",
+					Description: "Basic role",
+					Permissions: models.RolePermissions{
+						Allow: stmts("read"),
+						Deny:  stmts("delete"),
+					},
+					Enabled: true,
 				},
-				Enabled: true,
+				Composite: false, // No inheritance, not composite
 			},
 			expectError: false,
 		},
@@ -58,11 +80,11 @@ func TestGetCompositeRole(t *testing.T) {
 				"base": {
 					Name:        "base",
 					Description: "Base role",
-					Permissions: models.Permissions{
-						Allow: []string{"read"},
-					},
-					Resources: models.Resources{
-						Allow: []string{"resource1"},
+					Permissions: models.RolePermissions{
+						Allow: models.RoleStatements{{
+							Operations: []string{"read"},
+							Targets:    []string{"resource1"},
+						}},
 					},
 					Enabled: true,
 				},
@@ -70,12 +92,12 @@ func TestGetCompositeRole(t *testing.T) {
 					Name:        "extended",
 					Description: "Extended role",
 					Inherits:    []string{"base"},
-					Permissions: models.Permissions{
-						Allow: []string{"write"},
-						Deny:  []string{"admin"},
-					},
-					Resources: models.Resources{
-						Allow: []string{"resource2"},
+					Permissions: models.RolePermissions{
+						Allow: models.RoleStatements{{
+							Operations: []string{"write"},
+							Targets:    []string{"resource2"},
+						}},
+						Deny: stmts("admin"),
 					},
 					Enabled: true,
 				},
@@ -87,18 +109,27 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "extended",
-			expected: &models.Role{
-				Name:        "extended",
-				Description: "Extended role",
-				Inherits:    []string{"base"},
-				Permissions: models.Permissions{
-					Allow: []string{"write", "read"},
-					Deny:  []string{"admin"},
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "extended",
+					Description: "Extended role",
+					Inherits:    []string{"base"},
+					Permissions: models.RolePermissions{
+						Allow: models.RoleStatements{
+							{
+								Operations: []string{"read"},
+								Targets:    []string{"resource1"},
+							},
+							{
+								Operations: []string{"write"},
+								Targets:    []string{"resource2"},
+							},
+						},
+						Deny: stmts("admin"),
+					},
+					Enabled: true,
 				},
-				Resources: models.Resources{
-					Allow: []string{"resource2", "resource1"},
-				},
-				Enabled: true,
+				Composite: true, // Inherits from thand role, should be composite
 			},
 			expectError: false,
 		},
@@ -108,8 +139,8 @@ func TestGetCompositeRole(t *testing.T) {
 				"read-role": {
 					Name:        "read-role",
 					Description: "Read role",
-					Permissions: models.Permissions{
-						Allow: []string{"read"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("read"),
 					},
 					Workflows: []string{"read-workflow"},
 					Enabled:   true,
@@ -117,8 +148,8 @@ func TestGetCompositeRole(t *testing.T) {
 				"write-role": {
 					Name:        "write-role",
 					Description: "Write role",
-					Permissions: models.Permissions{
-						Allow: []string{"write"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("write"),
 					},
 					Workflows: []string{"write-workflow"},
 					Enabled:   true,
@@ -127,8 +158,8 @@ func TestGetCompositeRole(t *testing.T) {
 					Name:        "admin",
 					Description: "Admin role",
 					Inherits:    []string{"read-role", "write-role"},
-					Permissions: models.Permissions{
-						Allow: []string{"admin"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("admin"),
 					},
 					Workflows: []string{"admin-workflow"},
 					Enabled:   true,
@@ -141,15 +172,18 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "admin",
-			expected: &models.Role{
-				Name:        "admin",
-				Description: "Admin role",
-				Inherits:    []string{"read-role", "write-role"},
-				Permissions: models.Permissions{
-					Allow: []string{"admin", "read", "write"},
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "admin",
+					Description: "Admin role",
+					Inherits:    []string{"read-role", "write-role"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("admin", "read", "write"),
+					},
+					Workflows: []string{"admin-workflow"}, // Only the role's own workflows, not inherited
+					Enabled:   true,
 				},
-				Workflows: []string{"admin-workflow"}, // Only the role's own workflows, not inherited
-				Enabled:   true,
+				Composite: true, // Inherits from thand roles, should be composite
 			},
 			expectError: false,
 		},
@@ -159,11 +193,13 @@ func TestGetCompositeRole(t *testing.T) {
 				"scoped": {
 					Name:        "scoped",
 					Description: "Scoped role",
-					Permissions: models.Permissions{
-						Allow: []string{"special"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("special"),
 					},
-					Scopes: &models.RoleScopes{
-						Users: []string{"test@example.com"},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Users: []string{"test@example.com"},
+						},
 					},
 					Enabled: true,
 				},
@@ -171,8 +207,8 @@ func TestGetCompositeRole(t *testing.T) {
 					Name:        "public",
 					Description: "Public role",
 					Inherits:    []string{"scoped"},
-					Permissions: models.Permissions{
-						Allow: []string{"read"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("read"),
 					},
 					Enabled: true,
 				},
@@ -185,14 +221,17 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "public",
-			expected: &models.Role{
-				Name:        "public",
-				Description: "Public role",
-				Inherits:    []string{"scoped"},
-				Permissions: models.Permissions{
-					Allow: []string{"read", "special"},
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "public",
+					Description: "Public role",
+					Inherits:    []string{"scoped"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("read", "special"),
+					},
+					Enabled: true,
 				},
-				Enabled: true,
+				Composite: true, // Inherits from thand role, should be composite
 			},
 			expectError: false,
 		},
@@ -202,11 +241,13 @@ func TestGetCompositeRole(t *testing.T) {
 				"scoped": {
 					Name:        "scoped",
 					Description: "Scoped role",
-					Permissions: models.Permissions{
-						Allow: []string{"special"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("special"),
 					},
-					Scopes: &models.RoleScopes{
-						Users: []string{"other@example.com"},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Users: []string{"other@example.com"},
+						},
 					},
 					Enabled: true,
 				},
@@ -214,8 +255,8 @@ func TestGetCompositeRole(t *testing.T) {
 					Name:        "public",
 					Description: "Public role",
 					Inherits:    []string{"scoped"},
-					Permissions: models.Permissions{
-						Allow: []string{"read"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("read"),
 					},
 					Enabled: true,
 				},
@@ -228,14 +269,16 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "public",
-			expected: &models.Role{
-				Name:        "public",
-				Description: "Public role",
-				Inherits:    []string{"scoped"},
-				Permissions: models.Permissions{
-					Allow: []string{"read"},
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "public",
+					Description: "Public role",
+					Inherits:    []string{"scoped"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("read"),
+					},
+					Enabled: true,
 				},
-				Enabled: true,
 			},
 			expectError: false,
 		},
@@ -306,11 +349,13 @@ func TestGetCompositeRole(t *testing.T) {
 				"group-role": {
 					Name:        "group-role",
 					Description: "Group specific role",
-					Permissions: models.Permissions{
-						Allow: []string{"group-action"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("group-action"),
 					},
-					Scopes: &models.RoleScopes{
-						Groups: []string{"developers"},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Groups: []string{"developers"},
+						},
 					},
 					Enabled: true,
 				},
@@ -318,8 +363,8 @@ func TestGetCompositeRole(t *testing.T) {
 					Name:        "user-role",
 					Description: "User role inheriting group role",
 					Inherits:    []string{"group-role"},
-					Permissions: models.Permissions{
-						Allow: []string{"user-action"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("user-action"),
 					},
 					Enabled: true,
 				},
@@ -332,14 +377,402 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "user-role",
-			expected: &models.Role{
-				Name:        "user-role",
-				Description: "User role inheriting group role",
-				Inherits:    []string{"group-role"},
-				Permissions: models.Permissions{
-					Allow: []string{"user-action", "group-action"},
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "user-role",
+					Description: "User role inheriting group role",
+					Inherits:    []string{"group-role"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("group-action", "user-action"), // sorted alphabetically
+					},
+					Enabled: true,
 				},
-				Enabled: true,
+				Composite: true, // Inherits from thand role, should be composite
+			},
+			expectError: false,
+		},
+		{
+			name: "domain-scoped role inheritance - user matches domain",
+			roles: map[string]models.Role{
+				"base-role": {
+					Name:        "base-role",
+					Description: "Base role with domain scope",
+					Permissions: models.RolePermissions{
+						Allow: stmts("base-action"),
+					},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Domains: []string{"example.com"},
+						},
+					},
+					Enabled: true,
+				},
+				"child-role": {
+					Name:        "child-role",
+					Description: "Child role inheriting domain-scoped base",
+					Inherits:    []string{"base-role"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("child-action"),
+					},
+					Enabled: true,
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"users"},
+				},
+			},
+			roleName: "child-role",
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "child-role",
+					Description: "Child role inheriting domain-scoped base",
+					Inherits:    []string{"base-role"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("base-action", "child-action"),
+					},
+					Enabled: true,
+				},
+				Composite: true,
+			},
+			expectError: false,
+		},
+		{
+			name: "domain-scoped role inheritance - user does not match domain",
+			roles: map[string]models.Role{
+				"base-role": {
+					Name:        "base-role",
+					Description: "Base role with domain scope",
+					Permissions: models.RolePermissions{
+						Allow: stmts("base-action"),
+					},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Domains: []string{"company.com"},
+						},
+					},
+					Enabled: true,
+				},
+				"child-role": {
+					Name:        "child-role",
+					Description: "Child role inheriting domain-scoped base",
+					Inherits:    []string{"base-role"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("child-action"),
+					},
+					Enabled: true,
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"users"},
+				},
+			},
+			roleName: "child-role",
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "child-role",
+					Description: "Child role inheriting domain-scoped base",
+					Inherits:    []string{"base-role"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("child-action"), // base-action not inherited
+					},
+					Enabled: true,
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "mixed scopes in inheritance - user matches via domain",
+			roles: map[string]models.Role{
+				"scoped-base": {
+					Name:        "scoped-base",
+					Description: "Base with mixed scopes",
+					Permissions: models.RolePermissions{
+						Allow: stmts("scoped-action"),
+					},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Users:   []string{"other@company.com"},
+							Groups:  []string{"admins"},
+							Domains: []string{"example.com"},
+						},
+					},
+					Enabled: true,
+				},
+				"parent-role": {
+					Name:        "parent-role",
+					Description: "Parent inheriting mixed-scope role",
+					Inherits:    []string{"scoped-base"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("parent-action"),
+					},
+					Enabled: true,
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers"},
+				},
+			},
+			roleName: "parent-role",
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "parent-role",
+					Description: "Parent inheriting mixed-scope role",
+					Inherits:    []string{"scoped-base"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("parent-action", "scoped-action"),
+					},
+					Enabled: true,
+				},
+				Composite: true,
+			},
+			expectError: false,
+		},
+		{
+			name: "deep inheritance with domain scopes - middle role scoped",
+			roles: map[string]models.Role{
+				"grandparent": {
+					Name:        "grandparent",
+					Description: "Grandparent role",
+					Permissions: models.RolePermissions{
+						Allow: stmts("grandparent-action"),
+					},
+					Enabled: true,
+				},
+				"parent": {
+					Name:        "parent",
+					Description: "Parent with domain scope",
+					Inherits:    []string{"grandparent"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("parent-action"),
+					},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Domains: []string{"example.com"},
+						},
+					},
+					Enabled: true,
+				},
+				"child": {
+					Name:        "child",
+					Description: "Child role",
+					Inherits:    []string{"parent"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("child-action"),
+					},
+					Enabled: true,
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"users"},
+				},
+			},
+			roleName: "child",
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "child",
+					Description: "Child role",
+					Inherits:    []string{"parent"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("child-action", "grandparent-action", "parent-action"),
+					},
+					Enabled: true,
+				},
+				Composite: true,
+			},
+			expectError: false,
+		},
+		{
+			name: "base role with group scope - user has no groups",
+			roles: map[string]models.Role{
+				"admin-role": {
+					Name:        "admin-role",
+					Description: "Admin role requiring group membership",
+					Permissions: models.RolePermissions{
+						Allow: stmts("admin:write", "admin:delete"),
+					},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Groups: []string{"admins"},
+						},
+					},
+					Enabled: true,
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{}, // No groups
+				},
+			},
+			roleName:      "admin-role",
+			expectError:   true,
+			errorContains: "not applicable to identity",
+		},
+		{
+			name: "base role with group scope - user has matching group",
+			roles: map[string]models.Role{
+				"developer-role": {
+					Name:        "developer-role",
+					Description: "Developer role requiring group membership",
+					Permissions: models.RolePermissions{
+						Allow: stmts("dev:read", "dev:write"),
+					},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Groups: []string{"developers"},
+						},
+					},
+					Enabled: true,
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers", "users"},
+				},
+			},
+			roleName: "developer-role",
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "developer-role",
+					Description: "Developer role requiring group membership",
+					Permissions: models.RolePermissions{
+						Allow: models.RoleStatements{{Operations: []string{"dev:read,write"}}},
+					},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Groups: []string{"developers"},
+						},
+					},
+					Enabled: true,
+				},
+				Composite: false, // No inheritance, not composite
+			},
+			expectError: false,
+		},
+		{
+			name: "base role with domain scope - user domain does not match",
+			roles: map[string]models.Role{
+				"company-role": {
+					Name:        "company-role",
+					Description: "Role for company employees",
+					Permissions: models.RolePermissions{
+						Allow: stmts("company:read"),
+					},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Domains: []string{"company.com"},
+						},
+					},
+					Enabled: true,
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"users"},
+				},
+			},
+			roleName:      "company-role",
+			expectError:   true,
+			errorContains: "not applicable to identity",
+		},
+		{
+			name: "base role with user scope - user does not match",
+			roles: map[string]models.Role{
+				"specific-user-role": {
+					Name:        "specific-user-role",
+					Description: "Role for specific users only",
+					Permissions: models.RolePermissions{
+						Allow: stmts("special:action"),
+					},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Users: []string{"admin@company.com", "manager@company.com"},
+						},
+					},
+					Enabled: true,
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"users"},
+				},
+			},
+			roleName:      "specific-user-role",
+			expectError:   true,
+			errorContains: "not applicable to identity",
+		},
+		{
+			name: "base role with mixed scopes - user matches via domain",
+			roles: map[string]models.Role{
+				"mixed-scope-role": {
+					Name:        "mixed-scope-role",
+					Description: "Role with multiple scope types",
+					Permissions: models.RolePermissions{
+						Allow: stmts("mixed:action"),
+					},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Users:   []string{"other@company.com"},
+							Groups:  []string{"admins"},
+							Domains: []string{"example.com"},
+						},
+					},
+					Enabled: true,
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"users"},
+				},
+			},
+			roleName: "mixed-scope-role",
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "mixed-scope-role",
+					Description: "Role with multiple scope types",
+					Permissions: models.RolePermissions{
+						Allow: stmts("mixed:action"),
+					},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Users:   []string{"other@company.com"},
+							Groups:  []string{"admins"},
+							Domains: []string{"example.com"},
+						},
+					},
+					Enabled: true,
+				},
+				Composite: false, // No inheritance, not composite
 			},
 			expectError: false,
 		},
@@ -378,14 +811,11 @@ func TestGetCompositeRole(t *testing.T) {
 			assert.Equal(t, tt.expected.Name, result.Name)
 			assert.Equal(t, tt.expected.Description, result.Description)
 			assert.Equal(t, tt.expected.Enabled, result.Enabled)
+			assert.Equal(t, tt.expected.Composite, result.Composite, "Composite field mismatch")
 
 			// Compare permissions (order doesn't matter)
 			assert.ElementsMatch(t, tt.expected.Permissions.Allow, result.Permissions.Allow)
 			assert.ElementsMatch(t, tt.expected.Permissions.Deny, result.Permissions.Deny)
-
-			// Compare resources (order doesn't matter)
-			assert.ElementsMatch(t, tt.expected.Resources.Allow, result.Resources.Allow)
-			assert.ElementsMatch(t, tt.expected.Resources.Deny, result.Resources.Deny)
 
 			// Compare workflows (order doesn't matter)
 			assert.ElementsMatch(t, tt.expected.Workflows, result.Workflows)
@@ -401,8 +831,8 @@ func TestGetCompositeRole_ProviderSpecificInheritance(t *testing.T) {
 		"admin": {
 			Name:        "admin",
 			Description: "Admin role in AWS",
-			Permissions: models.Permissions{
-				Allow: []string{"aws:admin"},
+			Permissions: models.RolePermissions{
+				Allow: stmts("aws:admin"),
 			},
 			Enabled: true,
 		},
@@ -410,8 +840,8 @@ func TestGetCompositeRole_ProviderSpecificInheritance(t *testing.T) {
 			Name:        "base",
 			Description: "Base role",
 			Inherits:    []string{"aws-prod:admin"},
-			Permissions: models.Permissions{
-				Allow: []string{"base:read"},
+			Permissions: models.RolePermissions{
+				Allow: stmts("base:read"),
 			},
 			Enabled: true,
 		},
@@ -447,7 +877,7 @@ func TestGetCompositeRole_ProviderSpecificInheritance(t *testing.T) {
 
 	// Should inherit from the 'admin' role since aws-prod provider exists
 	assert.Equal(t, "base", result.Name)
-	assert.ElementsMatch(t, []string{"base:read"}, result.Permissions.Allow)
+	assert.ElementsMatch(t, []string{"base:read"}, collectAllOps(result.Permissions.Allow))
 }
 
 func TestIsRoleApplicableToIdentity(t *testing.T) {
@@ -476,8 +906,10 @@ func TestIsRoleApplicableToIdentity(t *testing.T) {
 			name: "user scope - email match",
 			role: &models.Role{
 				Name: "test",
-				Scopes: &models.RoleScopes{
-					Users: []string{"test@example.com"},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"test@example.com"},
+					},
 				},
 			},
 			identity: &models.Identity{
@@ -493,8 +925,10 @@ func TestIsRoleApplicableToIdentity(t *testing.T) {
 			name: "user scope - username match",
 			role: &models.Role{
 				Name: "test",
-				Scopes: &models.RoleScopes{
-					Users: []string{"testuser"},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"testuser"},
+					},
 				},
 			},
 			identity: &models.Identity{
@@ -510,8 +944,10 @@ func TestIsRoleApplicableToIdentity(t *testing.T) {
 			name: "user scope - no match",
 			role: &models.Role{
 				Name: "test",
-				Scopes: &models.RoleScopes{
-					Users: []string{"other@example.com"},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"other@example.com"},
+					},
 				},
 			},
 			identity: &models.Identity{
@@ -524,11 +960,155 @@ func TestIsRoleApplicableToIdentity(t *testing.T) {
 			expected: false,
 		},
 		{
+			name: "user scope - email in scope matches user with both email and username",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"john@example.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "johndoe",
+					Email:    "john@example.com",
+					Name:     "John Doe",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "user scope - username in scope matches user with both email and username",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"johndoe"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "johndoe",
+					Email:    "john@example.com",
+					Name:     "John Doe",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "user scope - name in scope matches user with only name (no email/username/ID)",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"john_doe"}, // Name is converted to snake_case by GetIdentity()
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Name: "John Doe",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "user scope - full name matches user with multiple fields",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"Jane Smith"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					ID:       "user-789",
+					Username: "jsmith",
+					Email:    "jane@example.com",
+					Name:     "Jane Smith",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "user scope - multiple identifiers in scope, user matches one via username",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"alice@company.com", "bobsmith", "charlie@example.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					ID:       "user-456",
+					Username: "bobsmith",
+					Email:    "bob@example.com",
+					Name:     "Bob Smith",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "user scope - multiple identifiers in scope, user matches one via email",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"alice", "bob@example.com", "charlie"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					ID:       "user-456",
+					Username: "robertsmith",
+					Email:    "bob@example.com",
+					Name:     "Bob Smith",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "user scope - checks all user fields, none match",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"wronguser", "wrong@example.com", "Wrong Name", "wrong-id"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					ID:       "user-456",
+					Username: "johndoe",
+					Email:    "john@example.com",
+					Name:     "John Doe",
+				},
+			},
+			expected: false,
+		},
+		{
 			name: "group scope - user in group",
 			role: &models.Role{
 				Name: "test",
-				Scopes: &models.RoleScopes{
-					Groups: []string{"developers"},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"developers"},
+					},
 				},
 			},
 			identity: &models.Identity{
@@ -544,8 +1124,10 @@ func TestIsRoleApplicableToIdentity(t *testing.T) {
 			name: "group scope - user not in group",
 			role: &models.Role{
 				Name: "test",
-				Scopes: &models.RoleScopes{
-					Groups: []string{"admins"},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"admins"},
+					},
 				},
 			},
 			identity: &models.Identity{
@@ -561,14 +1143,530 @@ func TestIsRoleApplicableToIdentity(t *testing.T) {
 			name: "group identity - group match",
 			role: &models.Role{
 				Name: "test",
-				Scopes: &models.RoleScopes{
-					Groups: []string{"developers"},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"developers"},
+					},
 				},
 			},
 			identity: &models.Identity{
 				ID: "group1",
 				Group: &models.Group{
 					Name: "developers",
+				},
+			},
+			expected: true,
+		},
+		// Domain scope tests
+		{
+			name: "domain scope - user email domain matches",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Domains: []string{"example.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "domain scope - user email domain does not match",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Domains: []string{"company.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"users"},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "domain scope - user has no email",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Domains: []string{"example.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "",
+					Groups:   []string{"users"},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "domain scope - user email has no @ symbol",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Domains: []string{"example.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "malformed-email",
+					Groups:   []string{"users"},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "domain scope - multiple domains, user matches one",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Domains: []string{"example.com", "company.org", "other.net"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@company.org",
+					Groups:   []string{"users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "domain scope - case insensitive matching",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Domains: []string{"Example.COM"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "domain scope - subdomain does not match parent domain",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Domains: []string{"example.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@mail.example.com",
+					Groups:   []string{"users"},
+				},
+			},
+			expected: false,
+		},
+		// Combined scope tests (OR logic - matching any scope type should grant access)
+		{
+			name: "users + groups scopes - user matches via groups",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users:  []string{"other@example.com"},
+						Groups: []string{"developers"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers", "users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "users + groups scopes - user matches via users",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users:  []string{"testuser@example.com"},
+						Groups: []string{"admins"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers", "users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "users + groups scopes - user matches neither",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users:  []string{"other@example.com"},
+						Groups: []string{"admins"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers", "users"},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "users + domains scopes - user matches via domain",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users:   []string{"other@company.com"},
+						Domains: []string{"example.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "users + domains scopes - user matches via users",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users:   []string{"testuser@example.com"},
+						Domains: []string{"company.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "groups + domains scopes - user matches via groups",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups:  []string{"developers"},
+						Domains: []string{"company.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers", "users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "groups + domains scopes - user matches via domain",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups:  []string{"admins"},
+						Domains: []string{"example.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers", "users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "groups + domains scopes - user matches neither",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups:  []string{"admins"},
+						Domains: []string{"company.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers", "users"},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "users + groups + domains - user matches only via domain",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users:   []string{"other@company.com"},
+						Groups:  []string{"admins"},
+						Domains: []string{"example.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers", "users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "users + groups + domains - user matches only via groups",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users:   []string{"other@company.com"},
+						Groups:  []string{"developers"},
+						Domains: []string{"company.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers", "users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "users + groups + domains - user matches only via users",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users:   []string{"testuser"},
+						Groups:  []string{"admins"},
+						Domains: []string{"company.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers", "users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "users + groups + domains - user matches none",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users:   []string{"other@company.com"},
+						Groups:  []string{"admins"},
+						Domains: []string{"company.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers", "users"},
+				},
+			},
+			expected: false,
+		},
+		// Edge case tests
+		{
+			name: "group scope - user with nil groups",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"developers"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   nil,
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "group scope - user with empty groups array",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"developers"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "group scope - case insensitive group matching",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"Developers"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers", "users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "group scope - user with multiple groups, only one matches",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"admins", "managers"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
+					Groups:   []string{"developers", "managers", "users"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "user scope - ID match",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"user-id-123"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					ID:       "user-id-123",
+					Username: "testuser",
+					Email:    "testuser@example.com",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "empty scopes object - always applicable",
+			role: &models.Role{
+				Name:   "test",
+				Scopes: models.RoleScopes{},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "testuser@example.com",
 				},
 			},
 			expected: true,
@@ -589,26 +1687,30 @@ func TestAllowDenyConflictResolution(t *testing.T) {
 		roles := map[string]models.Role{
 			"child": {
 				Name: "Child Role",
-				Permissions: models.Permissions{
-					Allow: []string{"read", "list"},
-					Deny:  []string{"write", "delete"},
-				},
-				Resources: models.Resources{
-					Allow: []string{"bucket1"},
-					Deny:  []string{"bucket2", "bucket3"},
+				Permissions: models.RolePermissions{
+					Allow: models.RoleStatements{{
+						Operations: []string{"read", "list"},
+						Targets:    []string{"bucket1"},
+					}},
+					Deny: models.RoleStatements{{
+						Operations: []string{"write", "delete"},
+						Targets:    []string{"bucket2", "bucket3"},
+					}},
 				},
 				Enabled: true,
 			},
 			"parent": {
 				Name:     "Parent Role",
 				Inherits: []string{"child"},
-				Permissions: models.Permissions{
-					Allow: []string{"write"}, // This should override child's deny for "write"
-					Deny:  []string{"read"},  // This should override child's allow for "read"
-				},
-				Resources: models.Resources{
-					Allow: []string{"bucket2"}, // This should override child's deny for "bucket2"
-					Deny:  []string{"bucket1"}, // This should override child's allow for "bucket1"
+				Permissions: models.RolePermissions{
+					Allow: models.RoleStatements{{
+						Operations: []string{"write"},   // This should override child's deny for "write"
+						Targets:    []string{"bucket2"}, // This should override child's deny for "bucket2"
+					}},
+					Deny: models.RoleStatements{{
+						Operations: []string{"read"},    // This should override child's allow for "read"
+						Targets:    []string{"bucket1"}, // This should override child's allow for "bucket1"
+					}},
 				},
 				Enabled: true,
 			},
@@ -631,46 +1733,52 @@ func TestAllowDenyConflictResolution(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
-		// Expected: parent permissions override child permissions in conflicts
-		expectedAllowPerms := []string{"write", "list"}
-		expectedDenyPerms := []string{"read", "delete"}
+		// Collect all targets from result
+		var allowTargets, denyTargets []string
+		for _, stmt := range result.Permissions.Allow {
+			allowTargets = append(allowTargets, stmt.Targets...)
+		}
+		for _, stmt := range result.Permissions.Deny {
+			denyTargets = append(denyTargets, stmt.Targets...)
+		}
 
-		assert.ElementsMatch(t, expectedAllowPerms, result.Permissions.Allow)
-		assert.ElementsMatch(t, expectedDenyPerms, result.Permissions.Deny)
+		// Expected: operations are resolved, targets preserved per operation
+		// - list (from child) stays allowed on bucket1
+		// - write (from parent, overrides child deny) is allowed on bucket2
+		// - read (from parent, overrides child allow) is denied on bucket1
+		// - delete (from child, not overridden) stays denied on bucket2,bucket3
+		expectedAllowTargets := []string{"bucket1", "bucket2"}
+		expectedDenyTargets := []string{"bucket1", "bucket2", "bucket3"}
 
-		// Expected: parent resources override child resources in conflicts
-		expectedAllowResources := []string{"bucket2"}
-		expectedDenyResources := []string{"bucket1", "bucket3"}
-
-		assert.ElementsMatch(t, expectedAllowResources, result.Resources.Allow)
-		assert.ElementsMatch(t, expectedDenyResources, result.Resources.Deny)
+		assert.ElementsMatch(t, expectedAllowTargets, allowTargets)
+		assert.ElementsMatch(t, expectedDenyTargets, denyTargets)
 	})
 
 	t.Run("multi-level inheritance with conflicts", func(t *testing.T) {
 		roles := map[string]models.Role{
 			"grandchild": {
 				Name: "Grandchild Role",
-				Permissions: models.Permissions{
-					Allow: []string{"read", "list"},
-					Deny:  []string{"write"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("read", "list"),
+					Deny:  stmts("write"),
 				},
 				Enabled: true,
 			},
 			"child": {
 				Name:     "Child Role",
 				Inherits: []string{"grandchild"},
-				Permissions: models.Permissions{
-					Allow: []string{"write"}, // Overrides grandchild's deny
-					Deny:  []string{"list"},  // Overrides grandchild's allow
+				Permissions: models.RolePermissions{
+					Allow: stmts("write"), // Overrides grandchild's deny
+					Deny:  stmts("list"),  // Overrides grandchild's allow
 				},
 				Enabled: true,
 			},
 			"parent": {
 				Name:     "Parent Role",
 				Inherits: []string{"child"},
-				Permissions: models.Permissions{
-					Allow: []string{"delete", "list"}, // "list" overrides child's deny
-					Deny:  []string{"read"},           // Overrides grandchild's allow (inherited through child)
+				Permissions: models.RolePermissions{
+					Allow: stmts("delete", "list"), // "list" overrides child's deny
+					Deny:  stmts("read"),           // Overrides grandchild's allow (inherited through child)
 				},
 				Enabled: true,
 			},
@@ -697,24 +1805,24 @@ func TestAllowDenyConflictResolution(t *testing.T) {
 		expectedAllowPerms := []string{"list", "write", "delete"}
 		expectedDenyPerms := []string{"read"}
 
-		assert.ElementsMatch(t, expectedAllowPerms, result.Permissions.Allow)
-		assert.ElementsMatch(t, expectedDenyPerms, result.Permissions.Deny)
+		assert.ElementsMatch(t, expectedAllowPerms, collectAllOps(result.Permissions.Allow))
+		assert.ElementsMatch(t, expectedDenyPerms, collectAllOps(result.Permissions.Deny))
 	})
 
 	t.Run("parent deny overrides child allow", func(t *testing.T) {
 		roles := map[string]models.Role{
 			"permissive-child": {
 				Name: "Permissive Child",
-				Permissions: models.Permissions{
-					Allow: []string{"read", "write", "delete"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("read", "write", "delete"),
 				},
 				Enabled: true,
 			},
 			"restrictive-parent": {
 				Name:     "Restrictive Parent",
 				Inherits: []string{"permissive-child"},
-				Permissions: models.Permissions{
-					Deny: []string{"delete", "write"}, // Parent denies what child allows
+				Permissions: models.RolePermissions{
+					Deny: stmts("delete", "write"), // Parent denies what child allows
 				},
 				Enabled: true,
 			},
@@ -741,7 +1849,2153 @@ func TestAllowDenyConflictResolution(t *testing.T) {
 		expectedAllowPerms := []string{"read"}
 		expectedDenyPerms := []string{"delete", "write"}
 
-		assert.ElementsMatch(t, expectedAllowPerms, result.Permissions.Allow)
-		assert.ElementsMatch(t, expectedDenyPerms, result.Permissions.Deny)
+		assert.ElementsMatch(t, expectedAllowPerms, collectAllOps(result.Permissions.Allow))
+		assert.ElementsMatch(t, expectedDenyPerms, collectAllOps(result.Permissions.Deny))
+	})
+}
+
+// =============================================================================
+// DENY SCOPE TESTS
+// =============================================================================
+
+// TestDenyScopePrecedence verifies that deny scopes always take precedence over allow scopes.
+// This is SECURITY CRITICAL - explicit denials must not be bypassable by also adding to allow.
+func TestDenyScopePrecedence(t *testing.T) {
+	config := &Config{}
+
+	tests := []struct {
+		name     string
+		role     *models.Role
+		identity *models.Identity
+		expected bool
+	}{
+		{
+			name: "deny scope - user in Deny.Users blocks access",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Deny: models.ScopeIdentities{
+						Users: []string{"blocked@example.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "blockeduser",
+					Email:    "blocked@example.com",
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "deny scope - user in Deny.Groups blocks access",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"testuser"}, // User is explicitly allowed
+					},
+					Deny: models.ScopeIdentities{
+						Groups: []string{"blocked-group"}, // But their group is denied
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "test@example.com",
+					Groups:   []string{"developers", "blocked-group"},
+				},
+			},
+			expected: false, // Deny takes precedence even though user is in Allow.Users
+		},
+		{
+			name: "deny scope - user domain in Deny.Domains blocks access",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Domains: []string{"example.com"}, // Domain is allowed
+					},
+					Deny: models.ScopeIdentities{
+						Domains: []string{"example.com"}, // But also denied
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "test@example.com",
+				},
+			},
+			expected: false, // Deny takes precedence
+		},
+		{
+			name: "deny takes precedence - user in both Allow.Users and Deny.Users",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"admin@example.com"},
+					},
+					Deny: models.ScopeIdentities{
+						Users: []string{"admin@example.com"}, // Same user in both
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "admin1",
+				User: &models.User{
+					Username: "admin",
+					Email:    "admin@example.com",
+				},
+			},
+			expected: false, // Deny MUST take precedence
+		},
+		{
+			name: "deny takes precedence - group in both Allow.Groups and Deny.Groups",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"admins"},
+					},
+					Deny: models.ScopeIdentities{
+						Groups: []string{"admins"}, // Same group in both
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "admin1",
+				User: &models.User{
+					Username: "admin",
+					Email:    "admin@example.com",
+					Groups:   []string{"admins", "users"},
+				},
+			},
+			expected: false, // Deny MUST take precedence
+		},
+		{
+			name: "deny by username blocks access even when email is allowed",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"allowed@example.com"},
+					},
+					Deny: models.ScopeIdentities{
+						Users: []string{"blockeduser"}, // Denied by username
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "blockeduser",
+					Email:    "allowed@example.com", // Email is allowed but username is denied
+				},
+			},
+			expected: false, // Deny takes precedence
+		},
+		{
+			name: "user allowed when not in any deny scope",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"allowed@example.com"},
+					},
+					Deny: models.ScopeIdentities{
+						Users: []string{"other@example.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "alloweduser",
+					Email:    "allowed@example.com",
+				},
+			},
+			expected: true, // Not in deny, is in allow
+		},
+		{
+			name: "group identity blocked by Deny.Groups",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"developers"},
+					},
+					Deny: models.ScopeIdentities{
+						Groups: []string{"developers"}, // Same group denied
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "group1",
+				Group: &models.Group{
+					Name: "developers",
+				},
+			},
+			expected: false, // Group identity denied
+		},
+		{
+			name: "only deny scopes defined - user not in deny list allowed",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Deny: models.ScopeIdentities{
+						Users: []string{"blocked@example.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "test@example.com",
+				},
+			},
+			expected: true, // No allow scopes means open to all except deny list
+		},
+		{
+			name: "only deny scopes defined - user in deny list blocked",
+			role: &models.Role{
+				Name: "test",
+				Scopes: models.RoleScopes{
+					Deny: models.ScopeIdentities{
+						Users: []string{"blocked@example.com"},
+					},
+				},
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "blockeduser",
+					Email:    "blocked@example.com",
+				},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := config.isRoleApplicableToIdentity(tt.role, tt.identity)
+			assert.Equal(t, tt.expected, result, "Deny scope precedence test failed: %s", tt.name)
+		})
+	}
+}
+
+// TestDenyScopePrecedenceInInheritance verifies that roles with matching deny scopes
+// are NOT inherited, even if allow scopes also match.
+func TestDenyScopePrecedenceInInheritance(t *testing.T) {
+	t.Run("inherited role with deny scope is not inherited", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"restricted": {
+				Name:        "Restricted Role",
+				Description: "Role with both allow and deny scopes",
+				Permissions: models.RolePermissions{
+					Allow: stmts("restricted:action"),
+				},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Users: []string{"admin@example.com"},
+					},
+					Deny: models.ScopeIdentities{
+						Users: []string{"admin@example.com"}, // Same user denied
+					},
+				},
+				Enabled: true,
+			},
+			"parent": {
+				Name:        "Parent Role",
+				Description: "Parent that inherits restricted",
+				Inherits:    []string{"restricted"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("parent:action"),
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{
+			Roles: RoleConfig{
+				Definitions: roles,
+			},
+		}
+
+		identity := &models.Identity{
+			ID: "admin1",
+			User: &models.User{
+				Username: "admin",
+				Email:    "admin@example.com",
+			},
+		}
+
+		result, err := config.GetCompositeRoleByName(identity, "parent")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		// Should only have parent's permissions, not the restricted role's
+		allowOps := collectAllOps(result.Permissions.Allow)
+		assert.Contains(t, allowOps, "parent:action")
+		assert.NotContains(t, allowOps, "restricted:action", "Denied role should NOT be inherited")
+	})
+
+	t.Run("inherited role denied by group scope is not inherited", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"admin-only": {
+				Name: "Admin Only Role",
+				Permissions: models.RolePermissions{
+					Allow: stmts("admin:superpower"),
+				},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"admins"},
+					},
+					Deny: models.ScopeIdentities{
+						Groups: []string{"suspended-admins"},
+					},
+				},
+				Enabled: true,
+			},
+			"general": {
+				Name:     "General Role",
+				Inherits: []string{"admin-only"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("general:action"),
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{
+			Roles: RoleConfig{
+				Definitions: roles,
+			},
+		}
+
+		// User is in both admins AND suspended-admins
+		identity := &models.Identity{
+			ID: "user1",
+			User: &models.User{
+				Username: "suspendedadmin",
+				Email:    "suspended@example.com",
+				Groups:   []string{"admins", "suspended-admins"},
+			},
+		}
+
+		result, err := config.GetCompositeRoleByName(identity, "general")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		assert.Contains(t, allowOps, "general:action")
+		assert.NotContains(t, allowOps, "admin:superpower", "User in deny group should NOT inherit role")
+	})
+
+	t.Run("multi-level inheritance respects deny scopes at each level", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"level3": {
+				Name: "Level 3 - Deepest",
+				Permissions: models.RolePermissions{
+					Allow: stmts("level3:action"),
+				},
+				Enabled: true,
+			},
+			"level2": {
+				Name:     "Level 2 - Middle (Denied)",
+				Inherits: []string{"level3"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("level2:action"),
+				},
+				Scopes: models.RoleScopes{
+					Deny: models.ScopeIdentities{
+						Domains: []string{"blocked.com"},
+					},
+				},
+				Enabled: true,
+			},
+			"level1": {
+				Name:     "Level 1 - Top",
+				Inherits: []string{"level2"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("level1:action"),
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{
+			Roles: RoleConfig{
+				Definitions: roles,
+			},
+		}
+
+		identity := &models.Identity{
+			ID: "user1",
+			User: &models.User{
+				Username: "blockeduser",
+				Email:    "user@blocked.com",
+			},
+		}
+
+		result, err := config.GetCompositeRoleByName(identity, "level1")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		assert.Contains(t, allowOps, "level1:action", "Level 1 should be present")
+		assert.NotContains(t, allowOps, "level2:action", "Level 2 should NOT be inherited (domain denied)")
+		assert.NotContains(t, allowOps, "level3:action", "Level 3 should NOT be inherited (blocked by level 2)")
+	})
+}
+
+// =============================================================================
+// WILDCARD EXPANSION EDGE CASE TESTS
+// =============================================================================
+
+func TestWildcardExpansionEdgeCases(t *testing.T) {
+	t.Run("service-level wildcard subsumes specific actions", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"child": {
+				Name: "Child",
+				Permissions: models.RolePermissions{
+					Allow: stmts("s3:GetObject", "s3:PutObject", "s3:DeleteObject"),
+				},
+				Enabled: true,
+			},
+			"parent": {
+				Name:     "Parent",
+				Inherits: []string{"child"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("s3:*"), // Wildcard should subsume all s3 actions
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{
+			Roles: RoleConfig{
+				Definitions: roles,
+			},
+		}
+
+		identity := &models.Identity{
+			ID:   "user1",
+			User: &models.User{Username: "test"},
+		}
+
+		result, err := config.GetCompositeRoleByName(identity, "parent")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		// Should only contain the wildcard, not individual actions
+		assert.Contains(t, allowOps, "s3:*")
+		// Specific actions may or may not be present depending on condensation
+	})
+
+	t.Run("GCP-style atomic permissions are not condensed", func(t *testing.T) {
+		// GCP permissions have dots in the action: compute.instances.start
+		perms := []string{
+			"compute.instances.start",
+			"compute.instances.stop",
+			"storage.buckets.get",
+		}
+
+		result := condenseActions(perms)
+
+		// Each should remain separate (not condensed)
+		assert.Contains(t, result, "compute.instances.start")
+		assert.Contains(t, result, "compute.instances.stop")
+		assert.Contains(t, result, "storage.buckets.get")
+	})
+
+	t.Run("mixed AWS and GCP permissions", func(t *testing.T) {
+		perms := []string{
+			"s3:GetObject",
+			"s3:PutObject",
+			"compute.instances.start",
+			"ec2:DescribeInstances",
+		}
+
+		result := condenseActions(perms)
+
+		// AWS should be condensable, GCP should not
+		assert.Len(t, result, 3) // s3:GetObject,PutObject + compute... + ec2:...
+	})
+
+	t.Run("empty operations list", func(t *testing.T) {
+		result := condenseActions(nil)
+		assert.Nil(t, result)
+
+		result = condenseActions([]string{})
+		assert.Nil(t, result)
+	})
+
+	t.Run("single action not condensed", func(t *testing.T) {
+		result := condenseActions([]string{"s3:GetObject"})
+		assert.Equal(t, []string{"s3:GetObject"}, result)
+	})
+
+	t.Run("wildcard at different levels", func(t *testing.T) {
+		perms := []string{
+			"s3:*",             // Service-level wildcard
+			"s3:Get*",          // This is not a valid wildcard pattern in our system
+			"s3:GetObject",     // Should be subsumed by s3:*
+			"ec2:RunInstances", // Different service
+		}
+
+		result := condenseActions(perms)
+
+		assert.Contains(t, result, "s3:*")
+		assert.Contains(t, result, "ec2:RunInstances")
+	})
+
+	t.Run("expandCondensedActions handles comma-separated actions", func(t *testing.T) {
+		expanded := expandCondensedActions("k8s:pods:get,list,watch")
+		assert.ElementsMatch(t, []string{
+			"k8s:pods:get",
+			"k8s:pods:list",
+			"k8s:pods:watch",
+		}, expanded)
+	})
+
+	t.Run("expandCondensedActions handles single action", func(t *testing.T) {
+		expanded := expandCondensedActions("s3:GetObject")
+		assert.Equal(t, []string{"s3:GetObject"}, expanded)
+	})
+
+	t.Run("expandCondensedActions handles GCP-style permissions unchanged", func(t *testing.T) {
+		expanded := expandCondensedActions("compute.instances.start")
+		assert.Equal(t, []string{"compute.instances.start"}, expanded)
+	})
+}
+
+// =============================================================================
+// PERMISSION CONDENSATION EDGE CASE TESTS
+// =============================================================================
+
+func TestCondenseActionsEdgeCases(t *testing.T) {
+	t.Run("multiple actions per resource get condensed", func(t *testing.T) {
+		perms := []string{
+			"s3:GetObject",
+			"s3:PutObject",
+			"s3:ListBucket",
+		}
+
+		result := condenseActions(perms)
+
+		// Should be condensed to a single entry with comma-separated actions
+		assert.Len(t, result, 1)
+		assert.Contains(t, result[0], "s3:")
+		assert.Contains(t, result[0], "GetObject")
+		assert.Contains(t, result[0], "PutObject")
+		assert.Contains(t, result[0], "ListBucket")
+	})
+
+	t.Run("actions are sorted within condensed permission", func(t *testing.T) {
+		perms := []string{
+			"s3:Zebra",
+			"s3:Alpha",
+			"s3:Middle",
+		}
+
+		result := condenseActions(perms)
+
+		assert.Len(t, result, 1)
+		// Should be sorted alphabetically
+		assert.Equal(t, "s3:Alpha,Middle,Zebra", result[0])
+	})
+
+	t.Run("self-subsumption does not occur", func(t *testing.T) {
+		// A wildcard should not remove itself
+		perms := []string{"s3:*"}
+
+		result := condenseActions(perms)
+
+		assert.Contains(t, result, "s3:*")
+	})
+
+	t.Run("different services remain separate", func(t *testing.T) {
+		perms := []string{
+			"s3:GetObject",
+			"ec2:DescribeInstances",
+			"iam:GetUser",
+		}
+
+		result := condenseActions(perms)
+
+		assert.Len(t, result, 3)
+	})
+
+	t.Run("wildcard subsumes specific but not other wildcards", func(t *testing.T) {
+		perms := []string{
+			"s3:*",
+			"s3:GetObject", // Should be subsumed
+			"ec2:*",
+			"ec2:RunInstances", // Should be subsumed
+		}
+
+		result := condenseActions(perms)
+
+		assert.Len(t, result, 2)
+		assert.Contains(t, result, "s3:*")
+		assert.Contains(t, result, "ec2:*")
+	})
+
+	t.Run("nested service prefixes handled correctly", func(t *testing.T) {
+		perms := []string{
+			"iam:*",
+			"iam-identity-center:GetUser", // Different service (has hyphen)
+		}
+
+		result := condenseActions(perms)
+
+		// iam:* should NOT subsume iam-identity-center:GetUser
+		assert.Contains(t, result, "iam:*")
+		assert.Contains(t, result, "iam-identity-center:GetUser")
+	})
+}
+
+// =============================================================================
+// CONFLICT RESOLUTION EDGE CASE TESTS
+// =============================================================================
+
+func TestConflictResolutionEdgeCases(t *testing.T) {
+	t.Run("same operation in both allow and deny within single role is removed from both", func(t *testing.T) {
+		role := &models.Role{
+			Name: "Conflicted",
+			Permissions: models.RolePermissions{
+				Allow: stmts("s3:GetObject", "s3:PutObject"),
+				Deny:  stmts("s3:PutObject", "s3:DeleteObject"),
+			},
+		}
+
+		config := &Config{}
+		config.resolvePermissionConflicts(role)
+
+		allowOps := collectAllOps(role.Permissions.Allow)
+		denyOps := collectAllOps(role.Permissions.Deny)
+
+		// s3:PutObject should be removed from BOTH
+		assert.Contains(t, allowOps, "s3:GetObject")
+		assert.NotContains(t, allowOps, "s3:PutObject", "Conflicted permission should be removed from allow")
+		assert.Contains(t, denyOps, "s3:DeleteObject")
+		assert.NotContains(t, denyOps, "s3:PutObject", "Conflicted permission should be removed from deny")
+	})
+
+	t.Run("wildcard allow vs specific deny - parent allow wins", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"child": {
+				Name: "Child",
+				Permissions: models.RolePermissions{
+					Deny: stmts("s3:GetObject", "s3:PutObject"), // Specific denies
+				},
+				Enabled: true,
+			},
+			"parent": {
+				Name:     "Parent",
+				Inherits: []string{"child"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("s3:*"), // Wildcard allow should override child denies
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{
+			Roles: RoleConfig{
+				Definitions: roles,
+			},
+		}
+
+		identity := &models.Identity{
+			ID:   "user1",
+			User: &models.User{Username: "test"},
+		}
+
+		result, err := config.GetCompositeRoleByName(identity, "parent")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		assert.Contains(t, allowOps, "s3:*")
+		// Child denies should be removed since parent allows with wildcard
+		assert.NotContains(t, denyOps, "s3:GetObject")
+		assert.NotContains(t, denyOps, "s3:PutObject")
+	})
+
+	t.Run("wildcard deny vs specific allow - parent deny wins", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"child": {
+				Name: "Child",
+				Permissions: models.RolePermissions{
+					Allow: stmts("s3:GetObject", "s3:PutObject"), // Specific allows
+				},
+				Enabled: true,
+			},
+			"parent": {
+				Name:     "Parent",
+				Inherits: []string{"child"},
+				Permissions: models.RolePermissions{
+					Deny: stmts("s3:*"), // Wildcard deny should override child allows
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{
+			Roles: RoleConfig{
+				Definitions: roles,
+			},
+		}
+
+		identity := &models.Identity{
+			ID:   "user1",
+			User: &models.User{Username: "test"},
+		}
+
+		result, err := config.GetCompositeRoleByName(identity, "parent")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		assert.Contains(t, denyOps, "s3:*")
+		// Child allows should be removed since parent denies with wildcard
+		assert.NotContains(t, allowOps, "s3:GetObject")
+		assert.NotContains(t, allowOps, "s3:PutObject")
+	})
+
+	t.Run("empty permissions handling", func(t *testing.T) {
+		role := &models.Role{
+			Name: "Empty",
+			Permissions: models.RolePermissions{
+				Allow: nil,
+				Deny:  nil,
+			},
+		}
+
+		config := &Config{}
+		config.resolvePermissionConflicts(role)
+
+		assert.Nil(t, role.Permissions.Allow)
+		assert.Nil(t, role.Permissions.Deny)
+	})
+
+	t.Run("all permissions conflict and are removed", func(t *testing.T) {
+		role := &models.Role{
+			Name: "AllConflict",
+			Permissions: models.RolePermissions{
+				Allow: stmts("action1", "action2"),
+				Deny:  stmts("action1", "action2"),
+			},
+		}
+
+		config := &Config{}
+		config.resolvePermissionConflicts(role)
+
+		allowOps := collectAllOps(role.Permissions.Allow)
+		denyOps := collectAllOps(role.Permissions.Deny)
+
+		assert.Empty(t, allowOps)
+		assert.Empty(t, denyOps)
+	})
+}
+
+// =============================================================================
+// SCOPE MATCHING EDGE CASE TESTS
+// =============================================================================
+
+func TestScopeMatchingEdgeCases(t *testing.T) {
+	config := &Config{}
+
+	t.Run("case-insensitive email matching", func(t *testing.T) {
+		role := &models.Role{
+			Name: "test",
+			Scopes: models.RoleScopes{
+				Allow: models.ScopeIdentities{
+					Users: []string{"USER@EXAMPLE.COM"},
+				},
+			},
+		}
+
+		identity := &models.Identity{
+			ID: "user1",
+			User: &models.User{
+				Email: "user@example.com", // Lowercase
+			},
+		}
+
+		assert.True(t, config.isRoleApplicableToIdentity(role, identity))
+	})
+
+	t.Run("case-insensitive group matching", func(t *testing.T) {
+		role := &models.Role{
+			Name: "test",
+			Scopes: models.RoleScopes{
+				Allow: models.ScopeIdentities{
+					Groups: []string{"DEVELOPERS"},
+				},
+			},
+		}
+
+		identity := &models.Identity{
+			ID: "user1",
+			User: &models.User{
+				Username: "test",
+				Groups:   []string{"developers"}, // Lowercase
+			},
+		}
+
+		assert.True(t, config.isRoleApplicableToIdentity(role, identity))
+	})
+
+	t.Run("case-insensitive domain matching", func(t *testing.T) {
+		role := &models.Role{
+			Name: "test",
+			Scopes: models.RoleScopes{
+				Allow: models.ScopeIdentities{
+					Domains: []string{"EXAMPLE.COM"},
+				},
+			},
+		}
+
+		identity := &models.Identity{
+			ID: "user1",
+			User: &models.User{
+				Email: "user@example.com",
+			},
+		}
+
+		assert.True(t, config.isRoleApplicableToIdentity(role, identity))
+	})
+
+	t.Run("partial string should NOT match", func(t *testing.T) {
+		role := &models.Role{
+			Name: "test",
+			Scopes: models.RoleScopes{
+				Allow: models.ScopeIdentities{
+					Users: []string{"admin"},
+				},
+			},
+		}
+
+		identity := &models.Identity{
+			ID: "user1",
+			User: &models.User{
+				Username: "administrator", // Contains "admin" but is not "admin"
+				Email:    "administrator@example.com",
+			},
+		}
+
+		assert.False(t, config.isRoleApplicableToIdentity(role, identity))
+	})
+
+	t.Run("nil identity returns false", func(t *testing.T) {
+		role := &models.Role{
+			Name: "test",
+			Scopes: models.RoleScopes{
+				Allow: models.ScopeIdentities{
+					Users: []string{"anyone"},
+				},
+			},
+		}
+
+		assert.False(t, config.isRoleApplicableToIdentity(role, nil))
+	})
+
+	t.Run("empty scope lists with non-empty role scopes", func(t *testing.T) {
+		role := &models.Role{
+			Name: "test",
+			Scopes: models.RoleScopes{
+				Allow: models.ScopeIdentities{
+					Users:   []string{}, // Empty but initialized
+					Groups:  []string{},
+					Domains: []string{},
+				},
+			},
+		}
+
+		identity := &models.Identity{
+			ID: "user1",
+			User: &models.User{
+				Username: "testuser",
+				Email:    "test@example.com",
+			},
+		}
+
+		// No allow scopes defined means open to all
+		assert.True(t, config.isRoleApplicableToIdentity(role, identity))
+	})
+
+	t.Run("user identity with groups vs group identity", func(t *testing.T) {
+		role := &models.Role{
+			Name: "test",
+			Scopes: models.RoleScopes{
+				Allow: models.ScopeIdentities{
+					Groups: []string{"developers"},
+				},
+			},
+		}
+
+		// User identity with group membership
+		userIdentity := &models.Identity{
+			ID: "user1",
+			User: &models.User{
+				Username: "testuser",
+				Groups:   []string{"developers"},
+			},
+		}
+
+		// Group identity
+		groupIdentity := &models.Identity{
+			ID: "group1",
+			Group: &models.Group{
+				Name: "developers",
+			},
+		}
+
+		assert.True(t, config.isRoleApplicableToIdentity(role, userIdentity))
+		assert.True(t, config.isRoleApplicableToIdentity(role, groupIdentity))
+	})
+
+	t.Run("user matched by ID", func(t *testing.T) {
+		role := &models.Role{
+			Name: "test",
+			Scopes: models.RoleScopes{
+				Allow: models.ScopeIdentities{
+					Users: []string{"unique-user-id-123"},
+				},
+			},
+		}
+
+		identity := &models.Identity{
+			ID: "different",
+			User: &models.User{
+				ID:       "unique-user-id-123",
+				Username: "testuser",
+				Email:    "test@example.com",
+			},
+		}
+
+		assert.True(t, config.isRoleApplicableToIdentity(role, identity))
+	})
+
+	t.Run("group matched by ID", func(t *testing.T) {
+		role := &models.Role{
+			Name: "test",
+			Scopes: models.RoleScopes{
+				Allow: models.ScopeIdentities{
+					Groups: []string{"group-id-456"},
+				},
+			},
+		}
+
+		identity := &models.Identity{
+			ID: "different",
+			Group: &models.Group{
+				ID:   "group-id-456",
+				Name: "developers",
+			},
+		}
+
+		assert.True(t, config.isRoleApplicableToIdentity(role, identity))
+	})
+}
+
+// =============================================================================
+// INHERITANCE DEPTH AND CYCLE TESTS
+// =============================================================================
+
+func TestInheritanceDepthAndCycles(t *testing.T) {
+	t.Run("maximum inheritance depth exceeded", func(t *testing.T) {
+		roles := make(map[string]models.Role)
+
+		// Create a chain of MaxInheritanceDepth + 1 roles
+		for i := 0; i <= MaxInheritanceDepth+1; i++ {
+			roleName := fmt.Sprintf("role%d", i)
+			role := models.Role{
+				Name:    roleName,
+				Enabled: true,
+			}
+			if i > 0 {
+				role.Inherits = []string{fmt.Sprintf("role%d", i-1)}
+			}
+			roles[roleName] = role
+		}
+
+		config := &Config{
+			Roles: RoleConfig{
+				Definitions: roles,
+			},
+		}
+
+		identity := &models.Identity{
+			ID:   "user1",
+			User: &models.User{Username: "test"},
+		}
+
+		_, err := config.GetCompositeRoleByName(identity, fmt.Sprintf("role%d", MaxInheritanceDepth+1))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "exceeds maximum inheritance depth")
+	})
+
+	t.Run("self-referencing role detected as cycle", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"self-ref": {
+				Name:     "self-ref",
+				Inherits: []string{"self-ref"},
+				Enabled:  true,
+			},
+		}
+
+		config := &Config{
+			Roles: RoleConfig{
+				Definitions: roles,
+			},
+		}
+
+		identity := &models.Identity{
+			ID:   "user1",
+			User: &models.User{Username: "test"},
+		}
+
+		_, err := config.GetCompositeRoleByName(identity, "self-ref")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cyclic inheritance")
+	})
+
+	t.Run("indirect cycle detected", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"a": {
+				Name:     "a",
+				Inherits: []string{"b"},
+				Enabled:  true,
+			},
+			"b": {
+				Name:     "b",
+				Inherits: []string{"c"},
+				Enabled:  true,
+			},
+			"c": {
+				Name:     "c",
+				Inherits: []string{"a"}, // Creates cycle: a -> b -> c -> a
+				Enabled:  true,
+			},
+		}
+
+		config := &Config{
+			Roles: RoleConfig{
+				Definitions: roles,
+			},
+		}
+
+		identity := &models.Identity{
+			ID:   "user1",
+			User: &models.User{Username: "test"},
+		}
+
+		_, err := config.GetCompositeRoleByName(identity, "a")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cyclic inheritance")
+	})
+}
+
+// =============================================================================
+// TARGET MERGING TESTS
+// =============================================================================
+
+func TestTargetMerging(t *testing.T) {
+	t.Run("targets are merged during inheritance", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"child": {
+				Name: "Child",
+				Permissions: models.RolePermissions{
+					Allow: models.RoleStatements{{
+						Operations: []string{"s3:GetObject"},
+						Targets:    []string{"bucket1", "bucket2"},
+					}},
+				},
+				Enabled: true,
+			},
+			"parent": {
+				Name:     "Parent",
+				Inherits: []string{"child"},
+				Permissions: models.RolePermissions{
+					Allow: models.RoleStatements{{
+						Operations: []string{"s3:GetObject"},
+						Targets:    []string{"bucket2", "bucket3"}, // bucket2 overlaps
+					}},
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{
+			Roles: RoleConfig{
+				Definitions: roles,
+			},
+		}
+
+		identity := &models.Identity{
+			ID:   "user1",
+			User: &models.User{Username: "test"},
+		}
+
+		result, err := config.GetCompositeRoleByName(identity, "parent")
+		require.NoError(t, err)
+
+		// Collect all targets
+		var targets []string
+		for _, stmt := range result.Permissions.Allow {
+			targets = append(targets, stmt.Targets...)
+		}
+
+		// All unique targets should be present
+		assert.Contains(t, targets, "bucket1")
+		assert.Contains(t, targets, "bucket2")
+		assert.Contains(t, targets, "bucket3")
+	})
+
+	t.Run("empty targets means all targets", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"global": {
+				Name: "Global",
+				Permissions: models.RolePermissions{
+					Allow: models.RoleStatements{{
+						Operations: []string{"s3:GetObject"},
+						Targets:    nil, // No targets = all targets
+					}},
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{
+			Roles: RoleConfig{
+				Definitions: roles,
+			},
+		}
+
+		identity := &models.Identity{
+			ID:   "user1",
+			User: &models.User{Username: "test"},
+		}
+
+		result, err := config.GetCompositeRoleByName(identity, "global")
+		require.NoError(t, err)
+
+		// Should have the permission with no targets (means all)
+		assert.NotEmpty(t, result.Permissions.Allow)
+		allowOps := collectAllOps(result.Permissions.Allow)
+		assert.Contains(t, allowOps, "s3:GetObject")
+	})
+}
+
+// TestGetCompositeRoleForIdentity tests that the GetCompositeRoleForIdentity function
+// creates a unique identifier that differs from the original role identifier
+func TestGetCompositeRoleForIdentity(t *testing.T) {
+	tests := []struct {
+		name         string
+		role         models.Role
+		identity     *models.Identity
+		expectChange bool // Whether we expect the identifier to change
+	}{
+		{
+			name: "simple role without inheritance - no identifier change",
+			role: models.Role{
+				Name:        "basic",
+				Identifier:  "basic",
+				Description: "Basic role",
+				Permissions: models.RolePermissions{
+					Allow: stmts("read"),
+				},
+				Enabled: true,
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "test@example.com",
+				},
+			},
+			expectChange: false, // No inheritance, so Composite will be false
+		},
+		{
+			name: "role with inheritance - identifier should change",
+			role: models.Role{
+				Name:        "extended",
+				Identifier:  "extended",
+				Description: "Extended role",
+				Inherits:    []string{"base"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("write"),
+				},
+				Enabled: true,
+			},
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "test@example.com",
+				},
+			},
+			expectChange: true,
+		},
+		{
+			name: "role with inheritance - different identity creates different identifier",
+			role: models.Role{
+				Name:        "extended",
+				Identifier:  "extended",
+				Description: "Extended role",
+				Inherits:    []string{"base"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("write"),
+				},
+				Enabled: true,
+			},
+			identity: &models.Identity{
+				ID: "user2",
+				User: &models.User{
+					Username: "anotheruser",
+					Email:    "another@example.com",
+				},
+			},
+			expectChange: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			roles := map[string]models.Role{
+				"base": {
+					Name:        "base",
+					Identifier:  "base",
+					Description: "Base role",
+					Permissions: models.RolePermissions{
+						Allow: stmts("read"),
+					},
+					Enabled: true,
+				},
+			}
+			roles[tt.role.Name] = tt.role
+
+			config := &Config{
+				Roles: RoleConfig{
+					Definitions: roles,
+				},
+			}
+
+			originalIdentifier := tt.role.Identifier
+
+			result, err := config.GetCompositeRoleForIdentity(tt.identity, &tt.role)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+
+			uniqueName := result.GetName()
+			if tt.expectChange {
+				// Should have a different identifier with hash suffix
+				assert.NotEqual(t, originalIdentifier, uniqueName, "Identifier should change for composite roles")
+				assert.Contains(t, uniqueName, "_", "Composite role identifier should contain underscore separator")
+				assert.True(t, strings.HasPrefix(uniqueName, originalIdentifier+"_"), "Identifier should start with original identifier plus underscore")
+				assert.True(t, result.Composite, "Role should be marked as composite")
+			} else {
+				// Non-composite roles return the plain identifier, not hash-suffixed
+				assert.Equal(t, originalIdentifier, uniqueName, "GetName should return the identifier for non-composite roles")
+				assert.False(t, result.Composite, "Role without inheritance should not be composite")
+			}
+		})
+	}
+}
+
+// TestGetCompositeRoleForWorkflow tests that the GetCompositeRoleForWorkflow function
+// creates a unique identifier that includes the workflow ID and differs from the original
+func TestGetCompositeRoleForWorkflow(t *testing.T) {
+	// Helper to create a workflow task with a role
+
+	tests := []struct {
+		name            string
+		role            models.Role
+		workflowID      string
+		identity        *models.Identity
+		shouldFail      bool
+		expectComposite bool
+	}{
+		{
+			name: "workflow with role without inheritance",
+			role: models.Role{
+				Name:        "workflow-role",
+				Identifier:  "workflow_role",
+				Description: "Workflow role",
+				Permissions: models.RolePermissions{
+					Allow: stmts("execute"),
+				},
+				Enabled: true,
+			},
+			workflowID:      "test-workflow",
+			expectComposite: false, // Roles without inheritance are not composite
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "test@example.com",
+				},
+			},
+		},
+		{
+			name:            "workflow with role with inheritance",
+			expectComposite: true, // Roles with inheritance should be composite
+			role: models.Role{
+				Name:        "workflow-extended",
+				Identifier:  "workflow_extended",
+				Description: "Workflow extended role",
+				Inherits:    []string{"base"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("execute"),
+				},
+				Enabled: true,
+			},
+			workflowID: "test-workflow-extended",
+			identity: &models.Identity{
+				ID: "user1",
+				User: &models.User{
+					Username: "testuser",
+					Email:    "test@example.com",
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			roles := map[string]models.Role{
+				"base": {
+					Name:        "base",
+					Identifier:  "base",
+					Description: "Base role",
+					Permissions: models.RolePermissions{
+						Allow: stmts("read"),
+					},
+					Enabled: true,
+				},
+			}
+			if len(tt.role.Name) > 0 {
+				roles[tt.role.Name] = tt.role
+			}
+
+			config := &Config{
+				Roles: RoleConfig{
+					Definitions: roles,
+				},
+			}
+
+			result, err := config.GetCompositeRoleForWorkflow(tt.identity, &tt.role, tt.workflowID)
+
+			if tt.shouldFail {
+				require.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, result)
+
+			originalIdentifier := tt.role.Identifier
+			uniqueName := result.GetName()
+			if tt.expectComposite {
+				// Composite roles get a hash-suffixed name
+				assert.NotEqual(t, originalIdentifier, uniqueName, "Unique name should change for workflow composite roles")
+				assert.Contains(t, uniqueName, "_", "Unique name should contain underscore separator")
+				assert.True(t, strings.HasPrefix(uniqueName, originalIdentifier+"_"), "Unique name should start with original identifier plus underscore")
+				parts := strings.Split(uniqueName, "_")
+				assert.GreaterOrEqual(t, len(parts), 2, "Unique name should have at least 2 parts separated by underscore")
+				hashPart := parts[len(parts)-1]
+				assert.Equal(t, 6, len(hashPart), "Hash part should be 6 characters")
+			} else {
+				// Non-composite roles return the plain identifier, not hash-suffixed
+				assert.Equal(t, originalIdentifier, uniqueName, "Non-composite role should return plain identifier")
+				assert.False(t, result.Composite, "Role without inheritance should not be composite")
+			}
+		})
+	}
+
+	// Test nil workflow
+	t.Run("nil workflow should fail", func(t *testing.T) {
+		config := &Config{
+			Roles: RoleConfig{
+				Definitions: make(map[string]models.Role),
+			},
+		}
+		result, err := config.GetCompositeRoleForWorkflow(nil, nil, "some-workflow")
+		require.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "workflow role is nil")
+	})
+}
+
+// TestGetCompositeRoleForIdentity_DifferentIdentitiesDifferentIdentifiers tests that
+// different identities produce different composite role identifiers
+func TestGetCompositeRoleForIdentity_DifferentIdentitiesDifferentIdentifiers(t *testing.T) {
+	role := models.Role{
+		Name:        "test-role",
+		Identifier:  "test_role",
+		Description: "Test role",
+		Inherits:    []string{"base"},
+		Permissions: models.RolePermissions{
+			Allow: stmts("write"),
+		},
+		Enabled: true,
+	}
+
+	roles := map[string]models.Role{
+		"base": {
+			Name:        "base",
+			Identifier:  "base",
+			Description: "Base role",
+			Permissions: models.RolePermissions{
+				Allow: stmts("read"),
+			},
+			Enabled: true,
+		},
+		"test-role": role,
+	}
+
+	config := &Config{
+		Roles: RoleConfig{
+			Definitions: roles,
+		},
+	}
+
+	identity1 := &models.Identity{
+		ID: "user1",
+		User: &models.User{
+			Username: "user1",
+			Email:    "user1@example.com",
+		},
+	}
+
+	identity2 := &models.Identity{
+		ID: "user2",
+		User: &models.User{
+			Username: "user2",
+			Email:    "user2@example.com",
+		},
+	}
+
+	result1, err1 := config.GetCompositeRoleForIdentity(identity1, &role)
+	require.NoError(t, err1)
+	require.NotNil(t, result1)
+
+	result2, err2 := config.GetCompositeRoleForIdentity(identity2, &role)
+	require.NoError(t, err2)
+	require.NotNil(t, result2)
+
+	// Different identities should produce different identifiers
+	assert.NotEqual(t, result1.GetName(), result2.GetName(), "Different identities should produce different composite role identifiers")
+	assert.True(t, result1.Composite, "Result1 should be composite")
+	assert.True(t, result2.Composite, "Result2 should be composite")
+}
+
+// =============================================================================
+// WILDCARD + DENY + SCOPE INHERITANCE RESOLUTION TESTS
+// =============================================================================
+
+// TestWildcardDenyInheritanceResolution verifies that wildcard permissions
+// interact correctly with deny lists during role inheritance, and that scopes
+// gate which inherited roles are included.
+func TestWildcardDenyInheritanceResolution(t *testing.T) {
+
+	// ── ec2:* allow with inherited deny of a specific action ─────────────
+	// Scenario: child has the broad ec2:* allow; parent narrows it by adding
+	// a specific deny.  Parent deny does NOT wildcard-subsume ec2:* (it is
+	// a specific action, not a wildcard), so both survive.
+	t.Run("parent deny ec2:DescribeInstances narrows inherited ec2:*", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"ec2-full": {
+				Name: "EC2 Full Access",
+				Permissions: models.RolePermissions{
+					Allow: stmts("ec2:*"),
+				},
+				Enabled: true,
+			},
+			"ec2-restricted": {
+				Name:     "EC2 Restricted",
+				Inherits: []string{"ec2-full"},
+				Permissions: models.RolePermissions{
+					Deny: stmts("ec2:DescribeInstances"),
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+		identity := &models.Identity{ID: "u1", User: &models.User{Username: "alice"}}
+
+		result, err := config.GetCompositeRoleByName(identity, "ec2-restricted")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		// ec2:* from child stays in allow (parent deny is specific, not wildcard)
+		assert.Contains(t, allowOps, "ec2:*", "inherited wildcard should stay in allow")
+		// Parent deny ec2:DescribeInstances should be in deny
+		assert.Contains(t, denyOps, "ec2:DescribeInstances",
+			"parent deny should narrow the inherited wildcard")
+	})
+
+	// ── Parent deny wildcard overrides child allow specifics ─────────────
+	t.Run("parent deny ec2:* overrides child allow ec2 specifics", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"ec2-reader": {
+				Name: "EC2 Reader",
+				Permissions: models.RolePermissions{
+					Allow: stmts("ec2:DescribeInstances", "ec2:StartInstances", "ec2:StopInstances"),
+				},
+				Enabled: true,
+			},
+			"ec2-lockdown": {
+				Name:     "EC2 Lockdown",
+				Inherits: []string{"ec2-reader"},
+				Permissions: models.RolePermissions{
+					Deny: stmts("ec2:*"), // Parent deny wildcard wipes all child ec2 allows
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+		identity := &models.Identity{ID: "u1", User: &models.User{Username: "bob"}}
+
+		result, err := config.GetCompositeRoleByName(identity, "ec2-lockdown")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		// All ec2 specifics from child should be removed from allow
+		assert.NotContains(t, allowOps, "ec2:DescribeInstances")
+		assert.NotContains(t, allowOps, "ec2:StartInstances")
+		assert.NotContains(t, allowOps, "ec2:StopInstances")
+		// Deny wildcard should be present
+		assert.Contains(t, denyOps, "ec2:*")
+	})
+
+	// ── Parent allow wildcard overrides child deny specifics ─────────────
+	t.Run("parent allow s3:* overrides child deny s3 specifics", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"s3-restrictive": {
+				Name: "S3 Restrictive",
+				Permissions: models.RolePermissions{
+					Allow: stmts("s3:GetObject"),
+					Deny:  stmts("s3:PutObject", "s3:DeleteObject"),
+				},
+				Enabled: true,
+			},
+			"s3-full-access": {
+				Name:     "S3 Full Access",
+				Inherits: []string{"s3-restrictive"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("s3:*"), // Should override child's specific denies
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+		identity := &models.Identity{ID: "u1", User: &models.User{Username: "carol"}}
+
+		result, err := config.GetCompositeRoleByName(identity, "s3-full-access")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		// Parent allow s3:* should be present
+		assert.Contains(t, allowOps, "s3:*")
+		// Child deny specifics should be overridden by parent's wildcard allow
+		assert.NotContains(t, denyOps, "s3:PutObject", "parent allow s3:* should override child deny")
+		assert.NotContains(t, denyOps, "s3:DeleteObject", "parent allow s3:* should override child deny")
+	})
+
+	// ── Mixed services: wildcard + deny only affects matching service ────
+	t.Run("ec2:* allow with s3 deny does not cross service boundaries", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"s3-deny": {
+				Name: "S3 Deny",
+				Permissions: models.RolePermissions{
+					Deny: stmts("s3:DeleteObject"),
+				},
+				Enabled: true,
+			},
+			"ec2-full": {
+				Name:     "EC2 Full",
+				Inherits: []string{"s3-deny"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("ec2:*", "s3:GetObject"),
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+		identity := &models.Identity{ID: "u1", User: &models.User{Username: "dave"}}
+
+		result, err := config.GetCompositeRoleByName(identity, "ec2-full")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		assert.Contains(t, allowOps, "ec2:*", "ec2 wildcard should be present")
+		assert.Contains(t, allowOps, "s3:GetObject", "s3:GetObject should be present")
+		assert.Contains(t, denyOps, "s3:DeleteObject", "s3 deny should NOT be affected by ec2:*")
+	})
+
+	// ── Multi-level: grandchild allow, child deny specific, parent wildcard ──
+	t.Run("three-level: grandchild allow, child deny specific, parent wildcard allow", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"grandchild": {
+				Name: "Grandchild",
+				Permissions: models.RolePermissions{
+					Allow: stmts("ec2:DescribeInstances", "ec2:StartInstances", "s3:GetObject"),
+				},
+				Enabled: true,
+			},
+			"child": {
+				Name:     "Child",
+				Inherits: []string{"grandchild"},
+				Permissions: models.RolePermissions{
+					Deny: stmts("ec2:StartInstances"), // Deny grandchild's ec2:StartInstances
+				},
+				Enabled: true,
+			},
+			"parent": {
+				Name:     "Parent",
+				Inherits: []string{"child"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("ec2:*"), // Wildcard overrides child's deny
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+		identity := &models.Identity{ID: "u1", User: &models.User{Username: "eve"}}
+
+		result, err := config.GetCompositeRoleByName(identity, "parent")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		// Parent ec2:* in allow should override child's ec2:StartInstances deny
+		assert.Contains(t, allowOps, "ec2:*")
+		assert.NotContains(t, denyOps, "ec2:StartInstances",
+			"parent allow ec2:* should override child's specific deny")
+		// s3:GetObject from grandchild should still be present (unaffected)
+		assert.Contains(t, allowOps, "s3:GetObject")
+	})
+
+	// ── Scope-gated inheritance: deny scope blocks entire inherited role ──
+	t.Run("scope deny blocks wildcard role from being inherited", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"privileged": {
+				Name: "Privileged",
+				Permissions: models.RolePermissions{
+					Allow: stmts("ec2:*", "s3:*", "rds:*"),
+				},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"admins"},
+					},
+					Deny: models.ScopeIdentities{
+						Groups: []string{"restricted-admins"},
+					},
+				},
+				Enabled: true,
+			},
+			"standard": {
+				Name:     "Standard",
+				Inherits: []string{"privileged"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("ec2:DescribeInstances"),
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+
+		// User in admins AND restricted-admins — deny takes precedence
+		identity := &models.Identity{
+			ID: "u1",
+			User: &models.User{
+				Username: "restricted-admin",
+				Email:    "ra@corp.com",
+				Groups:   []string{"admins", "restricted-admins"},
+			},
+		}
+
+		result, err := config.GetCompositeRoleByName(identity, "standard")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+
+		// Only standard's own permissions should be present
+		assert.Contains(t, allowOps, "ec2:DescribeInstances")
+		// Privileged role's wildcards should NOT be inherited
+		assert.NotContains(t, allowOps, "ec2:*", "scope-denied role should not be inherited")
+		assert.NotContains(t, allowOps, "s3:*", "scope-denied role should not be inherited")
+		assert.NotContains(t, allowOps, "rds:*", "scope-denied role should not be inherited")
+	})
+
+	// ── Scoped user DOES inherit wildcard role ──────────────────────────
+	t.Run("scope allow grants wildcard role inheritance", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"privileged": {
+				Name: "Privileged",
+				Permissions: models.RolePermissions{
+					Allow: stmts("ec2:*", "s3:*"),
+				},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"admins"},
+					},
+				},
+				Enabled: true,
+			},
+			"standard-plus": {
+				Name:     "Standard Plus",
+				Inherits: []string{"privileged"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("rds:DescribeDBInstances"),
+					Deny:  stmts("ec2:TerminateInstances"),
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+
+		identity := &models.Identity{
+			ID: "u1",
+			User: &models.User{
+				Username: "admin1",
+				Email:    "admin1@corp.com",
+				Groups:   []string{"admins"},
+			},
+		}
+
+		result, err := config.GetCompositeRoleByName(identity, "standard-plus")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		// Should inherit privileged wildcards
+		assert.Contains(t, allowOps, "ec2:*", "scoped user should inherit ec2:*")
+		assert.Contains(t, allowOps, "s3:*", "scoped user should inherit s3:*")
+		assert.Contains(t, allowOps, "rds:DescribeDBInstances")
+		// Parent deny should be preserved
+		assert.Contains(t, denyOps, "ec2:TerminateInstances")
+	})
+
+	// ── Multi-level: scopes + wildcard deny + specific allow ────────────
+	t.Run("multi-level with scopes and wildcard deny", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"base-ec2": {
+				Name: "Base EC2",
+				Permissions: models.RolePermissions{
+					Allow: stmts("ec2:DescribeInstances", "ec2:StartInstances", "ec2:StopInstances"),
+				},
+				Enabled: true,
+			},
+			"devops": {
+				Name:     "DevOps",
+				Inherits: []string{"base-ec2"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("s3:*"),
+					Deny:  stmts("ec2:StopInstances"),
+				},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"devops", "engineering"},
+					},
+				},
+				Enabled: true,
+			},
+			"team-lead": {
+				Name:     "Team Lead",
+				Inherits: []string{"devops"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("rds:*"),
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+
+		// User in devops group — should inherit devops role
+		identity := &models.Identity{
+			ID: "u1",
+			User: &models.User{
+				Username: "lead1",
+				Email:    "lead1@corp.com",
+				Groups:   []string{"devops"},
+			},
+		}
+
+		result, err := config.GetCompositeRoleByName(identity, "team-lead")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		// Operations may come back in condensed form (ec2:DescribeInstances,StartInstances).
+		// Expand them so we can check by individual action.
+		var expandedAllow, expandedDeny []string
+		for _, op := range allowOps {
+			expandedAllow = append(expandedAllow, models.ExpandCondensedActions(op)...)
+		}
+		for _, op := range denyOps {
+			expandedDeny = append(expandedDeny, models.ExpandCondensedActions(op)...)
+		}
+
+		// rds:* from team-lead (parent)
+		assert.Contains(t, expandedAllow, "rds:*")
+		// s3:* from devops (inherited)
+		assert.Contains(t, expandedAllow, "s3:*")
+		// ec2 specifics from base-ec2 (grandchild), minus ec2:StopInstances denied by devops
+		assert.Contains(t, expandedAllow, "ec2:DescribeInstances")
+		assert.Contains(t, expandedAllow, "ec2:StartInstances")
+		assert.Contains(t, expandedDeny, "ec2:StopInstances")
+		assert.NotContains(t, expandedAllow, "ec2:StopInstances", "devops deny should block grandchild allow")
+	})
+
+	// ── Same service: deny specific + allow wildcard within one role ─────
+	t.Run("single role with ec2:* allow and ec2:TerminateInstances deny", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"ec2-safe": {
+				Name: "EC2 Safe",
+				Permissions: models.RolePermissions{
+					Allow: stmts("ec2:*"),
+					Deny:  stmts("ec2:TerminateInstances"),
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+		identity := &models.Identity{ID: "u1", User: &models.User{Username: "user1"}}
+
+		result, err := config.GetCompositeRoleByName(identity, "ec2-safe")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		// Within a single role, same-op in both allow and deny removes from BOTH
+		// But ec2:* and ec2:TerminateInstances are different operations,
+		// so both should survive conflict resolution.
+		assert.Contains(t, allowOps, "ec2:*", "wildcard should remain in allow")
+		assert.Contains(t, denyOps, "ec2:TerminateInstances", "specific deny should remain")
+	})
+
+	// ── Condensed actions with deny ──────────────────────────────────────
+	t.Run("condensed k8s actions with deny on specific verb", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"k8s-base": {
+				Name: "K8s Base",
+				Permissions: models.RolePermissions{
+					Allow: stmts("k8s:pods:get,list,watch"),
+					Deny:  stmts("k8s:pods:delete"),
+				},
+				Enabled: true,
+			},
+			"k8s-admin": {
+				Name:     "K8s Admin",
+				Inherits: []string{"k8s-base"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("k8s:deployments:get,list,create,delete"),
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+		identity := &models.Identity{ID: "u1", User: &models.User{Username: "k8suser"}}
+
+		result, err := config.GetCompositeRoleByName(identity, "k8s-admin")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		// Expand condensed results for individual checks
+		var expandedAllow, expandedDeny []string
+		for _, op := range allowOps {
+			expandedAllow = append(expandedAllow, models.ExpandCondensedActions(op)...)
+		}
+		for _, op := range denyOps {
+			expandedDeny = append(expandedDeny, models.ExpandCondensedActions(op)...)
+		}
+
+		// Condensed actions should be expanded during normalization, then re-condensed
+		assert.Contains(t, expandedAllow, "k8s:pods:get")
+		assert.Contains(t, expandedAllow, "k8s:pods:list")
+		assert.Contains(t, expandedAllow, "k8s:pods:watch")
+		assert.Contains(t, expandedDeny, "k8s:pods:delete")
+		assert.NotContains(t, expandedAllow, "k8s:pods:delete", "denied verb must not appear in allow")
+
+		// Deployment permissions from parent
+		assert.Contains(t, expandedAllow, "k8s:deployments:get")
+		assert.Contains(t, expandedAllow, "k8s:deployments:list")
+		assert.Contains(t, expandedAllow, "k8s:deployments:create")
+		assert.Contains(t, expandedAllow, "k8s:deployments:delete")
+	})
+
+	// ── Azure-style wildcards + deny with scopes ─────────────────────────
+	t.Run("Azure wildcards with deny and scope filtering", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"azure-compute-reader": {
+				Name: "Azure Compute Reader",
+				Permissions: models.RolePermissions{
+					Allow: stmts("Microsoft.Compute/*/read"),
+				},
+				Enabled: true,
+			},
+			"azure-restricted": {
+				Name:     "Azure Restricted",
+				Inherits: []string{"azure-compute-reader"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("Microsoft.Storage/storageAccounts/read"),
+					Deny:  stmts("Microsoft.Compute/virtualMachines/read"),
+				},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Domains: []string{"corp.com"},
+					},
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+
+		// User from corp.com — should inherit
+		identity := &models.Identity{
+			ID: "u1",
+			User: &models.User{
+				Username: "azureuser",
+				Email:    "user@corp.com",
+			},
+		}
+
+		result, err := config.GetCompositeRoleByName(identity, "azure-restricted")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		// Inherited compute reader wildcard should be in allow
+		assert.Contains(t, allowOps, "Microsoft.Compute/*/read")
+		// Storage read from parent
+		assert.Contains(t, allowOps, "Microsoft.Storage/storageAccounts/read")
+		// Specific deny should override the wildcard match for this one resource
+		assert.Contains(t, denyOps, "Microsoft.Compute/virtualMachines/read")
+	})
+
+	// ── Azure: user NOT in allowed domain is blocked ─────────────────────
+	t.Run("Azure scope deny blocks inheritance for out-of-domain user", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"azure-compute-reader": {
+				Name: "Azure Compute Reader",
+				Permissions: models.RolePermissions{
+					Allow: stmts("Microsoft.Compute/*/read"),
+				},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Domains: []string{"corp.com"},
+					},
+				},
+				Enabled: true,
+			},
+			"azure-base": {
+				Name:     "Azure Base",
+				Inherits: []string{"azure-compute-reader"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("Microsoft.Storage/storageAccounts/read"),
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+
+		// User NOT from corp.com — should NOT inherit compute reader
+		identity := &models.Identity{
+			ID: "u1",
+			User: &models.User{
+				Username: "outsider",
+				Email:    "user@external.com",
+			},
+		}
+
+		result, err := config.GetCompositeRoleByName(identity, "azure-base")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+
+		assert.Contains(t, allowOps, "Microsoft.Storage/storageAccounts/read")
+		assert.NotContains(t, allowOps, "Microsoft.Compute/*/read",
+			"scoped role should not be inherited by out-of-domain user")
+	})
+
+	// ── Double wildcard in different services: parent allow wildcard
+	// subsumes inherited specific denies under the same service ─────────
+	t.Run("parent wildcard allow subsumes inherited specific denies", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"deny-layer": {
+				Name: "Deny Layer",
+				Permissions: models.RolePermissions{
+					Deny: stmts("ec2:TerminateInstances", "s3:DeleteObject"),
+				},
+				Enabled: true,
+			},
+			"full-access": {
+				Name:     "Full Access",
+				Inherits: []string{"deny-layer"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("ec2:*", "s3:*", "rds:*"),
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+		identity := &models.Identity{ID: "u1", User: &models.User{Username: "user1"}}
+
+		result, err := config.GetCompositeRoleByName(identity, "full-access")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		// All three wildcards should still be in allow
+		assert.Contains(t, allowOps, "ec2:*")
+		assert.Contains(t, allowOps, "s3:*")
+		assert.Contains(t, allowOps, "rds:*")
+		// Parent allow wildcards SUBSUME child deny specifics under the same
+		// service prefix, so deny list should be empty.
+		assert.Empty(t, denyOps,
+			"parent allow wildcard should override inherited specific denies")
+	})
+
+	// ── Reverse direction: parent deny specific, child allow wildcard ───
+	// This is the user's core scenario: inherit ec2:*, then deny one action.
+	t.Run("parent deny specific narrows inherited wildcard allow", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"broad-access": {
+				Name: "Broad Access",
+				Permissions: models.RolePermissions{
+					Allow: stmts("ec2:*", "s3:*"),
+				},
+				Enabled: true,
+			},
+			"narrowed": {
+				Name:     "Narrowed",
+				Inherits: []string{"broad-access"},
+				Permissions: models.RolePermissions{
+					Deny: stmts("ec2:TerminateInstances", "s3:DeleteObject"),
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+		identity := &models.Identity{ID: "u1", User: &models.User{Username: "user1"}}
+
+		result, err := config.GetCompositeRoleByName(identity, "narrowed")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		// Inherited wildcards stay in allow (parent deny is specific, not wildcard)
+		assert.Contains(t, allowOps, "ec2:*")
+		assert.Contains(t, allowOps, "s3:*")
+		// Parent deny specifics survive alongside the wildcard
+		assert.Contains(t, denyOps, "ec2:TerminateInstances")
+		assert.Contains(t, denyOps, "s3:DeleteObject")
+	})
+
+	// ── GCP-style permissions with deny and scope ────────────────────────
+	t.Run("GCP-style permissions with deny and scope gating", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"gcp-viewer": {
+				Name: "GCP Viewer",
+				Permissions: models.RolePermissions{
+					Allow: stmts(
+						"compute.instances.get",
+						"compute.instances.list",
+						"storage.buckets.get",
+						"storage.buckets.list",
+					),
+				},
+				Scopes: models.RoleScopes{
+					Allow: models.ScopeIdentities{
+						Groups: []string{"gcp-users"},
+					},
+				},
+				Enabled: true,
+			},
+			"gcp-ops": {
+				Name:     "GCP Ops",
+				Inherits: []string{"gcp-viewer"},
+				Permissions: models.RolePermissions{
+					Allow: stmts("compute.instances.start", "compute.instances.stop"),
+					Deny:  stmts("storage.buckets.list"), // Override inherited allow
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+
+		identity := &models.Identity{
+			ID: "u1",
+			User: &models.User{
+				Username: "gcpops",
+				Email:    "ops@corp.com",
+				Groups:   []string{"gcp-users"},
+			},
+		}
+
+		result, err := config.GetCompositeRoleByName(identity, "gcp-ops")
+		require.NoError(t, err)
+
+		allowOps := collectAllOps(result.Permissions.Allow)
+		denyOps := collectAllOps(result.Permissions.Deny)
+
+		// Inherited compute permissions
+		assert.Contains(t, allowOps, "compute.instances.get")
+		assert.Contains(t, allowOps, "compute.instances.list")
+		// Parent's own allow
+		assert.Contains(t, allowOps, "compute.instances.start")
+		assert.Contains(t, allowOps, "compute.instances.stop")
+		// Inherited storage.buckets.get
+		assert.Contains(t, allowOps, "storage.buckets.get")
+		// Parent deny overrides inherited allow
+		assert.Contains(t, denyOps, "storage.buckets.list")
+		assert.NotContains(t, allowOps, "storage.buckets.list")
 	})
 }

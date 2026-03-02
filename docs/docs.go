@@ -410,7 +410,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.ElevateRequest"
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.ElevateRequest"
                         }
                     }
                 ],
@@ -490,7 +490,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.ElevateLLMRequest"
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.ElevateLLMRequest"
                         }
                     }
                 ],
@@ -691,7 +691,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/execution/{id}/approve": {
+        "/execution/{id}/approvals": {
             "get": {
                 "security": [
                     {
@@ -1153,7 +1153,7 @@ const docTemplate = `{
                     "200": {
                         "description": "Provider details",
                         "schema": {
-                            "$ref": "#/definitions/models.ProviderResponse"
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.ProviderResponse"
                         }
                     },
                     "404": {
@@ -1425,6 +1425,12 @@ const docTemplate = `{
                         "description": "Filter query",
                         "name": "q",
                         "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum number of results to return (default: 100)",
+                        "name": "limit",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -1443,6 +1449,13 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "501": {
+                        "description": "Provider does not implement tenants",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -1562,7 +1575,7 @@ const docTemplate = `{
                     "200": {
                         "description": "List of providers",
                         "schema": {
-                            "$ref": "#/definitions/models.ProvidersResponse"
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.ProvidersResponse"
                         }
                     },
                     "401": {
@@ -1642,26 +1655,21 @@ const docTemplate = `{
         },
         "/role/{role}": {
             "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Retrieve detailed information about a specific role",
+                "description": "Display a page showing the composite role with all inherited permissions resolved",
                 "consumes": [
-                    "application/json"
+                    "text/html"
                 ],
                 "produces": [
-                    "application/json"
+                    "text/html"
                 ],
                 "tags": [
                     "roles"
                 ],
-                "summary": "Get role by name",
+                "summary": "Get role page",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Role name",
+                        "description": "Role key",
                         "name": "role",
                         "in": "path",
                         "required": true
@@ -1669,10 +1677,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "Role details",
-                        "schema": {
-                            "$ref": "#/definitions/models.RoleResponse"
-                        }
+                        "description": "Role page HTML"
                     },
                     "400": {
                         "description": "Bad request",
@@ -1681,8 +1686,22 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
                     "404": {
                         "description": "Role not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -1698,7 +1717,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Get a list of all available roles with optional provider filtering",
+                "description": "Get a list of all available roles with optional provider filtering and search",
                 "consumes": [
                     "application/json"
                 ],
@@ -1715,13 +1734,25 @@ const docTemplate = `{
                         "description": "Comma-separated list of providers to filter by",
                         "name": "provider",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Search query for roles",
+                        "name": "q",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum number of search results (default: 10)",
+                        "name": "limit",
+                        "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "List of roles",
                         "schema": {
-                            "$ref": "#/definitions/models.RolesResponse"
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.RolesResponse"
                         }
                     },
                     "401": {
@@ -2103,6 +2134,41 @@ const docTemplate = `{
                 }
             }
         },
+        "/whoami": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get information about the currently authenticated user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "Get current user",
+                "responses": {
+                    "200": {
+                        "description": "Current user information",
+                        "schema": {
+                            "$ref": "#/definitions/models.WhoamiResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/workflow/{name}": {
             "get": {
                 "security": [
@@ -2177,7 +2243,7 @@ const docTemplate = `{
                     "200": {
                         "description": "List of workflows",
                         "schema": {
-                            "$ref": "#/definitions/models.WorkflowsResponse"
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.WorkflowsResponse"
                         }
                     },
                     "401": {
@@ -2298,7 +2364,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "role": {
-                    "description": "Role name to evaluate",
+                    "description": "Role key (identifier) to evaluate",
                     "type": "string"
                 }
             }
@@ -2406,6 +2472,9 @@ const docTemplate = `{
         "daemon.SimpleServer": {
             "type": "object",
             "properties": {
+                "capabilities": {
+                    "$ref": "#/definitions/models.CapabilitiesConfig"
+                },
                 "health": {
                     "$ref": "#/definitions/daemon.SimpleHealth"
                 },
@@ -2451,7 +2520,7 @@ const docTemplate = `{
                     "description": "Load providers directly from config using mapstructure:\",remain\"",
                     "type": "object",
                     "additionalProperties": {
-                        "$ref": "#/definitions/models.ProviderConfig"
+                        "$ref": "#/definitions/github_com_thand-io_agent_internal_models.ProviderConfig"
                     }
                 },
                 "path": {
@@ -2480,6 +2549,10 @@ const docTemplate = `{
                 "commit": {
                     "type": "string"
                 },
+                "endpoint": {
+                    "description": "Login server endpoint",
+                    "type": "string"
+                },
                 "environment": {
                     "$ref": "#/definitions/github_com_thand-io_agent_internal_models.EnvironmentConfig"
                 },
@@ -2488,6 +2561,10 @@ const docTemplate = `{
                 },
                 "mode": {
                     "$ref": "#/definitions/github_com_thand-io_agent_internal_config.Mode"
+                },
+                "origin": {
+                    "description": "Where the agent is running, used for logging and analytics",
+                    "type": "string"
                 },
                 "version": {
                     "type": "string"
@@ -2520,6 +2597,60 @@ const docTemplate = `{
         "github_com_thand-io_agent_internal_models.BasicConfig": {
             "type": "object",
             "additionalProperties": {}
+        },
+        "github_com_thand-io_agent_internal_models.ElevateLLMRequest": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_thand-io_agent_internal_models.ElevateRequest": {
+            "type": "object",
+            "properties": {
+                "authenticator": {
+                    "description": "Which provider to use for authentication",
+                    "type": "string"
+                },
+                "duration": {
+                    "description": "Duration in ISO 8601 format",
+                    "type": "string"
+                },
+                "identities": {
+                    "description": "Optional identities to elevate, if empty the requesting user is used",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "providers": {
+                    "description": "A role can be applied to multiple providers",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "role": {
+                    "$ref": "#/definitions/github_com_thand-io_agent_internal_models.Role"
+                },
+                "session": {
+                    "$ref": "#/definitions/github_com_thand-io_agent_internal_models.LocalSession"
+                },
+                "tenants": {
+                    "description": "Optional tenant IDs for multi-account providers",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "workflow": {
+                    "type": "string"
+                }
+            }
         },
         "github_com_thand-io_agent_internal_models.EnvironmentConfig": {
             "type": "object",
@@ -2598,25 +2729,6 @@ const docTemplate = `{
                 "parent": {
                     "description": "Parent is the ID of the parent group, if any.",
                     "type": "string"
-                }
-            }
-        },
-        "github_com_thand-io_agent_internal_models.Groups": {
-            "type": "object",
-            "properties": {
-                "allow": {
-                    "type": "array",
-                    "maxItems": 100,
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "deny": {
-                    "type": "array",
-                    "maxItems": 100,
-                    "items": {
-                        "type": "string"
-                    }
                 }
             }
         },
@@ -2721,22 +2833,121 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_thand-io_agent_internal_models.Permissions": {
+        "github_com_thand-io_agent_internal_models.ProviderCapabilities": {
             "type": "object",
             "properties": {
-                "allow": {
-                    "type": "array",
-                    "maxItems": 500,
-                    "items": {
-                        "type": "string"
-                    }
+                "authorizer": {
+                    "description": "SSO Capabilities",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.AuthorizerConfiguration"
+                        }
+                    ]
                 },
-                "deny": {
-                    "type": "array",
-                    "maxItems": 500,
-                    "items": {
-                        "type": "string"
-                    }
+                "groups": {
+                    "$ref": "#/definitions/models.GroupsConfiguration"
+                },
+                "identities": {
+                    "description": "Identity management capabilities",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.IdentitiesConfiguration"
+                        }
+                    ]
+                },
+                "notifier": {
+                    "description": "Notifier",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.NotifierConfiguration"
+                        }
+                    ]
+                },
+                "permissions": {
+                    "$ref": "#/definitions/models.PermissionsConfiguration"
+                },
+                "provisioning": {
+                    "description": "Rbac capabilities",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ProvisioningConfiguration"
+                        }
+                    ]
+                },
+                "resources": {
+                    "$ref": "#/definitions/models.ResourcesConfiguration"
+                },
+                "roles": {
+                    "$ref": "#/definitions/models.RolesConfiguration"
+                },
+                "tenants": {
+                    "description": "Tenant discovery capability",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.TenantsConfiguration"
+                        }
+                    ]
+                },
+                "users": {
+                    "$ref": "#/definitions/models.UsersConfiguration"
+                },
+                "webhook": {
+                    "$ref": "#/definitions/models.NotifierConfiguration"
+                }
+            }
+        },
+        "github_com_thand-io_agent_internal_models.ProviderConfig": {
+            "type": "object",
+            "required": [
+                "name",
+                "provider"
+            ],
+            "properties": {
+                "capabilities": {
+                    "description": "Allows the user to specify what this provider can do",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.ProviderCapabilities"
+                        }
+                    ]
+                },
+                "config": {
+                    "description": "Provider-specific configuration",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.BasicConfig"
+                        }
+                    ]
+                },
+                "description": {
+                    "type": "string",
+                    "maxLength": 500
+                },
+                "enabled": {
+                    "description": "Whether this provider is enabled",
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "minLength": 1
+                },
+                "provider": {
+                    "description": "e.g. aws, gcp, azure",
+                    "type": "string",
+                    "maxLength": 50,
+                    "minLength": 2
+                },
+                "role": {
+                    "description": "The base role for this provider",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.Role"
+                        }
+                    ]
+                },
+                "version": {
+                    "$ref": "#/definitions/version.Version"
                 }
             }
         },
@@ -2774,8 +2985,38 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "tenant": {
+                    "type": "string"
+                },
                 "type": {
                     "type": "string"
+                }
+            }
+        },
+        "github_com_thand-io_agent_internal_models.ProviderResponse": {
+            "type": "object",
+            "properties": {
+                "capabilities": {
+                    "$ref": "#/definitions/github_com_thand-io_agent_internal_models.ProviderCapabilities"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "identifier": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "provider": {
+                    "description": "e.g. aws, gcp, azure",
+                    "type": "string"
+                },
+                "version": {
+                    "$ref": "#/definitions/version.Version"
                 }
             }
         },
@@ -2791,27 +3032,59 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "tenant": {
+                    "type": "string"
+                },
                 "title": {
                     "type": "string"
                 }
             }
         },
-        "github_com_thand-io_agent_internal_models.Resources": {
+        "github_com_thand-io_agent_internal_models.ProvidersResponse": {
             "type": "object",
             "properties": {
-                "allow": {
+                "meta": {
+                    "$ref": "#/definitions/github_com_thand-io_agent_internal_models.ResponseMeta"
+                },
+                "providers": {
                     "type": "array",
-                    "maxItems": 500,
                     "items": {
-                        "type": "string"
+                        "type": "object",
+                        "properties": {
+                            "_id": {
+                                "type": "string"
+                            },
+                            "_reason": {
+                                "type": "string"
+                            },
+                            "_score": {
+                                "type": "number"
+                            },
+                            "_source": {
+                                "$ref": "#/definitions/github_com_thand-io_agent_internal_models.ProviderResponse"
+                            }
+                        }
                     }
                 },
-                "deny": {
-                    "type": "array",
-                    "maxItems": 500,
-                    "items": {
-                        "type": "string"
-                    }
+                "version": {
+                    "$ref": "#/definitions/version.Version"
+                }
+            }
+        },
+        "github_com_thand-io_agent_internal_models.ResponseMeta": {
+            "type": "object",
+            "properties": {
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
                 }
             }
         },
@@ -2828,6 +3101,11 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "composite": {
+                    "description": "Whether this role is a composite role (i.e., aggregates other roles)",
+                    "type": "boolean",
+                    "default": false
+                },
                 "description": {
                     "type": "string",
                     "maxLength": 500
@@ -2837,13 +3115,9 @@ const docTemplate = `{
                     "type": "boolean",
                     "default": true
                 },
-                "groups": {
-                    "description": "groups to add the user to",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.Groups"
-                        }
-                    ]
+                "identifier": {
+                    "description": "To be set by the system",
+                    "type": "string"
                 },
                 "inherits": {
                     "description": "roles to inherit from or provider specific roles/policies etc",
@@ -2859,10 +3133,10 @@ const docTemplate = `{
                     "minLength": 1
                 },
                 "permissions": {
-                    "description": "granular permissions for the role",
+                    "description": "CSP-agnostic permission statements",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.Permissions"
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.RolePermissions"
                         }
                     ]
                 },
@@ -2874,13 +3148,105 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "resources": {
-                    "description": "resource access rules, apis, files, systems etc",
+                "scopes": {
+                    "description": "scope of who can be assigned this role",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.Resources"
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.RoleScopes"
                         }
                     ]
+                },
+                "version": {
+                    "$ref": "#/definitions/version.Version"
+                },
+                "workflows": {
+                    "description": "The workflows to execute",
+                    "type": "array",
+                    "maxItems": 5,
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "github_com_thand-io_agent_internal_models.RolePermissions": {
+            "type": "object",
+            "properties": {
+                "allow": {
+                    "type": "array",
+                    "maxItems": 500,
+                    "items": {
+                        "$ref": "#/definitions/models.Statement"
+                    }
+                },
+                "deny": {
+                    "type": "array",
+                    "maxItems": 500,
+                    "items": {
+                        "$ref": "#/definitions/models.Statement"
+                    }
+                }
+            }
+        },
+        "github_com_thand-io_agent_internal_models.RoleResponse": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "authenticators": {
+                    "description": "All the auth providers that the role can use. If empty then any provider can be used",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "composite": {
+                    "description": "Whether this role is a composite role (i.e., aggregates other roles)",
+                    "type": "boolean",
+                    "default": false
+                },
+                "description": {
+                    "type": "string",
+                    "maxLength": 500
+                },
+                "enabled": {
+                    "description": "By default enable the role",
+                    "type": "boolean",
+                    "default": true
+                },
+                "identifier": {
+                    "description": "To be set by the system",
+                    "type": "string"
+                },
+                "inherits": {
+                    "description": "roles to inherit from or provider specific roles/policies etc",
+                    "type": "array",
+                    "maxItems": 50,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "minLength": 1
+                },
+                "permissions": {
+                    "description": "CSP-agnostic permission statements",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.RolePermissions"
+                        }
+                    ]
+                },
+                "providers": {
+                    "description": "providers that can assign this role",
+                    "type": "array",
+                    "maxItems": 5,
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "scopes": {
                     "description": "scope of who can be assigned this role",
@@ -2906,32 +3272,56 @@ const docTemplate = `{
         "github_com_thand-io_agent_internal_models.RoleScopes": {
             "type": "object",
             "properties": {
-                "domains": {
+                "allow": {
+                    "$ref": "#/definitions/models.ScopeIdentities"
+                },
+                "deny": {
+                    "$ref": "#/definitions/models.ScopeIdentities"
+                }
+            }
+        },
+        "github_com_thand-io_agent_internal_models.RolesResponse": {
+            "type": "object",
+            "properties": {
+                "meta": {
+                    "$ref": "#/definitions/github_com_thand-io_agent_internal_models.ResponseMeta"
+                },
+                "roles": {
                     "type": "array",
-                    "maxItems": 50,
                     "items": {
-                        "type": "string"
+                        "type": "object",
+                        "properties": {
+                            "_id": {
+                                "type": "string"
+                            },
+                            "_reason": {
+                                "type": "string"
+                            },
+                            "_score": {
+                                "type": "number"
+                            },
+                            "_source": {
+                                "$ref": "#/definitions/github_com_thand-io_agent_internal_models.RoleResponse"
+                            }
+                        }
                     }
                 },
-                "groups": {
-                    "type": "array",
-                    "maxItems": 100,
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "users": {
-                    "type": "array",
-                    "maxItems": 500,
-                    "items": {
-                        "type": "string"
-                    }
+                "version": {
+                    "$ref": "#/definitions/version.Version"
                 }
             }
         },
         "github_com_thand-io_agent_internal_models.ServicesConfig": {
             "type": "object",
             "properties": {
+                "analytics": {
+                    "description": "Analytics - used for telemetry and usage data",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.AnalyticsConfig"
+                        }
+                    ]
+                },
                 "encryption": {
                     "description": "Encryption - used for encrypting sensitive data",
                     "allOf": [
@@ -2968,7 +3358,7 @@ const docTemplate = `{
                     "description": "Temporal - used for workflow processing and orchestration",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/models.TemporalConfig"
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.TemporalConfig"
                         }
                     ]
                 },
@@ -2979,6 +3369,54 @@ const docTemplate = `{
                             "$ref": "#/definitions/models.ServiceConfig"
                         }
                     ]
+                }
+            }
+        },
+        "github_com_thand-io_agent_internal_models.TemporalConfig": {
+            "type": "object",
+            "properties": {
+                "apiKey": {
+                    "type": "string"
+                },
+                "disableVersioning": {
+                    "description": "DisableVersioning disables worker versioning/deployments for testing",
+                    "type": "boolean",
+                    "default": false
+                },
+                "host": {
+                    "type": "string",
+                    "default": "localhost"
+                },
+                "mtlsCert": {
+                    "type": "string"
+                },
+                "mtlsCertFile": {
+                    "type": "string"
+                },
+                "mtlsKey": {
+                    "type": "string"
+                },
+                "mtlsKeyFile": {
+                    "type": "string"
+                },
+                "mtlsVaultName": {
+                    "description": "HSM key resource ID (AWS KMS ARN, Azure Key Vault key URL, GCP KMS resource name)",
+                    "type": "string"
+                },
+                "mtlsVaultPassword": {
+                    "type": "string"
+                },
+                "mtlsVaultType": {
+                    "description": "Optional: auto-detected from platform",
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string",
+                    "default": "default"
+                },
+                "port": {
+                    "type": "integer",
+                    "default": 7233
                 }
             }
         },
@@ -3033,6 +3471,10 @@ const docTemplate = `{
                     "description": "By default enable the workflow",
                     "type": "boolean",
                     "default": true
+                },
+                "identifier": {
+                    "description": "To be set by the system",
+                    "type": "string"
                 },
                 "name": {
                     "type": "string",
@@ -3112,6 +3554,57 @@ const docTemplate = `{
                 },
                 "user": {
                     "type": "string"
+                }
+            }
+        },
+        "github_com_thand-io_agent_internal_models.WorkflowResponse": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "identifier": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "version": {
+                    "$ref": "#/definitions/version.Version"
+                }
+            }
+        },
+        "github_com_thand-io_agent_internal_models.WorkflowsResponse": {
+            "type": "object",
+            "properties": {
+                "meta": {
+                    "$ref": "#/definitions/github_com_thand-io_agent_internal_models.ResponseMeta"
+                },
+                "version": {
+                    "$ref": "#/definitions/version.Version"
+                },
+                "workflows": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "_id": {
+                                "type": "string"
+                            },
+                            "_reason": {
+                                "type": "string"
+                            },
+                            "_score": {
+                                "type": "number"
+                            },
+                            "_source": {
+                                "$ref": "#/definitions/github_com_thand-io_agent_internal_models.WorkflowResponse"
+                            }
+                        }
+                    }
                 }
             }
         },
@@ -3853,6 +4346,28 @@ const docTemplate = `{
                 }
             }
         },
+        "models.AnalyticsConfig": {
+            "type": "object",
+            "properties": {
+                "config": {
+                    "description": "Config - additional configuration parameters for the Analytics service",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.BasicConfig"
+                        }
+                    ]
+                },
+                "disabled": {
+                    "description": "Disable Analytics service",
+                    "type": "boolean",
+                    "default": false
+                },
+                "provider": {
+                    "description": "Provider - the Analytics service provider (e.g., \"posthog\")",
+                    "type": "string"
+                }
+            }
+        },
         "models.AuthorizerConfiguration": {
             "type": "object",
             "properties": {
@@ -3861,57 +4376,34 @@ const docTemplate = `{
                 }
             }
         },
-        "models.ElevateLLMRequest": {
+        "models.CapabilitiesConfig": {
             "type": "object",
             "properties": {
-                "reason": {
-                    "type": "string"
+                "elevations": {
+                    "$ref": "#/definitions/models.ElevationsConfig"
                 }
             }
         },
-        "models.ElevateRequest": {
+        "models.DynamicElevationsConfig": {
             "type": "object",
             "properties": {
-                "authenticator": {
-                    "description": "Which provider to use for authentication",
-                    "type": "string"
+                "enabled": {
+                    "type": "boolean",
+                    "default": true
+                }
+            }
+        },
+        "models.ElevationsConfig": {
+            "type": "object",
+            "properties": {
+                "dynamic": {
+                    "$ref": "#/definitions/models.DynamicElevationsConfig"
                 },
-                "duration": {
-                    "description": "Duration in ISO 8601 format",
-                    "type": "string"
+                "llm": {
+                    "$ref": "#/definitions/models.LargeLanguageModelElevationsConfig"
                 },
-                "identities": {
-                    "description": "Optional identities to elevate, if empty the requesting user is used",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "providers": {
-                    "description": "A role can be applied to multiple providers",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "reason": {
-                    "type": "string"
-                },
-                "role": {
-                    "$ref": "#/definitions/github_com_thand-io_agent_internal_models.Role"
-                },
-                "session": {
-                    "$ref": "#/definitions/github_com_thand-io_agent_internal_models.LocalSession"
-                },
-                "tenants": {
-                    "description": "Optional tenant IDs for multi-account providers",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "workflow": {
-                    "type": "string"
+                "static": {
+                    "$ref": "#/definitions/models.StaticElevationsConfig"
                 }
             }
         },
@@ -4027,6 +4519,15 @@ const docTemplate = `{
                 }
             }
         },
+        "models.LargeLanguageModelElevationsConfig": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "default": true
+                }
+            }
+        },
         "models.MetricsInfo": {
             "type": "object",
             "properties": {
@@ -4078,124 +4579,6 @@ const docTemplate = `{
                 },
                 "synchronizable": {
                     "type": "boolean"
-                }
-            }
-        },
-        "models.ProviderCapabilities": {
-            "type": "object",
-            "properties": {
-                "authorizer": {
-                    "description": "SSO Capabilities",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.AuthorizerConfiguration"
-                        }
-                    ]
-                },
-                "groups": {
-                    "$ref": "#/definitions/models.GroupsConfiguration"
-                },
-                "identities": {
-                    "description": "Identity management capabilities",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.IdentitiesConfiguration"
-                        }
-                    ]
-                },
-                "notifier": {
-                    "description": "Notifier",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.NotifierConfiguration"
-                        }
-                    ]
-                },
-                "permissions": {
-                    "$ref": "#/definitions/models.PermissionsConfiguration"
-                },
-                "provisioning": {
-                    "description": "Rbac capabilities",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.ProvisioningConfiguration"
-                        }
-                    ]
-                },
-                "resources": {
-                    "$ref": "#/definitions/models.ResourcesConfiguration"
-                },
-                "roles": {
-                    "$ref": "#/definitions/models.RolesConfiguration"
-                },
-                "tenants": {
-                    "description": "Tenant discovery capability",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.TenantsConfiguration"
-                        }
-                    ]
-                },
-                "users": {
-                    "$ref": "#/definitions/models.UsersConfiguration"
-                },
-                "webhook": {
-                    "$ref": "#/definitions/models.NotifierConfiguration"
-                }
-            }
-        },
-        "models.ProviderConfig": {
-            "type": "object",
-            "required": [
-                "name",
-                "provider"
-            ],
-            "properties": {
-                "capabilities": {
-                    "description": "Allows the user to specify what this provider can do",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.ProviderCapabilities"
-                        }
-                    ]
-                },
-                "config": {
-                    "description": "Provider-specific configuration",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.BasicConfig"
-                        }
-                    ]
-                },
-                "description": {
-                    "type": "string",
-                    "maxLength": 500
-                },
-                "enabled": {
-                    "description": "Whether this provider is enabled",
-                    "type": "boolean"
-                },
-                "name": {
-                    "type": "string",
-                    "maxLength": 100,
-                    "minLength": 1
-                },
-                "provider": {
-                    "description": "e.g. aws, gcp, azure",
-                    "type": "string",
-                    "maxLength": 50,
-                    "minLength": 2
-                },
-                "role": {
-                    "description": "The base role for this provider",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.Role"
-                        }
-                    ]
-                },
-                "version": {
-                    "$ref": "#/definitions/version.Version"
                 }
             }
         },
@@ -4288,31 +4671,7 @@ const docTemplate = `{
                     }
                 },
                 "version": {
-                    "type": "string"
-                }
-            }
-        },
-        "models.ProviderResponse": {
-            "type": "object",
-            "properties": {
-                "capabilities": {
-                    "$ref": "#/definitions/models.ProviderCapabilities"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "enabled": {
-                    "type": "boolean"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "provider": {
-                    "description": "e.g. aws, gcp, azure",
-                    "type": "string"
+                    "$ref": "#/definitions/version.Version"
                 }
             }
         },
@@ -4396,20 +4755,6 @@ const docTemplate = `{
                 }
             }
         },
-        "models.ProvidersResponse": {
-            "type": "object",
-            "properties": {
-                "providers": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "$ref": "#/definitions/models.ProviderResponse"
-                    }
-                },
-                "version": {
-                    "type": "string"
-                }
-            }
-        },
         "models.ProvisioningConfiguration": {
             "type": "object",
             "properties": {
@@ -4452,94 +4797,6 @@ const docTemplate = `{
                 }
             }
         },
-        "models.RoleResponse": {
-            "type": "object",
-            "required": [
-                "name"
-            ],
-            "properties": {
-                "authenticators": {
-                    "description": "All the auth providers that the role can use. If empty then any provider can be used",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "description": {
-                    "type": "string",
-                    "maxLength": 500
-                },
-                "enabled": {
-                    "description": "By default enable the role",
-                    "type": "boolean",
-                    "default": true
-                },
-                "groups": {
-                    "description": "groups to add the user to",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.Groups"
-                        }
-                    ]
-                },
-                "inherits": {
-                    "description": "roles to inherit from or provider specific roles/policies etc",
-                    "type": "array",
-                    "maxItems": 50,
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "name": {
-                    "type": "string",
-                    "maxLength": 100,
-                    "minLength": 1
-                },
-                "permissions": {
-                    "description": "granular permissions for the role",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.Permissions"
-                        }
-                    ]
-                },
-                "providers": {
-                    "description": "providers that can assign this role",
-                    "type": "array",
-                    "maxItems": 5,
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "resources": {
-                    "description": "resource access rules, apis, files, systems etc",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.Resources"
-                        }
-                    ]
-                },
-                "scopes": {
-                    "description": "scope of who can be assigned this role",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.RoleScopes"
-                        }
-                    ]
-                },
-                "version": {
-                    "$ref": "#/definitions/version.Version"
-                },
-                "workflows": {
-                    "description": "The workflows to execute",
-                    "type": "array",
-                    "maxItems": 5,
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
         "models.RolesConfiguration": {
             "type": "object",
             "properties": {
@@ -4557,17 +4814,29 @@ const docTemplate = `{
                 }
             }
         },
-        "models.RolesResponse": {
+        "models.ScopeIdentities": {
             "type": "object",
             "properties": {
-                "roles": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "$ref": "#/definitions/models.RoleResponse"
+                "domains": {
+                    "type": "array",
+                    "maxItems": 50,
+                    "items": {
+                        "type": "string"
                     }
                 },
-                "version": {
-                    "type": "string"
+                "groups": {
+                    "type": "array",
+                    "maxItems": 100,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "users": {
+                    "type": "array",
+                    "maxItems": 500,
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -4602,6 +4871,19 @@ const docTemplate = `{
                 },
                 "session": {
                     "description": "Encoded session token",
+                    "type": "string"
+                }
+            }
+        },
+        "models.SessionInfo": {
+            "type": "object",
+            "properties": {
+                "expiry": {
+                    "description": "Session expiry time",
+                    "type": "string"
+                },
+                "uuid": {
+                    "description": "Session UUID",
                     "type": "string"
                 }
             }
@@ -4642,51 +4924,38 @@ const docTemplate = `{
                 }
             }
         },
-        "models.TemporalConfig": {
+        "models.Statement": {
             "type": "object",
             "properties": {
-                "apiKey": {
-                    "type": "string"
+                "conditions": {
+                    "description": "Conditions contains optional provider-specific conditions.\nWARNING: Conditions are PRESERVED but NOT EVALUATED by this system.\nEnforcement is delegated to the target provider's IAM system.\nExamples: {\"IpAddress\": {\"aws:SourceIp\": \"10.0.0.0/8\"}} for AWS",
+                    "type": "object",
+                    "additionalProperties": {}
                 },
-                "disableVersioning": {
-                    "description": "DisableVersioning disables worker versioning/deployments for testing",
+                "operations": {
+                    "description": "Operations contains provider-specific actions/permissions.\nExamples: [\"s3:GetObject\", \"s3:PutObject\"] for AWS, [\"storage.buckets.get\"] for GCP",
+                    "type": "array",
+                    "maxItems": 500,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "targets": {
+                    "description": "Targets contains provider-specific resource identifiers.\nExamples: [\"arn:aws:s3:::my-bucket/*\"] for AWS, [\"projects/my-project/buckets/my-bucket\"] for GCP",
+                    "type": "array",
+                    "maxItems": 100,
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "models.StaticElevationsConfig": {
+            "type": "object",
+            "properties": {
+                "enabled": {
                     "type": "boolean",
-                    "default": false
-                },
-                "host": {
-                    "type": "string",
-                    "default": "localhost"
-                },
-                "mtlsCert": {
-                    "type": "string"
-                },
-                "mtlsCertFile": {
-                    "type": "string"
-                },
-                "mtlsKey": {
-                    "type": "string"
-                },
-                "mtlsKeyFile": {
-                    "type": "string"
-                },
-                "mtlsVaultName": {
-                    "description": "HSM key resource ID (AWS KMS ARN, Azure Key Vault key URL, GCP KMS resource name)",
-                    "type": "string"
-                },
-                "mtlsVaultPassword": {
-                    "type": "string"
-                },
-                "mtlsVaultType": {
-                    "description": "Optional: auto-detected from platform",
-                    "type": "string"
-                },
-                "namespace": {
-                    "type": "string",
-                    "default": "default"
-                },
-                "port": {
-                    "type": "integer",
-                    "default": 7233
+                    "default": true
                 }
             }
         },
@@ -4724,31 +4993,28 @@ const docTemplate = `{
                 }
             }
         },
-        "models.WorkflowResponse": {
+        "models.WhoamiResponse": {
             "type": "object",
             "properties": {
-                "description": {
+                "provider": {
+                    "description": "The authentication provider",
                     "type": "string"
                 },
-                "enabled": {
-                    "type": "boolean"
+                "session": {
+                    "description": "Session metadata",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.SessionInfo"
+                        }
+                    ]
                 },
-                "name": {
-                    "type": "string"
-                }
-            }
-        },
-        "models.WorkflowsResponse": {
-            "type": "object",
-            "properties": {
-                "version": {
-                    "type": "string"
-                },
-                "workflows": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "$ref": "#/definitions/models.WorkflowResponse"
-                    }
+                "user": {
+                    "description": "The authenticated user",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/github_com_thand-io_agent_internal_models.User"
+                        }
+                    ]
                 }
             }
         },
