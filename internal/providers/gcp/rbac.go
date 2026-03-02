@@ -930,7 +930,12 @@ func isFolderResource(tenant *models.ProviderTenant) bool {
 	if tenant == nil {
 		return false
 	}
-	return strings.EqualFold(tenant.Type, "folder")
+	if strings.EqualFold(tenant.Type, "folder") {
+		return true
+	}
+	// Additionally, check if the ID follows the folder pattern (e.g., "folders/123456789").
+	// TODO: Remove this fallback is for Generating the start URL
+	return strings.HasPrefix(tenant.ID, "folders/")
 }
 
 // newThandConditionV3 creates the thand-managed condition tag using the v3 CRM types.

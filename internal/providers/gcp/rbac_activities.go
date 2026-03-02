@@ -74,6 +74,22 @@ func (a *gcpProviderActivities) BindUserToPredefinedRole(
 	ctx context.Context,
 	req *BindUserToPredefinedRoleRequest,
 ) (*BindUserToPredefinedRoleResponse, error) {
+	if req == nil || req.Tenant == nil {
+		return nil, temporal.NewNonRetryableApplicationError(
+			"request and tenant must not be nil",
+			"InvalidRequestError",
+			nil,
+		)
+	}
+
+	if req.User == nil {
+		return nil, temporal.NewNonRetryableApplicationError(
+			"user must not be nil",
+			"InvalidRequestError",
+			nil,
+		)
+	}
+
 	providerRole, err := a.provider.GetRole(ctx, req.InheritedRole)
 	if err != nil {
 		return nil, fmt.Errorf("invalid GCP role '%s': %w", req.InheritedRole, err)
@@ -100,6 +116,23 @@ func (a *gcpProviderActivities) GetOrCreateAndBindCustomRole(
 	ctx context.Context,
 	req *GetOrCreateAndBindCustomRoleRequest,
 ) (*GetOrCreateAndBindCustomRoleResponse, error) {
+	if req == nil || req.Tenant == nil {
+		// Return non-retryable error if request or tenant is nil, as this indicates a programming error rather than a transient issue.
+		return nil, temporal.NewNonRetryableApplicationError(
+			"request and tenant must not be nil",
+			"InvalidRequestError",
+			nil,
+		)
+	}
+
+	if req.User == nil {
+		return nil, temporal.NewNonRetryableApplicationError(
+			"user must not be nil",
+			"InvalidRequestError",
+			nil,
+		)
+	}
+
 	projectID := req.Tenant.ID
 	existingRole, err := a.provider.getRole(ctx, projectID, req.RoleName)
 	if err != nil {
@@ -174,6 +207,22 @@ func (a *gcpProviderActivities) UnbindUserFromPredefinedRole(
 	ctx context.Context,
 	req *UnbindUserFromPredefinedRoleRequest,
 ) error {
+	if req == nil || req.Tenant == nil {
+		return temporal.NewNonRetryableApplicationError(
+			"request and tenant must not be nil",
+			"InvalidRequestError",
+			nil,
+		)
+	}
+
+	if req.User == nil {
+		return temporal.NewNonRetryableApplicationError(
+			"user must not be nil",
+			"InvalidRequestError",
+			nil,
+		)
+	}
+
 	resourceID := req.Tenant.ID
 	err := a.provider.unbindUserFromPredefinedRole(ctx, resourceID, req.User, req.RoleName, req.Tenant)
 	if err != nil {
@@ -194,6 +243,22 @@ func (a *gcpProviderActivities) UnbindAndDeleteCustomRole(
 	ctx context.Context,
 	req *UnbindAndDeleteCustomRoleRequest,
 ) error {
+	if req == nil || req.Tenant == nil {
+		return temporal.NewNonRetryableApplicationError(
+			"request and tenant must not be nil",
+			"InvalidRequestError",
+			nil,
+		)
+	}
+
+	if req.User == nil {
+		return temporal.NewNonRetryableApplicationError(
+			"user must not be nil",
+			"InvalidRequestError",
+			nil,
+		)
+	}
+
 	// Extract short name from full path (projects/{project}/roles/{name})
 	customRoleName, err := parseCustomRolePath(req.RoleName)
 	if err != nil {
@@ -244,6 +309,22 @@ func (a *gcpProviderActivities) UnbindUserFromCustomRole(
 	ctx context.Context,
 	req *UnbindUserFromCustomRoleRequest,
 ) error {
+	if req == nil || req.Tenant == nil {
+		return temporal.NewNonRetryableApplicationError(
+			"request and tenant must not be nil",
+			"InvalidRequestError",
+			nil,
+		)
+	}
+
+	if req.User == nil {
+		return temporal.NewNonRetryableApplicationError(
+			"user must not be nil",
+			"InvalidRequestError",
+			nil,
+		)
+	}
+
 	customRoleName, err := parseCustomRolePath(req.RoleName)
 	if err != nil {
 		return err
