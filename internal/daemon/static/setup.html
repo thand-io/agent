@@ -268,9 +268,9 @@
         
         // Build tooltip content
         let tooltipContent = `
-            <div class="tooltip-title">${desc.title}</div>
-            <div class="tooltip-description">${desc.description}</div>
-            <div class="tooltip-description" style="font-style: italic;">${desc.why}</div>
+            <div class="tooltip-title">${escapeHtml(desc.title)}</div>
+            <div class="tooltip-description">${escapeHtml(desc.description)}</div>
+            <div class="tooltip-description" style="font-style: italic;">${escapeHtml(desc.why)}</div>
         `;
         
         // Add children if any
@@ -281,7 +281,7 @@
                 tooltipContent += `
                     <div class="tooltip-subitem">
                         <div class="tooltip-subitem-dot ${childConfigured ? 'configured' : 'needs-config'}"></div>
-                        <span>${childName}</span>
+                        <span>${escapeHtml(childName)}</span>
                     </div>
                 `;
             }
@@ -290,7 +290,7 @@
         
         item.innerHTML = `
             <div class="config-status-dot ${configured ? 'configured' : 'needs-config'}"></div>
-            <span class="config-status-label">${key}</span>
+            <span class="config-status-label">${escapeHtml(key)}</span>
             <div class="config-status-tooltip">${tooltipContent}</div>
         `;
         

@@ -15,6 +15,31 @@
     .choice-wrapper-single .choices__list--single {
         padding: 0px 5px 0px 0px;
     }
+    
+    /* Tenant type icon styling */
+    .tenant-type-icon {
+        display: inline-block;
+        padding: 2px 6px;
+        margin-right: 6px;
+        border-radius: 3px;
+        text-align: center;
+        font-size: 0.65rem;
+        font-weight: 600;
+        vertical-align: middle;
+        text-transform: capitalize;
+    }
+    .tenant-type-icon.type-project {
+        background-color: #3b82f6;
+        color: white;
+    }
+    .tenant-type-icon.type-folder {
+        background-color: #f59e0b;
+        color: white;
+    }
+    .tenant-type-icon.type-other {
+        background-color: #6b7280;
+        color: white;
+    }
 </style>
 
 <main>
@@ -371,6 +396,7 @@
                 // Disable client-side search - we handle it via backend
                 searchFloor: 0,
                 searchChoices: false,
+                allowHTML: true,  // Allow HTML in labels for type icons
             });
 
             // Disable tenant selector initially (no provider selected)
@@ -960,9 +986,19 @@
                         // Convert tenants map to Choices.js format
                         const tenantChoices = Object.keys(this.tenants).map(key => {
                             const tenant = this.tenants[key];
+                            const type = tenant.type || '';
+                            let icon = '';
+                            if (type) {
+                                const typeClass = type === 'project' ? 'type-project' : (type === 'folder' ? 'type-folder' : 'type-other');
+                                const typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
+                                icon = `<span class="tenant-type-icon ${typeClass}" title="${escapeHtml(type)}">${typeLabel}</span> `;
+                            }
                             return {
                                 value: key,
-                                label: tenant.name || key,
+                                label: icon + escapeHtml(tenant.name || key),
+                                customProperties: {
+                                    type: type
+                                }
                             };
                         });
 
