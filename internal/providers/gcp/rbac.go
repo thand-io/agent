@@ -425,6 +425,12 @@ func (p *gcpProvider) authorizeRoleTemporal(
 		return nil, fmt.Errorf("role %s has no inherits or permissions defined", role.Name)
 	}
 
+	// GCP custom roles are project-scoped only (created via Projects.Roles API).
+	// Reject requests that attempt to use custom permissions on a folder tenant.
+	if isFolderResource(tenant) && len(role.Permissions.Allow) > 0 {
+		return nil, fmt.Errorf("custom roles (permissions.allow) are not supported for folder-level resources (%s); GCP custom roles can only be created at the project level", projectID)
+	}
+
 	var assignedRoles []string
 
 	for _, inheritedRole := range role.Inherits {
@@ -1046,11 +1052,6 @@ func (p *gcpProvider) bindUserToRoleByName(ctx context.Context, resourceID strin
 	member, err := validateAndFormatMember(user)
 	if err != nil {
 		return err
-	}
-
-	// Block primitive role bindings unless explicitly permitted in provider config
-	if isPrimitiveRole(roleName) && !p.allowPrimitiveRoles {
-		return fmt.Errorf("binding to primitive role %q is blocked; set allow_primitive_roles: true in provider config to enable", roleName)
 	}
 
 	if isFolderResource(tenant) {

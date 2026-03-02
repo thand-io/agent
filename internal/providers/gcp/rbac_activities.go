@@ -214,7 +214,7 @@ func (a *gcpProviderActivities) UnbindAndDeleteCustomRole(
 		)
 	}
 
-	if err := a.provider.unbindUserFromRole(ctx, req.ProjectID, req.User, existingRole); err != nil {
+	if err := a.provider.unbindUserFromRole(ctx, req.ProjectID, req.User, existingRole, req.Tenant); err != nil {
 		return temporal.NewApplicationErrorWithOptions(
 			fmt.Sprintf("failed to unbind user from custom role %s: %v", req.RoleName, err),
 			"GcpCustomRoleUnbindingError",
