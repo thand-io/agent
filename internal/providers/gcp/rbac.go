@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
 	"sort"
 	"strings"
@@ -387,11 +388,27 @@ func (p *gcpProvider) GetAuthorizedAccessUrl(
 	req *models.AuthorizeRoleRequest,
 	resp *models.AuthorizeRoleResponse,
 ) string {
+	u := &url.URL{
+		Scheme: "https",
+		Host:   "console.cloud.google.com",
+		Path:   "/welcome",
+	}
+	query := url.Values{}
 
-	consoleUrl := fmt.Sprintf("https://console.cloud.google.com/welcome?project=%s", p.GetProjectId())
+	if req.HasTenant() {
+		tenant := req.GetTenant()
+		if isFolderResource(tenant) {
+			u.Path = "/"
+			query.Set("folder", tenant.ID)
+		} else {
+			query.Set("project", tenant.ID)
+		}
+	} else {
+		query.Set("project", p.GetProjectId())
+	}
 
-	return p.GetConfig().GetStringWithDefault(
-		"sso_start_url", consoleUrl)
+	u.RawQuery = query.Encode()
+	return p.GetConfig().GetStringWithDefault("sso_start_url", u.String())
 }
 
 // authorizeRoleTemporal sequences GCP role authorization as independent Temporal activities.
@@ -508,7 +525,6 @@ func (p *gcpProvider) revokeRoleTemporal(
 	var tenant *models.ProviderTenant
 	if req.HasTenant() {
 		tenant = req.GetTenant()
-		projectID = tenant.ID
 	} else {
 		// Create synthetic tenant for project-level operations
 		tenant = &models.ProviderTenant{
