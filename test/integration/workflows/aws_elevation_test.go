@@ -355,12 +355,10 @@ func TestAWSElevationWithTemporal(t *testing.T) {
 		workflowID := workflowTask.GetWorkflowID()
 		t.Logf("Workflow ID: %s", workflowID)
 
-		// Calculate the expected role name using the same path as the provider:
-		// CompositeRoleWorkflowIdentifier hashes workflowID + role identifier + user identity.
-		identityForName := &models.Identity{ID: testUser.Email, User: testUser}
-		nameRef := models.CompositeRole{Role: role, Composite: true}
-		nameRef.SetUniqueIdentifierFromString(models.CompositeRoleWorkflowIdentifier(workflowID, &role, identityForName))
-		expectedRoleName := nameRef.GetName()
+		// Calculate the expected role name.
+		// Role only inherits from provider roles (not thand roles), so Composite is false.
+		// Non-composite roles return their plain identifier.
+		expectedRoleName := role.Identifier
 		t.Logf("Expected IAM role name: %s", expectedRoleName)
 
 		// Channel to signal workflow completion
