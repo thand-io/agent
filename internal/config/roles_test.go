@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/thand-io/agent/internal/models"
-	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 // stmts converts a []string to models.RoleStatements for test convenience
@@ -36,7 +35,7 @@ func TestGetCompositeRole(t *testing.T) {
 		providers     map[string]models.Provider
 		identity      *models.Identity
 		roleName      string
-		expected      *models.Role
+		expected      *models.CompositeRole
 		expectError   bool
 		errorContains string
 	}{
@@ -61,14 +60,16 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "basic",
-			expected: &models.Role{
-				Name:        "basic",
-				Description: "Basic role",
-				Permissions: models.RolePermissions{
-					Allow: stmts("read"),
-					Deny:  stmts("delete"),
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "basic",
+					Description: "Basic role",
+					Permissions: models.RolePermissions{
+						Allow: stmts("read"),
+						Deny:  stmts("delete"),
+					},
+					Enabled: true,
 				},
-				Enabled:   true,
 				Composite: false, // No inheritance, not composite
 			},
 			expectError: false,
@@ -108,24 +109,26 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "extended",
-			expected: &models.Role{
-				Name:        "extended",
-				Description: "Extended role",
-				Inherits:    []string{"base"},
-				Permissions: models.RolePermissions{
-					Allow: models.RoleStatements{
-						{
-							Operations: []string{"read"},
-							Targets:    []string{"resource1"},
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "extended",
+					Description: "Extended role",
+					Inherits:    []string{"base"},
+					Permissions: models.RolePermissions{
+						Allow: models.RoleStatements{
+							{
+								Operations: []string{"read"},
+								Targets:    []string{"resource1"},
+							},
+							{
+								Operations: []string{"write"},
+								Targets:    []string{"resource2"},
+							},
 						},
-						{
-							Operations: []string{"write"},
-							Targets:    []string{"resource2"},
-						},
+						Deny: stmts("admin"),
 					},
-					Deny: stmts("admin"),
+					Enabled: true,
 				},
-				Enabled:   true,
 				Composite: true, // Inherits from thand role, should be composite
 			},
 			expectError: false,
@@ -169,15 +172,17 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "admin",
-			expected: &models.Role{
-				Name:        "admin",
-				Description: "Admin role",
-				Inherits:    []string{"read-role", "write-role"},
-				Permissions: models.RolePermissions{
-					Allow: stmts("admin", "read", "write"),
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "admin",
+					Description: "Admin role",
+					Inherits:    []string{"read-role", "write-role"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("admin", "read", "write"),
+					},
+					Workflows: []string{"admin-workflow"}, // Only the role's own workflows, not inherited
+					Enabled:   true,
 				},
-				Workflows: []string{"admin-workflow"}, // Only the role's own workflows, not inherited
-				Enabled:   true,
 				Composite: true, // Inherits from thand roles, should be composite
 			},
 			expectError: false,
@@ -216,14 +221,16 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "public",
-			expected: &models.Role{
-				Name:        "public",
-				Description: "Public role",
-				Inherits:    []string{"scoped"},
-				Permissions: models.RolePermissions{
-					Allow: stmts("read", "special"),
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "public",
+					Description: "Public role",
+					Inherits:    []string{"scoped"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("read", "special"),
+					},
+					Enabled: true,
 				},
-				Enabled:   true,
 				Composite: true, // Inherits from thand role, should be composite
 			},
 			expectError: false,
@@ -262,14 +269,16 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "public",
-			expected: &models.Role{
-				Name:        "public",
-				Description: "Public role",
-				Inherits:    []string{"scoped"},
-				Permissions: models.RolePermissions{
-					Allow: stmts("read"),
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "public",
+					Description: "Public role",
+					Inherits:    []string{"scoped"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("read"),
+					},
+					Enabled: true,
 				},
-				Enabled: true,
 			},
 			expectError: false,
 		},
@@ -368,14 +377,16 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "user-role",
-			expected: &models.Role{
-				Name:        "user-role",
-				Description: "User role inheriting group role",
-				Inherits:    []string{"group-role"},
-				Permissions: models.RolePermissions{
-					Allow: stmts("group-action", "user-action"), // sorted alphabetically
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "user-role",
+					Description: "User role inheriting group role",
+					Inherits:    []string{"group-role"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("group-action", "user-action"), // sorted alphabetically
+					},
+					Enabled: true,
 				},
-				Enabled:   true,
 				Composite: true, // Inherits from thand role, should be composite
 			},
 			expectError: false,
@@ -415,15 +426,17 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "child-role",
-			expected: &models.Role{
-				Name:        "child-role",
-				Description: "Child role inheriting domain-scoped base",
-				Inherits:    []string{"base-role"},
-				Permissions: models.RolePermissions{
-					Allow: stmts("base-action", "child-action"),
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "child-role",
+					Description: "Child role inheriting domain-scoped base",
+					Inherits:    []string{"base-role"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("base-action", "child-action"),
+					},
+					Enabled: true,
 				},
 				Composite: true,
-				Enabled:   true,
 			},
 			expectError: false,
 		},
@@ -462,14 +475,16 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "child-role",
-			expected: &models.Role{
-				Name:        "child-role",
-				Description: "Child role inheriting domain-scoped base",
-				Inherits:    []string{"base-role"},
-				Permissions: models.RolePermissions{
-					Allow: stmts("child-action"), // base-action not inherited
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "child-role",
+					Description: "Child role inheriting domain-scoped base",
+					Inherits:    []string{"base-role"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("child-action"), // base-action not inherited
+					},
+					Enabled: true,
 				},
-				Enabled: true,
 			},
 			expectError: false,
 		},
@@ -510,15 +525,17 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "parent-role",
-			expected: &models.Role{
-				Name:        "parent-role",
-				Description: "Parent inheriting mixed-scope role",
-				Inherits:    []string{"scoped-base"},
-				Permissions: models.RolePermissions{
-					Allow: stmts("parent-action", "scoped-action"),
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "parent-role",
+					Description: "Parent inheriting mixed-scope role",
+					Inherits:    []string{"scoped-base"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("parent-action", "scoped-action"),
+					},
+					Enabled: true,
 				},
 				Composite: true,
-				Enabled:   true,
 			},
 			expectError: false,
 		},
@@ -566,15 +583,17 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "child",
-			expected: &models.Role{
-				Name:        "child",
-				Description: "Child role",
-				Inherits:    []string{"parent"},
-				Permissions: models.RolePermissions{
-					Allow: stmts("child-action", "grandparent-action", "parent-action"),
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "child",
+					Description: "Child role",
+					Inherits:    []string{"parent"},
+					Permissions: models.RolePermissions{
+						Allow: stmts("child-action", "grandparent-action", "parent-action"),
+					},
+					Enabled: true,
 				},
 				Composite: true,
-				Enabled:   true,
 			},
 			expectError: false,
 		},
@@ -633,18 +652,21 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "developer-role",
-			expected: &models.Role{
-				Name:        "developer-role",
-				Description: "Developer role requiring group membership",
-				Permissions: models.RolePermissions{
-					Allow: models.RoleStatements{{Operations: []string{"dev:read,write"}}},
-				},
-				Scopes: models.RoleScopes{
-					Allow: models.ScopeIdentities{
-						Groups: []string{"developers"},
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "developer-role",
+					Description: "Developer role requiring group membership",
+					Permissions: models.RolePermissions{
+						Allow: models.RoleStatements{{Operations: []string{"dev:read,write"}}},
 					},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Groups: []string{"developers"},
+						},
+					},
+					Enabled: true,
 				},
-				Enabled: true,
+				Composite: false, // No inheritance, not composite
 			},
 			expectError: false,
 		},
@@ -734,20 +756,23 @@ func TestGetCompositeRole(t *testing.T) {
 				},
 			},
 			roleName: "mixed-scope-role",
-			expected: &models.Role{
-				Name:        "mixed-scope-role",
-				Description: "Role with multiple scope types",
-				Permissions: models.RolePermissions{
-					Allow: stmts("mixed:action"),
-				},
-				Scopes: models.RoleScopes{
-					Allow: models.ScopeIdentities{
-						Users:   []string{"other@company.com"},
-						Groups:  []string{"admins"},
-						Domains: []string{"example.com"},
+			expected: &models.CompositeRole{
+				Role: models.Role{
+					Name:        "mixed-scope-role",
+					Description: "Role with multiple scope types",
+					Permissions: models.RolePermissions{
+						Allow: stmts("mixed:action"),
 					},
+					Scopes: models.RoleScopes{
+						Allow: models.ScopeIdentities{
+							Users:   []string{"other@company.com"},
+							Groups:  []string{"admins"},
+							Domains: []string{"example.com"},
+						},
+					},
+					Enabled: true,
 				},
-				Enabled: true,
+				Composite: false, // No inheritance, not composite
 			},
 			expectError: false,
 		},
@@ -3075,16 +3100,17 @@ func TestGetCompositeRoleForIdentity(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, result)
 
+			uniqueName := result.GetName()
 			if tt.expectChange {
 				// Should have a different identifier with hash suffix
-				assert.NotEqual(t, originalIdentifier, result.Identifier, "Identifier should change for composite roles")
-				assert.Contains(t, result.Identifier, "_", "Composite role identifier should contain underscore separator")
-				assert.True(t, strings.HasPrefix(result.Identifier, originalIdentifier+"_"), "Identifier should start with original identifier plus underscore")
+				assert.NotEqual(t, originalIdentifier, uniqueName, "Identifier should change for composite roles")
+				assert.Contains(t, uniqueName, "_", "Composite role identifier should contain underscore separator")
+				assert.True(t, strings.HasPrefix(uniqueName, originalIdentifier+"_"), "Identifier should start with original identifier plus underscore")
 				assert.True(t, result.Composite, "Role should be marked as composite")
 			} else {
-				// For non-composite roles, identifier is always updated with hash
-				assert.NotEqual(t, originalIdentifier, result.Identifier, "Identifier is always updated")
-				assert.Contains(t, result.Identifier, "_", "Identifier should contain underscore separator")
+				// Non-composite roles return the plain identifier, not hash-suffixed
+				assert.Equal(t, originalIdentifier, uniqueName, "GetName should return the identifier for non-composite roles")
+				assert.False(t, result.Composite, "Role without inheritance should not be composite")
 			}
 		})
 	}
@@ -3094,26 +3120,14 @@ func TestGetCompositeRoleForIdentity(t *testing.T) {
 // creates a unique identifier that includes the workflow ID and differs from the original
 func TestGetCompositeRoleForWorkflow(t *testing.T) {
 	// Helper to create a workflow task with a role
-	createWorkflowTask := func(workflowID string, role *models.Role) *models.ElevateWorkflowTask {
-		req := &models.ElevateRequestInternal{
-			ElevateRequest: models.ElevateRequest{
-				Role: role,
-			},
-		}
-		return &models.ElevateWorkflowTask{
-			WorkflowTask: &sdkWorkflowsModel.WorkflowTask{
-				WorkflowID: workflowID,
-				Context:    req,
-			},
-		}
-	}
 
 	tests := []struct {
-		name       string
-		role       models.Role
-		workflowID string
-		identity   *models.Identity
-		shouldFail bool
+		name            string
+		role            models.Role
+		workflowID      string
+		identity        *models.Identity
+		shouldFail      bool
+		expectComposite bool
 	}{
 		{
 			name: "workflow with role without inheritance",
@@ -3126,7 +3140,8 @@ func TestGetCompositeRoleForWorkflow(t *testing.T) {
 				},
 				Enabled: true,
 			},
-			workflowID: "test-workflow",
+			workflowID:      "test-workflow",
+			expectComposite: false, // Roles without inheritance are not composite
 			identity: &models.Identity{
 				ID: "user1",
 				User: &models.User{
@@ -3136,7 +3151,8 @@ func TestGetCompositeRoleForWorkflow(t *testing.T) {
 			},
 		},
 		{
-			name: "workflow with role with inheritance",
+			name:            "workflow with role with inheritance",
+			expectComposite: true, // Roles with inheritance should be composite
 			role: models.Role{
 				Name:        "workflow-extended",
 				Identifier:  "workflow_extended",
@@ -3181,8 +3197,7 @@ func TestGetCompositeRoleForWorkflow(t *testing.T) {
 				},
 			}
 
-			workflow := createWorkflowTask(tt.workflowID, &tt.role)
-			result, err := config.GetCompositeRoleForWorkflow(tt.identity, workflow)
+			result, err := config.GetCompositeRoleForWorkflow(tt.identity, &tt.role, tt.workflowID)
 
 			if tt.shouldFail {
 				require.Error(t, err)
@@ -3192,17 +3207,22 @@ func TestGetCompositeRoleForWorkflow(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, result)
 
-			// Identifier should always change for workflow roles
-			originalIdentifier := workflow.GetRole().Identifier
-			assert.NotEqual(t, originalIdentifier, result.Identifier, "Identifier should change for workflow composite roles")
-			assert.Contains(t, result.Identifier, "_", "Composite role identifier should contain underscore separator")
-			assert.True(t, strings.HasPrefix(result.Identifier, originalIdentifier+"_"), "Identifier should start with original identifier plus underscore")
-
-			// Verify the identifier is unique (contains hash)
-			parts := strings.Split(result.Identifier, "_")
-			assert.GreaterOrEqual(t, len(parts), 2, "Identifier should have at least 2 parts separated by underscore")
-			hashPart := parts[len(parts)-1]
-			assert.Equal(t, 6, len(hashPart), "Hash part should be 6 characters")
+			originalIdentifier := tt.role.Identifier
+			uniqueName := result.GetName()
+			if tt.expectComposite {
+				// Composite roles get a hash-suffixed name
+				assert.NotEqual(t, originalIdentifier, uniqueName, "Unique name should change for workflow composite roles")
+				assert.Contains(t, uniqueName, "_", "Unique name should contain underscore separator")
+				assert.True(t, strings.HasPrefix(uniqueName, originalIdentifier+"_"), "Unique name should start with original identifier plus underscore")
+				parts := strings.Split(uniqueName, "_")
+				assert.GreaterOrEqual(t, len(parts), 2, "Unique name should have at least 2 parts separated by underscore")
+				hashPart := parts[len(parts)-1]
+				assert.Equal(t, 6, len(hashPart), "Hash part should be 6 characters")
+			} else {
+				// Non-composite roles return the plain identifier, not hash-suffixed
+				assert.Equal(t, originalIdentifier, uniqueName, "Non-composite role should return plain identifier")
+				assert.False(t, result.Composite, "Role without inheritance should not be composite")
+			}
 		})
 	}
 
@@ -3213,10 +3233,10 @@ func TestGetCompositeRoleForWorkflow(t *testing.T) {
 				Definitions: make(map[string]models.Role),
 			},
 		}
-		result, err := config.GetCompositeRoleForWorkflow(nil, nil)
+		result, err := config.GetCompositeRoleForWorkflow(nil, nil, "some-workflow")
 		require.Error(t, err)
 		assert.Nil(t, result)
-		assert.Contains(t, err.Error(), "workflow is nil")
+		assert.Contains(t, err.Error(), "workflow role is nil")
 	})
 }
 
@@ -3278,7 +3298,7 @@ func TestGetCompositeRoleForIdentity_DifferentIdentitiesDifferentIdentifiers(t *
 	require.NotNil(t, result2)
 
 	// Different identities should produce different identifiers
-	assert.NotEqual(t, result1.Identifier, result2.Identifier, "Different identities should produce different composite role identifiers")
+	assert.NotEqual(t, result1.GetName(), result2.GetName(), "Different identities should produce different composite role identifiers")
 	assert.True(t, result1.Composite, "Result1 should be composite")
 	assert.True(t, result2.Composite, "Result2 should be composite")
 }

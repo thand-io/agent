@@ -5,11 +5,11 @@ package config
 import (
 	"context"
 	"fmt"
-	"hash/fnv"
 	"reflect"
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/search"
@@ -231,6 +231,55 @@ func (rc *RoleConfig) ListRoles(
 	return models.ReturnSearchResults(filtered), nil
 }
 
+const providerReadinessTimeout = 5 * time.Minute
+
+// awaitProviderReadiness blocks until every registered provider signals ready
+// or the timeout expires. Uses each provider's Ready() channel so there is no
+// polling — we get signalled the moment each provider finishes synchronising.
+func (c *Config) awaitProviderReadiness() {
+	c.mu.RLock()
+	providers := make([]models.Provider, 0, len(c.providerInstances))
+	for _, p := range c.providerInstances {
+		providers = append(providers, p)
+	}
+	c.mu.RUnlock()
+
+	if len(providers) == 0 {
+		return
+	}
+
+	logrus.Infof("Waiting for %d provider(s) to become ready", len(providers))
+
+	deadline := time.After(providerReadinessTimeout)
+	for _, p := range providers {
+		select {
+		case <-p.Ready():
+			// provider is ready
+		case <-deadline:
+			logrus.WithField("provider", p.GetIdentifier()).
+				Error("Timed out waiting for provider readiness, role indexes may be incomplete")
+			return
+		}
+	}
+
+	logrus.Info("All providers ready, proceeding with role index build")
+}
+
+// anyProviderNotReady returns true if any of the named providers exist and
+// have not yet completed their initial synchronization.
+func (c *Config) anyProviderNotReady(providerNames []string) bool {
+	for _, name := range providerNames {
+		p, err := c.GetProviderByName(name)
+		if err != nil || p == nil {
+			continue
+		}
+		if !p.IsReady() {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *Config) ReloadRoleIndexes() error {
 
 	// Never compute indexs if we're not in server mode.
@@ -239,6 +288,10 @@ func (c *Config) ReloadRoleIndexes() error {
 		logrus.Debugln("Not running in server mode, skipping role index reload")
 		return nil
 	}
+
+	// Block until all providers have finished loading their roles/permissions
+	// so that inherited provider roles (ARNs, Azure built-ins, etc.) resolve.
+	c.awaitProviderReadiness()
 
 	// Create bleve index for roles
 	if c.Roles.Definitions == nil {
@@ -378,7 +431,7 @@ func (c *Config) GetRoleByName(name string) (*models.Role, error) {
 func (c *Config) GetCompositeRoleByName(
 	identity *models.Identity,
 	roleName string,
-) (*models.Role, error) {
+) (*models.CompositeRole, error) {
 	if len(roleName) == 0 {
 		return nil, fmt.Errorf("cannot resolve composite role: role name is empty")
 	}
@@ -392,8 +445,20 @@ func (c *Config) GetCompositeRoleByName(
 func (c *Config) GetCompositeRole(
 	identity *models.Identity,
 	baseRole *models.Role,
-) (*models.Role, error) {
-	return c.resolveCompositeRole(identity, baseRole, make(map[string]bool, 8))
+	providers ...models.Provider,
+) (*models.CompositeRole, error) {
+
+	derivedRole, err := c.resolveCompositeRole(
+		identity,
+		baseRole,
+		make(map[string]bool, 8),
+		providers...,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return derivedRole, nil
 }
 
 // GetCompositeRole evaluates a role and resolves all inherited roles into a single composite role.
@@ -413,97 +478,79 @@ func (c *Config) GetCompositeRole(
 //   - An inherited role cannot be resolved
 func (c *Config) GetCompositeRoleForWorkflow(
 	identity *models.Identity,
-	workflow *models.ElevateWorkflowTask,
-) (*models.Role, error) {
+	baseRole *models.Role,
+	workflowID string,
+	providers ...models.Provider,
+) (*models.CompositeRole, error) {
 
-	if workflow == nil {
-		return nil, fmt.Errorf("cannot resolve composite role: workflow is nil")
+	if workflowID == "" {
+		return nil, fmt.Errorf("cannot resolve composite role: workflow ID is empty")
 	}
 
-	// Get identifier for workflow
-	baseRole := workflow.GetRole()
-
-	// Set an ephemeral identifier for this composite role (not persisted, just for caching/indexing)
-	// Extract user from identity (handles nil identity gracefully)
-	userIdentity := "unknown"
-	if identity != nil {
-		userIdentity = identity.GetMappableIdentifier()
-	}
-
-	// Build the composite identifier
-	versionStr := "1.0.0"
-	if baseRole.Version != nil {
-		versionStr = baseRole.Version.String()
+	if baseRole == nil {
+		return nil, fmt.Errorf("cannot resolve composite role: workflow role is nil")
 	}
 
 	// Combine all components to create a unique identifier
-	roleIdentifier := fmt.Sprintf("%s:%s:%s:%s:%s",
-		workflow.GetWorkflowID(),
-		baseRole.Identifier,
-		versionStr,
-		baseRole.Name,
-		userIdentity,
-	)
+	roleIdentifier := models.CompositeRoleWorkflowIdentifier(workflowID, baseRole, identity)
 
-	return c.getCompositeRoleForIdentity(roleIdentifier, identity, baseRole)
+	derivedRole, err := c.getCompositeRoleForIdentity(
+		roleIdentifier, identity, baseRole, providers...)
+
+	if err != nil {
+		logrus.WithError(err).Errorf("Failed to resolve composite role for workflow '%s'", workflowID)
+		return nil, err
+	}
+
+	return derivedRole, nil
 }
 
 func (c *Config) GetCompositeRoleForIdentity(
 	identity *models.Identity,
 	baseRole *models.Role,
-) (*models.Role, error) {
+	providers ...models.Provider,
+) (*models.CompositeRole, error) {
 
 	if baseRole == nil {
 		return nil, fmt.Errorf("cannot resolve composite role: base role is nil")
 	}
 
 	// Set an ephemeral identifier for this composite role (not persisted, just for caching/indexing)
-	// Extract user from identity (handles nil identity gracefully)
-	userIdentity := "unknown"
-	if identity != nil {
-		userIdentity = identity.GetMappableIdentifier()
+	roleIdentifier := models.CompositeRoleWorkflowIdentifier("", baseRole, identity)
+
+	derivedRole, err := c.getCompositeRoleForIdentity(
+		roleIdentifier, identity, baseRole, providers...)
+
+	if err != nil {
+		logrus.WithError(err).Errorf("Failed to resolve composite role for identity '%s'", identity.GetMappableIdentifier())
+		return nil, err
 	}
 
-	// Build the composite identifier
-	versionStr := "1.0.0"
-	if baseRole.Version != nil {
-		versionStr = baseRole.Version.String()
-	}
-
-	// Combine all components to create a unique identifier
-	roleIdentifier := fmt.Sprintf("%s:%s:%s:%s", baseRole.Identifier, versionStr, baseRole.Name, userIdentity)
-
-	return c.getCompositeRoleForIdentity(roleIdentifier, identity, baseRole)
+	return derivedRole, nil
 }
 
 func (c *Config) getCompositeRoleForIdentity(
 	roleIdentifier string,
 	identity *models.Identity,
 	baseRole *models.Role,
-) (*models.Role, error) {
+	providers ...models.Provider,
+) (*models.CompositeRole, error) {
 
 	// Pre-allocate visited map with reasonable capacity to reduce allocations
-	resolvedRole, err := c.GetCompositeRole(identity, baseRole)
+	resolvedRole, err := c.GetCompositeRole(identity, baseRole, providers...)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve composite role for '%s': %w", baseRole.Name, err)
 	}
 
-	// Create FNV-1a hash (non-cryptographic, fast, 6 hex chars)
-	h := fnv.New32a()
-	h.Write([]byte(roleIdentifier))
-
-	// Conform to snake_case for consistency
-	newIdentifier := fmt.Sprintf("%s_%06x", baseRole.GetIdentifier(), h.Sum32()&0xFFFFFF)
-
 	// Update identifier to make it unique for this composite role instance
-	resolvedRole.Identifier = newIdentifier
+	resolvedRole.SetUniqueIdentifierFromString(roleIdentifier)
 
 	// Log the identifier change for debugging
 	logrus.WithFields(logrus.Fields{
 		"role":                baseRole.Name,
 		"original_identifier": baseRole.Identifier,
-		"new_identifier":      resolvedRole.Identifier,
+		"new_identifier":      resolvedRole.GetUniqueIdentifier(),
 	}).Debugln("Marked role as composite and updated identifier")
 
 	return resolvedRole, nil
@@ -514,12 +561,13 @@ func (c *Config) resolveCompositeRoleByName(
 	identity *models.Identity,
 	roleName string,
 	visited map[string]bool,
-) (*models.Role, error) {
+	providers ...models.Provider,
+) (*models.CompositeRole, error) {
 	baseRole, err := c.GetRoleByName(roleName)
 	if err != nil {
 		return nil, err
 	}
-	return c.resolveCompositeRole(identity, baseRole, visited)
+	return c.resolveCompositeRole(identity, baseRole, visited, providers...)
 }
 
 // resolveCompositeRole recursively resolves a role and its inheritance chain.
@@ -531,11 +579,14 @@ func (c *Config) resolveCompositeRoleByName(
 //
 // This "parent wins" model allows administrators to define base roles with specific
 // permissions that cannot be overridden by inherited roles.
+// resolveCompositeRole is the internal implementation. It works on models.Role
+// throughout and wraps the result into a CompositeRole at the very end.
 func (c *Config) resolveCompositeRole(
 	identity *models.Identity,
 	baseRole *models.Role,
 	visited map[string]bool,
-) (*models.Role, error) {
+	providers ...models.Provider,
+) (*models.CompositeRole, error) {
 
 	if len(baseRole.Name) == 0 {
 		return nil, fmt.Errorf("cannot resolve role with empty name")
@@ -567,16 +618,28 @@ func (c *Config) resolveCompositeRole(
 
 	logrus.WithField("role", baseRole.Name).Debugln("Resolving composite role")
 
+	// Build a provider filter from the explicitly-passed providers argument.
+	// When providers are supplied, only provider-prefixed items matching one
+	// of these providers are kept; non-prefixed items are always included.
+	// When no providers are passed the role's own Providers list is used
+	// (preserving the original behaviour).
+	explicitProviderNames := providerIdentifiers(providers...)
+
 	// Create composite role with provider-filtered permissions/resources/groups
 	compositeRole := *baseRole
-	c.filterRoleByProviders(&compositeRole)
+	if len(explicitProviderNames) > 0 {
+		c.filterRoleByProviderNames(&compositeRole, explicitProviderNames)
+	} else {
+		c.filterRoleByProviders(&compositeRole)
+	}
 
 	// Pre-allocate with expected capacity to reduce allocations
 	numInherits := len(baseRole.Inherits)
 	if numInherits == 0 {
 		// No inheritance to process, just resolve conflicts and return
-		c.resolvePermissionConflicts(&compositeRole)
-		return &compositeRole, nil
+		c.resolvePermissionConflicts(&compositeRole, providers...)
+		c.expandPermissionsForProviders(&compositeRole, providers)
+		return &models.CompositeRole{Role: compositeRole, Providers: baseRole.Providers}, nil
 	}
 
 	// Track whether this role inherits from thand roles (not just provider roles)
@@ -589,12 +652,20 @@ func (c *Config) resolveCompositeRole(
 		providerName, roleName, isProviderPrefixed := c.parseProviderPrefix(inheritedRoleName)
 
 		if isProviderPrefixed {
-			// Must match one of the base role's providers
-			if !slices.Contains(baseRole.Providers, providerName) {
+			// Determine which provider list to check against.
+			// If explicit providers were passed, use those; otherwise fall back
+			// to the base role's own Providers list.
+			allowedForInherit := baseRole.Providers
+			if len(explicitProviderNames) > 0 {
+				allowedForInherit = explicitProviderNames
+			}
+
+			// Must match one of the allowed providers
+			if !slices.Contains(allowedForInherit, providerName) {
 				log.WithFields(logrus.Fields{
 					"inherited_role": inheritedRoleName,
 					"provider":       providerName,
-				}).Debugln("Inherited role provider not in base role's providers, skipping")
+				}).Debugln("Inherited role provider not in allowed providers, skipping")
 				continue
 			}
 
@@ -616,9 +687,13 @@ func (c *Config) resolveCompositeRole(
 			continue
 		}
 
-		// Try as provider role against base role's providers
-		if len(baseRole.Providers) > 0 {
-			providerRole := c.GetProviderRoleWithIdentity(identity, inheritedRoleName, baseRole.Providers...)
+		// Try as provider role against allowed providers
+		providersForLookup := baseRole.Providers
+		if len(explicitProviderNames) > 0 {
+			providersForLookup = explicitProviderNames
+		}
+		if len(providersForLookup) > 0 {
+			providerRole := c.GetProviderRoleWithIdentity(identity, inheritedRoleName, providersForLookup...)
 			if providerRole != nil {
 				if len(providerRole.Name) != 0 {
 					remainingInherits = append(remainingInherits, providerRole.Name)
@@ -627,10 +702,22 @@ func (c *Config) resolveCompositeRole(
 				}
 				continue
 			}
+
+			// Provider role not found. If any target provider is still
+			// syncing, skip gracefully instead of falling through to the
+			// thand role registry (which will never contain provider roles
+			// like ARNs or Azure built-in names).
+			if c.anyProviderNotReady(providersForLookup) {
+				log.WithFields(logrus.Fields{
+					"inherited_role": inheritedRoleName,
+					"providers":      providersForLookup,
+				}).Warn("Skipping inherited role — provider(s) still syncing")
+				continue
+			}
 		}
 
 		// Resolve as normal role
-		inheritedRole, err := c.resolveInheritedRole(identity, inheritedRoleName, visited)
+		inheritedRole, err := c.resolveInheritedRole(identity, inheritedRoleName, visited, providers...)
 		if err != nil {
 			// Skip roles not applicable to identity (expected behavior)
 			if strings.Contains(err.Error(), "not applicable to identity") {
@@ -641,29 +728,65 @@ func (c *Config) resolveCompositeRole(
 		}
 
 		// Merge inherited role into composite
-		c.mergeRole(&compositeRole, inheritedRole)
+		c.mergeRolePermissions(&compositeRole, inheritedRole, providers...)
+		// Bubble up provider-role inherits (e.g. ARN managed policies) from
+		// the resolved child so they propagate through the full chain.
+		if len(inheritedRole.Inherits) > 0 {
+			remainingInherits = append(remainingInherits, inheritedRole.Inherits...)
+		}
 		// Mark that we inherited from a thand role (not a provider role)
 		hasThandRoleInheritance = true
 	}
 
 	compositeRole.Inherits = remainingInherits
-	c.resolvePermissionConflicts(&compositeRole)
-
-	// Mark as composite and update identifier if it inherited thand roles
-	if hasThandRoleInheritance {
-		compositeRole.Composite = true
-	}
+	c.resolvePermissionConflicts(&compositeRole, providers...)
+	c.expandPermissionsForProviders(&compositeRole, providers)
 
 	// Validate composite role limits after merging
 	if err := validateRoleLimits(compositeRole.Name, &compositeRole); err != nil {
 		return nil, fmt.Errorf("composite role exceeds limits: %w", err)
 	}
 
-	return &compositeRole, nil
+	return &models.CompositeRole{
+		Role:      compositeRole,
+		Providers: baseRole.Providers,
+		Composite: hasThandRoleInheritance,
+	}, nil
+}
+
+// providersSupportsWildcards returns true when every provider in the list supports
+// wildcard permissions in its API (e.g. AWS, Azure). Returns true when the list is
+// empty (no provider restriction). Returns false as soon as any provider reports
+// SupportsWildcards=false (e.g. GCP, Okta), so that CondenseActions is skipped and
+// individually-expanded permissions are kept in their concrete form.
+func providersSupportsWildcards(providers []models.Provider) bool {
+	for _, p := range providers {
+		caps := p.GetCapabilities()
+		if caps != nil && caps.Permissions != nil && !caps.Permissions.SupportsWildcards {
+			return false
+		}
+	}
+	return true
+}
+
+// expandPermissionsForProviders expands wildcard permissions in a role for each
+// provider that does not support wildcard patterns in its API (e.g. GCP, Okta).
+// Providers where SupportsWildcards is true (e.g. AWS, Azure) are skipped — their
+// APIs accept wildcard patterns natively and no expansion is required.
+func (c *Config) expandPermissionsForProviders(role *models.Role, providers []models.Provider) {
+	for _, provider := range providers {
+		caps := provider.GetCapabilities()
+		if caps == nil || caps.Permissions == nil || caps.Permissions.SupportsWildcards {
+			continue
+		}
+		models.ExpandWildcardPermissionsForProvider(provider, role)
+	}
 }
 
 // resolveInheritedRole handles scope checking before resolving an inherited role.
-func (c *Config) resolveInheritedRole(identity *models.Identity, roleName string, visited map[string]bool) (*models.Role, error) {
+// It returns *models.Role (the embedded Role from CompositeRole) so that it can
+// be passed directly to mergeRole.
+func (c *Config) resolveInheritedRole(identity *models.Identity, roleName string, visited map[string]bool, providers ...models.Provider) (*models.Role, error) {
 	role, err := c.GetRoleByName(roleName)
 	if err != nil {
 		return nil, fmt.Errorf("inherited role '%s' not found: %w", roleName, err)
@@ -671,7 +794,11 @@ func (c *Config) resolveInheritedRole(identity *models.Identity, roleName string
 	if !c.isRoleApplicableToIdentity(role, identity) {
 		return nil, fmt.Errorf("inherited role '%s' not applicable to identity", roleName)
 	}
-	return c.resolveCompositeRoleByName(identity, roleName, visited)
+	composite, err := c.resolveCompositeRoleByName(identity, roleName, visited, providers...)
+	if err != nil {
+		return nil, err
+	}
+	return &composite.Role, nil
 }
 
 // isRoleApplicableToIdentity checks if a role's scopes allow it to be applied to the identity.
@@ -817,17 +944,26 @@ func (c *Config) filterRoleByProviders(role *models.Role) {
 	role.Permissions.Deny = c.filterStatementsListByProvider(role.Permissions.Deny, role.Providers)
 }
 
-// mergeRole merges an inherited role into the composite role.
+// filterRoleByProviderNames filters all provider-prefixed items in a role using
+// the given explicit provider name list instead of the role's own Providers field.
+// This is used when callers pass specific models.Provider objects to restrict
+// evaluation to only those providers.
+func (c *Config) filterRoleByProviderNames(role *models.Role, providerNames []string) {
+	role.Permissions.Allow = c.filterStatementsListByProvider(role.Permissions.Allow, providerNames)
+	role.Permissions.Deny = c.filterStatementsListByProvider(role.Permissions.Deny, providerNames)
+}
+
+// mergeRolePermissions merges an inherited role into the composite role.
 // Parent (composite) takes precedence over child (inherited) in conflicts:
 // - Parent Allow overrides Child Deny
 // - Parent Deny overrides Child Allow
-func (c *Config) mergeRole(composite *models.Role, inherited *models.Role) {
+func (c *Config) mergeRolePermissions(composite *models.Role, inherited *models.Role, providers ...models.Provider) {
 	// Filter inherited items by composite's providers
 	inheritedAllowPerms := c.filterStatementsListByProvider(inherited.Permissions.Allow, composite.Providers)
 	inheritedDenyPerms := c.filterStatementsListByProvider(inherited.Permissions.Deny, composite.Providers)
 
 	// Merge permissions with conflict resolution
-	c.mergePermissionsWithConflictResolution(composite, inheritedAllowPerms, inheritedDenyPerms)
+	c.mergePermissionsWithConflictResolution(composite, inheritedAllowPerms, inheritedDenyPerms, providers...)
 }
 
 // normalizeStatements expands all statement operations and creates a map by operation.
@@ -956,7 +1092,7 @@ func stringSlicesEqual(a, b []string) bool {
 // Groups operations by their target sets for more efficient statement representation.
 // rebuildStatementsFromNormalized reconstructs Statement objects from normalized data
 // and appends any preserved statements (those with conditions) at the end.
-func rebuildStatementsFromNormalized(normalized map[string]map[string]bool, preserved models.RoleStatements) models.RoleStatements {
+func rebuildStatementsFromNormalized(normalized map[string]map[string]bool, preserved models.RoleStatements, supportsWildcards bool) models.RoleStatements {
 	// Return nil if both inputs are empty
 	if len(normalized) == 0 && len(preserved) == 0 {
 		return nil
@@ -983,7 +1119,13 @@ func rebuildStatementsFromNormalized(normalized map[string]map[string]bool, pres
 
 		// Build statements, one per unique target set
 		for targetKey, ops := range targetGroupToOps {
-			condensedOps := models.CondenseActions(ops)
+			var condensedOps []string
+			if supportsWildcards {
+				condensedOps = models.CondenseActions(ops)
+			} else {
+				sort.Strings(ops)
+				condensedOps = ops
+			}
 			targets := targetGroupToTargets[targetKey]
 
 			// Filter out empty string marker (means "all targets")
@@ -1010,7 +1152,7 @@ func rebuildStatementsFromNormalized(normalized map[string]map[string]bool, pres
 // mergePermissionsWithConflictResolution merges permissions with proper conflict resolution.
 // Parent Allow overrides Child Deny, Parent Deny overrides Child Allow.
 // This function preserves both operations AND targets during merging.
-func (c *Config) mergePermissionsWithConflictResolution(composite *models.Role, childAllow, childDeny models.RoleStatements) {
+func (c *Config) mergePermissionsWithConflictResolution(composite *models.Role, childAllow, childDeny models.RoleStatements, providers ...models.Provider) {
 	// Separate normalized and preserved statements
 	parentAllowNorm, parentAllowPreserved := normalizeStatements(composite.Permissions.Allow)
 	parentDenyNorm, parentDenyPreserved := normalizeStatements(composite.Permissions.Deny)
@@ -1106,9 +1248,12 @@ func (c *Config) mergePermissionsWithConflictResolution(composite *models.Role, 
 	finalAllowPreserved := append(childAllowPreserved, parentAllowPreserved...)
 	finalDenyPreserved := append(childDenyPreserved, parentDenyPreserved...)
 
-	// Rebuild statements from normalized form with preserved statements
-	composite.Permissions.Allow = rebuildStatementsFromNormalized(finalAllowNorm, finalAllowPreserved)
-	composite.Permissions.Deny = rebuildStatementsFromNormalized(finalDenyNorm, finalDenyPreserved)
+	// Rebuild statements from normalized form with preserved statements.
+	// Skip CondenseActions for providers that do not support wildcards so that
+	// individually expanded permissions are not re-condensed back into patterns.
+	supportsWildcards := providersSupportsWildcards(providers)
+	composite.Permissions.Allow = rebuildStatementsFromNormalized(finalAllowNorm, finalAllowPreserved, supportsWildcards)
+	composite.Permissions.Deny = rebuildStatementsFromNormalized(finalDenyNorm, finalDenyPreserved, supportsWildcards)
 }
 
 // isOperationSubsumedByWildcard checks if an operation is covered by a wildcard
@@ -1170,7 +1315,7 @@ func (c *Config) filterStatementsListByProvider(stmts models.RoleStatements, all
 //	Allow: ["s3:GetObject", "s3:PutObject"]  +  Deny: ["s3:PutObject", "s3:DeleteObject"]
 //	Result: Allow: ["s3:GetObject"]  +  Deny: ["s3:DeleteObject"]
 //	(s3:PutObject removed from both due to conflict)
-func (c *Config) resolvePermissionConflicts(role *models.Role) {
+func (c *Config) resolvePermissionConflicts(role *models.Role, providers ...models.Provider) {
 	// Separate normalized and preserved statements
 	allowNorm, allowPreserved := normalizeStatements(role.Permissions.Allow)
 	denyNorm, denyPreserved := normalizeStatements(role.Permissions.Deny)
@@ -1187,9 +1332,10 @@ func (c *Config) resolvePermissionConflicts(role *models.Role) {
 	// They could conflict with each other if identical - remove both
 	dedupedAllow, dedupedDeny := deduplicatePreservedStatements(allowPreserved, denyPreserved)
 
-	// Rebuild statements
-	role.Permissions.Allow = rebuildStatementsFromNormalized(allowNorm, dedupedAllow)
-	role.Permissions.Deny = rebuildStatementsFromNormalized(denyNorm, dedupedDeny)
+	// Rebuild statements, skipping CondenseActions for providers that do not support wildcards.
+	supportsWildcards := providersSupportsWildcards(providers)
+	role.Permissions.Allow = rebuildStatementsFromNormalized(allowNorm, dedupedAllow, supportsWildcards)
+	role.Permissions.Deny = rebuildStatementsFromNormalized(denyNorm, dedupedDeny, supportsWildcards)
 }
 
 // parseProviderPrefix checks if a spec has a provider prefix (e.g., "gcp-prod:permission").
@@ -1265,8 +1411,40 @@ var (
 	condenseActions         = models.CondenseActions
 	expandCondensedActions  = models.ExpandCondensedActions
 	isCondensablePermission = models.IsCondensablePermission
-	isSubsumedByWildcard    = models.IsSubsumedByWildcard
 )
+
+// providerIdentifiers builds a deduplicated list of provider names from the
+// given Provider objects. For each provider it includes both the unique
+// identifier (GetIdentifier, e.g. "aws-prod") and the engine type
+// (GetProvider, e.g. "aws") so that parseProviderPrefix matching works
+// correctly against both forms.
+// Returns nil when no providers are supplied (caller should treat this as
+// "no provider filter — evaluate everything").
+func providerIdentifiers(providers ...models.Provider) []string {
+	if len(providers) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(providers)*2)
+	result := make([]string, 0, len(providers)*2)
+	for _, p := range providers {
+		if p == nil {
+			continue
+		}
+		for _, id := range []string{p.GetIdentifier(), p.GetProvider()} {
+			if len(id) == 0 {
+				continue
+			}
+			if _, exists := seen[id]; !exists {
+				seen[id] = struct{}{}
+				result = append(result, id)
+			}
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
 
 // mapKeys returns the keys of a map as a sorted slice.
 // Returns nil for empty or nil maps.

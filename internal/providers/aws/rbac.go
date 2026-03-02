@@ -6,12 +6,11 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
-	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 // Authorize grants access for a user to a role
 func (p *awsProvider) AuthorizeRole(
-	taskSupport sdkWorkflowsModel.WorkflowTaskSupport,
+	ctx models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
 
@@ -23,15 +22,15 @@ func (p *awsProvider) AuthorizeRole(
 	// Determine target account: selected account or configured default
 	targetAccountID := p.GetAccountID()
 
-	if len(req.Tenant) > 0 {
+	if req.HasTenant() {
 		// If a tenant is specified, use it as the target account ID
-		targetAccountID = req.Tenant
+		targetAccountID = req.GetTenant().ID
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"req_user_email":    req.User.Email,
-		"req_user_source":   req.User.Source,
-		"req_user_username": req.User.Username,
+		"req_user_email":    req.GetUser().Email,
+		"req_user_source":   req.GetUser().Source,
+		"req_user_username": req.GetUser().Username,
 		"account_id":        targetAccountID,
 	}).Info("AWS AuthorizeRole called")
 
@@ -40,15 +39,15 @@ func (p *awsProvider) AuthorizeRole(
 	useIdentityCenter := p.shouldUseIdentityCenter(req.GetUser())
 
 	if useIdentityCenter {
-		return p.authorizeRoleIdentityCenter(taskSupport, req, targetAccountID)
+		return p.authorizeRoleIdentityCenter(ctx, req, targetAccountID)
 	} else {
-		return p.authorizeRoleTraditionalIAM(taskSupport, req, targetAccountID)
+		return p.authorizeRoleTraditionalIAM(ctx, req, targetAccountID)
 	}
 }
 
 // Revoke removes access for a user from a role
 func (p *awsProvider) RevokeRole(
-	taskSupport sdkWorkflowsModel.WorkflowTaskSupport,
+	ctx models.ProviderContext,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
 	// Check for nil inputs
@@ -62,22 +61,22 @@ func (p *awsProvider) RevokeRole(
 	// Determine target account: selected account or configured default
 	targetAccountID := p.GetAccountID()
 
-	if len(req.Tenant) > 0 {
+	if req.HasTenant() {
 		// If a tenant is specified, use it as the target account ID
-		targetAccountID = req.Tenant
+		targetAccountID = req.GetTenant().ID
 	}
 
 	// Determine if we should use IAM Identity Center or traditional IAM
 	useIdentityCenter := p.shouldUseIdentityCenter(user)
 
 	if useIdentityCenter {
-		err := p.revokeRoleIdentityCenter(taskSupport, req, targetAccountID)
+		err := p.revokeRoleIdentityCenter(ctx, req, targetAccountID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to revoke Identity Center role: %w", err)
 		}
 		return nil, nil
 	} else {
-		return p.revokeRoleTraditionalIAM(taskSupport, user, role)
+		return p.revokeRoleTraditionalIAM(ctx, user, role)
 	}
 }
 

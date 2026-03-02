@@ -1,4 +1,4 @@
-package workflows_test
+package testinfra
 
 import (
 	"encoding/json"
@@ -15,7 +15,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TestCase represents a workflow test case loaded from testdata
+// TestCase represents a workflow test case loaded from testdata.
 type TestCase struct {
 	Name      string
 	Path      string
@@ -24,21 +24,22 @@ type TestCase struct {
 	Workflows map[string]models.Workflow
 }
 
-// TestCaseLoader loads test cases from the testdata directory
+// TestCaseLoader loads test cases from a testdata directory.
 type TestCaseLoader struct {
 	infra    *TestInfrastructure
 	basePath string
 }
 
-// NewTestCaseLoader creates a new test case loader
-func NewTestCaseLoader(infra *TestInfrastructure) *TestCaseLoader {
+// NewTestCaseLoader creates a new test case loader.
+// basePath is the path to the testdata directory (relative to the test's working directory).
+func NewTestCaseLoader(infra *TestInfrastructure, basePath string) *TestCaseLoader {
 	return &TestCaseLoader{
 		infra:    infra,
-		basePath: "testdata",
+		basePath: basePath,
 	}
 }
 
-// LoadTestCase loads a specific test case by name
+// LoadTestCase loads a specific test case by name.
 func (l *TestCaseLoader) LoadTestCase(name string) (*TestCase, error) {
 	testPath := filepath.Join(l.basePath, name)
 
@@ -75,7 +76,7 @@ func (l *TestCaseLoader) LoadTestCase(name string) (*TestCase, error) {
 	return tc, nil
 }
 
-// loadProviders loads providers from the test case directory
+// loadProviders loads providers from the test case directory.
 func (l *TestCaseLoader) loadProviders(testPath string) (map[string]models.ProviderConfig, error) {
 	content, err := os.ReadFile(filepath.Join(testPath, "providers.yaml"))
 	if err != nil {
@@ -97,7 +98,7 @@ func (l *TestCaseLoader) loadProviders(testPath string) (map[string]models.Provi
 	return data.Providers, nil
 }
 
-// loadRoles loads roles from the test case directory
+// loadRoles loads roles from the test case directory.
 func (l *TestCaseLoader) loadRoles(testPath string) (map[string]models.Role, error) {
 	content, err := os.ReadFile(filepath.Join(testPath, "roles.yaml"))
 	if err != nil {
@@ -116,7 +117,7 @@ func (l *TestCaseLoader) loadRoles(testPath string) (map[string]models.Role, err
 	return data.Roles, nil
 }
 
-// loadWorkflows loads workflows from the test case directory
+// loadWorkflows loads workflows from the test case directory.
 func (l *TestCaseLoader) loadWorkflows(testPath string) (map[string]models.Workflow, error) {
 	content, err := os.ReadFile(filepath.Join(testPath, "workflow.yaml"))
 	if err != nil {
@@ -142,7 +143,7 @@ func (l *TestCaseLoader) loadWorkflows(testPath string) (map[string]models.Workf
 	return data.Workflows, nil
 }
 
-// substituteVariables replaces ${VAR} placeholders with actual values from infrastructure
+// substituteVariables replaces ${VAR} placeholders with actual values from infrastructure.
 func (l *TestCaseLoader) substituteVariables(content []byte) []byte {
 	str := string(content)
 
@@ -171,7 +172,7 @@ func (l *TestCaseLoader) substituteVariables(content []byte) []byte {
 	return []byte(str)
 }
 
-// CreateConfigFromTestCase creates a Config object from a test case
+// CreateConfigFromTestCase creates a Config object from a test case.
 func (l *TestCaseLoader) CreateConfigFromTestCase(tc *TestCase) (*config.Config, error) {
 	cfg := config.DefaultConfig()
 
@@ -228,7 +229,7 @@ func (l *TestCaseLoader) CreateConfigFromTestCase(tc *TestCase) (*config.Config,
 	return cfg, nil
 }
 
-// ListTestCases returns all available test case names
+// ListTestCases returns all available test case names.
 func (l *TestCaseLoader) ListTestCases() ([]string, error) {
 	entries, err := os.ReadDir(l.basePath)
 	if err != nil {

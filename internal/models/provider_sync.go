@@ -141,138 +141,43 @@ func Synchronize(
 	var mu sync.Mutex
 	var errs []error
 
+	// Use ProviderActivities so that store updates (AddIdentities, AddTenants, etc.)
+	// live in one place and are shared by both the Temporal and pure-Go paths.
+	pa := NewProviderActivities(provider)
+
 	if provider.CanSynchronizeTenants() {
-		// Synchronize Tenants
 		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeTenants, &SynchronizeTenantsRequest{},
-			func(ctx context.Context, req *SynchronizeTenantsRequest) (*SynchronizeTenantsResponse, error) {
-				logrus.WithFields(logrus.Fields{
-					"provider":   provider.GetIdentifier(),
-					"pagination": req.Pagination,
-				}).Debug("Starting tenant synchronization")
-				return provider.SynchronizeTenants(ctx, req)
-			},
-			func(resp *SynchronizeTenantsResponse) {
-				logrus.WithFields(logrus.Fields{
-					"provider": provider.GetIdentifier(),
-					"count":    len(resp.Tenants),
-				}).Info("Synchronized tenants")
-				provider.AddTenants(resp.Tenants...)
-			})
+			pa.SynchronizeTenants)
 	}
 
 	if provider.CanSynchronizeIdentities() {
-		// Synchronize Identities
 		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeIdentities, &SynchronizeIdentitiesRequest{},
-			func(ctx context.Context, req *SynchronizeIdentitiesRequest) (*SynchronizeIdentitiesResponse, error) {
-				logrus.WithFields(logrus.Fields{
-					"provider":   provider.GetIdentifier(),
-					"pagination": req.Pagination,
-				}).Debug("Starting identity synchronization")
-				return provider.SynchronizeIdentities(ctx, req)
-			},
-			func(resp *SynchronizeIdentitiesResponse) {
-				logrus.WithFields(logrus.Fields{
-					"provider": provider.GetIdentifier(),
-					"count":    len(resp.Identities),
-				}).Info("Synchronized identities")
-				provider.AddIdentities(resp.Identities...)
-			})
+			pa.SynchronizeIdentities)
 	}
 
 	if provider.CanSynchronizeUsers() {
-		// Synchronize Users
 		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeUsers, &SynchronizeUsersRequest{},
-			func(ctx context.Context, req *SynchronizeUsersRequest) (*SynchronizeUsersResponse, error) {
-				logrus.WithFields(logrus.Fields{
-					"provider":   provider.GetIdentifier(),
-					"pagination": req.Pagination,
-				}).Debug("Starting user synchronization")
-				return provider.SynchronizeUsers(ctx, req)
-			},
-			func(resp *SynchronizeUsersResponse) {
-				logrus.WithFields(logrus.Fields{
-					"provider": provider.GetIdentifier(),
-					"count":    len(resp.Identities),
-				}).Debug("Synchronized users")
-				provider.AddIdentities(resp.Identities...)
-			})
+			pa.SynchronizeUsers)
 	}
 
 	if provider.CanSynchronizeGroups() {
-		// Synchronize Groups
 		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeGroups, &SynchronizeGroupsRequest{},
-			func(ctx context.Context, req *SynchronizeGroupsRequest) (*SynchronizeGroupsResponse, error) {
-				logrus.WithFields(logrus.Fields{
-					"provider":   provider.GetIdentifier(),
-					"pagination": req.Pagination,
-				}).Debug("Starting group synchronization")
-				return provider.SynchronizeGroups(ctx, req)
-			},
-			func(resp *SynchronizeGroupsResponse) {
-				logrus.WithFields(logrus.Fields{
-					"provider": provider.GetIdentifier(),
-					"count":    len(resp.Identities),
-				}).Debug("Synchronized groups")
-				provider.AddIdentities(resp.Identities...)
-			})
+			pa.SynchronizeGroups)
 	}
 
 	if provider.CanSynchronizeResources() {
-		// Synchronize Resources
 		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeResources, &SynchronizeResourcesRequest{},
-			func(ctx context.Context, req *SynchronizeResourcesRequest) (*SynchronizeResourcesResponse, error) {
-				logrus.WithFields(logrus.Fields{
-					"provider":   provider.GetIdentifier(),
-					"pagination": req.Pagination,
-				}).Debug("Starting resource synchronization")
-				return provider.SynchronizeResources(ctx, req)
-			},
-			func(resp *SynchronizeResourcesResponse) {
-				logrus.WithFields(logrus.Fields{
-					"provider": provider.GetIdentifier(),
-					"count":    len(resp.Resources),
-				}).Debug("Synchronized resources")
-				provider.AddResources(resp.Resources...)
-			})
+			pa.SynchronizeResources)
 	}
 
 	if provider.CanSynchronizeRoles() {
-		// Synchronize Roles
 		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeRoles, &SynchronizeRolesRequest{},
-			func(ctx context.Context, req *SynchronizeRolesRequest) (*SynchronizeRolesResponse, error) {
-				logrus.WithFields(logrus.Fields{
-					"provider":   provider.GetIdentifier(),
-					"pagination": req.Pagination,
-				}).Debug("Starting role synchronization")
-				return provider.SynchronizeRoles(ctx, req)
-			},
-			func(resp *SynchronizeRolesResponse) {
-				logrus.WithFields(logrus.Fields{
-					"provider": provider.GetIdentifier(),
-					"count":    len(resp.Roles),
-				}).Debug("Synchronized roles")
-				provider.AddRoles(resp.Roles...)
-			})
+			pa.SynchronizeRoles)
 	}
 
 	if provider.CanSynchronizePermissions() {
-		// Synchronize Permissions
 		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizePermissions, &SynchronizePermissionsRequest{},
-			func(ctx context.Context, req *SynchronizePermissionsRequest) (*SynchronizePermissionsResponse, error) {
-				logrus.WithFields(logrus.Fields{
-					"provider":   provider.GetIdentifier(),
-					"pagination": req.Pagination,
-				}).
-					Debug("Starting permission synchronization")
-				return provider.SynchronizePermissions(ctx, req)
-			},
-			func(resp *SynchronizePermissionsResponse) {
-				logrus.WithFields(logrus.Fields{
-					"provider": provider.GetIdentifier(),
-					"count":    len(resp.Permissions),
-				}).Debug("Synchronized permissions")
-				provider.AddPermissions(resp.Permissions...)
-			})
+			pa.SynchronizePermissions)
 	}
 
 	logrus.WithFields(logrus.Fields{
@@ -298,7 +203,6 @@ func executeSync[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 	name SynchronizeCapability,
 	req Req,
 	syncOp func(context.Context, Req) (Resp, error),
-	processOp func(Resp),
 ) {
 	if !slices.Contains(syncRequest.Requests, name) {
 		logrus.Infof("Skipping synchronization for %s as it's not requested", name)
@@ -325,8 +229,6 @@ func executeSync[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 				mu.Unlock()
 				return
 			}
-
-			processOp(resp)
 
 			pagination := resp.GetPagination()
 

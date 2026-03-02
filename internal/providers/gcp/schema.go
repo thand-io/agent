@@ -21,12 +21,6 @@ type ConfigSchema struct {
 	ServiceAccountKeyPath string                               `json:"service_account_key_path" mapstructure:"service_account_key_path" validate:"omitempty"`
 	ServiceAccountKey     string                               `json:"service_account_key" mapstructure:"service_account_key" validate:"omitempty" sensitive:"true"`
 	Credentials           *models.GCPServiceAccountCredentials `json:"credentials" mapstructure:"credentials" validate:"omitempty"`
-
-	// AllowPrimitiveRoles controls whether the provider is permitted to bind users to
-	// GCP primitive roles (roles/owner, roles/editor, roles/viewer). Defaults to false.
-	// Primitive roles do not support IAM conditions and grant very broad access;
-	// prefer predefined roles for fine-grained, condition-tagged access control.
-	AllowPrimitiveRoles bool `json:"allow_primitive_roles" mapstructure:"allow_primitive_roles"`
 }
 
 // Unmarshal converts BasicConfig to ConfigSchema

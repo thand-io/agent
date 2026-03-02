@@ -16,15 +16,26 @@ import (
 const PrincipalIdentifierMetadataKey = "principal_id"
 const RoleDefinitionIdentifierMetadataKey = "role_definition_id"
 
-// Authorize grants access for a user to a role
+// Authorize grants access for a user to a role.
+//
+// Role lifecycle:
+//   - Composite roles: role definition gets a unique name (hashed suffix).
+//     On revoke both the assignment and the definition are deleted.
+//   - Non-composite roles: role definition uses the base name so it can be
+//     shared across users. On revoke only the assignment is removed; the
+//     definition is retained.
 func (p *azureProvider) AuthorizeRole(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
-	if task.HasTemporalContext() {
-		return p.authorizeRoleTemporal(task.GetTemporalContext(), task.GetTaskQueue(), req)
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		return p.authorizeRoleTemporal(workflowCtx, req)
 	}
-	ctx := task.GetContext()
+
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
 
 	if !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to authorize azure role")
@@ -32,28 +43,35 @@ func (p *azureProvider) AuthorizeRole(
 
 	user := req.GetUser()
 	role := req.GetRole()
+	isComposite := role.IsComposite()
 
-	// Check if the role exists (as custom role definition)
-	existingRole, err := p.getRoleDefinition(ctx, role.Name)
+	// Composite roles get a unique definition name; non-composite roles share a base name.
+	roleName := role.GetName()
+
+	logrus.WithFields(logrus.Fields{
+		"role":         roleName,
+		"is_composite": isComposite,
+	}).Info("Azure authorizeRole: determining role lifecycle")
+
+	// Check if the role definition already exists
+	existingRole, err := p.getRoleDefinition(localCtx, roleName)
 	if err != nil {
 		// If role doesn't exist, create it as a custom role
-		existingRole, err = p.createRoleDefinition(ctx, role.Name, role.Description, role.Permissions)
+		existingRole, err = p.createRoleDefinition(localCtx, roleName, role.GetDescription(), role.Permissions)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create role definition: %w", err)
 		}
 	}
 
 	// Create role assignment for the user
-	principalID, err := p.createRoleAssignment(ctx, user, *existingRole.ID)
+	principalID, err := p.createRoleAssignment(localCtx, user, *existingRole.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create role assignment: %w", err)
 	}
 
-	// Return the response with the principal ID stored in metadata
-	// This ensures we use the same principal ID for revocation
 	return &models.AuthorizeRoleResponse{
 		UserId: user.Email,
-		Roles:  []string{role.Name},
+		Roles:  []string{roleName},
 		Metadata: map[string]any{
 			PrincipalIdentifierMetadataKey:      principalID,
 			RoleDefinitionIdentifierMetadataKey: *existingRole.ID,
@@ -61,15 +79,23 @@ func (p *azureProvider) AuthorizeRole(
 	}, nil
 }
 
-// Revoke removes access for a user from a role
+// Revoke removes access for a user from a role.
+//
+// Role lifecycle on revoke:
+//   - Composite: delete assignment + delete role definition.
+//   - Non-composite: delete assignment only; the definition is retained.
 func (p *azureProvider) RevokeRole(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
-	if task.HasTemporalContext() {
-		return p.revokeRoleTemporal(task.GetTemporalContext(), task.GetTaskQueue(), req)
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		return p.revokeRoleTemporal(workflowCtx, req)
 	}
-	ctx := task.GetContext()
+
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
 
 	if !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to revoke azure role")
@@ -78,8 +104,18 @@ func (p *azureProvider) RevokeRole(
 	user := req.GetUser()
 	role := req.GetRole()
 
+	isComposite := role.IsComposite()
+
+	// Use composite-aware name for lookup.
+	roleName := role.GetName()
+
+	logrus.WithFields(logrus.Fields{
+		"role":         roleName,
+		"is_composite": isComposite,
+	}).Info("Azure revokeRole: determining cleanup strategy")
+
 	// Get the role definition
-	roleDefinition, err := p.getRoleDefinition(ctx, role.Name)
+	roleDefinition, err := p.getRoleDefinition(localCtx, roleName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get role definition: %w", err)
 	}
@@ -96,7 +132,7 @@ func (p *azureProvider) RevokeRole(
 		}).Debug("Retrieved stored principal ID from authorization response")
 
 		// Find and delete role assignments for this user and role
-		err = p.deleteRoleAssignment(ctx, user, *roleDefinition.ID, principalID)
+		err = p.deleteRoleAssignment(localCtx, user, *roleDefinition.ID, principalID)
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to delete role assignment: %w", err)
@@ -108,13 +144,25 @@ func (p *azureProvider) RevokeRole(
 
 	}
 
+	// Composite: delete the role definition after removing the assignment.
+	// Non-composite: retain the definition for future authorizations.
+	if isComposite {
+		err = p.deleteRoleDefinition(localCtx, *roleDefinition.ID)
+		if err != nil {
+			logrus.WithError(err).WithField("role_definition_id", *roleDefinition.ID).
+				Warn("Failed to delete composite role definition; assignment was already removed")
+		} else {
+			logrus.WithField("role_definition_id", *roleDefinition.ID).
+				Info("Successfully deleted composite Azure role definition")
+		}
+	}
+
 	return nil, nil
 }
 
 // authorizeRoleTemporal sequences Azure role authorization as two independent Temporal activities.
 func (p *azureProvider) authorizeRoleTemporal(
 	wfCtx workflow.Context,
-	taskQueue string,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
 	if !req.IsValid() {
@@ -123,7 +171,6 @@ func (p *azureProvider) authorizeRoleTemporal(
 
 	identifier := p.GetIdentifier()
 	ao := workflow.ActivityOptions{
-		TaskQueue:              taskQueue,
 		StartToCloseTimeout:    2 * time.Minute,
 		ScheduleToCloseTimeout: 10 * time.Minute,
 		RetryPolicy:            sdkWorkflowsRunner.DefaultRetryPolicy,
@@ -133,15 +180,18 @@ func (p *azureProvider) authorizeRoleTemporal(
 	user := req.GetUser()
 	role := req.GetRole()
 
+	// Composite-aware role name: unique for composite, base for non-composite.
+	roleName := role.GetName()
+
 	// Step 1 — GetOrCreateRoleDefinition
 	var roleDefResp GetOrCreateRoleDefinitionResponse
 	if err := workflow.ExecuteActivity(
 		wfCtx,
 		models.CreateTemporalProviderWorkflowName(identifier, GetOrCreateRoleDefinitionActivityName),
 		&GetOrCreateRoleDefinitionRequest{
-			RoleName:    role.Name,
-			Description: role.Description,
-			Permissions: role.Permissions,
+			RoleIdentifier: roleName,
+			Description:    role.GetDescription(),
+			Permissions:    role.Permissions,
 		},
 	).Get(wfCtx, &roleDefResp); err != nil {
 		return nil, fmt.Errorf("GetOrCreateRoleDefinition activity failed: %w", err)
@@ -162,7 +212,7 @@ func (p *azureProvider) authorizeRoleTemporal(
 
 	return &models.AuthorizeRoleResponse{
 		UserId: user.Email,
-		Roles:  []string{role.Name},
+		Roles:  []string{roleName},
 		Metadata: map[string]any{
 			PrincipalIdentifierMetadataKey:      assignResp.PrincipalID,
 			RoleDefinitionIdentifierMetadataKey: roleDefResp.RoleDefinitionID,
@@ -170,10 +220,12 @@ func (p *azureProvider) authorizeRoleTemporal(
 	}, nil
 }
 
-// revokeRoleTemporal sequences Azure role revocation as two independent Temporal activities.
+// revokeRoleTemporal sequences Azure role revocation as Temporal activities.
+//
+// Composite roles: delete assignment + delete role definition.
+// Non-composite roles: delete assignment only.
 func (p *azureProvider) revokeRoleTemporal(
 	wfCtx workflow.Context,
-	taskQueue string,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
 	if !req.IsValid() {
@@ -182,7 +234,6 @@ func (p *azureProvider) revokeRoleTemporal(
 
 	identifier := p.GetIdentifier()
 	ao := workflow.ActivityOptions{
-		TaskQueue:              taskQueue,
 		StartToCloseTimeout:    2 * time.Minute,
 		ScheduleToCloseTimeout: 10 * time.Minute,
 		RetryPolicy:            sdkWorkflowsRunner.DefaultRetryPolicy,
@@ -191,6 +242,11 @@ func (p *azureProvider) revokeRoleTemporal(
 
 	user := req.GetUser()
 	role := req.GetRole()
+
+	isComposite := role.IsComposite()
+
+	// Use composite-aware name for lookup.
+	roleName := role.GetName()
 
 	if req.AuthorizeRoleResponse == nil || req.AuthorizeRoleResponse.Metadata == nil {
 		return nil, fmt.Errorf("missing authorization response metadata for revocation")
@@ -213,7 +269,7 @@ func (p *azureProvider) revokeRoleTemporal(
 	if err := workflow.ExecuteActivity(
 		wfCtx,
 		models.CreateTemporalProviderWorkflowName(identifier, GetRoleDefinitionActivityName),
-		&GetRoleDefinitionRequest{RoleName: role.Name},
+		&GetRoleDefinitionRequest{RoleIdentifier: roleName},
 	).Get(wfCtx, &roleDefResp); err != nil {
 		return nil, fmt.Errorf("GetRoleDefinition activity failed: %w", err)
 	}
@@ -229,6 +285,21 @@ func (p *azureProvider) revokeRoleTemporal(
 		},
 	).Get(wfCtx, nil); err != nil {
 		return nil, fmt.Errorf("DeleteRoleAssignment activity failed: %w", err)
+	}
+
+	// Step 3 — For composite roles, delete the role definition.
+	if isComposite {
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(identifier, DeleteRoleDefinitionActivityName),
+			&DeleteRoleDefinitionRequest{
+				RoleDefinitionID: roleDefResp.RoleDefinitionID,
+			},
+		).Get(wfCtx, nil); err != nil {
+			// Non-fatal: the assignment was already removed. Log but don't fail the workflow.
+			logrus.WithError(err).WithField("role_definition_id", roleDefResp.RoleDefinitionID).
+				Warn("DeleteRoleDefinition activity failed for composite role")
+		}
 	}
 
 	return nil, nil

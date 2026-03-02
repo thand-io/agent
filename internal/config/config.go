@@ -342,24 +342,6 @@ func (c *Config) ReloadConfig() error {
 	var wg sync.WaitGroup
 	var foundErrors []error
 
-	// Load roles in parallel
-	wg.Go(func() {
-		roles, err := c.LoadRoles()
-		if err != nil {
-			logrus.WithError(err).Errorln("Error loading roles")
-			c.mu.Lock()
-			foundErrors = append(foundErrors, fmt.Errorf("loading roles: %w", err))
-			c.mu.Unlock()
-		} else if len(roles) > 0 {
-			logrus.Infoln("Loaded roles from external source:", len(roles))
-			c.mu.Lock()
-			c.Roles.Definitions = roles
-			c.mu.Unlock()
-		} else {
-			logrus.Warningln("No roles loaded from external source")
-		}
-	})
-
 	// Load workflows in parallel
 	wg.Go(func() {
 		workflows, err := c.LoadWorkflows()
@@ -393,6 +375,22 @@ func (c *Config) ReloadConfig() error {
 			c.mu.Unlock()
 		} else {
 			logrus.Warningln("No providers loaded from external source")
+		}
+
+		// Roles depend on providers, so we load them in the same goroutine to ensure they are loaded after providers
+		roles, err := c.LoadRoles()
+		if err != nil {
+			logrus.WithError(err).Errorln("Error loading roles")
+			c.mu.Lock()
+			foundErrors = append(foundErrors, fmt.Errorf("loading roles: %w", err))
+			c.mu.Unlock()
+		} else if len(roles) > 0 {
+			logrus.Infoln("Loaded roles from external source:", len(roles))
+			c.mu.Lock()
+			c.Roles.Definitions = roles
+			c.mu.Unlock()
+		} else {
+			logrus.Warningln("No roles loaded from external source")
 		}
 	})
 

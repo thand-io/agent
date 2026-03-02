@@ -12,6 +12,7 @@
                         <tr>
                             <th>Name</th>
                             <th>Provider Type</th>
+                            <th>Status</th>
                             <th style="width: 420px;">Actions</th>
                         </tr>
                     </thead>
@@ -19,7 +20,7 @@
                         {{range $provider := .Response.Providers}}
                         <tr style="position: relative;">
                             <td style="position: relative;">
-                                <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background-color: hsl(var(--status-active)); border-radius: 0.25rem 0 0 0.25rem;"></div>
+                                <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background-color: {{if $provider.Result.Ready}}hsl(var(--status-active)){{else}}hsl(38 92% 50%){{end}}; border-radius: 0.25rem 0 0 0.25rem;"></div>
                                 <strong>{{$provider.Result.Name}}</strong>
                                 {{if $provider.Result.Description}}
                                     <div style="font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin-top: 0.25rem;">{{$provider.Result.Description}}</div>
@@ -27,6 +28,13 @@
                             </td>
                             <td>
                                 <span class="badge badge-secondary">{{$provider.Result.Provider}}</span>
+                            </td>
+                            <td>
+                                {{if $provider.Result.Ready}}
+                                    <span class="badge badge-success">Ready</span>
+                                {{else}}
+                                    <span class="badge badge-warning">Syncing</span>
+                                {{end}}
                             </td>
                             <td>
                                 {{if or (and $provider.Result.Capabilities.Identities $provider.Result.Capabilities.Identities.Enabled) (and $provider.Result.Capabilities.Users $provider.Result.Capabilities.Users.Enabled) (and $provider.Result.Capabilities.Groups $provider.Result.Capabilities.Groups.Enabled)}}
@@ -45,7 +53,7 @@
                         </tr>
                         {{else}}
                         <tr>
-                            <td colspan="3" class="text-muted" style="text-align: center; padding: 2rem;">
+                            <td colspan="4" class="text-muted" style="text-align: center; padding: 2rem;">
                                 No providers configured. Or you do not have access to view any providers.
                             </td>
                         </tr>

@@ -665,15 +665,20 @@
                     this.evaluationError = null;
 
                     try {
+                        const requestBody = {
+                            role: this.selectedRole,
+                            identities: [identityId],
+                        };
+                        if (this.selectedProvider) {
+                            requestBody.providers = [this.selectedProvider];
+                        }
+
                         const response = await fetch(`${this.apiBasePath}/roles/evaluate`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
                             },
-                            body: JSON.stringify({
-                                role: this.selectedRole,
-                                identity: identityId,
-                            }),
+                            body: JSON.stringify(requestBody),
                         });
 
                         if (!response.ok) {
@@ -696,7 +701,7 @@
                         }
 
                         const data = await response.json();
-                        this.evaluatedRole = data.role || null;
+                        this.evaluatedRole = (data.results && data.results[identityId]) || null;
                     } catch (error) {
                         console.error('Error evaluating role:', error);
                         this.evaluatedRole = null;
