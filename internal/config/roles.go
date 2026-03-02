@@ -546,10 +546,6 @@ func (c *Config) getCompositeRoleForIdentity(
 	// Update identifier to make it unique for this composite role instance
 	resolvedRole.SetUniqueIdentifierFromString(roleIdentifier)
 
-	// Mark as composite since it has a unique identifier
-	// This ensures proper lifecycle management (role cleanup on revocation)
-	resolvedRole.Composite = true
-
 	// Log the identifier change for debugging
 	logrus.WithFields(logrus.Fields{
 		"role":                baseRole.Name,

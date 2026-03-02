@@ -145,6 +145,11 @@ func (p *salesForceProvider) RevokeRole(
 	if workflowCtx, ok := ctx.(workflow.Context); ok {
 		return p.revokeRoleTemporal(workflowCtx, req)
 	}
+	_, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
+
 	client := p.client
 
 	user := req.GetUser()

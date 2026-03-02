@@ -3141,7 +3141,7 @@ func TestGetCompositeRoleForWorkflow(t *testing.T) {
 				Enabled: true,
 			},
 			workflowID:      "test-workflow",
-			expectComposite: true, // Changed: workflow roles are always composite for proper cleanup
+			expectComposite: false, // Roles without inheritance are not composite
 			identity: &models.Identity{
 				ID: "user1",
 				User: &models.User{
@@ -3152,7 +3152,7 @@ func TestGetCompositeRoleForWorkflow(t *testing.T) {
 		},
 		{
 			name:            "workflow with role with inheritance",
-			expectComposite: true,
+			expectComposite: true, // Roles with inheritance should be composite
 			role: models.Role{
 				Name:        "workflow-extended",
 				Identifier:  "workflow_extended",
