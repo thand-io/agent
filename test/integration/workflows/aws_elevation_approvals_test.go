@@ -108,6 +108,8 @@ func TestAWSElevationApprovalsWorkflow(t *testing.T) {
 	require.NoError(t, err, "Failed to get workflow from config")
 	workflow := *workflowPtr
 	role := testCase.Roles["aws_test_admin"]
+	// Set identifier from map key - required for composite role name generation
+	role.Identifier = "aws_test_admin"
 
 	t.Run("Full elevation lifecycle with multiple approvers", func(t *testing.T) {
 		// Create workflow task (elevation request)

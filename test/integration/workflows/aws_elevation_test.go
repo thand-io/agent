@@ -79,6 +79,8 @@ func TestAWSElevationWorkflow(t *testing.T) {
 		require.NoError(t, err, "Failed to get workflow from config")
 		workflow := *workflowPtr
 		role := testCase.Roles["aws_test_admin"]
+		// Set identifier from map key - required for composite role name generation
+		role.Identifier = "aws_test_admin"
 
 		// Create workflow task (elevation request)
 		workflowTask, err := models.NewElevationWorkflowContext(&workflow)
@@ -313,6 +315,8 @@ func TestAWSElevationWithTemporal(t *testing.T) {
 	require.NoError(t, err, "Failed to get workflow from config")
 	workflow := *workflowPtr
 	role := testCase.Roles["aws_test_admin"]
+	// Set identifier from map key - required for composite role name generation
+	role.Identifier = "aws_test_admin"
 
 	t.Run("Full elevation lifecycle with Temporal", func(t *testing.T) {
 		// Create workflow task (elevation request)

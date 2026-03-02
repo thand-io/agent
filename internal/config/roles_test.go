@@ -3141,7 +3141,7 @@ func TestGetCompositeRoleForWorkflow(t *testing.T) {
 				Enabled: true,
 			},
 			workflowID:      "test-workflow",
-			expectComposite: false,
+			expectComposite: true, // Changed: workflow roles are always composite for proper cleanup
 			identity: &models.Identity{
 				ID: "user1",
 				User: &models.User{

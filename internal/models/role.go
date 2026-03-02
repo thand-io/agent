@@ -74,6 +74,32 @@ func (r *CompositeRole) IsComposite() bool {
 	return r.Composite
 }
 
+// MarshalJSON implements custom JSON marshaling for CompositeRole.
+// This ensures that CompositeRole-specific fields (UUID, Providers, Composite)
+// are explicitly included in the JSON output along with the embedded Role fields.
+func (r *CompositeRole) MarshalJSON() ([]byte, error) {
+	// Create a map to hold all fields
+	result := make(map[string]any)
+	
+	// Marshal the embedded Role first
+	roleBytes, err := json.Marshal(r.Role)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal embedded role: %w", err)
+	}
+	
+	// Unmarshal Role fields into the result map
+	if err := json.Unmarshal(roleBytes, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal role fields: %w", err)
+	}
+	
+	// Add CompositeRole-specific fields (these will override if there are conflicts)
+	result["uuid"] = r.UUID
+	result["composite_providers"] = r.Providers
+	result["composite"] = r.Composite
+	
+	return json.Marshal(result)
+}
+
 // UnmarshalJSON implements custom JSON unmarshaling for CompositeRole.
 // This is CRITICAL for workflow.SideEffect serialization to work correctly in Temporal workflows.
 // 
