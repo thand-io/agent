@@ -376,8 +376,11 @@ func (p *gcpProvider) GetAuthorizedAccessUrl(
 	req *models.AuthorizeRoleRequest,
 	resp *models.AuthorizeRoleResponse,
 ) string {
+
+	consoleUrl := fmt.Sprintf("https://console.cloud.google.com/welcome?project=%s", p.GetProjectId())
+
 	return p.GetConfig().GetStringWithDefault(
-		"sso_start_url", "https://console.cloud.google.com/")
+		"sso_start_url", consoleUrl)
 }
 
 // authorizeRoleTemporal sequences GCP role authorization as independent Temporal activities.
