@@ -20,10 +20,9 @@ type gcpProviderActivities struct {
 // ─────────────────────────────────────────────────────────────────────────────
 
 type BindUserToPredefinedRoleRequest struct {
-	ProjectID     string                   `json:"project_id"`
-	User          *models.User             `json:"user"`
-	InheritedRole string                   `json:"inherited_role"`
-	Tenant        *models.ProviderTenant   `json:"tenant,omitempty"`
+	User          *models.User           `json:"user"`
+	InheritedRole string                 `json:"inherited_role"`
+	Tenant        *models.ProviderTenant `json:"tenant"` // Required: contains resource ID and type (project/folder)
 }
 
 type BindUserToPredefinedRoleResponse struct {
@@ -31,7 +30,6 @@ type BindUserToPredefinedRoleResponse struct {
 }
 
 type GetOrCreateAndBindCustomRoleRequest struct {
-	ProjectID   string                 `json:"project_id"`
 	User        *models.User           `json:"user"`
 	RoleName    string                 `json:"role_name"`
 	Title       string                 `json:"title"`
@@ -40,7 +38,7 @@ type GetOrCreateAndBindCustomRoleRequest struct {
 	Permissions models.RolePermissions `json:"permissions"`
 	IsComposite bool                   `json:"is_composite"`      // Determines lifecycle: composite = always refresh; non-composite = version-checked
 	Version     string                 `json:"version,omitempty"` // Role version for label tracking (non-composite only)
-	Tenant      *models.ProviderTenant `json:"tenant,omitempty"`
+	Tenant      *models.ProviderTenant `json:"tenant"`            // Required: contains resource ID and type (project/folder)
 }
 
 type GetOrCreateAndBindCustomRoleResponse struct {
@@ -48,26 +46,23 @@ type GetOrCreateAndBindCustomRoleResponse struct {
 }
 
 type UnbindUserFromPredefinedRoleRequest struct {
-	ProjectID string                 `json:"project_id"`
-	User      *models.User           `json:"user"`
-	RoleName  string                 `json:"role_name"`
-	Tenant    *models.ProviderTenant `json:"tenant,omitempty"`
+	User     *models.User           `json:"user"`
+	RoleName string                 `json:"role_name"`
+	Tenant   *models.ProviderTenant `json:"tenant"` // Required: contains resource ID and type (project/folder)
 }
 
 type UnbindAndDeleteCustomRoleRequest struct {
-	ProjectID string                 `json:"project_id"`
-	User      *models.User           `json:"user"`
-	RoleName  string                 `json:"role_name"` // full path e.g. projects/{p}/roles/{name}
-	Tenant    *models.ProviderTenant `json:"tenant,omitempty"`
+	User     *models.User           `json:"user"`
+	RoleName string                 `json:"role_name"` // full path e.g. projects/{p}/roles/{name}
+	Tenant   *models.ProviderTenant `json:"tenant"`     // Required: contains resource ID and type (project/folder)
 }
 
 // UnbindUserFromCustomRoleRequest unbinds a user from a custom role WITHOUT
 // deleting the role. Used for non-composite roles that should be retained.
 type UnbindUserFromCustomRoleRequest struct {
-	ProjectID string                 `json:"project_id"`
-	User      *models.User           `json:"user"`
-	RoleName  string                 `json:"role_name"` // full path e.g. projects/{p}/roles/{name}
-	Tenant    *models.ProviderTenant `json:"tenant,omitempty"`
+	User     *models.User           `json:"user"`
+	RoleName string                 `json:"role_name"` // full path e.g. projects/{p}/roles/{name}
+	Tenant   *models.ProviderTenant `json:"tenant"`     // Required: contains resource ID and type (project/folder)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -84,7 +79,8 @@ func (a *gcpProviderActivities) BindUserToPredefinedRole(
 		return nil, fmt.Errorf("invalid GCP role '%s': %w", req.InheritedRole, err)
 	}
 
-	err = a.provider.bindUserToPredefinedRole(ctx, req.ProjectID, req.User, providerRole.Name, req.Tenant)
+	resourceID := req.Tenant.ID
+	err = a.provider.bindUserToPredefinedRole(ctx, resourceID, req.User, providerRole.Name, req.Tenant)
 	if err != nil {
 		return nil, temporal.NewApplicationErrorWithOptions(
 			fmt.Sprintf("failed to bind user to role %s: %v", providerRole.Name, err),
@@ -104,11 +100,12 @@ func (a *gcpProviderActivities) GetOrCreateAndBindCustomRole(
 	ctx context.Context,
 	req *GetOrCreateAndBindCustomRoleRequest,
 ) (*GetOrCreateAndBindCustomRoleResponse, error) {
-	existingRole, err := a.provider.getRole(ctx, req.ProjectID, req.RoleName)
+	projectID := req.Tenant.ID
+	existingRole, err := a.provider.getRole(ctx, projectID, req.RoleName)
 	if err != nil {
 		existingRole, err = a.provider.createRole(
 			ctx,
-			req.ProjectID,
+			projectID,
 			req.RoleName,
 			req.Title,
 			req.Description,
@@ -128,20 +125,20 @@ func (a *gcpProviderActivities) GetOrCreateAndBindCustomRole(
 
 		// For non-composite roles, record the version in a project label.
 		if !req.IsComposite && len(req.Version) > 0 {
-			a.provider.setRoleVersionLabel(ctx, req.ProjectID, req.RoleName, req.Version)
+			a.provider.setRoleVersionLabel(ctx, projectID, req.RoleName, req.Version)
 		}
 	} else {
 		// Role already exists — check version for non-composite roles.
 		needsUpdate := true
 		if !req.IsComposite && len(req.Version) > 0 {
-			storedVersion := a.provider.getRoleVersionLabel(ctx, req.ProjectID, req.RoleName)
+			storedVersion := a.provider.getRoleVersionLabel(ctx, projectID, req.RoleName)
 			if storedVersion == req.Version {
 				needsUpdate = false
 			}
 		}
 
 		if needsUpdate {
-			existingRole, err = a.provider.patchRoleIfStale(ctx, req.ProjectID, existingRole, req.Permissions)
+			existingRole, err = a.provider.patchRoleIfStale(ctx, projectID, existingRole, req.Permissions)
 			if err != nil {
 				return nil, temporal.NewApplicationErrorWithOptions(
 					fmt.Sprintf("failed to update custom role %s: %v", req.RoleName, err),
@@ -153,12 +150,12 @@ func (a *gcpProviderActivities) GetOrCreateAndBindCustomRole(
 				)
 			}
 			if !req.IsComposite && len(req.Version) > 0 {
-				a.provider.setRoleVersionLabel(ctx, req.ProjectID, req.RoleName, req.Version)
+				a.provider.setRoleVersionLabel(ctx, projectID, req.RoleName, req.Version)
 			}
 		}
 	}
 
-	err = a.provider.bindUserToRole(ctx, req.ProjectID, req.User, existingRole, req.Tenant)
+	err = a.provider.bindUserToRole(ctx, projectID, req.User, existingRole, req.Tenant)
 	if err != nil {
 		return nil, temporal.NewApplicationErrorWithOptions(
 			fmt.Sprintf("failed to bind user to custom role %s: %v", existingRole.Name, err),
@@ -177,7 +174,8 @@ func (a *gcpProviderActivities) UnbindUserFromPredefinedRole(
 	ctx context.Context,
 	req *UnbindUserFromPredefinedRoleRequest,
 ) error {
-	err := a.provider.unbindUserFromPredefinedRole(ctx, req.ProjectID, req.User, req.RoleName, req.Tenant)
+	resourceID := req.Tenant.ID
+	err := a.provider.unbindUserFromPredefinedRole(ctx, resourceID, req.User, req.RoleName, req.Tenant)
 	if err != nil {
 		return temporal.NewApplicationErrorWithOptions(
 			fmt.Sprintf("failed to unbind user from predefined role %s: %v", req.RoleName, err),
@@ -202,7 +200,8 @@ func (a *gcpProviderActivities) UnbindAndDeleteCustomRole(
 		return err
 	}
 
-	existingRole, err := a.provider.getRole(ctx, req.ProjectID, customRoleName)
+	projectID := req.Tenant.ID
+	existingRole, err := a.provider.getRole(ctx, projectID, customRoleName)
 	if err != nil {
 		return temporal.NewApplicationErrorWithOptions(
 			fmt.Sprintf("failed to get custom role %s: %v", customRoleName, err),
@@ -214,7 +213,7 @@ func (a *gcpProviderActivities) UnbindAndDeleteCustomRole(
 		)
 	}
 
-	if err := a.provider.unbindUserFromRole(ctx, req.ProjectID, req.User, existingRole, req.Tenant); err != nil {
+	if err := a.provider.unbindUserFromRole(ctx, projectID, req.User, existingRole, req.Tenant); err != nil {
 		return temporal.NewApplicationErrorWithOptions(
 			fmt.Sprintf("failed to unbind user from custom role %s: %v", req.RoleName, err),
 			"GcpCustomRoleUnbindingError",
@@ -225,7 +224,7 @@ func (a *gcpProviderActivities) UnbindAndDeleteCustomRole(
 		)
 	}
 
-	if err := a.provider.deleteRole(ctx, req.ProjectID, customRoleName); err != nil {
+	if err := a.provider.deleteRole(ctx, projectID, customRoleName); err != nil {
 		return temporal.NewApplicationErrorWithOptions(
 			fmt.Sprintf("failed to delete custom role %s: %v", customRoleName, err),
 			"GcpCustomRoleDeletionError",
@@ -250,7 +249,8 @@ func (a *gcpProviderActivities) UnbindUserFromCustomRole(
 		return err
 	}
 
-	existingRole, err := a.provider.getRole(ctx, req.ProjectID, customRoleName)
+	projectID := req.Tenant.ID
+	existingRole, err := a.provider.getRole(ctx, projectID, customRoleName)
 	if err != nil {
 		return temporal.NewApplicationErrorWithOptions(
 			fmt.Sprintf("failed to get custom role %s: %v", customRoleName, err),
@@ -262,7 +262,7 @@ func (a *gcpProviderActivities) UnbindUserFromCustomRole(
 		)
 	}
 
-	if err := a.provider.unbindUserFromRole(ctx, req.ProjectID, req.User, existingRole, req.Tenant); err != nil {
+	if err := a.provider.unbindUserFromRole(ctx, projectID, req.User, existingRole, req.Tenant); err != nil {
 		return temporal.NewApplicationErrorWithOptions(
 			fmt.Sprintf("failed to unbind user from custom role %s: %v", req.RoleName, err),
 			"GcpCustomRoleUnbindingError",

@@ -124,12 +124,12 @@
                 
                 // Display full JSON response in role output
                 roleOutput.innerHTML = `<div class="error">
-                    <strong>Error Response: ${errorTitle}</strong><br/>
-                    <pre>${errorMessage}</pre>
+                    <strong>Error Response: ${escapeHtml(errorTitle)}</strong><br/>
+                    <pre>${escapeHtml(errorMessage)}</pre>
                 </div>`;
                 
                 // Display parsed error message under text field
-                reasonError.innerHTML = `<strong>${errorTitle}:</strong> ${errorMessage}`;
+                reasonError.innerHTML = `<strong>${escapeHtml(errorTitle)}:</strong> ${escapeHtml(errorMessage)}`;
                 reasonError.style.display = 'block';
                 
                 throw new Error(`${errorTitle}: ${errorMessage}`);
@@ -137,8 +137,8 @@
         } catch (error) {
             // If it's not already handled above, show generic error
             if (!reasonError.style.display || reasonError.style.display === 'none') {
-                roleOutput.innerHTML = `<div class="error">Error: ${error.message}</div>`;
-                reasonError.innerHTML = `<strong>Error:</strong> ${error.message}`;
+                roleOutput.innerHTML = `<div class="error">Error: ${escapeHtml(error.message)}</div>`;
+                reasonError.innerHTML = `<strong>Error:</strong> ${escapeHtml(error.message)}`;
                 reasonError.style.display = 'block';
             }
             createRoleBtn.textContent = 'Create Role';

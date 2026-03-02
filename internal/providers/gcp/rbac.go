@@ -418,6 +418,13 @@ func (p *gcpProvider) authorizeRoleTemporal(
 	if req.HasTenant() {
 		tenant = req.GetTenant()
 		projectID = tenant.ID
+	} else {
+		// Create synthetic tenant for project-level operations
+		tenant = &models.ProviderTenant{
+			ID:   projectID,
+			Type: "project",
+			Name: projectID,
+		}
 	}
 	stage := p.GetConfig().GetStringWithDefault("stage", "GA")
 
@@ -439,7 +446,6 @@ func (p *gcpProvider) authorizeRoleTemporal(
 			wfCtx,
 			models.CreateTemporalProviderWorkflowName(identifier, BindUserToPredefinedRoleActivityName),
 			&BindUserToPredefinedRoleRequest{
-				ProjectID:     projectID,
 				User:          user,
 				InheritedRole: inheritedRole,
 				Tenant:        tenant,
@@ -459,7 +465,6 @@ func (p *gcpProvider) authorizeRoleTemporal(
 			wfCtx,
 			models.CreateTemporalProviderWorkflowName(identifier, GetOrCreateAndBindCustomRoleActivityName),
 			&GetOrCreateAndBindCustomRoleRequest{
-				ProjectID:   projectID,
 				User:        user,
 				RoleName:    customRoleName,
 				Title:       role.Role.GetName(),
@@ -504,6 +509,13 @@ func (p *gcpProvider) revokeRoleTemporal(
 	if req.HasTenant() {
 		tenant = req.GetTenant()
 		projectID = tenant.ID
+	} else {
+		// Create synthetic tenant for project-level operations
+		tenant = &models.ProviderTenant{
+			ID:   projectID,
+			Type: "project",
+			Name: projectID,
+		}
 	}
 
 	// Determine composite flag from the role.
@@ -519,10 +531,9 @@ func (p *gcpProvider) revokeRoleTemporal(
 				wfCtx,
 				models.CreateTemporalProviderWorkflowName(identifier, UnbindUserFromPredefinedRoleActivityName),
 				&UnbindUserFromPredefinedRoleRequest{
-					ProjectID: projectID,
-					User:      user,
-					RoleName:  roleName,
-					Tenant:    tenant,
+					User:     user,
+					RoleName: roleName,
+					Tenant:   tenant,
 				},
 			).Get(wfCtx, nil); err != nil {
 				return nil, fmt.Errorf("UnbindUserFromPredefinedRole activity failed for %s: %w", roleName, err)
@@ -533,10 +544,9 @@ func (p *gcpProvider) revokeRoleTemporal(
 				wfCtx,
 				models.CreateTemporalProviderWorkflowName(identifier, UnbindAndDeleteCustomRoleActivityName),
 				&UnbindAndDeleteCustomRoleRequest{
-					ProjectID: projectID,
-					User:      user,
-					RoleName:  roleName,
-					Tenant:    tenant,
+					User:     user,
+					RoleName: roleName,
+					Tenant:   tenant,
 				},
 			).Get(wfCtx, nil); err != nil {
 				return nil, fmt.Errorf("UnbindAndDeleteCustomRole activity failed for %s: %w", roleName, err)
@@ -547,10 +557,9 @@ func (p *gcpProvider) revokeRoleTemporal(
 				wfCtx,
 				models.CreateTemporalProviderWorkflowName(identifier, UnbindUserFromCustomRoleActivityName),
 				&UnbindUserFromCustomRoleRequest{
-					ProjectID: projectID,
-					User:      user,
-					RoleName:  roleName,
-					Tenant:    tenant,
+					User:     user,
+					RoleName: roleName,
+					Tenant:   tenant,
 				},
 			).Get(wfCtx, nil); err != nil {
 				return nil, fmt.Errorf("UnbindUserFromCustomRole activity failed for %s: %w", roleName, err)
