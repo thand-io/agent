@@ -19,15 +19,14 @@
     /* Tenant type icon styling */
     .tenant-type-icon {
         display: inline-block;
-        width: 16px;
-        height: 16px;
+        padding: 2px 6px;
         margin-right: 6px;
-        border-radius: 2px;
+        border-radius: 3px;
         text-align: center;
-        line-height: 16px;
         font-size: 0.65rem;
         font-weight: 600;
         vertical-align: middle;
+        text-transform: capitalize;
     }
     .tenant-type-icon.type-project {
         background-color: #3b82f6;
@@ -991,7 +990,7 @@
                             let icon = '';
                             if (type) {
                                 const typeClass = type === 'project' ? 'type-project' : (type === 'folder' ? 'type-folder' : 'type-other');
-                                const typeLabel = type === 'project' ? 'P' : (type === 'folder' ? 'F' : type.charAt(0).toUpperCase());
+                                const typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
                                 icon = `<span class="tenant-type-icon ${typeClass}" title="${type}">${typeLabel}</span> `;
                             }
                             return {
