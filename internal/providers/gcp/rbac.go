@@ -71,7 +71,7 @@ func (p *gcpProvider) AuthorizeRole(
 
 	// GCP custom roles are project-scoped only (created via Projects.Roles API).
 	// Reject requests that attempt to use custom permissions on a folder tenant.
-	if isFolderResource(projectId) && len(role.Permissions.Allow) > 0 {
+	if p.isTenantFolder(ctx, projectId) && len(role.Permissions.Allow) > 0 {
 		return nil, fmt.Errorf("custom roles (permissions.allow) are not supported for folder-level resources (%s); GCP custom roles can only be created at the project level", projectId)
 	}
 
@@ -687,9 +687,14 @@ func (p *gcpProvider) withIAMPolicyUpdate(
 	return fmt.Errorf("failed to update IAM policy for project %s after %d attempts due to concurrent modifications", projectID, maxPolicyRetries)
 }
 
-// isFolderResource returns true if the resource ID represents a GCP folder (e.g. "folders/123456789").
-func isFolderResource(resourceID string) bool {
-	return strings.HasPrefix(resourceID, "folders/")
+// isTenantFolder returns true if the resource ID corresponds to a tenant whose type is "folder".
+// It looks up the resource in the provider's tenant store and checks the registered type.
+func (p *gcpProvider) isTenantFolder(ctx context.Context, resourceID string) bool {
+	tenant, err := p.GetTenant(ctx, resourceID)
+	if err != nil {
+		return false
+	}
+	return tenant.Type == "folder"
 }
 
 // newThandConditionV3 creates the thand-managed condition tag using the v3 CRM types.
@@ -843,7 +848,7 @@ func (p *gcpProvider) bindUserToRoleByName(ctx context.Context, resourceID strin
 		return fmt.Errorf("binding to primitive role %q is blocked; set allow_primitive_roles: true in provider config to enable", roleName)
 	}
 
-	if isFolderResource(resourceID) {
+	if p.isTenantFolder(ctx, resourceID) {
 		return p.withFolderIAMPolicyUpdate(ctx, resourceID, func(policy *crmv3.Policy) (bool, error) {
 			return addMemberToPolicyV3(policy, roleName, member), nil
 		})
@@ -862,7 +867,7 @@ func (p *gcpProvider) unbindUserFromRoleByName(ctx context.Context, resourceID s
 		return err
 	}
 
-	if isFolderResource(resourceID) {
+	if p.isTenantFolder(ctx, resourceID) {
 		return p.withFolderIAMPolicyUpdate(ctx, resourceID, func(policy *crmv3.Policy) (bool, error) {
 			if !removeMemberFromPolicyV3(policy, roleName, member) {
 				return false, fmt.Errorf("thand-managed role binding not found for role %s", roleName)
