@@ -3,12 +3,219 @@ package models
 import (
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 )
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Role lifecycle constants
+//
+// Roles follow one of two lifecycle patterns depending on whether they are
+// composite (i.e. resolved from inherited thand roles) or non-composite:
+//
+//	Composite roles    – Unique per identity. Created on authorize, deleted on
+//	                      revoke. Their CSP name includes a hash suffix so each
+//	                      session gets an isolated role.
+//
+//	Non-composite roles – Persistent / shared. Created once with a version tag,
+//	                      reused across sessions. On revoke only the user
+//	                      binding is removed; the role itself is retained.
+//	                      The version tag is checked on each authorize; if the
+//	                      role definition has changed the CSP role is updated
+//	                      in-place.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+const (
+	// DefaultRoleVersion is used when a role has no explicit version set.
+	DefaultRoleVersion = "1.0.0"
+
+	// ThandVersionTagKey is the tag/label key used on CSP resources to record
+	// the role definition version at the time the role was last created or
+	// updated. Providers compare this value against the current role version
+	// to decide whether an update is needed.
+	ThandVersionTagKey = "thand:version"
+
+	// ThandManagedTagKey is the tag/label key that marks a CSP resource as
+	// managed by thand. Providers use this during cleanup and discovery.
+	ThandManagedTagKey = "thand:managed"
+)
+
+type CompositeRole struct {
+
+	// A unique identifier for this specific composite role
+	// instance, generated based on the identity, base role,
+	// and providers. This allows caching and reusing
+	// composite roles for the same context without
+	// needing to recompute them.
+	UUID uuid.UUID `json:"uuid"`
+
+	// Set the providers that this composite role has been resolved
+	// for
+	Providers []string `json:"composite_providers"` // Renamed to avoid collision with embedded Role.Providers
+
+	// Composite indicates whether this role is a resolved, flattened composite
+	// that includes inherited thand roles (true) or a non-composite, persistent
+	// role representation without applied inheritance (false).
+	// Defaults to false for non-composite roles; may be true when representing a composite role within CompositeRole.
+	Composite bool `json:"composite"`
+
+	Role `json:",inline" yaml:",inline"` // Embed the base
+}
+
+// IsComposite returns true when the role was produced by merging inherited
+// thand roles. Composite roles are per-identity and should be deleted on
+// revocation. Non-composite roles are persistent and shared.
+func (r *CompositeRole) IsComposite() bool {
+	return r.Composite
+}
+
+// MarshalJSON implements custom JSON marshaling for CompositeRole.
+// This ensures that CompositeRole-specific fields (UUID, Providers, Composite)
+// are explicitly included in the JSON output along with the embedded Role fields.
+func (r *CompositeRole) MarshalJSON() ([]byte, error) {
+	// Create a map to hold all fields
+	result := make(map[string]any)
+	
+	// Marshal the embedded Role first
+	roleBytes, err := json.Marshal(r.Role)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal embedded role: %w", err)
+	}
+	
+	// Unmarshal Role fields into the result map
+	if err := json.Unmarshal(roleBytes, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal role fields: %w", err)
+	}
+	
+	// Add CompositeRole-specific fields (these will override if there are conflicts)
+	result["uuid"] = r.UUID
+	result["composite_providers"] = r.Providers
+	result["composite"] = r.Composite
+	
+	return json.Marshal(result)
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling for CompositeRole.
+// This is CRITICAL for workflow.SideEffect serialization to work correctly in Temporal workflows.
+// 
+// Without this custom unmarshaler, CompositeRole fields (UUID, Providers, Composite) are lost
+// during Temporal's workflow.SideEffect serialization/deserialization cycle because:
+// 1. The embedded Role struct (marked with json:",inline") has its own UnmarshalJSON method
+// 2. Go's default JSON unmarshaler would call Role.UnmarshalJSON which creates a new Role instance
+// 3. This new Role instance overwrites the CompositeRole fields that were already set
+//
+// This custom unmarshaler solves the problem by:
+// 1. First extracting CompositeRole-specific fields (uuid, composite_providers, composite) directly
+// 2. Then delegating to Role.UnmarshalJSON for the embedded Role fields
+// 3. This ensures all CompositeRole fields survive the serialization round-trip
+//
+// See test/integration/workflows/sideeffect_serialization_test.go for verification tests.
+func (r *CompositeRole) UnmarshalJSON(data []byte) error {
+	// First, unmarshal into a temporary map to get all fields
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return fmt.Errorf("failed to unmarshal composite role: %w", err)
+	}
+
+	// Unmarshal CompositeRole-specific fields directly to prevent them from being overwritten
+	if uuidData, ok := raw["uuid"]; ok {
+		if err := json.Unmarshal(uuidData, &r.UUID); err != nil {
+			return fmt.Errorf("failed to unmarshal uuid: %w", err)
+		}
+	}
+
+	if providersData, ok := raw["composite_providers"]; ok {
+		if err := json.Unmarshal(providersData, &r.Providers); err != nil {
+			return fmt.Errorf("failed to unmarshal composite_providers: %w", err)
+		}
+	}
+
+	if compositeData, ok := raw["composite"]; ok {
+		if err := json.Unmarshal(compositeData, &r.Composite); err != nil {
+			return fmt.Errorf("failed to unmarshal composite: %w", err)
+		}
+	}
+
+	// Now unmarshal the embedded Role by delegating to Role.UnmarshalJSON
+	if err := json.Unmarshal(data, &r.Role); err != nil {
+		return fmt.Errorf("failed to unmarshal embedded role: %w", err)
+	}
+
+	return nil
+}
+
+func (r *CompositeRole) SetUniqueIdentifier(uuid uuid.UUID) {
+	r.UUID = uuid
+}
+
+func (r *CompositeRole) SetUniqueIdentifierFromString(idStr string) {
+
+	// Create uuid from string that may already contain a hash suffix (e.g., "baseRole_abcdef123456")
+	r.UUID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(idStr))
+
+}
+
+func (r *CompositeRole) SetProviders(providers []string) {
+	r.Providers = providers
+}
+
+// CompositeRoleWorkflowIdentifier builds the unique string used to derive a composite
+// role's UUID (and therefore its CSP resource name via GetName) for a specific
+// workflow execution. Both the config layer (GetCompositeRoleForWorkflow) and any
+// test code that needs to predict the resulting role name should use this function.
+func CompositeRoleWorkflowIdentifier(workflowID string, role *Role, identity *Identity) string {
+	userIdentity := "unknown"
+	if identity != nil {
+		userIdentity = identity.GetMappableIdentifier()
+	}
+	return fmt.Sprintf("%s:%s:%s:%s:%s",
+		workflowID,
+		role.Identifier,
+		role.GetVersionString(),
+		role.Name,
+		userIdentity,
+	)
+}
+
+func (r *CompositeRole) GetUniqueIdentifier() uuid.UUID {
+	if r.UUID != uuid.Nil {
+		return r.UUID
+	}
+	// Fallback to base role identifier if UUID is not set
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(r.Role.GetIdentifier()))
+}
+
+// GetName returns the name of the composite role, which includes a hash suffix for uniqueness.
+// For composite roles, the name is generated by hashing the workflow ID, base role identifier, version, and user identity to ensure uniqueness per workflow execution and user. For non-composite roles, it returns the base role's identifier.
+// This approach allows composite roles to be uniquely identified and managed in the CSP, while non-composite roles remain stable and shared.
+// Note: The hash is truncated to 6 hex characters to keep the name concise while still providing a high degree of uniqueness.
+// The resulting name format for composite roles is: "{baseRoleIdentifier}_{6CharHashSuffix}"
+// This is critical functionality for role naming. DO NOT MODIFY. THIS WILL BE A BREAKING CHANGE.
+func (r *CompositeRole) GetName() string {
+	if r.Composite {
+		return r.getUniqueName()
+	}
+	return r.Role.GetIdentifier()
+}
+
+func (r *CompositeRole) getUniqueName() string {
+
+	roleIdentifier := r.GetUniqueIdentifier()
+
+	// Create FNV-1a hash (non-cryptographic, fast, 6 hex chars)
+	h := fnv.New32a()
+	h.Write([]byte(roleIdentifier.String()))
+
+	// Conform to snake_case for consistency
+	newIdentifier := fmt.Sprintf("%s_%06x", r.Role.GetIdentifier(), h.Sum32()&0xFFFFFF)
+
+	return newIdentifier
+}
 
 type Role struct {
 	Version     *version.Version `json:"version,omitempty"`
@@ -25,8 +232,7 @@ type Role struct {
 
 	Scopes RoleScopes `json:"scopes"` // scope of who can be assigned this role
 
-	Composite bool `json:"composite" default:"false"` // Whether this role is a composite role (i.e., aggregates other roles)
-	Enabled   bool `json:"enabled" default:"true"`    // By default enable the role
+	Enabled bool `json:"enabled" default:"true"` // By default enable the role
 }
 
 // UnmarshalJSON provides backwards compatibility for Role.
@@ -218,6 +424,15 @@ func (r *Role) IsValid() bool {
 
 func (r *Role) GetVersion() *version.Version {
 	return r.Version
+}
+
+// GetVersionString returns the role version as a string suitable for tagging.
+// Returns "1.0.0" when no version is explicitly set.
+func (r *Role) GetVersionString() string {
+	if r.Version != nil {
+		return r.Version.String()
+	}
+	return DefaultRoleVersion
 }
 
 func (r *Role) GetIdentifier() string {

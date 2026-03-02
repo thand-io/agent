@@ -67,7 +67,7 @@ func (p *exampleProvider) RenewSession(ctx context.Context, session *models.Sess
 
 // Authorize grants access for a user to a role
 func (p *exampleProvider) AuthorizeRole(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
 	return &models.AuthorizeRoleResponse{}, nil
@@ -75,7 +75,7 @@ func (p *exampleProvider) AuthorizeRole(
 
 // Revoke removes access for a user from a role
 func (p *exampleProvider) RevokeRole(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
 	return &models.RevokeRoleResponse{}, nil

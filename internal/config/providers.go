@@ -279,7 +279,7 @@ func (c *Config) InitializeProviders() error {
 						// full workflow.Context, allowing providers to dispatch activities,
 						// use workflow.Go, etc.
 						worker.RegisterWorkflowWithOptions(
-							models.CreateProviderAuthorizeRoleWorkflow(providerResult),
+							models.CreateProviderAuthorizeRoleWorkflow(c, providerResult),
 							workflow.RegisterOptions{
 								Name:               authWorkflowName,
 								VersioningBehavior: workflow.VersioningBehaviorPinned,
@@ -295,7 +295,7 @@ func (c *Config) InitializeProviders() error {
 						}).Infoln("Registering provider revoke role workflow with name", revokeWorkflowName)
 
 						worker.RegisterWorkflowWithOptions(
-							models.CreateProviderRevokeRoleWorkflow(providerResult),
+							models.CreateProviderRevokeRoleWorkflow(c, providerResult),
 							workflow.RegisterOptions{
 								Name:               revokeWorkflowName,
 								VersioningBehavior: workflow.VersioningBehaviorPinned,
@@ -337,7 +337,12 @@ func (c *Config) InitializeProviders() error {
 
 			} else {
 				logrus.Infoln("Skipping Temporal registration for provider", result.key, "in non-server mode")
+				// Non-server mode: provider won't be synchronized, mark ready immediately
+				providerResult.SetReady()
 			}
+		} else {
+			// Provider doesn't have RBAC/Identity capabilities, no sync needed
+			result.provider.SetReady()
 		}
 
 		// The provider returned from the goroutine already has the client set

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/hashicorp/go-version"
 	"github.com/thand-io/agent/internal/common"
@@ -128,6 +127,13 @@ type Provider interface {
 	CanSynchronizeUsers() bool
 	CanSynchronizeGroups() bool
 
+	// Synchronization readiness — providers signal readiness after their
+	// initial role/permission data has been loaded.
+	SetPending()
+	SetReady()
+	IsReady() bool
+	Ready() <-chan struct{}
+
 	// Sub-interfaces
 	ProviderNotifier
 	ProviderWebhook
@@ -139,29 +145,4 @@ type Provider interface {
 
 type AuthorizeSessionResponse struct {
 	Url string `json:"url"`
-}
-
-type RoleRequest struct {
-	Tenant   string         `json:"tenant,omitempty"` // Optional tenant ID for multi-account providers
-	User     *User          `json:"user"`
-	Role     *Role          `json:"role"`
-	Duration *time.Duration `json:"duration,omitempty"` // Optional duration for temporary access
-}
-
-// IsValid checks if any of the fields are nil
-// if they are then it returns false
-func (r *RoleRequest) IsValid() bool {
-	return r.User != nil && r.Role != nil
-}
-
-func (r *RoleRequest) GetUser() *User {
-	return r.User
-}
-
-func (r *RoleRequest) GetRole() *Role {
-	return r.Role
-}
-
-func (r *RoleRequest) GetDuration() *time.Duration {
-	return r.Duration
 }

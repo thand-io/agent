@@ -30,10 +30,14 @@ type GetIdentityCenterInstanceResponse struct {
 type FindOrCreatePermissionSetRequest struct {
 	InstanceArn string       `json:"instance_arn"`
 	Role        *models.Role `json:"role"`
+	RoleName    string       `json:"role_name"`         // CSP resource name (from CompositeRole.GetName())
+	IsComposite bool         `json:"is_composite"`      // Determines lifecycle: composite = always refresh; non-composite = version-checked
+	Version     string       `json:"version,omitempty"` // Role version for tagging (non-composite only)
 }
 
 type FindOrCreatePermissionSetResponse struct {
 	PermissionSetArn string `json:"permission_set_arn"`
+	NeedsUpdate      bool   `json:"needs_update"` // true when policies were (re-)attached
 }
 
 type FindIdentityCenterUserRequest struct {
@@ -121,12 +125,16 @@ type CheckPermissionSetProvisioningStatusResponse struct {
 type GetOrCreateIAMRoleRequest struct {
 	User            *models.User `json:"user"`
 	Role            *models.Role `json:"role"`
+	RoleName        string       `json:"role_name"` // CSP resource name (from CompositeRole.GetName())
 	TargetAccountID string       `json:"target_account_id"`
+	IsComposite     bool         `json:"is_composite"`      // Determines lifecycle: composite = always refresh; non-composite = version-checked
+	Version         string       `json:"version,omitempty"` // Role version for tagging (non-composite only)
 }
 
 type GetOrCreateIAMRoleResponse struct {
-	RoleName string `json:"role_name"`
-	RoleArn  string `json:"role_arn"`
+	RoleName    string `json:"role_name"`
+	RoleArn     string `json:"role_arn"`
+	NeedsUpdate bool   `json:"needs_update"` // true when policies should be (re-)attached
 }
 
 type AttachPoliciesToIAMRoleRequest struct {
@@ -147,12 +155,20 @@ type UnbindUserFromIAMRoleRequest struct {
 
 // GetIAMRoleRequest looks up an existing IAM role by name (read-only, no creation).
 type GetIAMRoleRequest struct {
-	Role *models.Role `json:"role"`
+	Role     *models.Role `json:"role"`
+	RoleName string       `json:"role_name"` // CSP resource name (from CompositeRole.GetName())
 }
 
 type GetIAMRoleResponse struct {
 	RoleName string `json:"role_name"`
 	RoleArn  string `json:"role_arn"`
+}
+
+// TagIAMRoleRequest sets tags on an existing IAM role. Used to record
+// version metadata for non-composite roles.
+type TagIAMRoleRequest struct {
+	RoleName string            `json:"role_name"`
+	Tags     map[string]string `json:"tags"`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -178,15 +194,18 @@ func (a *awsProviderActivities) GetIdentityCenterInstance(
 // FindOrCreatePermissionSet finds an existing permission set by name, or creates
 // a new one with the role's policies attached. Idempotent — repeated calls
 // with the same role name and policies have no additional effect.
+//
+// For non-composite roles, the permission set is tagged with a version and
+// policies are only refreshed when the version changes.
 func (a *awsProviderActivities) FindOrCreatePermissionSet(
 	ctx context.Context,
 	req *FindOrCreatePermissionSetRequest,
 ) (*FindOrCreatePermissionSetResponse, error) {
-	arn, err := a.provider.findOrCreatePermissionSet(ctx, req.InstanceArn, req.Role)
+	arn, needsUpdate, err := a.provider.findOrCreatePermissionSet(ctx, req.InstanceArn, req.RoleName, req.Role, req.IsComposite, req.Version)
 	if err != nil {
 		return nil, err
 	}
-	return &FindOrCreatePermissionSetResponse{PermissionSetArn: arn}, nil
+	return &FindOrCreatePermissionSetResponse{PermissionSetArn: arn, NeedsUpdate: needsUpdate}, nil
 }
 
 // FindIdentityCenterUser searches for a user in the Identity Center identity store
@@ -306,26 +325,39 @@ func (a *awsProviderActivities) CheckPermissionSetProvisioningStatus(
 // ─────────────────────────────────────────────────────────────────────────────
 
 // GetOrCreateIAMRole retrieves an existing IAM role or creates it if absent.
+// For non-composite roles (IsComposite == false), version tags are compared
+// to determine whether the role's policies need refreshing.
 // Safe to retry — duplicate creation is handled by AWS returning the existing role.
 func (a *awsProviderActivities) GetOrCreateIAMRole(
 	ctx context.Context,
 	req *GetOrCreateIAMRoleRequest,
 ) (*GetOrCreateIAMRoleResponse, error) {
-	existingRole, err := a.provider.getRole(ctx, req.User, req.Role)
+	existingRole, err := a.provider.getRole(ctx, req.RoleName)
 	if err != nil {
-		existingRole, err = a.provider.createRole(ctx, req.User, req.Role, req.TargetAccountID)
+		// Role doesn't exist — create it, optionally with version tags.
+		var tags map[string]string
+		if !req.IsComposite && len(req.Version) > 0 {
+			tags = map[string]string{
+				models.ThandVersionTagKey: req.Version,
+				models.ThandManagedTagKey: "true",
+			}
+		}
+		existingRole, err = a.provider.createRole(ctx, req.RoleName, req.Role.Description, req.TargetAccountID, tags)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get or create IAM role: %w", err)
 		}
+		return buildIAMRoleResponse(existingRole, true), nil
 	}
-	resp := &GetOrCreateIAMRoleResponse{}
-	if existingRole.RoleName != nil {
-		resp.RoleName = *existingRole.RoleName
+
+	// Role exists. Determine whether its policies are stale.
+	needsUpdate := true // composite roles always get refreshed
+	if !req.IsComposite && len(req.Version) > 0 && existingRole.RoleName != nil {
+		currentVersion, found := a.provider.getRoleVersionTag(ctx, *existingRole.RoleName)
+		if found && currentVersion == req.Version {
+			needsUpdate = false
+		}
 	}
-	if existingRole.Arn != nil {
-		resp.RoleArn = *existingRole.Arn
-	}
-	return resp, nil
+	return buildIAMRoleResponse(existingRole, needsUpdate), nil
 }
 
 // AttachPoliciesToIAMRole puts the inline policy onto the IAM role. Idempotent —
@@ -365,7 +397,7 @@ func (a *awsProviderActivities) GetIAMRole(
 	ctx context.Context,
 	req *GetIAMRoleRequest,
 ) (*GetIAMRoleResponse, error) {
-	rawRole, err := a.provider.getRole(ctx, nil, req.Role)
+	rawRole, err := a.provider.getRole(ctx, req.RoleName)
 	if err != nil {
 		return nil, fmt.Errorf("IAM role not found: %w", err)
 	}
@@ -377,4 +409,13 @@ func (a *awsProviderActivities) GetIAMRole(
 		resp.RoleArn = *rawRole.Arn
 	}
 	return resp, nil
+}
+
+// TagIAMRole sets or updates tags on an existing IAM role.
+// Used to record version metadata for non-composite roles.
+func (a *awsProviderActivities) TagIAMRole(
+	ctx context.Context,
+	req *TagIAMRoleRequest,
+) error {
+	return a.provider.tagRole(ctx, req.RoleName, req.Tags)
 }

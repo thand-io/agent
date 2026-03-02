@@ -30,23 +30,24 @@ const (
 
 const (
 	// SSO / Identity Center activity names
-	GetIdentityCenterInstanceActivityName           = "GetIdentityCenterInstance"
-	FindOrCreatePermissionSetActivityName           = "FindOrCreatePermissionSet"
-	FindIdentityCenterUserActivityName              = "FindIdentityCenterUser"
-	CreateAccountAssignmentActivityName             = "CreateAccountAssignment"
-	FindPermissionSetByNameActivityName             = "FindPermissionSetByName"
-	DeleteAccountAssignmentActivityName             = "DeleteAccountAssignment"
-	CheckAssignmentDeletionStatusActivityName       = "CheckAssignmentDeletionStatus"
-	CleanupPermissionSetActivityName                = "CleanupPermissionSet"
-	ProvisionPermissionSetActivityName              = "ProvisionPermissionSet"
+	GetIdentityCenterInstanceActivityName            = "GetIdentityCenterInstance"
+	FindOrCreatePermissionSetActivityName            = "FindOrCreatePermissionSet"
+	FindIdentityCenterUserActivityName               = "FindIdentityCenterUser"
+	CreateAccountAssignmentActivityName              = "CreateAccountAssignment"
+	FindPermissionSetByNameActivityName              = "FindPermissionSetByName"
+	DeleteAccountAssignmentActivityName              = "DeleteAccountAssignment"
+	CheckAssignmentDeletionStatusActivityName        = "CheckAssignmentDeletionStatus"
+	CleanupPermissionSetActivityName                 = "CleanupPermissionSet"
+	ProvisionPermissionSetActivityName               = "ProvisionPermissionSet"
 	CheckPermissionSetProvisioningStatusActivityName = "CheckPermissionSetProvisioningStatus"
 
 	// IAM activity names
-	GetOrCreateIAMRoleActivityName    = "GetOrCreateIAMRole"
-	GetIAMRoleActivityName            = "GetIAMRole"
+	GetOrCreateIAMRoleActivityName      = "GetOrCreateIAMRole"
+	GetIAMRoleActivityName              = "GetIAMRole"
 	AttachPoliciesToIAMRoleActivityName = "AttachPoliciesToIAMRole"
-	BindUserToIAMRoleActivityName      = "BindUserToIAMRole"
-	UnbindUserFromIAMRoleActivityName  = "UnbindUserFromIAMRole"
+	BindUserToIAMRoleActivityName       = "BindUserToIAMRole"
+	UnbindUserFromIAMRoleActivityName   = "UnbindUserFromIAMRole"
+	TagIAMRoleActivityName              = "TagIAMRole"
 )
 
 // awsProvider implements the ProviderImpl interface for AWS

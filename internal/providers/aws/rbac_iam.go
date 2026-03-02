@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/iam/types"
+	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 	sdkWorkflowsRunner "github.com/thand-io/agent/sdk/workflows/runner"
@@ -18,6 +19,14 @@ import (
 // authorizeRoleTraditionalIAM handles role authorization for traditional IAM users.
 // Each sub-step is dispatched as a Temporal activity when a workflow context is
 // present, or executed inline otherwise. The exec* helpers encapsulate that branching.
+//
+// Role lifecycle:
+//   - Composite roles: unique per identity, always created fresh and policies re-applied
+//     on each authorize. Deleted on revoke.
+//   - Non-composite roles: persistent, created once with a version tag
+//     (thand:version / thand:managed). On subsequent authorizations the version
+//     tag is checked; policies are only updated when the version has changed.
+//     On revoke the user binding is removed but the role is retained.
 func (p *awsProvider) authorizeRoleTraditionalIAM(
 	task models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
@@ -26,24 +35,58 @@ func (p *awsProvider) authorizeRoleTraditionalIAM(
 
 	user := req.GetUser()
 	role := req.GetRole()
+	isComposite := role.IsComposite()
 
-	// Step 1 — get or create the IAM role
-	roleResp, err := p.execGetOrCreateIAMRole(task, &GetOrCreateIAMRoleRequest{
+	logrus.WithFields(logrus.Fields{
+		"role":         role.GetName(),
+		"is_composite": isComposite,
+	}).Info("IAM authorizeRole: determining role lifecycle")
+
+	// Step 1 — get or create the IAM role.
+	// For non-composite roles we pass the current version so the activity can
+	// compare it against the existing role's thand:version tag and report
+	// whether the role's policies need updating.
+	getOrCreateReq := &GetOrCreateIAMRoleRequest{
 		User:            user,
-		Role:            role,
+		Role:            &role.Role,
+		RoleName:        role.GetName(),
 		TargetAccountID: targetAccountID,
-	})
+		IsComposite:     isComposite,
+	}
+	if !isComposite {
+		getOrCreateReq.Version = role.GetVersionString()
+	}
+
+	roleResp, err := p.execGetOrCreateIAMRole(task, getOrCreateReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get or create IAM role: %w", err)
 	}
 
-	// Step 2 — attach permissions (only if defined)
-	if len(role.Permissions.Allow) > 0 || len(role.Permissions.Deny) > 0 {
+	// Step 2 — attach permissions.
+	// Composite: always update policies (role is per-session).
+	// Non-composite: only update when NeedsUpdate is true (version changed or role was just created).
+	needsPolicyUpdate := isComposite || roleResp.NeedsUpdate
+	if needsPolicyUpdate && (len(role.Permissions.Allow) > 0 || len(role.Permissions.Deny) > 0) {
 		if err := p.execAttachPoliciesToIAMRole(task, &AttachPoliciesToIAMRoleRequest{
 			RoleName:    roleResp.RoleName,
 			Permissions: role.Permissions,
 		}); err != nil {
 			return nil, fmt.Errorf("failed to attach policies to role: %w", err)
+		}
+	}
+
+	// Step 2.5 — for non-composite roles: update the version tag after policies
+	// have been applied so future calls can skip redundant updates.
+	if !isComposite && roleResp.NeedsUpdate {
+		if err := p.execTagIAMRole(task, &TagIAMRoleRequest{
+			RoleName: roleResp.RoleName,
+			Tags: map[string]string{
+				models.ThandVersionTagKey: role.GetVersionString(),
+				models.ThandManagedTagKey: "true",
+			},
+		}); err != nil {
+			// Tagging failure is not fatal — log and continue
+			logrus.WithError(err).Warn("IAM: failed to tag role with version; policies were applied successfully")
 		}
 	}
 
@@ -56,15 +99,15 @@ func (p *awsProvider) authorizeRoleTraditionalIAM(
 		return nil, fmt.Errorf("failed to bind user to role: %w", err)
 	}
 
-	return nil, nil
+	return &models.AuthorizeRoleResponse{}, nil
 }
 
 // revokeRoleTraditionalIAM handles role revocation for traditional IAM users.
 // Uses GetIAMRole (read-only) to prevent silently re-creating a deleted role.
-func (p *awsProvider) revokeRoleTraditionalIAM(task models.ProviderContext, user *models.User, role *models.Role) (*models.RevokeRoleResponse, error) {
+func (p *awsProvider) revokeRoleTraditionalIAM(task models.ProviderContext, user *models.User, role *models.CompositeRole) (*models.RevokeRoleResponse, error) {
 
 	// Step 1 — resolve the existing role; fail fast if not found, never create
-	roleResp, err := p.execGetIAMRole(task, &GetIAMRoleRequest{Role: role})
+	roleResp, err := p.execGetIAMRole(task, &GetIAMRoleRequest{Role: &role.Role, RoleName: role.GetName()})
 	if err != nil {
 		return nil, fmt.Errorf("role not found: %w", err)
 	}
@@ -81,9 +124,9 @@ func (p *awsProvider) revokeRoleTraditionalIAM(task models.ProviderContext, user
 }
 
 // getRole retrieves an IAM role by name
-func (p *awsProvider) getRole(ctx context.Context, user *models.User, role *models.Role) (*types.Role, error) {
+func (p *awsProvider) getRole(ctx context.Context, roleName string) (*types.Role, error) {
 	input := &iam.GetRoleInput{
-		RoleName: aws.String(role.GetIdentifier()),
+		RoleName: aws.String(roleName),
 	}
 
 	result, err := p.service.GetRole(ctx, input)
@@ -94,8 +137,10 @@ func (p *awsProvider) getRole(ctx context.Context, user *models.User, role *mode
 	return result.Role, nil
 }
 
-// createRole creates a new IAM role with the specified permissions
-func (p *awsProvider) createRole(ctx context.Context, user *models.User, role *models.Role, targetAccountID string) (*types.Role, error) {
+// createRole creates a new IAM role with the specified permissions.
+// When tags are provided they are set atomically during creation (used for
+// non-composite roles to record the thand:version and thand:managed markers).
+func (p *awsProvider) createRole(ctx context.Context, roleName, description, targetAccountID string, tags map[string]string) (*types.Role, error) {
 	// Create a basic assume role policy document using structs
 	// Initially allow the account root to assume the role (will be updated later)
 	assumeRolePolicy := PolicyDocument{
@@ -117,9 +162,19 @@ func (p *awsProvider) createRole(ctx context.Context, user *models.User, role *m
 	}
 
 	input := &iam.CreateRoleInput{
-		RoleName:                 aws.String(role.GetIdentifier()),
+		RoleName:                 aws.String(roleName),
 		AssumeRolePolicyDocument: aws.String(string(assumeRolePolicyJSON)),
-		Description:              aws.String(role.Description),
+		Description:              aws.String(description),
+	}
+
+	// Attach tags when provided (non-composite lifecycle)
+	if len(tags) > 0 {
+		for k, v := range tags {
+			input.Tags = append(input.Tags, types.Tag{
+				Key:   aws.String(k),
+				Value: aws.String(v),
+			})
+		}
 	}
 
 	result, err := p.service.CreateRole(ctx, input)
@@ -128,6 +183,43 @@ func (p *awsProvider) createRole(ctx context.Context, user *models.User, role *m
 	}
 
 	return result.Role, nil
+}
+
+// getRoleVersionTag reads the thand:version tag from an existing IAM role.
+// Returns the version string and true if found, or "" and false otherwise.
+func (p *awsProvider) getRoleVersionTag(ctx context.Context, roleName string) (string, bool) {
+	resp, err := p.service.ListRoleTags(ctx, &iam.ListRoleTagsInput{
+		RoleName: aws.String(roleName),
+	})
+	if err != nil {
+		logrus.WithError(err).WithField("role", roleName).Warn("Failed to list IAM role tags")
+		return "", false
+	}
+	for _, tag := range resp.Tags {
+		if tag.Key != nil && *tag.Key == models.ThandVersionTagKey && tag.Value != nil {
+			return *tag.Value, true
+		}
+	}
+	return "", false
+}
+
+// tagRole sets or updates tags on an existing IAM role.
+func (p *awsProvider) tagRole(ctx context.Context, roleName string, tags map[string]string) error {
+	var iamTags []types.Tag
+	for k, v := range tags {
+		iamTags = append(iamTags, types.Tag{
+			Key:   aws.String(k),
+			Value: aws.String(v),
+		})
+	}
+	_, err := p.service.TagRole(ctx, &iam.TagRoleInput{
+		RoleName: aws.String(roleName),
+		Tags:     iamTags,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to tag IAM role %s: %w", roleName, err)
+	}
+	return nil
 }
 
 // attachPoliciesToRole creates and attaches an inline policy with the specified permissions
@@ -300,12 +392,11 @@ func (p *awsProvider) getUsernameForIAM(user *models.User) string {
 // ─────────────────────────────────────────────────────────────────────────────
 
 func (p *awsProvider) execGetOrCreateIAMRole(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *GetOrCreateIAMRoleRequest,
 ) (*GetOrCreateIAMRoleResponse, error) {
-	if task.HasTemporalContext() {
-		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
-			TaskQueue:           task.GetTaskQueue(),
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		wfCtx := workflow.WithActivityOptions(workflowCtx, workflow.ActivityOptions{
 			StartToCloseTimeout: 2 * time.Minute,
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
@@ -315,30 +406,81 @@ func (p *awsProvider) execGetOrCreateIAMRole(
 		}
 		return &resp, nil
 	}
-	existingRole, err := p.getRole(task.GetContext(), req.User, req.Role)
+
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
+
+	// Inline (non-Temporal) implementation:
+	// For non-composite roles, check the version tag to determine if policies
+	// need to be refreshed. For composite roles, always report NeedsUpdate.
+	existingRole, err := p.getRole(localCtx, req.RoleName)
 	if err != nil {
-		existingRole, err = p.createRole(task.GetContext(), req.User, req.Role, req.TargetAccountID)
+		// Role doesn't exist — create it.
+		var tags map[string]string
+		if !req.IsComposite && len(req.Version) > 0 {
+			tags = map[string]string{
+				models.ThandVersionTagKey: req.Version,
+				models.ThandManagedTagKey: "true",
+			}
+		}
+		existingRole, err = p.createRole(localCtx, req.RoleName, req.Role.Description, req.TargetAccountID, tags)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get or create IAM role: %w", err)
 		}
+		return buildIAMRoleResponse(existingRole, true), nil
 	}
-	resp := &GetOrCreateIAMRoleResponse{}
-	if existingRole.RoleName != nil {
-		resp.RoleName = *existingRole.RoleName
+
+	// Role exists. Determine whether its policies are stale.
+	needsUpdate := true // composite roles always get refreshed
+	if !req.IsComposite && len(req.Version) > 0 && existingRole.RoleName != nil {
+		currentVersion, found := p.getRoleVersionTag(localCtx, *existingRole.RoleName)
+		if found && currentVersion == req.Version {
+			needsUpdate = false // version matches — policies are current
+		}
 	}
-	if existingRole.Arn != nil {
-		resp.RoleArn = *existingRole.Arn
+	return buildIAMRoleResponse(existingRole, needsUpdate), nil
+}
+
+// buildIAMRoleResponse is a small helper that populates GetOrCreateIAMRoleResponse.
+func buildIAMRoleResponse(r *types.Role, needsUpdate bool) *GetOrCreateIAMRoleResponse {
+	resp := &GetOrCreateIAMRoleResponse{NeedsUpdate: needsUpdate}
+	if r.RoleName != nil {
+		resp.RoleName = *r.RoleName
 	}
-	return resp, nil
+	if r.Arn != nil {
+		resp.RoleArn = *r.Arn
+	}
+	return resp
+}
+
+// execTagIAMRole sets tags on an existing IAM role. Used to record version
+// metadata on non-composite roles after policies have been applied.
+func (p *awsProvider) execTagIAMRole(
+	ctx models.ProviderContext,
+	req *TagIAMRoleRequest,
+) error {
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		wfCtx := workflow.WithActivityOptions(workflowCtx, workflow.ActivityOptions{
+			StartToCloseTimeout: 30 * time.Second,
+			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+		})
+		return workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), TagIAMRoleActivityName), req).Get(wfCtx, nil)
+	}
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("invalid context type")
+	}
+	return p.tagRole(localCtx, req.RoleName, req.Tags)
 }
 
 func (p *awsProvider) execGetIAMRole(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *GetIAMRoleRequest,
 ) (*GetIAMRoleResponse, error) {
-	if task.HasTemporalContext() {
-		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
-			TaskQueue:           task.GetTaskQueue(),
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		wfCtx := workflow.WithActivityOptions(workflowCtx, workflow.ActivityOptions{
 			StartToCloseTimeout: 30 * time.Second,
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
@@ -348,7 +490,11 @@ func (p *awsProvider) execGetIAMRole(
 		}
 		return &resp, nil
 	}
-	rawRole, err := p.getRole(task.GetContext(), nil, req.Role)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
+	rawRole, err := p.getRole(localCtx, req.RoleName)
 	if err != nil {
 		return nil, fmt.Errorf("IAM role not found: %w", err)
 	}
@@ -363,46 +509,55 @@ func (p *awsProvider) execGetIAMRole(
 }
 
 func (p *awsProvider) execAttachPoliciesToIAMRole(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *AttachPoliciesToIAMRoleRequest,
 ) error {
-	if task.HasTemporalContext() {
-		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
-			TaskQueue:           task.GetTaskQueue(),
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		wfCtx := workflow.WithActivityOptions(workflowCtx, workflow.ActivityOptions{
 			StartToCloseTimeout: 2 * time.Minute,
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
 		return workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), AttachPoliciesToIAMRoleActivityName), req).Get(wfCtx, nil)
 	}
-	return p.attachPoliciesToRole(task.GetContext(), req.RoleName, req.Permissions)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("invalid context type")
+	}
+	return p.attachPoliciesToRole(localCtx, req.RoleName, req.Permissions)
 }
 
 func (p *awsProvider) execBindUserToIAMRole(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *BindUserToIAMRoleRequest,
 ) error {
-	if task.HasTemporalContext() {
-		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
-			TaskQueue:           task.GetTaskQueue(),
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		wfCtx := workflow.WithActivityOptions(workflowCtx, workflow.ActivityOptions{
 			StartToCloseTimeout: 2 * time.Minute,
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
 		return workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), BindUserToIAMRoleActivityName), req).Get(wfCtx, nil)
 	}
-	return p.bindUserToRole(task.GetContext(), req.User, req.RoleName, req.TargetAccountID)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("invalid context type")
+	}
+	return p.bindUserToRole(localCtx, req.User, req.RoleName, req.TargetAccountID)
 }
 
 func (p *awsProvider) execUnbindUserFromIAMRole(
-	task models.ProviderContext,
+	ctx models.ProviderContext,
 	req *UnbindUserFromIAMRoleRequest,
 ) error {
-	if task.HasTemporalContext() {
-		wfCtx := workflow.WithActivityOptions(task.GetTemporalContext(), workflow.ActivityOptions{
-			TaskQueue:           task.GetTaskQueue(),
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		wfCtx := workflow.WithActivityOptions(workflowCtx, workflow.ActivityOptions{
 			StartToCloseTimeout: 2 * time.Minute,
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
 		return workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), UnbindUserFromIAMRoleActivityName), req).Get(wfCtx, nil)
 	}
-	return p.unbindUserFromRole(task.GetContext(), req.User, req.RoleName)
+	localCtx, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("invalid context type")
+	}
+	return p.unbindUserFromRole(localCtx, req.User, req.RoleName)
 }

@@ -55,6 +55,10 @@ func newTestConfig(t *testing.T, roles map[string]models.Role, providerDefs map[
 		err = impl.Initialize(name, providerCfg)
 		require.NoError(t, err, "Failed to initialize mock provider %q", name)
 
+		// Mock providers load roles synchronously in Initialize, so mark ready
+		// immediately. In production, synchronizeProvider handles this.
+		impl.SetReady()
+
 		config.AddProvider(name, impl)
 	}
 

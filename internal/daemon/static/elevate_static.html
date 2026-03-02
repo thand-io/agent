@@ -15,6 +15,32 @@
     .choice-wrapper-single .choices__list--single {
         padding: 0px 5px 0px 0px;
     }
+    
+    /* Tenant type icon styling */
+    .tenant-type-icon {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        margin-right: 6px;
+        border-radius: 2px;
+        text-align: center;
+        line-height: 16px;
+        font-size: 0.65rem;
+        font-weight: 600;
+        vertical-align: middle;
+    }
+    .tenant-type-icon.type-project {
+        background-color: #3b82f6;
+        color: white;
+    }
+    .tenant-type-icon.type-folder {
+        background-color: #f59e0b;
+        color: white;
+    }
+    .tenant-type-icon.type-other {
+        background-color: #6b7280;
+        color: white;
+    }
 </style>
 
 <main>
@@ -371,6 +397,7 @@
                 // Disable client-side search - we handle it via backend
                 searchFloor: 0,
                 searchChoices: false,
+                allowHTML: true,  // Allow HTML in labels for type icons
             });
 
             // Disable tenant selector initially (no provider selected)
@@ -665,15 +692,20 @@
                     this.evaluationError = null;
 
                     try {
+                        const requestBody = {
+                            role: this.selectedRole,
+                            identities: [identityId],
+                        };
+                        if (this.selectedProvider) {
+                            requestBody.providers = [this.selectedProvider];
+                        }
+
                         const response = await fetch(`${this.apiBasePath}/roles/evaluate`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
                             },
-                            body: JSON.stringify({
-                                role: this.selectedRole,
-                                identity: identityId,
-                            }),
+                            body: JSON.stringify(requestBody),
                         });
 
                         if (!response.ok) {
@@ -696,7 +728,7 @@
                         }
 
                         const data = await response.json();
-                        this.evaluatedRole = data.role || null;
+                        this.evaluatedRole = (data.results && data.results[identityId]) || null;
                     } catch (error) {
                         console.error('Error evaluating role:', error);
                         this.evaluatedRole = null;
@@ -955,9 +987,19 @@
                         // Convert tenants map to Choices.js format
                         const tenantChoices = Object.keys(this.tenants).map(key => {
                             const tenant = this.tenants[key];
+                            const type = tenant.type || '';
+                            let icon = '';
+                            if (type) {
+                                const typeClass = type === 'project' ? 'type-project' : (type === 'folder' ? 'type-folder' : 'type-other');
+                                const typeLabel = type === 'project' ? 'P' : (type === 'folder' ? 'F' : type.charAt(0).toUpperCase());
+                                icon = `<span class="tenant-type-icon ${typeClass}" title="${type}">${typeLabel}</span> `;
+                            }
                             return {
                                 value: key,
-                                label: tenant.name || key,
+                                label: icon + (tenant.name || key),
+                                customProperties: {
+                                    type: type
+                                }
                             };
                         });
 

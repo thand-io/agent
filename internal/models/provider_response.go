@@ -17,4 +17,5 @@ type ProviderResponse struct {
 	Provider     string                `json:"provider"` // e.g. aws, gcp, azure
 	Capabilities *ProviderCapabilities `json:"capabilities"`
 	Enabled      bool                  `json:"enabled"`
+	Ready        bool                  `json:"ready"`
 }

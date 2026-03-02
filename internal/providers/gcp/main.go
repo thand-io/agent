@@ -24,10 +24,11 @@ import (
 const GcpProviderName = "gcp"
 
 const (
-	BindUserToPredefinedRoleActivityName      = "BindUserToPredefinedRole"
-	GetOrCreateAndBindCustomRoleActivityName  = "GetOrCreateAndBindCustomRole"
-	UnbindUserFromPredefinedRoleActivityName  = "UnbindUserFromPredefinedRole"
-	UnbindAndDeleteCustomRoleActivityName     = "UnbindAndDeleteCustomRole"
+	BindUserToPredefinedRoleActivityName     = "BindUserToPredefinedRole"
+	GetOrCreateAndBindCustomRoleActivityName = "GetOrCreateAndBindCustomRole"
+	UnbindUserFromPredefinedRoleActivityName = "UnbindUserFromPredefinedRole"
+	UnbindAndDeleteCustomRoleActivityName    = "UnbindAndDeleteCustomRole"
+	UnbindUserFromCustomRoleActivityName     = "UnbindUserFromCustomRole"
 )
 
 var DefaultStage = "GA"
@@ -36,11 +37,10 @@ var DefaultStage = "GA"
 type gcpProvider struct {
 	*models.BaseProvider
 
-	client              *GcpConfigurationProvider
-	iamClient           *iam.Service
-	crmClient           *cloudresourcemanager.Service
-	crmV3Client         *crmv3.Service
-	allowPrimitiveRoles bool
+	client      *GcpConfigurationProvider
+	iamClient   *iam.Service
+	crmClient   *cloudresourcemanager.Service
+	crmV3Client *crmv3.Service
 }
 
 func (p *gcpProvider) Initialize(identifier string, provider models.ProviderConfig) error {
@@ -82,9 +82,6 @@ func (p *gcpProvider) Initialize(identifier string, provider models.ProviderConf
 		return fmt.Errorf("failed to create Resource Manager v3 client: %w", err)
 	}
 	p.crmV3Client = crmV3Service
-
-	allowPrimitive, _ := gcpConfig.GetBool("allow_primitive_roles")
-	p.allowPrimitiveRoles = allowPrimitive
 
 	return nil
 }

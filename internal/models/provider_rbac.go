@@ -12,12 +12,40 @@ import (
 
 	"github.com/blevesearch/bleve/v2"
 	"github.com/sirupsen/logrus"
-	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
 type AuthorizeRoleRequest struct {
-	*RoleRequest
-	ProviderIdentifier string `json:"provider_identifier,omitempty"` // Provider identifier for routing to the correct agent
+	Tenant   *ProviderTenant `json:"tenant,omitempty"`   // Optional tenant ID for multi-account providers
+	Identity *Identity       `json:"identity,omitempty"` // User or group identifier
+	Role     *CompositeRole  `json:"role,omitempty"`
+	Duration *time.Duration  `json:"duration,omitempty"` // Optional duration for temporary access
+}
+
+func (r *AuthorizeRoleRequest) IsValid() bool {
+	return r.Identity != nil && r.Identity.User != nil && r.Role != nil
+}
+
+func (r *AuthorizeRoleRequest) GetUser() *User {
+	if r.Identity == nil {
+		return nil
+	}
+	return r.Identity.User
+}
+
+func (r *AuthorizeRoleRequest) GetRole() *CompositeRole {
+	return r.Role
+}
+
+func (r *AuthorizeRoleRequest) GetTenant() *ProviderTenant {
+	return r.Tenant
+}
+
+func (r *AuthorizeRoleRequest) GetDuration() *time.Duration {
+	return r.Duration
+}
+
+func (r *AuthorizeRoleRequest) HasTenant() bool {
+	return r.Tenant != nil && len(r.Tenant.ID) > 0
 }
 
 type AuthorizeRoleResponse struct {
@@ -30,9 +58,8 @@ type AuthorizeRoleResponse struct {
 }
 
 type RevokeRoleRequest struct {
-	*RoleRequest
+	*AuthorizeRoleRequest
 	AuthorizeRoleResponse *AuthorizeRoleResponse `json:"response,omitempty"`
-	ProviderIdentifier    string                 `json:"provider_identifier,omitempty"` // Provider identifier for routing to the correct agent
 }
 
 type RevokeRoleResponse struct {
@@ -146,7 +173,9 @@ func (r SynchronizeTenantsResponse) GetPagination() *PaginationOptions  { return
 // It is an alias for WorkflowTaskSupport so providers receive both the plain
 // Go context and, when inside a Temporal workflow coroutine, the workflow.Context
 // needed to schedule sub-activities with proper retries.
-type ProviderContext = sdkWorkflowsModel.WorkflowTaskSupport
+type ProviderContext interface {
+	Deadline() (deadline time.Time, ok bool)
+}
 
 // ProviderRoleBasedAccessControl defines the interface for providers that support RBAC
 type ProviderRoleBasedAccessControl interface {
@@ -188,7 +217,7 @@ type ProviderRoleBasedAccessControl interface {
 
 	// Authorize a role for a user (Bind a user to a role)
 	AuthorizeRole(
-		taskSupport sdkWorkflowsModel.WorkflowTaskSupport,
+		ctx ProviderContext,
 		req *AuthorizeRoleRequest,
 	) (
 		*AuthorizeRoleResponse, // Return any custom metadata the provider wants to store
@@ -197,7 +226,7 @@ type ProviderRoleBasedAccessControl interface {
 
 	// Revoke a role from a user
 	RevokeRole(
-		taskSupport sdkWorkflowsModel.WorkflowTaskSupport,
+		ctx ProviderContext,
 		req *RevokeRoleRequest, // Any metadata returned from AuthorizeRole
 	) (*RevokeRoleResponse, error)
 
@@ -210,7 +239,7 @@ type ProviderRoleBasedAccessControl interface {
 }
 
 func (p *BaseProvider) AuthorizeRole(
-	taskSupport sdkWorkflowsModel.WorkflowTaskSupport,
+	ctx ProviderContext,
 	req *AuthorizeRoleRequest,
 ) (*AuthorizeRoleResponse, error) {
 	// Default implementation does nothing
@@ -218,7 +247,7 @@ func (p *BaseProvider) AuthorizeRole(
 }
 
 func (p *BaseProvider) RevokeRole(
-	taskSupport sdkWorkflowsModel.WorkflowTaskSupport,
+	ctx ProviderContext,
 	req *RevokeRoleRequest,
 ) (*RevokeRoleResponse, error) {
 	// Default implementation does nothing
@@ -356,6 +385,19 @@ func validateInheritedRolesExist(provider Provider, role *Role, providerRoles []
 		}
 	}
 	return nil
+}
+
+// ValidateRolePermissions expands wildcard permissions in a role's Allow and Deny lists
+// against the given provider's known permission set, then conditionally re-condenses them.
+//
+// This is the final step of the expand→resolve→condense pipeline: after allow/deny
+// conflict resolution, wildcards like "bigquery.datasets.*" are expanded into their
+// concrete individual permissions. For providers where SupportsWildcards is true
+// (e.g. AWS, Azure) the original wildcard patterns are then restored. For providers
+// where SupportsWildcards is false (e.g. GCP, Okta) the permissions remain expanded
+// so the cloud API receives fully-qualified permission names.
+func ValidateRolePermissions(provider Provider, role *Role) error {
+	return validateRolePermissions(provider, role)
 }
 
 // validateRolePermissions validates that role permissions exist in the provider
@@ -512,6 +554,74 @@ func expandPermissionsWildcard(providerPermissions []SearchResult[ProviderPermis
 // their original patterns (true for AWS/Azure) or left expanded (false for GCP/Okta).
 func ValidatePermissionsPublic(providerPermissions []SearchResult[ProviderPermission], statements RoleStatements, supportsWildcards bool) (RoleStatements, error) {
 	return validatePermissions(providerPermissions, statements, supportsWildcards)
+}
+
+// ExpandRolePermissionsForProvider expands wildcard permissions in a role's Allow and Deny
+// lists against the given provider's known permission set, respecting the provider's
+// SupportsWildcards capability flag.
+//
+// For providers where SupportsWildcards is false (e.g. GCP, Okta), wildcards like
+// "bigquery.datasets.*" are expanded into their individual concrete permissions before
+// the role is sent to the cloud API. For providers where SupportsWildcards is true
+// (e.g. AWS, Azure), the original wildcard patterns are preserved.
+//
+// This is the exported counterpart of validateRolePermissions, intended for use
+// during role assembly (e.g. in GetCompositeRoleForWorkflow) so that the correct
+// permission set reaches the provider at authorization time.
+func ExpandRolePermissionsForProvider(provider Provider, role *Role) error {
+	return validateRolePermissions(provider, role)
+}
+
+// ExpandWildcardPermissionsForProvider expands wildcard operations (those containing "*")
+// in a role's Allow and Deny lists against the given provider's known permission set.
+// Unlike ValidateRolePermissions, non-wildcard operations are never checked against the
+// provider dataset — they pass through exactly as-is. This makes it safe to call on
+// composite roles that contain generic or cross-provider permissions alongside the
+// provider-specific wildcards that need expanding.
+//
+// A wildcard that matches no permissions in the provider dataset is logged and silently
+// dropped from the list.
+func ExpandWildcardPermissionsForProvider(provider Provider, role *Role) {
+	if provider == nil || role == nil {
+		return
+	}
+
+	providerPermissions, err := provider.ListPermissions(context.TODO(), &SearchRequest{})
+	if err != nil || len(providerPermissions) == 0 {
+		return
+	}
+
+	expand := func(stmts RoleStatements) RoleStatements {
+		result := make(RoleStatements, 0, len(stmts))
+		for _, stmt := range stmts {
+			var ops []string
+			for _, op := range stmt.Operations {
+				if !strings.Contains(op, "*") {
+					ops = append(ops, op)
+					continue
+				}
+				expanded, expErr := expandPermissionsWildcard(providerPermissions, op)
+				if expErr != nil || len(expanded) == 0 {
+					logrus.WithField("permission", op).
+						WithField("provider", provider.GetIdentifier()).
+						Warn("Wildcard permission matched no provider permissions, dropping")
+					continue
+				}
+				ops = append(ops, expanded...)
+			}
+			if len(ops) > 0 {
+				result = append(result, Statement{
+					Operations: ops,
+					Targets:    stmt.Targets,
+					Conditions: stmt.Conditions,
+				})
+			}
+		}
+		return result
+	}
+
+	role.Permissions.Allow = expand(role.Permissions.Allow)
+	role.Permissions.Deny = expand(role.Permissions.Deny)
 }
 
 // condenseToOriginalWildcards replaces individually-expanded permissions with

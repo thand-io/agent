@@ -252,19 +252,7 @@ func (m *ThandWorkflowManager) executeElevationWorkflow(
 			if err == nil {
 
 				workflowTask.SetUser(decodedSession.User)
-
-				// Now that we have a user we need to evaluate our composite role
-				newRole, err := m.config.GetCompositeRoleForWorkflow(&models.Identity{
-					ID:    decodedSession.User.GetIdentity(),
-					Label: decodedSession.User.GetName(),
-					User:  decodedSession.User,
-				}, workflowTask)
-
-				if err != nil {
-					return nil, fmt.Errorf("failed to evaluate composite role for elevation request: %w", err)
-				}
-
-				workflowTask.SetRole(newRole)
+				workflowTask.SetRole(request.Role)
 
 				redirectUrl := m.config.GetResumeCallbackUrl(workflowTask)
 
