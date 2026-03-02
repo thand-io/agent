@@ -83,7 +83,7 @@ require (
 	go.temporal.io/api v1.62.2
 	go.temporal.io/sdk v1.40.0
 	golang.org/x/crypto v0.48.0
-	golang.org/x/net v0.50.0
+	golang.org/x/net v0.51.0
 	golang.org/x/oauth2 v0.35.0
 	golang.org/x/text v0.34.0
 	google.golang.org/api v0.268.0
