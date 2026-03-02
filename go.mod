@@ -1,6 +1,6 @@
 module github.com/thand-io/agent
 
-go 1.25.0
+go 1.26.0
 
 // replace github.com/serverlessworkflow/sdk-go/v3 => ../serverless-sdk-go
 replace github.com/serverlessworkflow/sdk-go/v3 => github.com/hughneale/serverless-sdk-go/v3 v3.0.0-20260105154148-a507840f0238
