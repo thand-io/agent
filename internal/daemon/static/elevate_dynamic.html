@@ -627,7 +627,7 @@
                         option.innerHTML = `
                             <div>
                                 <div class="permission-name">${highlightMatch(perm.label, query)}</div>
-                                <div class="permission-provider">${perm.customProperties.provider}</div>
+                                <div class="permission-provider">${escapeHtml(perm.customProperties.provider)}</div>
                             </div>
                         `;
                         
@@ -655,9 +655,13 @@
                 }
 
                 function highlightMatch(text, query) {
-                    if (!query) return text;
-                    const regex = new RegExp(`(${query})`, 'gi');
-                    return text.replace(regex, '<strong>$1</strong>');
+                    if (!query) return escapeHtml(text);
+                    // Escape the text first to prevent XSS
+                    const escapedText = escapeHtml(text);
+                    // Escape query for regex to prevent regex injection
+                    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const regex = new RegExp(`(${escapedQuery})`, 'gi');
+                    return escapedText.replace(regex, '<strong>$1</strong>');
                 }
 
                 function selectPermission(perm) {
@@ -706,7 +710,7 @@
                             const tag = document.createElement('div');
                             tag.className = 'selected-permission-tag';
                             tag.innerHTML = `
-                                ${perm.label}
+                                ${escapeHtml(perm.label)}
                                 <span class="remove-btn">&times;</span>
                             `;
                             

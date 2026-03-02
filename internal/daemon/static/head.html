@@ -112,6 +112,18 @@
                 }
             });
         });
+
+        /**
+         * HTML escape function to prevent XSS
+         * @param {string} str - String to escape
+         * @returns {string} - HTML-escaped string
+         */
+        function escapeHtml(str) {
+            if (!str) return '';
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
     </script>
    
 </head>

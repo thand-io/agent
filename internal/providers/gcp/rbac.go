@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
 	"sort"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"google.golang.org/api/cloudresourcemanager/v1"
+	crmv3 "google.golang.org/api/cloudresourcemanager/v3"
 	"google.golang.org/api/googleapi"
 	iam "google.golang.org/api/iam/v1"
 )
@@ -99,10 +101,18 @@ func (p *gcpProvider) AuthorizeRole(
 
 	config := p.GetConfig()
 	projectId := p.GetProjectId()
+	var tenant *models.ProviderTenant
 	if req.HasTenant() {
-		projectId = req.GetTenant().ID
+		tenant = req.GetTenant()
+		projectId = tenant.ID
 	}
 	stage := config.GetStringWithDefault("stage", "GA")
+
+	// GCP custom roles are project-scoped only (created via Projects.Roles API).
+	// Reject requests that attempt to use custom permissions on a folder tenant.
+	if isFolderResource(tenant) && len(role.Permissions.Allow) > 0 {
+		return nil, fmt.Errorf("custom roles (permissions.allow) are not supported for folder-level resources (%s); GCP custom roles can only be created at the project level", projectId)
+	}
 
 	var assignedRoles []string
 
@@ -116,7 +126,7 @@ func (p *gcpProvider) AuthorizeRole(
 			}
 
 			// Bind the user to the predefined role via IAM policy
-			err = p.bindUserToPredefinedRole(localCtx, projectId, user, predefinedRole.Name)
+			err = p.bindUserToPredefinedRole(localCtx, projectId, user, predefinedRole.Name, tenant)
 			if err != nil {
 				return nil, temporal.NewApplicationErrorWithOptions(
 					fmt.Sprintf("failed to bind user to role %s: %v", predefinedRole.Name, err),
@@ -205,7 +215,7 @@ func (p *gcpProvider) AuthorizeRole(
 		}
 
 		// Bind the user to the custom role via IAM policy
-		err = p.bindUserToRole(localCtx, projectId, user, existingRole)
+		err = p.bindUserToRole(localCtx, projectId, user, existingRole, tenant)
 		if err != nil {
 			return nil, temporal.NewApplicationErrorWithOptions(
 				fmt.Sprintf("failed to bind user to custom role %s: %v", existingRole.Name, err),
@@ -257,8 +267,10 @@ func (p *gcpProvider) RevokeRole(
 	user := req.GetUser()
 	role := req.GetRole()
 	projectId := p.GetProjectId()
+	var tenant *models.ProviderTenant
 	if req.HasTenant() {
-		projectId = req.GetTenant().ID
+		tenant = req.GetTenant()
+		projectId = tenant.ID
 	}
 
 	isComposite := role.IsComposite()
@@ -284,7 +296,7 @@ func (p *gcpProvider) RevokeRole(
 		// Check if this is a predefined role (starts with "roles/") or custom role (starts with "projects/")
 		if strings.HasPrefix(roleName, "roles/") {
 			// Predefined role - unbind directly by role name
-			err := p.unbindUserFromPredefinedRole(localCtx, projectId, user, roleName)
+			err := p.unbindUserFromPredefinedRole(localCtx, projectId, user, roleName, tenant)
 			if err != nil {
 				return nil, temporal.NewApplicationErrorWithOptions(
 					fmt.Sprintf("failed to unbind user from predefined role %s: %v", roleName, err),
@@ -320,7 +332,7 @@ func (p *gcpProvider) RevokeRole(
 				)
 			}
 
-			err = p.unbindUserFromRole(localCtx, projectId, user, existingRole)
+			err = p.unbindUserFromRole(localCtx, projectId, user, existingRole, tenant)
 			if err != nil {
 				return nil, temporal.NewApplicationErrorWithOptions(
 					fmt.Sprintf("failed to unbind user from custom role %s: %v", roleName, err),
@@ -376,8 +388,27 @@ func (p *gcpProvider) GetAuthorizedAccessUrl(
 	req *models.AuthorizeRoleRequest,
 	resp *models.AuthorizeRoleResponse,
 ) string {
-	return p.GetConfig().GetStringWithDefault(
-		"sso_start_url", "https://console.cloud.google.com/")
+	u := &url.URL{
+		Scheme: "https",
+		Host:   "console.cloud.google.com",
+		Path:   "/welcome",
+	}
+	query := url.Values{}
+
+	if req.HasTenant() {
+		tenant := req.GetTenant()
+		if isFolderResource(tenant) {
+			u.Path = "/"
+			query.Set("folder", tenant.ID)
+		} else {
+			query.Set("project", tenant.ID)
+		}
+	} else {
+		query.Set("project", p.GetProjectId())
+	}
+
+	u.RawQuery = query.Encode()
+	return p.GetConfig().GetStringWithDefault("sso_start_url", u.String())
 }
 
 // authorizeRoleTemporal sequences GCP role authorization as independent Temporal activities.
@@ -400,13 +431,28 @@ func (p *gcpProvider) authorizeRoleTemporal(
 	role := req.GetRole()
 	isComposite := role.IsComposite()
 	projectID := p.GetProjectId()
+	var tenant *models.ProviderTenant
 	if req.HasTenant() {
-		projectID = req.GetTenant().ID
+		tenant = req.GetTenant()
+		projectID = tenant.ID
+	} else {
+		// Create synthetic tenant for project-level operations
+		tenant = &models.ProviderTenant{
+			ID:   projectID,
+			Type: "project",
+			Name: projectID,
+		}
 	}
 	stage := p.GetConfig().GetStringWithDefault("stage", "GA")
 
 	if len(role.Inherits) == 0 && len(role.Permissions.Allow) == 0 {
 		return nil, fmt.Errorf("role %s has no inherits or permissions defined", role.Name)
+	}
+
+	// GCP custom roles are project-scoped only (created via Projects.Roles API).
+	// Reject requests that attempt to use custom permissions on a folder tenant.
+	if isFolderResource(tenant) && len(role.Permissions.Allow) > 0 {
+		return nil, fmt.Errorf("custom roles (permissions.allow) are not supported for folder-level resources (%s); GCP custom roles can only be created at the project level", projectID)
 	}
 
 	var assignedRoles []string
@@ -417,9 +463,9 @@ func (p *gcpProvider) authorizeRoleTemporal(
 			wfCtx,
 			models.CreateTemporalProviderWorkflowName(identifier, BindUserToPredefinedRoleActivityName),
 			&BindUserToPredefinedRoleRequest{
-				ProjectID:     projectID,
 				User:          user,
 				InheritedRole: inheritedRole,
+				Tenant:        tenant,
 			},
 		).Get(wfCtx, &resp); err != nil {
 			return nil, fmt.Errorf("BindUserToPredefinedRole activity failed for %s: %w", inheritedRole, err)
@@ -436,7 +482,6 @@ func (p *gcpProvider) authorizeRoleTemporal(
 			wfCtx,
 			models.CreateTemporalProviderWorkflowName(identifier, GetOrCreateAndBindCustomRoleActivityName),
 			&GetOrCreateAndBindCustomRoleRequest{
-				ProjectID:   projectID,
 				User:        user,
 				RoleName:    customRoleName,
 				Title:       role.Role.GetName(),
@@ -445,6 +490,7 @@ func (p *gcpProvider) authorizeRoleTemporal(
 				Permissions: role.Permissions,
 				IsComposite: isComposite,
 				Version:     role.GetVersionString(),
+				Tenant:      tenant,
 			},
 		).Get(wfCtx, &resp); err != nil {
 			return nil, fmt.Errorf("GetOrCreateAndBindCustomRole activity failed: %w", err)
@@ -476,8 +522,16 @@ func (p *gcpProvider) revokeRoleTemporal(
 	user := req.GetUser()
 	role := req.GetRole()
 	projectID := p.GetProjectId()
+	var tenant *models.ProviderTenant
 	if req.HasTenant() {
-		projectID = req.GetTenant().ID
+		tenant = req.GetTenant()
+	} else {
+		// Create synthetic tenant for project-level operations
+		tenant = &models.ProviderTenant{
+			ID:   projectID,
+			Type: "project",
+			Name: projectID,
+		}
 	}
 
 	// Determine composite flag from the role.
@@ -493,9 +547,9 @@ func (p *gcpProvider) revokeRoleTemporal(
 				wfCtx,
 				models.CreateTemporalProviderWorkflowName(identifier, UnbindUserFromPredefinedRoleActivityName),
 				&UnbindUserFromPredefinedRoleRequest{
-					ProjectID: projectID,
-					User:      user,
-					RoleName:  roleName,
+					User:     user,
+					RoleName: roleName,
+					Tenant:   tenant,
 				},
 			).Get(wfCtx, nil); err != nil {
 				return nil, fmt.Errorf("UnbindUserFromPredefinedRole activity failed for %s: %w", roleName, err)
@@ -506,9 +560,9 @@ func (p *gcpProvider) revokeRoleTemporal(
 				wfCtx,
 				models.CreateTemporalProviderWorkflowName(identifier, UnbindAndDeleteCustomRoleActivityName),
 				&UnbindAndDeleteCustomRoleRequest{
-					ProjectID: projectID,
-					User:      user,
-					RoleName:  roleName,
+					User:     user,
+					RoleName: roleName,
+					Tenant:   tenant,
 				},
 			).Get(wfCtx, nil); err != nil {
 				return nil, fmt.Errorf("UnbindAndDeleteCustomRole activity failed for %s: %w", roleName, err)
@@ -519,9 +573,9 @@ func (p *gcpProvider) revokeRoleTemporal(
 				wfCtx,
 				models.CreateTemporalProviderWorkflowName(identifier, UnbindUserFromCustomRoleActivityName),
 				&UnbindUserFromCustomRoleRequest{
-					ProjectID: projectID,
-					User:      user,
-					RoleName:  roleName,
+					User:     user,
+					RoleName: roleName,
+					Tenant:   tenant,
 				},
 			).Get(wfCtx, nil); err != nil {
 				return nil, fmt.Errorf("UnbindUserFromCustomRole activity failed for %s: %w", roleName, err)
@@ -576,13 +630,13 @@ func (p *gcpProvider) deleteRole(ctx context.Context, projectID, roleName string
 }
 
 // bindUserToPredefinedRole binds a user to a predefined GCP role (e.g., roles/viewer)
-func (p *gcpProvider) bindUserToPredefinedRole(ctx context.Context, projectID string, user *models.User, roleName string) error {
-	return p.bindUserToRoleByName(ctx, projectID, user, roleName)
+func (p *gcpProvider) bindUserToPredefinedRole(ctx context.Context, projectID string, user *models.User, roleName string, tenant *models.ProviderTenant) error {
+	return p.bindUserToRoleByName(ctx, projectID, user, roleName, tenant)
 }
 
 // unbindUserFromPredefinedRole removes a user from a predefined GCP role
-func (p *gcpProvider) unbindUserFromPredefinedRole(ctx context.Context, projectID string, user *models.User, roleName string) error {
-	return p.unbindUserFromRoleByName(ctx, projectID, user, roleName)
+func (p *gcpProvider) unbindUserFromPredefinedRole(ctx context.Context, projectID string, user *models.User, roleName string, tenant *models.ProviderTenant) error {
+	return p.unbindUserFromRoleByName(ctx, projectID, user, roleName, tenant)
 }
 
 // isThandManagedBinding checks if a binding has the thand condition tag
@@ -871,34 +925,194 @@ func (p *gcpProvider) withIAMPolicyUpdate(
 	return fmt.Errorf("failed to update IAM policy for project %s after %d attempts due to concurrent modifications", projectID, maxPolicyRetries)
 }
 
-func (p *gcpProvider) bindUserToRole(ctx context.Context, projectID string, user *models.User, iamRole *iam.Role) error {
-	return p.bindUserToRoleByName(ctx, projectID, user, iamRole.Name)
+// isFolderResource returns true if the tenant represents a GCP folder resource.
+func isFolderResource(tenant *models.ProviderTenant) bool {
+	if tenant == nil {
+		return false
+	}
+	if strings.EqualFold(tenant.Type, "folder") {
+		return true
+	}
+	// Additionally, check if the ID follows the folder pattern (e.g., "folders/123456789").
+	// TODO: Remove this fallback is for Generating the start URL
+	return strings.HasPrefix(tenant.ID, "folders/")
 }
 
-func (p *gcpProvider) unbindUserFromRole(ctx context.Context, projectID string, user *models.User, iamRole *iam.Role) error {
-	return p.unbindUserFromRoleByName(ctx, projectID, user, iamRole.Name)
+// newThandConditionV3 creates the thand-managed condition tag using the v3 CRM types.
+func newThandConditionV3() *crmv3.Expr {
+	return &crmv3.Expr{
+		Title:       "managed-by-thand",
+		Description: "This binding is managed by thand",
+		Expression:  "true",
+	}
+}
+
+// isThandManagedBindingV3 checks if a v3 binding has the thand condition tag.
+func isThandManagedBindingV3(binding *crmv3.Binding) bool {
+	return binding.Condition != nil && binding.Condition.Title == "managed-by-thand"
+}
+
+// addMemberToPolicyV3 adds a member to a role binding in a v3 policy, creating a new binding if necessary.
+// Returns true if the policy was modified.
+func addMemberToPolicyV3(policy *crmv3.Policy, roleName, member string) bool {
+	isPrimitive := isPrimitiveRole(roleName)
+
+	if isPrimitive {
+		logrus.WithFields(logrus.Fields{
+			"role":   roleName,
+			"member": member,
+		}).Warn("Binding to primitive role without IAM condition - GCP does not support conditions on primitive roles. Consider using predefined roles instead for better tracking.")
+	}
+
+	for _, binding := range policy.Bindings {
+		if binding.Role == roleName {
+			if (isPrimitive && binding.Condition == nil) || (!isPrimitive && isThandManagedBindingV3(binding)) {
+				if slices.Contains(binding.Members, member) {
+					return false
+				}
+				binding.Members = append(binding.Members, member)
+				return true
+			}
+		}
+	}
+
+	newBinding := &crmv3.Binding{
+		Role:    roleName,
+		Members: []string{member},
+	}
+	if !isPrimitive {
+		newBinding.Condition = newThandConditionV3()
+	}
+	policy.Bindings = append(policy.Bindings, newBinding)
+	return true
+}
+
+// removeMemberFromPolicyV3 removes a member from a role binding in a v3 policy.
+// Returns true if the member was found and removed.
+func removeMemberFromPolicyV3(policy *crmv3.Policy, roleName, member string) bool {
+	isPrimitive := isPrimitiveRole(roleName)
+
+	for i, binding := range policy.Bindings {
+		if binding.Role != roleName {
+			continue
+		}
+		if !isPrimitive && !isThandManagedBindingV3(binding) {
+			continue
+		}
+		if isPrimitive && binding.Condition != nil {
+			continue
+		}
+
+		idx := slices.Index(binding.Members, member)
+		if idx == -1 {
+			return false
+		}
+
+		binding.Members = slices.Delete(binding.Members, idx, idx+1)
+		if len(binding.Members) == 0 {
+			policy.Bindings = slices.Delete(policy.Bindings, i, i+1)
+		}
+		return true
+	}
+	return false
+}
+
+// withFolderIAMPolicyUpdate atomically fetches, mutates, and writes the IAM policy for a GCP folder.
+// It automatically retries on etag-mismatch conflicts up to maxPolicyRetries times.
+func (p *gcpProvider) withFolderIAMPolicyUpdate(
+	ctx context.Context,
+	folderID string,
+	mutateFn func(*crmv3.Policy) (bool, error),
+) error {
+	crmV3Service := p.crmV3Client
+	if crmV3Service == nil {
+		return fmt.Errorf("Cloud Resource Manager v3 client is not initialized, cannot manage folder IAM policies")
+	}
+
+	for attempt := 1; attempt <= maxPolicyRetries; attempt++ {
+		policy, err := crmV3Service.Folders.GetIamPolicy(folderID, &crmv3.GetIamPolicyRequest{
+			Options: &crmv3.GetPolicyOptions{
+				RequestedPolicyVersion: 3,
+			},
+		}).Context(ctx).Do()
+		if err != nil {
+			return fmt.Errorf("failed to get IAM policy for folder %s: %w", folderID, err)
+		}
+
+		policy.Version = 3
+
+		changed, err := mutateFn(policy)
+		if err != nil {
+			return err
+		}
+		if !changed {
+			return nil
+		}
+
+		_, err = crmV3Service.Folders.SetIamPolicy(folderID, &crmv3.SetIamPolicyRequest{
+			Policy: policy,
+		}).Context(ctx).Do()
+		if err != nil {
+			if isEtagConflict(err) && attempt < maxPolicyRetries {
+				logrus.WithFields(logrus.Fields{
+					"folder_id": folderID,
+					"attempt":   attempt,
+				}).Debug("IAM policy etag conflict, retrying")
+				time.Sleep(time.Duration(attempt) * 100 * time.Millisecond)
+				continue
+			}
+			return fmt.Errorf("failed to set IAM policy for folder %s: %w", folderID, err)
+		}
+		return nil
+	}
+	return fmt.Errorf("failed to update IAM policy for folder %s after %d attempts due to concurrent modifications", folderID, maxPolicyRetries)
+}
+
+func (p *gcpProvider) bindUserToRole(ctx context.Context, projectID string, user *models.User, iamRole *iam.Role, tenant *models.ProviderTenant) error {
+	return p.bindUserToRoleByName(ctx, projectID, user, iamRole.Name, tenant)
+}
+
+func (p *gcpProvider) unbindUserFromRole(ctx context.Context, projectID string, user *models.User, iamRole *iam.Role, tenant *models.ProviderTenant) error {
+	return p.unbindUserFromRoleByName(ctx, projectID, user, iamRole.Name, tenant)
 }
 
 // bindUserToRoleByName is the core implementation for binding a user to any role.
-func (p *gcpProvider) bindUserToRoleByName(ctx context.Context, projectID string, user *models.User, roleName string) error {
+// It supports both project-level and folder-level IAM bindings.
+func (p *gcpProvider) bindUserToRoleByName(ctx context.Context, resourceID string, user *models.User, roleName string, tenant *models.ProviderTenant) error {
 	member, err := validateAndFormatMember(user)
 	if err != nil {
 		return err
 	}
 
-	return p.withIAMPolicyUpdate(ctx, projectID, func(policy *cloudresourcemanager.Policy) (bool, error) {
+	if isFolderResource(tenant) {
+		return p.withFolderIAMPolicyUpdate(ctx, resourceID, func(policy *crmv3.Policy) (bool, error) {
+			return addMemberToPolicyV3(policy, roleName, member), nil
+		})
+	}
+
+	return p.withIAMPolicyUpdate(ctx, resourceID, func(policy *cloudresourcemanager.Policy) (bool, error) {
 		return addMemberToPolicy(policy, roleName, member), nil
 	})
 }
 
 // unbindUserFromRoleByName is the core implementation for unbinding a user from any role.
-func (p *gcpProvider) unbindUserFromRoleByName(ctx context.Context, projectID string, user *models.User, roleName string) error {
+// It supports both project-level and folder-level IAM bindings.
+func (p *gcpProvider) unbindUserFromRoleByName(ctx context.Context, resourceID string, user *models.User, roleName string, tenant *models.ProviderTenant) error {
 	member, err := validateAndFormatMember(user)
 	if err != nil {
 		return err
 	}
 
-	return p.withIAMPolicyUpdate(ctx, projectID, func(policy *cloudresourcemanager.Policy) (bool, error) {
+	if isFolderResource(tenant) {
+		return p.withFolderIAMPolicyUpdate(ctx, resourceID, func(policy *crmv3.Policy) (bool, error) {
+			if !removeMemberFromPolicyV3(policy, roleName, member) {
+				return false, fmt.Errorf("thand-managed role binding not found for role %s", roleName)
+			}
+			return true, nil
+		})
+	}
+
+	return p.withIAMPolicyUpdate(ctx, resourceID, func(policy *cloudresourcemanager.Policy) (bool, error) {
 		if !removeMemberFromPolicy(policy, roleName, member) {
 			return false, fmt.Errorf("thand-managed role binding not found for role %s", roleName)
 		}
