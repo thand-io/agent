@@ -52,17 +52,17 @@ type CompositeRole struct {
 	// and providers. This allows caching and reusing
 	// composite roles for the same context without
 	// needing to recompute them.
-	UUID uuid.UUID `json:"uuid,omitempty"`
+	UUID uuid.UUID `json:"uuid"`
 
 	// Set the providers that this composite role has been resolved
 	// for
-	Providers []string `json:"providers,omitempty"` // The provider context for this composite role (e.g., "aws", "gcp", "azure")
+	Providers []string `json:"composite_providers"` // Renamed to avoid collision with embedded Role.Providers
 
 	// Composite indicates whether this role is a resolved, flattened composite
 	// that includes inherited thand roles (true) or a non-composite, persistent
 	// role representation without applied inheritance (false).
 	// Defaults to false for non-composite roles; may be true when representing a composite role within CompositeRole.
-	Composite bool `json:"composite" default:"false"`
+	Composite bool `json:"composite"`
 
 	Role `json:",inline" yaml:",inline"` // Embed the base
 }
@@ -72,6 +72,55 @@ type CompositeRole struct {
 // revocation. Non-composite roles are persistent and shared.
 func (r *CompositeRole) IsComposite() bool {
 	return r.Composite
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling for CompositeRole.
+// This is CRITICAL for workflow.SideEffect serialization to work correctly in Temporal workflows.
+// 
+// Without this custom unmarshaler, CompositeRole fields (UUID, Providers, Composite) are lost
+// during Temporal's workflow.SideEffect serialization/deserialization cycle because:
+// 1. The embedded Role struct (marked with json:",inline") has its own UnmarshalJSON method
+// 2. Go's default JSON unmarshaler would call Role.UnmarshalJSON which creates a new Role instance
+// 3. This new Role instance overwrites the CompositeRole fields that were already set
+//
+// This custom unmarshaler solves the problem by:
+// 1. First extracting CompositeRole-specific fields (uuid, composite_providers, composite) directly
+// 2. Then delegating to Role.UnmarshalJSON for the embedded Role fields
+// 3. This ensures all CompositeRole fields survive the serialization round-trip
+//
+// See test/integration/workflows/sideeffect_serialization_test.go for verification tests.
+func (r *CompositeRole) UnmarshalJSON(data []byte) error {
+	// First, unmarshal into a temporary map to get all fields
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return fmt.Errorf("failed to unmarshal composite role: %w", err)
+	}
+
+	// Unmarshal CompositeRole-specific fields directly to prevent them from being overwritten
+	if uuidData, ok := raw["uuid"]; ok {
+		if err := json.Unmarshal(uuidData, &r.UUID); err != nil {
+			return fmt.Errorf("failed to unmarshal uuid: %w", err)
+		}
+	}
+
+	if providersData, ok := raw["composite_providers"]; ok {
+		if err := json.Unmarshal(providersData, &r.Providers); err != nil {
+			return fmt.Errorf("failed to unmarshal composite_providers: %w", err)
+		}
+	}
+
+	if compositeData, ok := raw["composite"]; ok {
+		if err := json.Unmarshal(compositeData, &r.Composite); err != nil {
+			return fmt.Errorf("failed to unmarshal composite: %w", err)
+		}
+	}
+
+	// Now unmarshal the embedded Role by delegating to Role.UnmarshalJSON
+	if err := json.Unmarshal(data, &r.Role); err != nil {
+		return fmt.Errorf("failed to unmarshal embedded role: %w", err)
+	}
+
+	return nil
 }
 
 func (r *CompositeRole) SetUniqueIdentifier(uuid uuid.UUID) {

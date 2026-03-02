@@ -328,8 +328,8 @@ func (r *WorkflowRoleRequest) GetDuration() *time.Duration {
 // non-deterministic operations (config lookups, UUID generation) are isolated
 // from workflow replay.
 type authorizeRoleRequestSideEffect struct {
-	Request *AuthorizeRoleRequest
-	Err     string
+	Request *AuthorizeRoleRequest `json:"request"`
+	Err     string                `json:"error"`
 }
 
 // CreateProviderAuthorizeRoleWorkflow returns a workflow function that captures the
@@ -349,6 +349,9 @@ func CreateProviderAuthorizeRoleWorkflow(cfg ConfigImpl, provider Provider) func
 		// their result is recorded in the workflow event history. On replay, Temporal
 		// replays the recorded value instead of re-executing the function, keeping
 		// workflow execution deterministic.
+		//
+		// Note: CompositeRole has a custom UnmarshalJSON to ensure UUID, Composite,
+		// and Providers fields survive JSON serialization through Temporal's data converter.
 		encodedReq := workflow.SideEffect(ctx, func(ctx workflow.Context) any {
 			result, err := CreateAuthorizeRoleRequest(cfg, provider, &req)
 			if err != nil {
@@ -366,6 +369,11 @@ func CreateProviderAuthorizeRoleWorkflow(cfg ConfigImpl, provider Provider) func
 			log.Error("Failed to create authorize role request", "error", se.Err)
 			return nil, fmt.Errorf("%s", se.Err)
 		}
+
+		log.Info("Constructed authorize role request, invoking provider",
+			"provider", provider.GetIdentifier(),
+			"authorizeReq", se.Request,
+		)
 
 		return provider.AuthorizeRole(ctx, se.Request)
 	}
@@ -413,6 +421,11 @@ func CreateProviderRevokeRoleWorkflow(cfg ConfigImpl, provider Provider) func(wo
 			AuthorizeRoleRequest:  authReq,
 			AuthorizeRoleResponse: req.AuthorizeRoleResponse,
 		}
+
+		log.Info("Constructed revoke role request, invoking provider",
+			"provider", provider.GetIdentifier(),
+			"revokeReq", revokeReq,
+		)
 
 		return provider.RevokeRole(ctx, revokeReq)
 	}

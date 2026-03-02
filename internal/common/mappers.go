@@ -52,19 +52,17 @@ func ConvertInterfaceToMap(from any) (map[string]any, error) {
 // leading/trailing underscores are trimmed.
 func ConvertToSnakeCase(name string) string {
 	var builder strings.Builder
+	lastWasUnderscore := false
+
 	for _, r := range name {
 		if unicode.IsLetter(r) || unicode.IsDigit(r) {
 			builder.WriteRune(unicode.ToLower(r))
-		} else {
+			lastWasUnderscore = false
+		} else if !lastWasUnderscore {
 			builder.WriteRune('_')
+			lastWasUnderscore = true
 		}
 	}
-	result := builder.String()
 
-	// Collapse consecutive underscores
-	for strings.Contains(result, "__") {
-		result = strings.ReplaceAll(result, "__", "_")
-	}
-
-	return strings.Trim(result, "_")
+	return strings.Trim(builder.String(), "_")
 }
