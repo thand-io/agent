@@ -46,6 +46,10 @@ func (p *gcpProviderMock) Synchronize(
 	return PreSynchronizeActivities(ctx, temporalService, p, req)
 }
 
+func (p *gcpProviderMock) SynchronizeRoles(ctx context.Context, req *models.SynchronizeRolesRequest) (*models.SynchronizeRolesResponse, error) {
+	return &models.SynchronizeRolesResponse{}, nil
+}
+
 func (p *gcpProviderMock) SynchronizeIdentities(ctx context.Context, req *models.SynchronizeIdentitiesRequest) (*models.SynchronizeIdentitiesResponse, error) {
 	return &models.SynchronizeIdentitiesResponse{}, nil
 }

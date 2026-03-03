@@ -42,7 +42,7 @@ func (p *gcpProvider) SynchronizeRoles(ctx context.Context, req *models.Synchron
 	listCall := p.iamClient.Projects.Roles.List("projects/" + projectId).
 		Context(ctx).
 		PageSize(int64(pageSize)).
-		View("FULL")
+		View("BASIC")
 
 	if req.Pagination.Token != "" {
 		listCall = listCall.PageToken(req.Pagination.Token)
