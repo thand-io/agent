@@ -53,7 +53,7 @@ func (p *gcpProvider) SynchronizeRoles(ctx context.Context, req *models.Synchron
 		return nil, fmt.Errorf("failed to list GCP project roles: %w", err)
 	}
 
-	var providerRoles []models.ProviderRole
+	providerRoles := make([]models.ProviderRole, 0, len(resp.Roles))
 	for _, role := range resp.Roles {
 		providerRoles = append(providerRoles, models.ProviderRole{
 			ID:          role.Name,
