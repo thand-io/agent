@@ -9,8 +9,8 @@ import (
 // sortedStrings returns a sorted (A-Z) copy of the given string slice without
 // modifying the original.
 func sortedStrings(s []string) []string {
-	if len(s) == 0 {
-		return s
+	if s == nil {
+		return nil
 	}
 	out := make([]string, len(s))
 	copy(out, s)
@@ -25,6 +25,9 @@ func sortedStrings(s []string) []string {
 //
 // The original slice and its elements are not modified.
 func sortedStatementsWithSortedFields(stmts models.RoleStatements) []models.Statement {
+	if len(stmts) == 0 {
+		return []models.Statement{}
+	}
 	out := make([]models.Statement, len(stmts))
 	for i, stmt := range stmts {
 		out[i] = models.Statement{
