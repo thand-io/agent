@@ -993,9 +993,11 @@
                                 const typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
                                 icon = `<span class="tenant-type-icon ${typeClass}" title="${escapeHtml(type)}">${typeLabel}</span> `;
                             }
+                            const name = tenant.name || key;
+                            const idSuffix = tenant.name ? ` (${escapeHtml(key)})` : '';
                             return {
                                 value: key,
-                                label: icon + escapeHtml(tenant.name || key),
+                                label: icon + escapeHtml(name) + idSuffix,
                                 customProperties: {
                                     type: type
                                 }
