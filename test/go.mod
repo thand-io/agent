@@ -10,8 +10,10 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.10
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.10
 	github.com/aws/aws-sdk-go-v2/service/iam v1.53.3
+	github.com/aws/aws-sdk-go-v2/service/sts v1.41.7
 	github.com/chromedp/chromedp v0.11.2
 	github.com/cloudevents/sdk-go/v2 v2.16.2
+	github.com/docker/go-connections v0.6.0
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-version v1.8.0
 	github.com/serverlessworkflow/sdk-go/v3 v3.2.0
@@ -65,7 +67,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.30.11 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssoadmin v1.37.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.15 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sts v1.41.7 // indirect
 	github.com/aws/smithy-go v1.24.2 // indirect
 	github.com/beevik/etree v1.6.0 // indirect
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
@@ -107,7 +108,6 @@ require (
 	github.com/denisbrodbeck/machineid v1.0.1 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/docker v28.5.2+incompatible // indirect
-	github.com/docker/go-connections v0.6.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/ebitengine/purego v0.8.4 // indirect
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect

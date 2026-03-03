@@ -242,7 +242,7 @@ func (m *ThandWorkflowManager) executeElevationWorkflow(
 		logrus.WithFields(logrus.Fields{
 			"expiry":      existingSession.Expiry.UTC(),
 			"user":        decodedSession.User.Email,
-			"has_expired": existingSession.Expiry.UTC().Before(time.Now().UTC()),
+			"has_expired": existingSession.Expiry.UTC().After(time.Now().UTC()),
 		}).Info("Found existing session for user")
 
 		if existingSession.Expiry.UTC().After(time.Now().UTC()) {

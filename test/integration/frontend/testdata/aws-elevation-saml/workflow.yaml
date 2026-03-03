@@ -1,0 +1,52 @@
+version: "1.0"
+workflows:
+  # AWS elevation workflow with self-approval for SAML UI testing
+  aws_self_approval_ui:
+    name: AWS Self Approval UI (SAML)
+    description: AWS access elevation with self-approval via email, authenticated by SAML
+    authentication: saml-test
+    enabled: true
+    workflow:
+      document:
+        dsl: "1.0.0-alpha5"
+        namespace: "thand-test"
+        name: "aws-self-approval-saml-ui"
+        version: "1.0.0"
+      do:
+        - validate:
+            thand: validate
+            with:
+              validator: static
+        - approvals:
+            thand: approvals
+            on:
+              approved: authorize
+              denied: denied
+            with:
+              approvals: 1
+              selfApprove: true
+              notifiers:
+                email:
+                  provider: email-test
+                  to: testuser@thand.io
+                  message: "User is requesting AWS admin access via UI (SAML). Please approve."
+            then: denied
+        - authorize:
+            thand: authorize
+            with:
+              revocation: revoke
+            then: monitor
+        - monitor:
+            thand: monitor
+            then: revoke
+        - revoke:
+            thand: revoke
+            then: end
+        - denied:
+            thand: notify
+            with:
+              provider: email-test
+              to: ${ $context.identities // [$context.user.email] }
+              subject: "AWS Access Request Denied"
+              message: "Your access request has been denied."
+            then: end

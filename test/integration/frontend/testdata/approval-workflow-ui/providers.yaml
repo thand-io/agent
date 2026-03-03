@@ -28,14 +28,19 @@ providers:
       user: ""
       pass: ""
 
-  # OIDC provider for authentication
+  # OAuth2 provider for authentication via Keycloak (OIDC)
   oidc-test:
-    name: Test OIDC Provider
-    description: Mock OIDC provider for testing
-    provider: oidc
+    name: Keycloak OIDC Provider
+    description: OAuth2 provider backed by Keycloak for e2e testing
+    provider: oauth2
     enabled: true
     config:
-      issuer_url: "${OIDC_ISSUER_URL}"
-      client_id: test-client
-      client_secret: test-secret
-      redirect_uri: "${THAND_SERVER_URL}/api/v1/auth/callback/oidc-test"
+      client_id: thand-oidc
+      client_secret: thand-oidc-secret
+      auth_url: "${OIDC_ISSUER_URL}/protocol/openid-connect/auth"
+      token_url: "${OIDC_ISSUER_URL}/protocol/openid-connect/token"
+      scopes:
+        - openid
+        - profile
+        - email
+      redirect_url: "${THAND_SERVER_URL}/api/v1/auth/callback/oidc-test"

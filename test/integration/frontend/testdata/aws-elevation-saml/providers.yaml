@@ -26,6 +26,17 @@ providers:
       host: "${MAILHOG_HOST}"
       port: "${MAILHOG_PORT}"
       from: test@thand.io
-      # MailHog doesn't require authentication
       user: ""
       pass: ""
+
+  # SAML provider for authentication via Keycloak
+  saml-test:
+    name: Keycloak SAML Provider
+    description: SAML provider backed by Keycloak for e2e testing
+    provider: saml
+    enabled: true
+    config:
+      idp_metadata_url: "${SAML_IDP_METADATA_URL_INTERNAL}"
+      entity_id: "${THAND_SERVER_URL}"
+      root_url: "${THAND_SERVER_URL}"
+      sign_requests: false

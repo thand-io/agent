@@ -26,6 +26,22 @@ providers:
       host: "${MAILHOG_HOST}"
       port: "${MAILHOG_PORT}"
       from: test@thand.io
-      # MailHog doesn't require authentication
       user: ""
       pass: ""
+
+  # OAuth2 provider for authentication via Keycloak (OIDC)
+  oidc-test:
+    name: Keycloak OIDC Provider
+    description: OAuth2 provider backed by Keycloak for e2e testing
+    provider: oauth2
+    enabled: true
+    config:
+      client_id: thand-oidc
+      client_secret: thand-oidc-secret
+      auth_url: "${OIDC_ISSUER_URL}/protocol/openid-connect/auth"
+      token_url: "${OIDC_ISSUER_URL_INTERNAL}/protocol/openid-connect/token"
+      scopes:
+        - openid
+        - profile
+        - email
+      redirect_url: "${THAND_SERVER_URL}/api/v1/auth/callback/oidc-test"

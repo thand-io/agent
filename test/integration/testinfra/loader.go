@@ -12,7 +12,6 @@ import (
 	"github.com/hashicorp/go-version"
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
-	testcommon "github.com/thand-io/agent/test/integration/common"
 	"gopkg.in/yaml.v3"
 )
 
@@ -146,6 +145,10 @@ func (l *TestCaseLoader) loadWorkflows(testPath string) (map[string]models.Workf
 
 // substituteVariables replaces ${VAR} placeholders with actual values from infrastructure.
 func (l *TestCaseLoader) substituteVariables(content []byte) []byte {
+	if l.infra == nil {
+		return content
+	}
+
 	str := string(content)
 
 	// Parse MailHog host and port
@@ -158,12 +161,19 @@ func (l *TestCaseLoader) substituteVariables(content []byte) []byte {
 
 	// Define variable substitutions
 	substitutions := map[string]string{
-		"${LOCALSTACK_ENDPOINT}": l.infra.LocalStackEndpoint,
+		"${LOCALSTACK_ENDPOINT}":  l.infra.LocalStackEndpoint,
 		"${MAILHOG_HOST}":        mailhogHost,
 		"${MAILHOG_PORT}":        mailhogPort,
 		"${MAILHOG_SMTP}":        l.infra.MailHogSMTP,
 		"${MAILHOG_API}":         l.infra.MailHogAPI,
 		"${TEMPORAL_ENDPOINT}":   l.infra.TemporalEndpoint,
+	}
+
+	// Add Keycloak variables if available
+	if l.infra.KeycloakEndpoint != "" {
+		substitutions["${KEYCLOAK_ENDPOINT}"] = l.infra.KeycloakEndpoint
+		substitutions["${OIDC_ISSUER_URL}"] = l.infra.KeycloakOIDCIssuerURL()
+		substitutions["${SAML_IDP_METADATA_URL}"] = l.infra.KeycloakSAMLMetadataURL()
 	}
 
 	for placeholder, value := range substitutions {
@@ -206,7 +216,7 @@ func (l *TestCaseLoader) CreateConfigFromTestCase(tc *TestCase) (*config.Config,
 	if err != nil {
 		// If no port in endpoint, use full endpoint as host with default port
 		host = l.infra.TemporalEndpoint
-		portStr = testcommon.TemporalDefaultPort
+		portStr = TemporalDefaultPort
 	}
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
@@ -216,7 +226,7 @@ func (l *TestCaseLoader) CreateConfigFromTestCase(tc *TestCase) (*config.Config,
 	cfg.Services.Temporal = &models.TemporalConfig{
 		Host:              host,
 		Port:              port,
-		Namespace:         testcommon.TemporalTestNamespace,
+		Namespace:         TemporalTestNamespace,
 		DisableVersioning: true, // Disable versioning for integration tests
 	}
 
