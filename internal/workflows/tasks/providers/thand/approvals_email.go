@@ -20,17 +20,17 @@ func (a *approvalsNotifier) createApprovalEmailBody() (string, string) {
 	plainText.WriteString("A user has requested elevated access and requires your approval.\n\n")
 
 	if elevateRequest.User != nil {
-		plainText.WriteString(fmt.Sprintf("Requested by: %s", elevateRequest.User.Name))
+		fmt.Fprintf(&plainText, "Requested by: %s", elevateRequest.User.Name)
 		if len(elevateRequest.User.Email) > 0 {
-			plainText.WriteString(fmt.Sprintf(" (%s)", elevateRequest.User.Email))
+			fmt.Fprintf(&plainText, " (%s)", elevateRequest.User.Email)
 		}
 		plainText.WriteString("\n\n")
 	}
 
 	if elevateRequest.Role != nil {
-		plainText.WriteString(fmt.Sprintf("Role: %s\n", elevateRequest.Role.Name))
+		fmt.Fprintf(&plainText, "Role: %s\n", elevateRequest.Role.Name)
 		if len(elevateRequest.Role.Description) > 0 {
-			plainText.WriteString(fmt.Sprintf("Description: %s\n", elevateRequest.Role.Description))
+			fmt.Fprintf(&plainText, "Description: %s\n", elevateRequest.Role.Description)
 		}
 	}
 
@@ -45,15 +45,15 @@ func (a *approvalsNotifier) createApprovalEmailBody() (string, string) {
 			}
 		}
 
-		plainText.WriteString(fmt.Sprintf("Providers: %s\n", strings.Join(providerNames, ", ")))
+		fmt.Fprintf(&plainText, "Providers: %s\n", strings.Join(providerNames, ", "))
 	}
 
 	if len(elevateRequest.Duration) > 0 {
-		plainText.WriteString(fmt.Sprintf("Duration: %s\n", elevateRequest.Duration))
+		fmt.Fprintf(&plainText, "Duration: %s\n", elevateRequest.Duration)
 	}
 
 	if len(elevateRequest.Reason) > 0 {
-		plainText.WriteString(fmt.Sprintf("Reason: %s\n", elevateRequest.Reason))
+		fmt.Fprintf(&plainText, "Reason: %s\n", elevateRequest.Reason)
 	}
 
 	if len(elevateRequest.Tenants) > 0 {
@@ -74,7 +74,7 @@ func (a *approvalsNotifier) createApprovalEmailBody() (string, string) {
 		}
 
 		if len(tenantNames) > 0 {
-			plainText.WriteString(fmt.Sprintf("Tenants: %s\n", strings.Join(tenantNames, ", ")))
+			fmt.Fprintf(&plainText, "Tenants: %s\n", strings.Join(tenantNames, ", "))
 		}
 	}
 
@@ -92,11 +92,11 @@ func (a *approvalsNotifier) createApprovalEmailBody() (string, string) {
 		for _, identity := range elevateRequest.Identities {
 
 			if resolved, ok := resolvedIdentities[identity]; ok {
-				plainText.WriteString(fmt.Sprintf("- %s\n", resolved.String()))
+				fmt.Fprintf(&plainText, "- %s\n", resolved.String())
 				continue
 			}
 
-			plainText.WriteString(fmt.Sprintf("- %s\n", identity))
+			fmt.Fprintf(&plainText, "- %s\n", identity)
 		}
 	}
 
@@ -104,23 +104,23 @@ func (a *approvalsNotifier) createApprovalEmailBody() (string, string) {
 		plainText.WriteString("\nPermissions:\n")
 		if len(elevateRequest.Role.Permissions.Allow) > 0 {
 			plainText.WriteString("Allowed:\n")
-			for _, stmt := range elevateRequest.Role.Permissions.Allow {
+			for _, stmt := range sortedStatementsWithSortedFields(elevateRequest.Role.Permissions.Allow) {
 				if len(stmt.Operations) > 0 {
-					plainText.WriteString(fmt.Sprintf("- Operations: %s\n", strings.Join(stmt.Operations, ", ")))
+					fmt.Fprintf(&plainText, "- Operations: %s\n", strings.Join(stmt.Operations, ", "))
 				}
 				if len(stmt.Targets) > 0 {
-					plainText.WriteString(fmt.Sprintf("  Targets: %s\n", strings.Join(stmt.Targets, ", ")))
+					fmt.Fprintf(&plainText, "  Targets: %s\n", strings.Join(stmt.Targets, ", "))
 				}
 			}
 		}
 		if len(elevateRequest.Role.Permissions.Deny) > 0 {
 			plainText.WriteString("Denied:\n")
-			for _, stmt := range elevateRequest.Role.Permissions.Deny {
+			for _, stmt := range sortedStatementsWithSortedFields(elevateRequest.Role.Permissions.Deny) {
 				if len(stmt.Operations) > 0 {
-					plainText.WriteString(fmt.Sprintf("- Operations: %s\n", strings.Join(stmt.Operations, ", ")))
+					fmt.Fprintf(&plainText, "- Operations: %s\n", strings.Join(stmt.Operations, ", "))
 				}
 				if len(stmt.Targets) > 0 {
-					plainText.WriteString(fmt.Sprintf("  Targets: %s\n", strings.Join(stmt.Targets, ", ")))
+					fmt.Fprintf(&plainText, "  Targets: %s\n", strings.Join(stmt.Targets, ", "))
 				}
 			}
 		}
@@ -158,8 +158,8 @@ func (a *approvalsNotifier) createApprovalEmailBody() (string, string) {
 		// Add permissions if available (includes targets formerly in groups/resources)
 		if len(elevateRequest.Role.Permissions.Allow) > 0 || len(elevateRequest.Role.Permissions.Deny) > 0 {
 			data["Permissions"] = map[string]any{
-				"Allow": elevateRequest.Role.Permissions.Allow,
-				"Deny":  elevateRequest.Role.Permissions.Deny,
+				"Allow": sortedStatementsWithSortedFields(elevateRequest.Role.Permissions.Allow),
+				"Deny":  sortedStatementsWithSortedFields(elevateRequest.Role.Permissions.Deny),
 			}
 		}
 	}
@@ -199,7 +199,7 @@ func (a *approvalsNotifier) createApprovalEmailBody() (string, string) {
 			actionMessage = fmt.Sprintf("Action Required:\n%d more approvals are needed (%d of %d received). Please review the request and choose an action.", remainingApprovals, approvedCount, notifyReq.Approvals)
 		}
 
-		plainText.WriteString(fmt.Sprintf("\n%s\n\n", actionMessage))
+		fmt.Fprintf(&plainText, "\n%s\n\n", actionMessage)
 
 		// Add action buttons with URLs
 		if remainingApprovals > 0 {
@@ -207,9 +207,9 @@ func (a *approvalsNotifier) createApprovalEmailBody() (string, string) {
 			denyURL := a.createCallbackUrl(workflowTask, notifyReq, false)
 			viewRequestURL := a.createViewRequestUrl(workflowTask)
 
-			plainText.WriteString(fmt.Sprintf("Approve: %s\n", approveURL))
-			plainText.WriteString(fmt.Sprintf("Deny: %s\n", denyURL))
-			plainText.WriteString(fmt.Sprintf("View Request: %s\n", viewRequestURL))
+			fmt.Fprintf(&plainText, "Approve: %s\n", approveURL)
+			fmt.Fprintf(&plainText, "Deny: %s\n", denyURL)
+			fmt.Fprintf(&plainText, "View Request: %s\n", viewRequestURL)
 
 			// Add URLs to template data
 			data["ActionMessage"] = actionMessage
