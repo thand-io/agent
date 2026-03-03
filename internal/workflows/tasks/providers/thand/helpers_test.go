@@ -52,11 +52,13 @@ func TestSortedStatementsWithSortedFields(t *testing.T) {
 	t.Run("nil input returns empty slice", func(t *testing.T) {
 		result := sortedStatementsWithSortedFields(nil)
 		assert.Empty(t, result)
+		assert.IsType(t, models.RoleStatements{}, result)
 	})
 
 	t.Run("empty input returns empty slice", func(t *testing.T) {
 		result := sortedStatementsWithSortedFields(models.RoleStatements{})
 		assert.Empty(t, result)
+		assert.IsType(t, models.RoleStatements{}, result)
 	})
 
 	t.Run("single statement returned with sorted fields", func(t *testing.T) {
@@ -105,6 +107,39 @@ func TestSortedStatementsWithSortedFields(t *testing.T) {
 		}
 		result := sortedStatementsWithSortedFields(stmts)
 		assert.Equal(t, []string{"arn:aws:s3:::a-bucket/*", "arn:aws:s3:::m-bucket/*", "arn:aws:s3:::z-bucket/*"}, result[0].Targets)
+	})
+
+	t.Run("statements sharing first operation are sorted by remaining operations then targets", func(t *testing.T) {
+		// Fields within each statement are sorted first, then statements are sorted.
+		// Input operations after per-statement field sort:
+		//   stmt A: ["s3:GetObject", "s3:PutObject"]    (was {"s3:GetObject","s3:PutObject"})
+		//   stmt B: ["s3:DeleteObject", "s3:GetObject"] (was {"s3:GetObject","s3:DeleteObject"})
+		//   stmt C: ["s3:GetObject"]                    (was {"s3:GetObject"})
+		// Statement sort order:
+		//   stmt B first  — "s3:DeleteObject" < "s3:GetObject"
+		//   then stmt C   — "s3:GetObject" (len 1) < "s3:GetObject"+"s3:PutObject" (len 2)
+		//   then stmt A
+		stmts := models.RoleStatements{
+			{Operations: []string{"s3:GetObject", "s3:PutObject"}, Targets: []string{"bucket-b"}},
+			{Operations: []string{"s3:GetObject", "s3:DeleteObject"}, Targets: []string{"bucket-a"}},
+			{Operations: []string{"s3:GetObject"}, Targets: []string{"bucket-z"}},
+		}
+		result := sortedStatementsWithSortedFields(stmts)
+		assert.Equal(t, []string{"s3:DeleteObject", "s3:GetObject"}, result[0].Operations)
+		assert.Equal(t, []string{"s3:GetObject"}, result[1].Operations)
+		assert.Equal(t, []string{"s3:GetObject", "s3:PutObject"}, result[2].Operations)
+	})
+
+	t.Run("statements with identical operations are sorted by targets", func(t *testing.T) {
+		stmts := models.RoleStatements{
+			{Operations: []string{"s3:GetObject"}, Targets: []string{"bucket-c"}},
+			{Operations: []string{"s3:GetObject"}, Targets: []string{"bucket-a"}},
+			{Operations: []string{"s3:GetObject"}, Targets: []string{"bucket-b"}},
+		}
+		result := sortedStatementsWithSortedFields(stmts)
+		assert.Equal(t, []string{"bucket-a"}, result[0].Targets)
+		assert.Equal(t, []string{"bucket-b"}, result[1].Targets)
+		assert.Equal(t, []string{"bucket-c"}, result[2].Targets)
 	})
 
 	t.Run("statement with no operations sorts before one with operations", func(t *testing.T) {
