@@ -8,7 +8,7 @@ providers:
     enabled: true
     config:
       region: us-east-1
-      endpoint: "${LOCALSTACK_ENDPOINT}"
+      endpoint: "${ .LOCALSTACK_ENDPOINT }"
       access_key_id: test
       secret_access_key: test
       account_id: "000000000000"
@@ -23,8 +23,8 @@ providers:
     enabled: true
     config:
       platform: smtp
-      host: "${MAILHOG_HOST}"
-      port: "${MAILHOG_PORT}"
+      host: "${ .MAILHOG_HOST }"
+      port: "${ .MAILHOG_PORT }"
       from: test@thand.io
       user: ""
       pass: ""
@@ -36,7 +36,7 @@ providers:
     provider: saml
     enabled: true
     config:
-      idp_metadata_url: "${SAML_IDP_METADATA_URL_INTERNAL}"
-      entity_id: "${THAND_SERVER_URL}"
-      root_url: "${THAND_SERVER_URL}"
+      idp_metadata_url: "${ .SAML_IDP_METADATA_URL_INTERNAL }"
+      entity_id: "${ .THAND_SERVER_URL }"
+      root_url: "${ .THAND_SERVER_URL }"
       sign_requests: false

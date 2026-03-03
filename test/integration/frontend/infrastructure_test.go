@@ -36,6 +36,10 @@ type UITestInfrastructure struct {
 	ThandAPIEndpoint  string
 	allocatedHostPort int // pre-allocated host port for deterministic URLs
 
+	// providerEnvVars are injected into the server container so that ResolveConfig
+	// can substitute ${ .VARNAME } jq expressions in provider definition YAML files.
+	providerEnvVars map[string]string
+
 	// Config directory for Thand server definitions
 	configDir string
 }
@@ -122,41 +126,37 @@ func (infra *UITestInfrastructure) createConfigDir(t *testing.T, testCase *TestC
 		mailhogPort = smtpParts[1]
 	}
 
-	replacements := map[string]string{
-		"${LOCALSTACK_ENDPOINT}": localStackEndpoint,
-		"${MAILHOG_HOST}":        mailhogHost,
-		"${MAILHOG_PORT}":        mailhogPort,
-		"${TEMPORAL_ENDPOINT}":   strings.ReplaceAll(infra.TestInfrastructure.TemporalEndpoint, "localhost", "host.docker.internal"),
+	// Compute endpoint values and store them for injection into the server container.
+	// ResolveConfig reads os.Environ() and resolves ${ .VARNAME } jq expressions in YAML files.
+	// host.docker.internal URLs are server-side (inside container).
+	// localhost URLs are browser-facing (navigated by the test's chromedp browser).
+	temporalEndpointInternal := strings.ReplaceAll(infra.TestInfrastructure.TemporalEndpoint, "localhost", "host.docker.internal")
+
+	infra.providerEnvVars = map[string]string{
+		"LOCALSTACK_ENDPOINT": localStackEndpoint,
+		"MAILHOG_HOST":        mailhogHost,
+		"MAILHOG_PORT":        mailhogPort,
+		"TEMPORAL_ENDPOINT":   temporalEndpointInternal,
 	}
 
-	// Add Keycloak URLs if available.
-	// Browser-facing URLs use localhost (the host can reach mapped ports directly).
-	// Server-facing URLs use host.docker.internal (the container can reach host-mapped ports).
 	if infra.TestInfrastructure.KeycloakEndpoint != "" {
-		keycloakInternal := strings.ReplaceAll(infra.TestInfrastructure.KeycloakEndpoint, "localhost", "host.docker.internal")
-		replacements["${KEYCLOAK_ENDPOINT}"] = keycloakInternal
-
-		// OIDC: auth_url is browser-facing (localhost), token_url is server-facing (host.docker.internal)
 		oidcIssuerBrowser := infra.TestInfrastructure.KeycloakOIDCIssuerURL() // already localhost
 		oidcIssuerInternal := strings.ReplaceAll(oidcIssuerBrowser, "localhost", "host.docker.internal")
-		replacements["${OIDC_ISSUER_URL}"] = oidcIssuerBrowser
-		replacements["${OIDC_ISSUER_URL_INTERNAL}"] = oidcIssuerInternal
-
-		// SAML: metadata is fetched server-side (internal), but login redirect is browser-facing
 		samlMetaBrowser := infra.TestInfrastructure.KeycloakSAMLMetadataURL()
 		samlMetaInternal := strings.ReplaceAll(samlMetaBrowser, "localhost", "host.docker.internal")
-		replacements["${SAML_IDP_METADATA_URL}"] = samlMetaBrowser
-		replacements["${SAML_IDP_METADATA_URL_INTERNAL}"] = samlMetaInternal
+		infra.providerEnvVars["OIDC_ISSUER_URL"] = oidcIssuerBrowser
+		infra.providerEnvVars["OIDC_ISSUER_URL_INTERNAL"] = oidcIssuerInternal
+		infra.providerEnvVars["SAML_IDP_METADATA_URL"] = samlMetaBrowser
+		infra.providerEnvVars["SAML_IDP_METADATA_URL_INTERNAL"] = samlMetaInternal
 	}
 
-	// Set THAND_SERVER_URL using the pre-allocated port.
-	// Use host.docker.internal so the server container can reach itself via this URL if needed.
-	// The redirect_url will use this — the browser receives it from Keycloak and navigates to it.
-	// On macOS Docker Desktop, host.docker.internal resolves to 127.0.0.1 from the host too.
+	// THAND_SERVER_URL uses localhost — the browser navigates here after Keycloak redirect.
 	if infra.allocatedHostPort > 0 {
-		replacements["${THAND_SERVER_URL}"] = fmt.Sprintf("http://localhost:%d", infra.allocatedHostPort)
+		infra.providerEnvVars["THAND_SERVER_URL"] = fmt.Sprintf("http://localhost:%d", infra.allocatedHostPort)
 	}
 
+	// Copy definition files verbatim — no string substitution needed.
+	// Values are injected as container env vars; ResolveConfig expands ${ .VARNAME } at startup.
 	for _, fp := range []struct{ src, dst string }{
 		{"providers.yaml", "providers.yaml"},
 		{"roles.yaml", "roles.yaml"},
@@ -171,24 +171,11 @@ func (infra *UITestInfrastructure) createConfigDir(t *testing.T, testCase *TestC
 			continue
 		}
 
-		contentStr := string(content)
-		for placeholder, value := range replacements {
-			contentStr = strings.ReplaceAll(contentStr, placeholder, value)
-		}
-
-		err = os.WriteFile(dstPath, []byte(contentStr), 0644)
+		err = os.WriteFile(dstPath, content, 0644)
 		require.NoError(t, err, "Failed to write %s", fp.dst)
-
-		// Debug: log any remaining unresolved placeholders
-		if strings.Contains(contentStr, "${") {
-			t.Logf("WARNING: Unresolved placeholders remain in %s", fp.dst)
-		}
-		if fp.dst == "providers.yaml" {
-			t.Logf("DEBUG providers.yaml content:\n%s", contentStr)
-		}
 	}
 
-	t.Logf("Copied and interpolated config files from %s", testdataPath)
+	t.Logf("Copied config files from %s", testdataPath)
 }
 
 // startThandServer starts the Thand server in an Alpine container.
@@ -239,8 +226,6 @@ login:
 server:
   host: 0.0.0.0
   port: %s
-  tls:
-    enabled: false
   security:
     cors:
       allowed_origins:
@@ -291,18 +276,26 @@ workflows:
 		}
 	}
 
+	// Build container env: Thand config vars + provider interpolation vars.
+	// Provider vars are read by ResolveConfig (via os.Environ) to substitute
+	// ${ .VARNAME } jq expressions in the definition YAML files.
+	containerEnv := map[string]string{
+		"THAND_MODE":               "server",
+		"THAND_TEMPORAL_ENDPOINT":  temporalEndpoint,
+		"THAND_TEMPORAL_NAMESPACE": testinfra.TemporalTestNamespace,
+	}
+	for k, v := range infra.providerEnvVars {
+		containerEnv[k] = v
+	}
+
 	req := testcontainers.ContainerRequest{
 		Image: "alpine:latest",
 		Cmd: []string{
 			"/app/agent", "server", "--config", "/app/config.yaml",
 		},
 		ExposedPorts: []string{ThandServerPort + "/tcp"},
-		Env: map[string]string{
-			"THAND_MODE":               "server",
-			"THAND_TEMPORAL_ENDPOINT":  temporalEndpoint,
-			"THAND_TEMPORAL_NAMESPACE": testinfra.TemporalTestNamespace,
-		},
-		Files: containerFiles,
+		Env:          containerEnv,
+		Files:        containerFiles,
 		// Forward container stdout/stderr to test log for diagnostics
 		LogConsumerCfg: &testcontainers.LogConsumerConfig{
 			Consumers: []testcontainers.LogConsumer{

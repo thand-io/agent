@@ -8,7 +8,7 @@ providers:
     enabled: true
     config:
       region: us-east-1
-      endpoint: "${LOCALSTACK_ENDPOINT}"
+      endpoint: "${ .LOCALSTACK_ENDPOINT }"
       access_key_id: test
       secret_access_key: test
       account_id: "000000000000"
@@ -23,8 +23,8 @@ providers:
     enabled: true
     config:
       platform: smtp
-      host: "${MAILHOG_HOST}"
-      port: "${MAILHOG_PORT}"
+      host: "${ .MAILHOG_HOST }"
+      port: "${ .MAILHOG_PORT }"
       from: test@thand.io
       user: ""
       pass: ""
@@ -38,10 +38,10 @@ providers:
     config:
       client_id: thand-oidc
       client_secret: thand-oidc-secret
-      auth_url: "${OIDC_ISSUER_URL}/protocol/openid-connect/auth"
-      token_url: "${OIDC_ISSUER_URL}/protocol/openid-connect/token"
+      auth_url: '${ .OIDC_ISSUER_URL + "/protocol/openid-connect/auth" }'
+      token_url: '${ .OIDC_ISSUER_URL_INTERNAL + "/protocol/openid-connect/token" }'
       scopes:
         - openid
         - profile
         - email
-      redirect_url: "${THAND_SERVER_URL}/api/v1/auth/callback/oidc-test"
+      redirect_url: '${ .THAND_SERVER_URL + "/api/v1/auth/callback/oidc-test" }'
