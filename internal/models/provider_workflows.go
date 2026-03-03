@@ -103,6 +103,11 @@ func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 		"provider": providerID,
 	}).Debug("Starting synchronization")
 
+	// patchFutures collects the upstream-patch activity futures so that patch
+	// calls do not block page iteration — we drain them after all pages are
+	// fetched.
+	var patchFutures []workflow.Future
+
 	for {
 
 		var resp Resp
@@ -126,21 +131,15 @@ func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 			return err
 		}
 
-		err = workflow.ExecuteLocalActivity(
+		// Fire the patch activity without blocking; collect the future for
+		// later resolution so pagination can proceed immediately.
+		patchFutures = append(patchFutures, workflow.ExecuteLocalActivity(
 			ctx,
 			TemporalPatchProviderUpstreamActivityName,
 			activityMethod,
 			providerID,
 			resp,
-		).Get(ctx, nil)
-
-		if err != nil {
-			logrus.WithFields(logrus.Fields{
-				"provider": providerID,
-				"error":    err,
-			}).Error("Error patching synchronization results upstream")
-			return err
-		}
+		))
 
 		pagination := resp.GetPagination()
 
@@ -150,6 +149,17 @@ func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 
 		req.SetPagination(pagination)
 
+	}
+
+	// Drain all patch futures now that every page has been fetched.
+	for _, f := range patchFutures {
+		if err := f.Get(ctx, nil); err != nil {
+			logrus.WithFields(logrus.Fields{
+				"provider": providerID,
+				"error":    err,
+			}).Error("Error patching synchronization results upstream")
+			return err
+		}
 	}
 
 	logrus.WithFields(logrus.Fields{

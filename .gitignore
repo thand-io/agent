@@ -48,6 +48,7 @@ Thumbs.db
 *.iml
 *.sublime-project
 *.sublime-workspace
+.vscode/settings.json
 
 # Environment variables
 .env

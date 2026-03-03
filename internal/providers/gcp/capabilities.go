@@ -4,10 +4,7 @@ import "github.com/thand-io/agent/internal/models"
 
 var GcpCapabilities = models.NewProviderCapabilities().
 	WithDefaultIdentitiesConfiguration().
-	WithRolesConfiguration(models.RolesConfiguration{
-		Enabled:        true,
-		Synchronizable: false,
-	}).
+	WithDefaultRolesConfiguration().
 	WithPermissionsConfiguration(models.PermissionsConfiguration{
 		SynchronizableConfiguration: models.SynchronizableConfiguration{
 			Enabled:        true,
