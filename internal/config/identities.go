@@ -417,10 +417,11 @@ func (c *Config) GetIdentitiesWithFilter(
 					}
 
 					identityMap[mappableIdentifier] = models.SearchResult[models.Identity]{
-						Result: applyResult,
-						Score:  identityResult.Score,
-						ID:     identityResult.ID,
-						Reason: identityResult.Reason,
+						Result:     applyResult,
+						Score:      identityResult.Score,
+						ID:         identityResult.ID,
+						Reason:     identityResult.Reason,
+						Highlights: identityResult.Highlights,
 					}
 				}
 

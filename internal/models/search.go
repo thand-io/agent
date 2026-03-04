@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 
 	"github.com/blevesearch/bleve/v2"
@@ -42,10 +43,11 @@ func (sr *SearchRequest) IsEmpty() bool {
 }
 
 type SearchResult[T any] struct {
-	ID     string  `json:"_id,omitempty"`
-	Score  float64 `json:"_score,omitempty"`
-	Reason string  `json:"_reason,omitempty"`
-	Result T       `json:"_source"`
+	ID         string              `json:"_id,omitempty"`
+	Score      float64             `json:"_score,omitempty"`
+	Reason     string              `json:"_reason,omitempty"`
+	Highlights map[string][]string `json:"_highlights,omitempty"`
+	Result     T                   `json:"_source"`
 }
 
 func ReturnSearchResults[T any](items []T) []SearchResult[T] {
@@ -118,9 +120,19 @@ func BleveListSearch[T any](
 		searchRequest.Size = math.MaxInt32 // 0 means unlimited
 	}
 
+	// Enable location tracking so we can report which fields matched
+	searchRequest.IncludeLocations = true
+
 	searchResults, err := searchIndex.Search(searchRequest)
 	if err != nil {
 		return nil, fmt.Errorf("search failed: %w", err)
+	}
+
+	// trivialSearchFields suppresses raw technical key fields and the primary
+	// display label from _highlights. id/identifier are internal keys; label
+	// is the main visible text in the dropdown so it's redundant as a hint.
+	trivialSearchFields := map[string]struct{}{
+		"id": {}, "identifier": {}, "label": {},
 	}
 
 	// Convert search results back to typed items
@@ -134,8 +146,52 @@ func BleveListSearch[T any](
 					Result: item,
 				}
 
-				if hit.Expl != nil {
-					found.Reason = hit.Expl.Message
+				// Build highlights: for each non-trivial field that Bleve matched,
+				// collect the actual indexed tokens from the TermLocationMap inner keys.
+				// hit.Locations is FieldTermLocationMap = map[field]map[indexedToken][]Location.
+				// The inner map key is the analysed token stored in the index (e.g.
+				// "administratoraccess"), not the raw query string (e.g. "admin").
+				// This mirrors Elasticsearch _highlight behaviour.
+				if len(hit.Locations) > 0 {
+					highlights := make(map[string][]string)
+					var nonTrivialFieldNames []string
+
+					// Use the raw Bleve field name as the highlight key.
+					// Friendly label mapping is left to the UI.
+					for field, termLocMap := range hit.Locations {
+						lower := strings.ToLower(field)
+						if _, isTrivial := trivialSearchFields[lower]; isTrivial {
+							continue
+						}
+						// Deduplicate indexed tokens for this field.
+						seenTok := make(map[string]struct{})
+						var tokens []string
+						for tok := range termLocMap {
+							if _, seen := seenTok[tok]; !seen {
+								tokens = append(tokens, tok)
+								seenTok[tok] = struct{}{}
+							}
+						}
+						sort.Strings(tokens)
+						highlights[lower] = tokens
+						nonTrivialFieldNames = append(nonTrivialFieldNames, lower)
+					}
+
+					if len(highlights) > 0 {
+						found.Highlights = highlights
+						sort.Strings(nonTrivialFieldNames)
+						// Build a human-readable reason: "inherits: "administratoraccess" · permissions: "ec2""
+						var reasonParts []string
+						for _, f := range nonTrivialFieldNames {
+							toks := highlights[f]
+							quoted := make([]string, len(toks))
+							for i, t := range toks {
+								quoted[i] = `"` + t + `"`
+							}
+							reasonParts = append(reasonParts, f+": "+strings.Join(quoted, ", "))
+						}
+						found.Reason = strings.Join(reasonParts, " · ")
+					}
 				}
 
 				matched = append(matched, found)

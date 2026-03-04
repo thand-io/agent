@@ -10,6 +10,9 @@
                 <h1>Elevate Request</h1>
                 <p>Choose your elevation method to proceed with privilege escalation.</p>
             </div>
+
+            {{template "session_warning" .}}
+
             <div class="elevate-methods">
                 {{if .Config.Server.Capabilities.Elevations.Static.Enabled}}
                 <div class="method-option">
@@ -100,9 +103,6 @@
                         Elevating as: 
                         <span x-text="$store.auth.user?.name || '{{.User.Name}}'"></span>
                         (<span x-text="$store.auth.user?.email || '{{.User.Email}}'"></span>)
-                    </p>
-                    <p x-show="$store.auth.loaded && !$store.auth.hasActiveSessions" style="color: hsl(var(--destructive)); margin-top: 0.5rem;">
-                        ⚠️ No active sessions. Please authenticate first.
                     </p>
                     <a href="/auth" class="button button-primary">Change User</a>
                 </div>

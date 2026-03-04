@@ -40,6 +40,27 @@
         background-color: #6b7280;
         color: white;
     }
+
+    /* Match hint shown below role/identity label when the search matched a non-obvious field */
+    .search-match-hint {
+        display: block;
+        font-size: 0.72em;
+        color: #888;
+        margin-top: 2px;
+        font-style: italic;
+    }
+    .search-match-hint mark.search-match-term {
+        background: rgba(250, 200, 50, 0.35);
+        color: inherit;
+        border-radius: 2px;
+        padding: 0 2px;
+        font-style: normal;
+        font-weight: 600;
+    }
+    /* Hide the match hint inside selected chips — only show it in the dropdown */
+    .choices__list--multiple .choices__item .search-match-hint {
+        display: none;
+    }
 </style>
 
 <main>
@@ -363,6 +384,7 @@
                 searchResultLimit: 50,
                 searchFields: ['label', 'value'],
                 duplicateItemsAllowed: false,
+                allowHTML: true,
             });
 
             // Initialize Choices.js for roles select
@@ -378,6 +400,7 @@
                 // Disable client-side search - we'll handle it via backend
                 searchFloor: 0,
                 searchChoices: false,
+                allowHTML: true,
             });
 
             // Disable roles selector initially (no provider selected)
@@ -530,6 +553,27 @@
         }
 
         /**
+         * Build a match hint HTML span from a SearchResult's _highlights.
+         * Returns an empty string when there are no non-trivial highlights.
+         * Format mirrors Elasticsearch: { field: [terms] }
+         * e.g. { "inherits": ["AdministratorAccess"], "permissions": ["ec2:Describe"] }
+         */
+        function buildMatchHint(item) {
+            const highlights = item._highlights;
+            if (!highlights || typeof highlights !== 'object') return '';
+
+            const parts = Object.entries(highlights).map(([field, terms]) => {
+                const termList = (Array.isArray(terms) ? terms : [terms])
+                    .map(t => `<mark class="search-match-term">${escapeHtml(t)}</mark>`)
+                    .join(', ');
+                return `${escapeHtml(field)}: ${termList}`;
+            });
+
+            if (parts.length === 0) return '';
+            return `<span class="search-match-hint">${parts.join(' &middot; ')}</span>`;
+        }
+
+        /**
          * Parse the identities API response into Choices.js format
          * @param {Object} data - API response data
          * @returns {Array} Formatted choices array
@@ -538,11 +582,11 @@
             const choices = [];
 
             if (Array.isArray(identities)) {
-                identities.forEach(identity => {
-                    
-                    if ('_source' in identity) {
-                        identity = identity._source;
-                    }
+                identities.forEach(item => {
+                    // Build match hint from _highlights before unwrapping the SearchResult envelope
+                    const matchHint = buildMatchHint(item);
+
+                    const identity = ('_source' in item) ? item._source : item;
 
                     const type = identity.user ? 'user' : (identity.group ? 'group' : 'unknown');
 
@@ -554,8 +598,8 @@
                         var title = identity.id;
                     }
 
-                    const label = identity.label 
-                        ? `${identity.label} (${title})` 
+                    let label = identity.label + matchHint
+                        ? `${identity.label} (${title})`  + matchHint
                         : identity.id;
 
                     choices.push({
@@ -888,14 +932,21 @@
                             this.roles[roleKey] = roleResponse;
                         });
 
-                        // Convert roles object to Choices.js format
-                        const roleChoices = Object.keys(this.roles).map(key => {
-                            const role = this.roles[key].role || this.roles[key];
+                        // Convert roles to Choices.js format, appending a match hint when the
+                        // search hit a field not visible in the label (e.g. permissions, inherits).
+                        const roleChoices = rawRoles.map(item => {
+                            const role = item._source?.role || item._source;
+                            const key = item._source?.identifier || item._id;
+                            let label = role?.name || key;
+                            const matchHint = buildMatchHint(item);
+                            if (matchHint) {
+                                label += matchHint;
+                            }
                             return {
                                 value: key,
-                                label: role.name || key,
+                                label: label,
                                 customProperties: {
-                                    description: role.description || ''
+                                    description: role?.description || ''
                                 }
                             };
                         });
@@ -971,21 +1022,20 @@
                         const data = await response.json();
                         const rawTenants = data.tenants || [];
 
-                        // Normalize tenants into an object map
+                        // Normalize tenants into an object map (for Alpine state / preselectTenant)
                         const tenantsMap = {};
                         rawTenants.forEach((tenant, index) => {
-                            if (tenant._source) {
-                                tenant = tenant._source;
-                            }
-                            const key = tenant.id || tenant.key || tenant.name || String(index);
-                            tenantsMap[key] = tenant;
+                            const src = tenant._source || tenant;
+                            const key = src.id || src.key || src.name || String(index);
+                            tenantsMap[key] = src;
                         });
 
                         this.tenants = tenantsMap;
 
-                        // Convert tenants map to Choices.js format
-                        const tenantChoices = Object.keys(this.tenants).map(key => {
-                            const tenant = this.tenants[key];
+                        // Build Choices.js options from rawTenants so _highlights is preserved
+                        const tenantChoices = rawTenants.map((item, index) => {
+                            const matchHint = buildMatchHint(item);
+                            const tenant = item._source || item;
                             const type = tenant.type || '';
                             let icon = '';
                             if (type) {
@@ -993,14 +1043,17 @@
                                 const typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
                                 icon = `<span class="tenant-type-icon ${typeClass}" title="${escapeHtml(type)}">${typeLabel}</span> `;
                             }
+                            const key = tenant.id || tenant.key || tenant.name || String(index);
                             const name = tenant.name || key;
                             const idSuffix = tenant.name ? ` (${escapeHtml(key)})` : '';
+                            let label = icon + escapeHtml(name) + idSuffix;
+                            if (matchHint) {
+                                label += matchHint;
+                            }
                             return {
                                 value: key,
-                                label: icon + escapeHtml(name) + idSuffix,
-                                customProperties: {
-                                    type: type
-                                }
+                                label: label,
+                                customProperties: { type: type }
                             };
                         });
 
