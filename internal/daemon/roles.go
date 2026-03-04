@@ -62,22 +62,22 @@ func (s *Server) getRoles(c *gin.Context) {
 	limit := parseSearchLimit(c.Query("limit"), 10)
 
 	// Get and filter roles
-	var filteredRoles []models.RoleResponse
+	var searchedRoles []models.SearchResult[models.RoleResponse]
 
 	if len(query) > 0 {
-		filteredRoles, err = s.searchAndFilterRoles(c, query, limit, providers, foundAuthenticator, foundSession)
+		searchedRoles, err = s.searchAndFilterRoles(c, query, limit, providers, foundAuthenticator, foundSession)
 		if err != nil {
 			s.getErrorPage(c, http.StatusInternalServerError, "Failed to search roles", err)
 			return
 		}
 	} else {
-		filteredRoles = s.filterAllRoles(providers, foundAuthenticator, foundSession)
+		searchedRoles = s.filterAllRoles(providers, foundAuthenticator, foundSession)
 	}
 
 	// Build and render response
 	response := models.RolesResponse{
 		Version: version.Must(version.NewVersion("1.0.0")),
-		Roles:   models.ReturnSearchResults(filteredRoles),
+		Roles:   searchedRoles,
 	}
 	s.renderRolesResponse(c, response)
 }
@@ -102,7 +102,7 @@ func parseSearchLimit(limitStr string, defaultLimit int) int {
 }
 
 // searchAndFilterRoles searches roles and applies filters
-func (s *Server) searchAndFilterRoles(c *gin.Context, query string, limit int, providers []string, authenticatorProvider string, authenticatedUser *models.Session) ([]models.RoleResponse, error) {
+func (s *Server) searchAndFilterRoles(c *gin.Context, query string, limit int, providers []string, authenticatorProvider string, authenticatedUser *models.Session) ([]models.SearchResult[models.RoleResponse], error) {
 	searchRequest := &models.SearchRequest{
 		Limit: limit,
 		Terms: []string{query},
@@ -115,38 +115,38 @@ func (s *Server) searchAndFilterRoles(c *gin.Context, query string, limit int, p
 		return nil, err
 	}
 
-	// Filter search results
-	var filteredRoles []models.RoleResponse
+	// Filter search results, preserving the full SearchResult wrapper so that
+	// _reason, _score and _id are included in the API response.
+	var filtered []models.SearchResult[models.RoleResponse]
 	for _, result := range searchResults {
-		role := result.Result
-		if s.shouldIncludeRole(role, providers, authenticatorProvider, authenticatedUser) {
-			filteredRoles = append(filteredRoles, role)
+		if s.shouldIncludeRole(result.Result, providers, authenticatorProvider, authenticatedUser) {
+			filtered = append(filtered, result)
 		}
 	}
 
 	// Sort alphabetically by Identifier
-	sort.Slice(filteredRoles, func(i, j int) bool {
-		return filteredRoles[i].Identifier < filteredRoles[j].Identifier
+	sort.Slice(filtered, func(i, j int) bool {
+		return filtered[i].Result.Identifier < filtered[j].Result.Identifier
 	})
 
-	return filteredRoles, nil
+	return filtered, nil
 }
 
 // filterAllRoles returns all roles with filters applied
-func (s *Server) filterAllRoles(providers []string, authenticatorProvider string, authenticatedUser *models.Session) []models.RoleResponse {
-	var filteredRoles []models.RoleResponse
+func (s *Server) filterAllRoles(providers []string, authenticatorProvider string, authenticatedUser *models.Session) []models.SearchResult[models.RoleResponse] {
+	var filtered []models.SearchResult[models.RoleResponse]
 	for _, role := range s.Config.GetRolesConfig().Definitions {
 		if s.shouldIncludeRole(role, providers, authenticatorProvider, authenticatedUser) {
-			filteredRoles = append(filteredRoles, role)
+			filtered = append(filtered, models.SearchResult[models.RoleResponse]{Result: role})
 		}
 	}
 
 	// Sort alphabetically by Identifier
-	sort.Slice(filteredRoles, func(i, j int) bool {
-		return filteredRoles[i].Identifier < filteredRoles[j].Identifier
+	sort.Slice(filtered, func(i, j int) bool {
+		return filtered[i].Result.Identifier < filtered[j].Result.Identifier
 	})
 
-	return filteredRoles
+	return filtered
 }
 
 // shouldIncludeRole checks if a role should be included based on filters
