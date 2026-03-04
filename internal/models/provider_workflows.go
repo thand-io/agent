@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -80,12 +79,18 @@ func CreateChildWorkflowID(parentWorkflowID, operation, provider string, req *Wo
 	return fmt.Sprintf("%s_%s_%s", parentWorkflowID, operation, hashStr)
 }
 
+// RegisterWorkflows registers the provider's workflows with Temporal. Providers can override this method to register custom workflows, but by default it does nothing.
+// Note: Providers should not register the primary workflows (synchronize, authorize role, revoke role) here as they are registered globally in the agent. This method is intended for additional custom workflows that a provider may want to define.
+// Careful: This method is called during provider initialization and should not perform any operations that require a Temporal workflow context (like starting workflows or activities) or access non-deterministic data. It should only return the workflow function definitions.
 func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 	ctx workflow.Context,
 	providerID string,
 	activityMethod SynchronizeCapability,
 	req Req,
 ) error {
+
+	log := workflow.GetLogger(ctx)
+	log.Info("Starting synchronization loop", "provider", providerID, "activity", activityMethod)
 
 	ao := workflow.LocalActivityOptions{
 		StartToCloseTimeout: 10 * time.Minute,
@@ -99,16 +104,14 @@ func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 
 	ctx = workflow.WithLocalActivityOptions(ctx, ao)
 
-	logrus.WithFields(logrus.Fields{
-		"provider": providerID,
-	}).Debug("Starting synchronization")
-
 	// patchFutures collects the upstream-patch activity futures so that patch
 	// calls do not block page iteration — we drain them after all pages are
 	// fetched.
 	var patchFutures []workflow.Future
 
 	for {
+
+		log.Info("Executing synchronization activity", "provider", providerID, "activity", activityMethod)
 
 		var resp Resp
 
@@ -124,10 +127,7 @@ func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 		).Get(ctx, &resp)
 
 		if err != nil {
-			logrus.WithFields(logrus.Fields{
-				"provider": providerID,
-				"error":    err,
-			}).Error("Error executing synchronization activity")
+			log.Error("Error executing synchronization activity", "provider", providerID, "error", err)
 			return err
 		}
 
@@ -154,22 +154,22 @@ func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 	// Drain all patch futures now that every page has been fetched.
 	for _, f := range patchFutures {
 		if err := f.Get(ctx, nil); err != nil {
-			logrus.WithFields(logrus.Fields{
-				"provider": providerID,
-				"error":    err,
-			}).Error("Error patching synchronization results upstream")
+			log.Error("Error patching synchronization results upstream", "provider", providerID, "error", err)
 			return err
 		}
 	}
 
-	logrus.WithFields(logrus.Fields{
-		"provider": providerID,
-	}).Debug("Completed synchronization")
+	log.Info("Completed synchronization", "provider", providerID)
 
 	return nil
 }
 
-func ProviderSynchronizeWorkflow(ctx workflow.Context, syncReq SynchronizeRequest) (*SynchronizeResponse, error) {
+// SynchronizeTenants is the default implementation for tenant synchronization; it returns ErrNotImplemented. Providers that support tenant synchronization should override this method with their implementation.
+// Careful: This method may be called within a Temporal workflow, so it should avoid performing any non-deterministic operations (like generating random numbers or accessing the current time) directly in the method. Any such operations should be performed within activities to ensure correct behavior during workflow replay.
+func ProviderSynchronizeWorkflow(
+	ctx workflow.Context,
+	syncReq SynchronizeRequest,
+) (*SynchronizeResponse, error) {
 
 	if len(syncReq.ProviderIdentifier) == 0 {
 		return nil, fmt.Errorf("provider identifier is required")
@@ -187,6 +187,8 @@ func ProviderSynchronizeWorkflow(ctx workflow.Context, syncReq SynchronizeReques
 		}
 		return slices.Contains(syncReq.Requests, cap)
 	}
+
+	log.Info("Determining which synchronization activities to run", "provider", syncReq.ProviderIdentifier, "requested_activities", syncReq.Requests)
 
 	if shouldSync(SynchronizeTenants) {
 		syncCount++
@@ -285,6 +287,8 @@ func ProviderSynchronizeWorkflow(ctx workflow.Context, syncReq SynchronizeReques
 		})
 	}
 
+	log.Info("Launched synchronization activities", "provider", syncReq.ProviderIdentifier, "activity_count", syncCount)
+
 	var errs []error
 	for range syncCount {
 		var err error
@@ -299,6 +303,8 @@ func ProviderSynchronizeWorkflow(ctx workflow.Context, syncReq SynchronizeReques
 		log.Error("Synchronization workflow encountered errors", "errors", errs)
 		return nil, fmt.Errorf("synchronization failed: %v", errs)
 	}
+
+	log.Info("Completed synchronization workflow", "provider", syncReq.ProviderIdentifier)
 
 	return &SynchronizeResponse{}, nil
 }
@@ -347,6 +353,7 @@ type authorizeRoleRequestSideEffect struct {
 // workflow.Context, constructs a WorkflowTaskSupport with it, and delegates to
 // provider.AuthorizeRole — allowing the provider to dispatch activities, use
 // workflow.Go, and manage state just as it does in the primary workflow.
+// Careful: The workflow function returned by this method will be executed as a Temporal workflow, so it must be deterministic and should not perform any non-deterministic operations (like generating random numbers or accessing the current time) directly in the workflow code. Any such operations should be performed within activities or isolated using workflow.SideEffect to ensure correct behavior during workflow replay.
 func CreateProviderAuthorizeRoleWorkflow(cfg ConfigImpl, provider Provider) func(workflow.Context, WorkflowRoleRequest) (*AuthorizeRoleResponse, error) {
 	return func(ctx workflow.Context, req WorkflowRoleRequest) (*AuthorizeRoleResponse, error) {
 
@@ -396,6 +403,8 @@ type WorkflowRevokeRoleRequest struct {
 
 // CreateProviderRevokeRoleWorkflow returns a workflow function that captures the
 // live provider instance via closure for revocation operations.
+// Careful: The revoke workflow may need to reconstruct the original AuthorizeRoleRequest
+// and must handle it deterministically within a workflow.SideEffect.
 func CreateProviderRevokeRoleWorkflow(cfg ConfigImpl, provider Provider) func(workflow.Context, WorkflowRevokeRoleRequest) (*RevokeRoleResponse, error) {
 	return func(ctx workflow.Context, req WorkflowRevokeRoleRequest) (*RevokeRoleResponse, error) {
 
@@ -441,6 +450,8 @@ func CreateProviderRevokeRoleWorkflow(cfg ConfigImpl, provider Provider) func(wo
 	}
 }
 
+// CreateTemporalProviderWorkflowName creates a standardized workflow name for provider operations by combining the provider identifier and operation name. This ensures consistent naming across all provider workflows, making them easier to identify and manage in Temporal.
+// Careful: The resulting workflow name must be deterministic and should not include any non-deterministic data (like timestamps or random values) to ensure it can be reliably used in workflow execution and querying.
 func CreateAuthorizeRoleRequest(
 	cfg ConfigImpl,
 	provider Provider,
@@ -499,18 +510,16 @@ func CreateAuthorizeRoleRequest(
 }
 
 // validateRoleAndBuildOutput validates the role and builds the initial model output
+// Careful: This function is called within a workflow.SideEffect, so it must be deterministic and cannot perform any Temporal operations (activities, child workflows, timers) or access non-deterministic data (current time, random numbers). It can only use the data passed in the parameters and perform pure computations.
 func validateRoleAndBuildOutput(
 	provider Provider,
 	elevateRequest ElevateRequestInternal,
 ) (map[string]any, error) {
+
 	modelOutput := map[string]any{}
 
 	validateOut, err := ValidateRole(provider, elevateRequest)
 	if err != nil {
-		logrus.WithFields(logrus.Fields{
-			"error": err,
-			"role":  elevateRequest.Role,
-		}).Error("Failed to validate role")
 		return nil, err
 	}
 

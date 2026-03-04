@@ -115,13 +115,33 @@ func Synchronize(
 			}
 		}
 
-		_, err := temporalClient.ExecuteWorkflow(
+		syncWorkflowName := CreateTemporalProviderWorkflowName(
+			provider.GetIdentifier(),
+			TemporalSynchronizeWorkflowName,
+		)
+
+		// Before starting the sync workflow, check to see if its currently
+		// running and terminate it if so as this is a new instance.
+		running, err := temporalClient.DescribeWorkflowExecution(ctx, syncWorkflowName, "")
+
+		if err == nil && running.WorkflowExecutionInfo != nil {
+			logrus.WithFields(logrus.Fields{
+				"workflow_id": running.WorkflowExecutionInfo.Execution.GetWorkflowId(),
+				"run_id":      running.WorkflowExecutionInfo.Execution.GetRunId(),
+			}).Info("Terminating existing provider synchronize workflow before starting new one")
+
+			err = temporalClient.TerminateWorkflow(ctx, syncWorkflowName, "", "New synchronization initiated")
+
+			if err != nil {
+				logrus.WithError(err).Error("Failed to terminate existing provider synchronize workflow")
+				return fmt.Errorf("failed to terminate existing synchronize workflow: %w", err)
+			}
+		}
+
+		syncWorkflow, err := temporalClient.ExecuteWorkflow(
 			ctx,
 			workflowOptions,
-			CreateTemporalProviderWorkflowName(
-				provider.GetIdentifier(),
-				TemporalSynchronizeWorkflowName,
-			),
+			syncWorkflowName,
 			syncRequest,
 		)
 
@@ -129,6 +149,14 @@ func Synchronize(
 			logrus.WithError(err).Error("Failed to start provider synchronize workflow")
 			return fmt.Errorf("failed to execute synchronize workflow: %w", err)
 		}
+
+		logrus.WithFields(logrus.Fields{
+			"workflow_id": syncWorkflow.GetID(),
+			"run_id":      syncWorkflow.GetRunID(),
+			"provider":    provider.GetName(),
+			"identifier":  provider.GetIdentifier(),
+			"requests":    syncRequest.Requests,
+		}).Info("Started provider synchronize workflow for: " + provider.GetIdentifier())
 
 		return nil
 	}
