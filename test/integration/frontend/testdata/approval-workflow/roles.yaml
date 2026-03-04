@@ -12,7 +12,7 @@ roles:
     providers:
       - aws-localstack
     scopes:
-      users:
-        - engineer@thand.io
-        - developer@thand.io
-        - "*"
+      allow:
+        users:
+          - engineer@thand.io
+          - developer@thand.io

@@ -20,9 +20,8 @@ import (
 //
 // Run specific test cases:
 //
-//	go test -v -run TestElevationE2E/aws-elevation-oidc ./integration/frontend/...
-//	go test -v -run TestElevationE2E/aws-elevation-saml ./integration/frontend/...
-//	go test -v -run TestElevationE2E/approval-workflow-oidc ./integration/frontend/...
+//	go test -v -run TestElevationE2E/aws-elevation ./integration/frontend/...
+//	go test -v -run TestElevationE2E/approval-workflow ./integration/frontend/...
 //
 // Run with visible browser:
 //
@@ -41,9 +40,8 @@ func TestElevationE2E(t *testing.T) {
 	_ = discoveryLoader // We'll list manually since loader needs infra for variable substitution
 
 	testCases := []string{
-		"aws-elevation-oidc",
-		"aws-elevation-saml",
-		"approval-workflow-oidc",
+		"aws-elevation",
+		"approval-workflow",
 	}
 
 	for _, tcName := range testCases {
@@ -95,14 +93,14 @@ func runElevationE2E(t *testing.T, parentCtx context.Context, testCaseName strin
 	require.NoError(t, err, "Failed to load test case with interpolation")
 
 	// Detect auth type and test parameters
-	authType := AuthType(DetectAuthType(testCase))
+	
 	users := GetTestUsers(testCase)
 	roleName := GetFirstRoleName(testCase)
 	workflowName := GetFirstWorkflowName(testCase)
 	awsProviderName := GetAWSProviderName(testCase)
 	needsManagerApproval := WorkflowRequiresManagerApproval(testCase)
 
-	t.Logf("Auth type: %s", authType)
+	t.Logf("Auth type: OIDC")
 	t.Logf("Role: %s, Workflow: %s, Provider: %s", roleName, workflowName, awsProviderName)
 	t.Logf("Manager approval required: %v", needsManagerApproval)
 
@@ -152,12 +150,12 @@ func runElevationE2E(t *testing.T, parentCtx context.Context, testCaseName strin
 	t.Run("Submit elevation request", func(t *testing.T) {
 		workflowID, err := browser.CompleteElevationWorkflow(
 			ctx,
-			authType,
+			
 			requestUser.Username,
 			requestUser.Password,
 			roleName,
 			awsProviderName,
-			fmt.Sprintf("E2E test elevation via %s", authType),
+			"E2E test elevation via OIDC",
 			"PT1H",
 		)
 		require.NoError(t, err, "Should be able to submit elevation request")
@@ -179,13 +177,13 @@ func runElevationE2E(t *testing.T, parentCtx context.Context, testCaseName strin
 
 		wfID, err := browser.CompleteElevationWorkflow(
 			ctx,
-			authType,
+			
 			requestUser.Username,
 			requestUser.Password,
 			roleName,
 			awsProviderName,
-			fmt.Sprintf("E2E lifecycle test via %s", authType),
-			"PT2M", // 2 minutes duration for faster test
+			"E2E lifecycle test via OIDC",
+			"PT1M", // 1 minute duration for faster test
 		)
 		require.NoError(t, err, "Should be able to submit elevation request")
 		require.NotEmpty(t, wfID)
@@ -227,7 +225,7 @@ func runElevationE2E(t *testing.T, parentCtx context.Context, testCaseName strin
 		if needsManagerApproval {
 			managerUser := users["manager"]
 			t.Log("Manager approving the request...")
-			err = browser.ApproveAsManager(ctx, authType,
+			err = browser.ApproveAsManager(ctx, 
 				managerUser.Username, managerUser.Password, workflowID)
 			require.NoError(t, err, "Manager should be able to approve")
 		} else {
@@ -257,13 +255,15 @@ func runElevationE2E(t *testing.T, parentCtx context.Context, testCaseName strin
 			// Step 6: Verify workflow is running (monitoring/timer phase)
 			VerifyWorkflowRunning(t, ctx, infra.TemporalClient, workflowID)
 
-			// Step 7: Cancel workflow to trigger revocation
-			t.Log("Cancelling workflow to trigger revocation...")
-			CancelWorkflow(t, ctx, infra.TemporalClient, workflowID)
+			// Step 7: Cancel workflow via UI to trigger revocation
+			t.Log("Cancelling workflow via UI to trigger revocation...")
+			err = browser.CancelWorkflowViaUI(ctx, workflowID)
+			require.NoError(t, err, "Should be able to cancel workflow via UI")
 
-			// Wait for revocation to take effect
-			finalStatus := WaitForWorkflowCompletion(t, ctx, infra.TemporalClient, workflowID, 60*time.Second)
-			t.Logf("Workflow final status: %s", finalStatus.String())
+			// Wait for revocation to take effect (poll UI for terminal status)
+			finalStatus, err := browser.WaitForWorkflowCompletion(ctx, workflowID, 60*time.Second)
+			require.NoError(t, err, "Should be able to wait for workflow completion in UI")
+			t.Logf("Workflow final status: %s", finalStatus)
 
 			// Allow time for revocation activity to complete
 			time.Sleep(3 * time.Second)
@@ -302,8 +302,8 @@ func TestElevationE2EDenial(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
-	t.Run("approval-workflow-oidc-denial", func(t *testing.T) {
-		testCaseName := "approval-workflow-oidc"
+	t.Run("approval-workflow-denial", func(t *testing.T) {
+		testCaseName := "approval-workflow"
 
 		// Load and setup
 		preLoader := testinfra.NewTestCaseLoader(nil, "testdata")
@@ -324,7 +324,7 @@ func TestElevationE2EDenial(t *testing.T) {
 		testCase, err := loader.LoadTestCase(testCaseName)
 		require.NoError(t, err)
 
-		authType := AuthType(DetectAuthType(testCase))
+		
 		users := GetTestUsers(testCase)
 		roleName := GetFirstRoleName(testCase)
 		awsProviderName := GetAWSProviderName(testCase)
@@ -355,7 +355,7 @@ func TestElevationE2EDenial(t *testing.T) {
 
 		// Step 1: Engineer submits elevation request
 		workflowID, err := browser.CompleteElevationWorkflow(
-			ctx, authType,
+			ctx, 
 			engineerUser.Username, engineerUser.Password,
 			roleName, awsProviderName,
 			"Testing denial flow", "PT1H",
@@ -385,7 +385,7 @@ func TestElevationE2EDenial(t *testing.T) {
 
 		// Step 3: Manager denies the request
 		managerUser := users["manager"]
-		err = browser.DenyAsManager(ctx, authType,
+		err = browser.DenyAsManager(ctx, 
 			managerUser.Username, managerUser.Password, workflowID)
 		require.NoError(t, err, "Manager should be able to deny")
 
