@@ -128,12 +128,11 @@ func BleveListSearch[T any](
 		return nil, fmt.Errorf("search failed: %w", err)
 	}
 
-	// trivialSearchFields suppresses raw technical key fields from _highlights
-	// since they are internal identifiers, not human-readable content.
-	// name, label, description etc. are intentionally NOT suppressed so the UI
-	// can show why a result matched (e.g. name: "admin" · inherits: "administratoraccess").
+	// trivialSearchFields suppresses raw technical key fields and the primary
+	// display label from _highlights. id/identifier are internal keys; label
+	// is the main visible text in the dropdown so it's redundant as a hint.
 	trivialSearchFields := map[string]struct{}{
-		"id": {}, "identifier": {},
+		"id": {}, "identifier": {}, "label": {},
 	}
 
 	// Convert search results back to typed items

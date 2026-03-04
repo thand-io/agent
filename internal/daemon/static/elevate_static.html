@@ -57,6 +57,10 @@
         font-style: normal;
         font-weight: 600;
     }
+    /* Hide the match hint inside selected chips — only show it in the dropdown */
+    .choices__list--multiple .choices__item .search-match-hint {
+        display: none;
+    }
 </style>
 
 <main>
@@ -594,13 +598,9 @@
                         var title = identity.id;
                     }
 
-                    let label = identity.label 
-                        ? `${identity.label} (${title})` 
+                    let label = identity.label + matchHint
+                        ? `${identity.label} (${title})`  + matchHint
                         : identity.id;
-
-                    if (matchHint) {
-                        label += matchHint;
-                    }
 
                     choices.push({
                         value: identity.id,
