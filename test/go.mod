@@ -12,7 +12,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/iam v1.53.4
 	github.com/aws/aws-sdk-go-v2/service/sts v1.41.8
 	github.com/chromedp/cdproto v0.0.0-20250803210736-d308e07a266d
-	github.com/chromedp/chromedp v0.11.2
+	github.com/chromedp/chromedp v0.14.2
 	github.com/cloudevents/sdk-go/v2 v2.16.2
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/docker/go-connections v0.6.0
