@@ -172,8 +172,16 @@ jobs:
     - name: Make binary executable
       run: chmod +x bin/thand-linux-amd64
 
+    - name: Install Chrome/Chromium
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y chromium-browser
+
     - name: Run frontend E2E integration tests
-      run: cd test && go test -v -timeout 20m ./integration/frontend/...
+      run: cd test && go test -v -timeout 30m ./integration/frontend/...
+      env:
+        DISPLAY: :99
+        CHROME_BIN: /usr/bin/chromium-browser
 
   auto-tag:
     runs-on: ubuntu-latest

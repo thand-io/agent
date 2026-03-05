@@ -40,6 +40,11 @@ func NewBrowser(t *testing.T, baseURL string) *Browser {
 		chromedp.Flag("disable-dev-shm-usage", true),
 	)
 
+	// If CHROME_BIN is set (e.g., in CI environments), use it
+	if chromeBin := os.Getenv("CHROME_BIN"); chromeBin != "" {
+		opts = append(opts, chromedp.ExecPath(chromeBin))
+	}
+
 	if showBrowser {
 		t.Log("Running browser in visible mode (THAND_SHOW_BROWSER=true)")
 	}
