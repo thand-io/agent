@@ -27,6 +27,8 @@ func (s *Server) getLogsPage(c *gin.Context) {
 		}
 	}
 
+	const maxLimit = 10000
+
 	filter := config.LogFilter{
 		Limit:  500,
 		Search: c.Query("search"),
@@ -34,9 +36,16 @@ func (s *Server) getLogsPage(c *gin.Context) {
 
 	// Parse optional limit override
 	if limitStr := c.Query("limit"); limitStr != "" {
-		if n, err := strconv.Atoi(limitStr); err == nil && n > 0 {
-			filter.Limit = n
+		n, err := strconv.Atoi(limitStr)
+		if err != nil || n <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be a positive integer"})
+			return
 		}
+		if n > maxLimit {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must not exceed " + strconv.Itoa(maxLimit)})
+			return
+		}
+		filter.Limit = n
 	}
 
 	// Parse optional level filter (single value, e.g. "info", "warning", "error")

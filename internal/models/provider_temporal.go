@@ -62,7 +62,8 @@ func RegisterActivities(temporalClient TemporalImpl, identifier string, s any) e
 		name := method.Name
 
 		if err := validateFnFormat(method.Type, false, false); err != nil {
-			logrus.WithError(err).Errorf("Skipping method %s of struct %s for provider %s due to invalid function signature: %v", name, structType.Name(), identifier, err)
+			logrus.WithError(err).Errorf(
+				"Failed to register method %s of struct %s for provider %s due to invalid function signature: %v", name, structType.Name(), identifier, err)
 			return fmt.Errorf("method %s of %s: %w", name, structType.Name(), err)
 		}
 

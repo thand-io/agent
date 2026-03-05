@@ -141,6 +141,7 @@ type PaginationOptions struct {
 }
 
 type SynchronizeRequestImpl interface {
+	GetPagination() *PaginationOptions
 	SetPagination(p *PaginationOptions)
 }
 
@@ -150,35 +151,51 @@ type SynchronizeResponseImpl interface {
 	// provider. This is the single place that maps response type → provider
 	// store update, shared by both the Temporal and pure-Go sync paths.
 	AddToProvider(provider Provider)
+	// ResultCount returns the number of items in this page of results.
+	ResultCount() int
 }
 
+func (r *SynchronizeRolesRequest) GetPagination() *PaginationOptions  { return r.Pagination }
 func (r *SynchronizeRolesRequest) SetPagination(p *PaginationOptions) { r.Pagination = p }
 func (r SynchronizeRolesResponse) GetPagination() *PaginationOptions  { return r.Pagination }
 func (r SynchronizeRolesResponse) AddToProvider(p Provider)           { p.AddRoles(r.Roles...) }
+func (r SynchronizeRolesResponse) ResultCount() int                   { return len(r.Roles) }
 
+func (r *SynchronizePermissionsRequest) GetPagination() *PaginationOptions  { return r.Pagination }
 func (r *SynchronizePermissionsRequest) SetPagination(p *PaginationOptions) { r.Pagination = p }
 func (r SynchronizePermissionsResponse) GetPagination() *PaginationOptions  { return r.Pagination }
 func (r SynchronizePermissionsResponse) AddToProvider(p Provider)           { p.AddPermissions(r.Permissions...) }
+func (r SynchronizePermissionsResponse) ResultCount() int                   { return len(r.Permissions) }
 
+func (r *SynchronizeUsersRequest) GetPagination() *PaginationOptions  { return r.Pagination }
 func (r *SynchronizeUsersRequest) SetPagination(p *PaginationOptions) { r.Pagination = p }
 func (r SynchronizeUsersResponse) GetPagination() *PaginationOptions  { return r.Pagination }
 func (r SynchronizeUsersResponse) AddToProvider(p Provider)           { p.AddIdentities(r.Identities...) }
+func (r SynchronizeUsersResponse) ResultCount() int                   { return len(r.Identities) }
 
+func (r *SynchronizeGroupsRequest) GetPagination() *PaginationOptions  { return r.Pagination }
 func (r *SynchronizeGroupsRequest) SetPagination(p *PaginationOptions) { r.Pagination = p }
 func (r SynchronizeGroupsResponse) GetPagination() *PaginationOptions  { return r.Pagination }
 func (r SynchronizeGroupsResponse) AddToProvider(p Provider)           { p.AddIdentities(r.Identities...) }
+func (r SynchronizeGroupsResponse) ResultCount() int                   { return len(r.Identities) }
 
+func (r *SynchronizeResourcesRequest) GetPagination() *PaginationOptions  { return r.Pagination }
 func (r *SynchronizeResourcesRequest) SetPagination(p *PaginationOptions) { r.Pagination = p }
 func (r SynchronizeResourcesResponse) GetPagination() *PaginationOptions  { return r.Pagination }
 func (r SynchronizeResourcesResponse) AddToProvider(p Provider)           { p.AddResources(r.Resources...) }
+func (r SynchronizeResourcesResponse) ResultCount() int                   { return len(r.Resources) }
 
+func (r *SynchronizeIdentitiesRequest) GetPagination() *PaginationOptions  { return r.Pagination }
 func (r *SynchronizeIdentitiesRequest) SetPagination(p *PaginationOptions) { r.Pagination = p }
 func (r SynchronizeIdentitiesResponse) GetPagination() *PaginationOptions  { return r.Pagination }
 func (r SynchronizeIdentitiesResponse) AddToProvider(p Provider)           { p.AddIdentities(r.Identities...) }
+func (r SynchronizeIdentitiesResponse) ResultCount() int                   { return len(r.Identities) }
 
+func (r *SynchronizeTenantsRequest) GetPagination() *PaginationOptions  { return r.Pagination }
 func (r *SynchronizeTenantsRequest) SetPagination(p *PaginationOptions) { r.Pagination = p }
 func (r SynchronizeTenantsResponse) GetPagination() *PaginationOptions  { return r.Pagination }
 func (r SynchronizeTenantsResponse) AddToProvider(p Provider)           { p.AddTenants(r.Tenants...) }
+func (r SynchronizeTenantsResponse) ResultCount() int                   { return len(r.Tenants) }
 
 // ProviderContext is the execution context passed to provider RBAC operations.
 // It is an alias for WorkflowTaskSupport so providers receive both the plain

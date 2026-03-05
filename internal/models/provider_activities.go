@@ -76,9 +76,13 @@ func NewProviderActivities(provider Provider) *ProviderActivities {
 }
 
 // runProviderActivity is the generic Temporal activity helper. It calls the
-// provider's sync method and wraps ErrNotImplemented into a non-retryable
-// Temporal error. The caller (paginatedSync, via runSyncLoop) is responsible
-// for calling resp.AddToProvider.
+// provider's sync method, applies results to the in-memory provider stores via
+// AddToProvider, and wraps ErrNotImplemented into a non-retryable Temporal error.
+//
+// Performing the AddToProvider mutation here — inside a local activity — keeps
+// the provider store updates out of the Temporal workflow goroutine, avoiding
+// non-deterministic operations (sync.Mutex, background goroutines for index
+// building) that would break workflow replay.
 func runProviderActivity[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 	ctx context.Context,
 	provider Provider,
@@ -91,7 +95,7 @@ func runProviderActivity[Req SynchronizeRequestImpl, Resp SynchronizeResponseImp
 
 	log.Info("Starting activity for provider: "+provider.GetIdentifier(),
 		"activity", activityName,
-		"pagination", req)
+		"pagination", req.GetPagination())
 
 	result, err := handleNotImplementedError(syncFunc(ctx, req))
 	if err != nil {
@@ -100,6 +104,10 @@ func runProviderActivity[Req SynchronizeRequestImpl, Resp SynchronizeResponseImp
 			"error", err)
 		return result, err
 	}
+
+	// Apply results to the provider's in-memory stores inside the activity
+	// context where sync.Mutex and background index goroutines are safe.
+	result.AddToProvider(provider)
 
 	return result, nil
 }

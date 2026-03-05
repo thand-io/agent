@@ -82,8 +82,9 @@ func CreateChildWorkflowID(parentWorkflowID, operation, provider string, req *Wo
 
 // runSyncLoop runs a single synchronization capability inside a Temporal workflow
 // goroutine. It delegates to paginatedSync, providing an executor that calls the
-// registered local activity and an onPage hook that fires the upstream patch
-// activity asynchronously.
+// registered local activity and an onPage hook that buffers patch payloads.
+// Provider store mutations (AddToProvider) happen inside the local activity
+// (runProviderActivity), not here, to keep the workflow deterministic.
 func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 	ctx workflow.Context,
 	provider Provider,
@@ -161,10 +162,9 @@ func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 }
 
 // CreateProviderSynchronizeWorkflow returns a workflow function that captures the
-// live provider instance via closure. This allows runSyncLoop — and by extension
-// paginatedSync — to call resp.AddToProvider(provider) from within the workflow,
-// keeping the in-memory provider stores up-to-date during both normal execution
-// and Temporal replay.
+// live provider instance via closure. Provider store mutations (AddToProvider)
+// happen inside the local activities (runProviderActivity), not in the workflow
+// goroutine, which keeps execution deterministic during Temporal replay.
 func CreateProviderSynchronizeWorkflow(provider Provider) func(workflow.Context, SynchronizeRequest) (*SynchronizeResponse, error) {
 	return func(ctx workflow.Context, syncReq SynchronizeRequest) (*SynchronizeResponse, error) {
 
@@ -425,8 +425,8 @@ func CreateProviderRevokeRoleWorkflow(cfg ConfigImpl, provider Provider) func(wo
 	}
 }
 
-// CreateTemporalProviderWorkflowName creates a standardized workflow name for provider operations by combining the provider identifier and operation name. This ensures consistent naming across all provider workflows, making them easier to identify and manage in Temporal.
-// Careful: The resulting workflow name must be deterministic and should not include any non-deterministic data (like timestamps or random values) to ensure it can be reliably used in workflow execution and querying.
+// CreateAuthorizeRoleRequest builds an AuthorizeRoleRequest from a WorkflowRoleRequest by resolving identity and tenant information, validating the requested role, and materializing any composite role configuration for the given provider.
+// Careful: This helper wraps errors from identity, tenant, and role resolution with additional context to make diagnosing workflow failures easier.
 func CreateAuthorizeRoleRequest(
 	cfg ConfigImpl,
 	provider Provider,

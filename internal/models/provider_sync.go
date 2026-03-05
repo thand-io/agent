@@ -136,7 +136,8 @@ func Synchronize(
 
 		// Before starting the sync workflow, check to see if its currently
 		// running and terminate it if so as this is a new instance.
-		running, err := temporalClient.DescribeWorkflowExecution(ctx, syncWorkflowName, "")
+		// Use the workflow ID (not the workflow type name) for describe/terminate.
+		running, err := temporalClient.DescribeWorkflowExecution(ctx, workflowOptions.ID, "")
 
 		if err == nil && running.WorkflowExecutionInfo != nil {
 			logrus.WithFields(logrus.Fields{
@@ -144,7 +145,7 @@ func Synchronize(
 				"run_id":      running.WorkflowExecutionInfo.Execution.GetRunId(),
 			}).Info("Terminating existing provider synchronize workflow before starting new one")
 
-			err = temporalClient.TerminateWorkflow(ctx, syncWorkflowName, "", "New synchronization initiated")
+			err = temporalClient.TerminateWorkflow(ctx, workflowOptions.ID, "", "New synchronization initiated")
 
 			if err != nil {
 				logrus.WithError(err).Error("Failed to terminate existing provider synchronize workflow")
@@ -303,7 +304,7 @@ func executeSync[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 
 		err := paginatedSync(provider, name, req,
 			func(r Req) (Resp, error) { return syncOp(ctx, r) },
-			nil, // no post-page hook in the pure-Go path
+			nil, // no post-page hook in the pure-Go path - TODO add patching support
 		)
 		if err != nil {
 			logrus.WithError(err).Errorf("Synchronization operation %s failed", name)
