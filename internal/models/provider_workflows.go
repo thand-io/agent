@@ -93,7 +93,7 @@ func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 ) error {
 
 	log := workflow.GetLogger(ctx)
-	log.Info("Starting synchronization loop", "provider", providerID, "activity", activityMethod)
+	log.Debug("Starting synchronization loop", "provider", providerID, "activity", activityMethod)
 
 	ao := workflow.LocalActivityOptions{
 		StartToCloseTimeout: 10 * time.Minute,
@@ -150,12 +150,12 @@ func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 			providerID,
 			payload,
 		).Get(actx, nil); err != nil {
-			log.Error("Error patching synchronization results upstream",
+			log.Warn("Error patching synchronization results upstream",
 				"provider", providerID, "error", err)
 		}
 	}
 
-	log.Info("Completed synchronization", "provider", providerID)
+	log.Debug("Completed synchronization", "provider", providerID)
 
 	return nil
 }
@@ -184,8 +184,6 @@ func CreateProviderSynchronizeWorkflow(provider Provider) func(workflow.Context,
 			}
 			return slices.Contains(syncReq.Requests, cap)
 		}
-
-		log.Info("Determining which synchronization activities to run", "provider", syncReq.ProviderIdentifier, "requested_activities", syncReq.Requests)
 
 		if shouldSync(SynchronizeTenants) {
 			syncCount++
@@ -364,7 +362,7 @@ func CreateProviderAuthorizeRoleWorkflow(cfg ConfigImpl, provider Provider) func
 			return nil, fmt.Errorf("%s", se.Err)
 		}
 
-		log.Info("Constructed authorize role request, invoking provider",
+		log.Debug("Constructed authorize role request, invoking provider",
 			"provider", provider.GetIdentifier(),
 			"authorizeReq", se.Request,
 		)
@@ -418,7 +416,7 @@ func CreateProviderRevokeRoleWorkflow(cfg ConfigImpl, provider Provider) func(wo
 			AuthorizeRoleResponse: req.AuthorizeRoleResponse,
 		}
 
-		log.Info("Constructed revoke role request, invoking provider",
+		log.Debug("Constructed revoke role request, invoking provider",
 			"provider", provider.GetIdentifier(),
 			"revokeReq", revokeReq,
 		)
