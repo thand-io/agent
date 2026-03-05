@@ -42,19 +42,10 @@ jobs:
         submodules: recursive
 
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
         go-version: ${{ env.GO_VERSION }}
-
-    - name: Cache Go modules
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
+        cache: true
 
     - name: Run unit tests
       run: |
@@ -73,20 +64,10 @@ jobs:
         submodules: recursive
 
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
         go-version: ${{ env.GO_VERSION }}
-
-    - name: Cache Go modules
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
-        key: ${{ runner.os }}-go-functional-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-functional-
-          ${{ runner.os }}-go-
+        cache: true
 
     - name: Run functional tests
       run: |
@@ -94,10 +75,10 @@ jobs:
         # Docker is available by default on ubuntu-latest runners
         cd test && go test -v -timeout 10m ./functional/...
 
-  integration-tests:
+  integration-services:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -106,29 +87,93 @@ jobs:
         submodules: recursive
 
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
         go-version: ${{ env.GO_VERSION }}
+        cache: true
 
-    - name: Cache Go modules
-      uses: actions/cache@v3
+    - name: Run services integration tests
+      run: cd test && go test -v -timeout 5m ./integration/services/...
+
+  integration-workflows:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
       with:
-        path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
-        key: ${{ runner.os }}-go-integration-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-integration-
-          ${{ runner.os }}-go-
+        fetch-depth: 1
+        submodules: recursive
 
-    - name: Run integration tests
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+
+    - name: Run workflows integration tests
+      run: cd test && go test -v -timeout 15m ./integration/workflows/...
+
+  build-linux-amd64:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+        submodules: recursive
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+
+    - name: Build linux/amd64 binary
       run: |
-        # Run integration tests (if any exist)
-        if [ -n "$(find ./test/integration -name '*_test.go' 2>/dev/null)" ]; then
-          cd test && go test -v -timeout 15m ./integration/...
-        else
-          echo "No integration tests found, skipping..."
-        fi
+        mkdir -p bin
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo \
+          -o bin/thand-linux-amd64 .
+
+    - name: Upload linux/amd64 binary
+      uses: actions/upload-artifact@v4
+      with:
+        name: thand-linux-amd64
+        path: bin/thand-linux-amd64
+        retention-days: 1
+
+  integration-frontend:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    needs: [build-linux-amd64]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+        submodules: recursive
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+
+    - name: Download linux/amd64 binary
+      uses: actions/download-artifact@v4
+      with:
+        name: thand-linux-amd64
+        path: bin/
+
+    - name: Make binary executable
+      run: chmod +x bin/thand-linux-amd64
+
+    - name: Run frontend E2E integration tests
+      run: cd test && go test -v -timeout 20m ./integration/frontend/...
 
   auto-tag:
     runs-on: ubuntu-latest
@@ -185,7 +230,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    needs: [auto-tag, unit-tests, functional-tests, integration-tests]
+    needs: [auto-tag, unit-tests, functional-tests, integration-services, integration-workflows, integration-frontend]
     strategy:
       matrix:
         include:
@@ -208,19 +253,10 @@ jobs:
         submodules: recursive
 
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
         go-version: ${{ env.GO_VERSION }}
-
-    - name: Cache Go modules
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
+        cache: true
 
     - name: Get version from auto-tag
       id: version

@@ -31,9 +31,6 @@ func TestElevationE2E(t *testing.T) {
 		t.Skip("Skipping UI E2E tests in short mode")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
-	defer cancel()
-
 	// Discover all test cases from testdata directories
 	// Use a temporary loader just to list cases (before infrastructure is up)
 	discoveryLoader := testinfra.NewTestCaseLoader(nil, "testdata")
@@ -47,15 +44,18 @@ func TestElevationE2E(t *testing.T) {
 	for _, tcName := range testCases {
 		tcName := tcName // capture range variable
 		t.Run(tcName, func(t *testing.T) {
-			runElevationE2E(t, ctx, tcName)
+			t.Parallel()
+			runElevationE2E(t, tcName)
 		})
 	}
 }
 
 // runElevationE2E runs a single elevation E2E test for a given testdata directory.
-func runElevationE2E(t *testing.T, parentCtx context.Context, testCaseName string) {
-	// Each test case gets its own context with a generous timeout
-	ctx, cancel := context.WithTimeout(parentCtx, 10*time.Minute)
+func runElevationE2E(t *testing.T, testCaseName string) {
+	// Each test case owns its own independent context so that a shared parent's
+	// defer cancel() (which fires when the parent t.Run body returns, before
+	// t.Parallel() subtests actually execute) cannot pre-cancel this context.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
 	// Phase 1: Load test case metadata (before infrastructure)
