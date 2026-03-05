@@ -31,6 +31,9 @@ func (p *BaseProvider) Synchronize(
 	temporalService TemporalImpl,
 	syncRequest *SynchronizeRequest,
 ) error {
+
+	logrus.Infoln("Using default synchronization strategy for provider: ", p.GetIdentifier())
+
 	return Synchronize(ctx, temporalService, p, syncRequest)
 }
 
@@ -90,6 +93,11 @@ func Synchronize(
 
 	}
 
+	logrus.WithFields(logrus.Fields{
+		"provider": provider.GetName(),
+		"requests": syncRequest.Requests,
+	}).Info("Starting synchronization for provider: " + provider.GetIdentifier())
+
 	if temporalService != nil && temporalService.HasClient() {
 
 		temporalClient := temporalService.GetClient()
@@ -120,6 +128,12 @@ func Synchronize(
 			TemporalSynchronizeWorkflowName,
 		)
 
+		logrus.WithFields(logrus.Fields{
+			"workflow":   syncWorkflowName,
+			"provider":   provider.GetName(),
+			"identifier": provider.GetIdentifier(),
+		}).Infoln("Starting provider synchronize workflow with name: " + syncWorkflowName + " for provider: " + provider.GetIdentifier())
+
 		// Before starting the sync workflow, check to see if its currently
 		// running and terminate it if so as this is a new instance.
 		running, err := temporalClient.DescribeWorkflowExecution(ctx, syncWorkflowName, "")
@@ -134,9 +148,13 @@ func Synchronize(
 
 			if err != nil {
 				logrus.WithError(err).Error("Failed to terminate existing provider synchronize workflow")
-				return fmt.Errorf("failed to terminate existing synchronize workflow: %w", err)
 			}
 		}
+
+		logrus.WithFields(logrus.Fields{
+			"workflow": syncWorkflowName,
+			"provider": provider.GetName(),
+		}).Infoln("Executing provider synchronize workflow for provider: " + provider.GetIdentifier())
 
 		syncWorkflow, err := temporalClient.ExecuteWorkflow(
 			ctx,
@@ -169,43 +187,39 @@ func Synchronize(
 	var mu sync.Mutex
 	var errs []error
 
-	// Use ProviderActivities so that store updates (AddIdentities, AddTenants, etc.)
-	// live in one place and are shared by both the Temporal and pure-Go paths.
-	pa := NewProviderActivities(provider)
-
 	if provider.CanSynchronizeTenants() {
-		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeTenants, &SynchronizeTenantsRequest{},
-			pa.SynchronizeTenants)
+		executeSync(ctx, &wg, &mu, &errs, syncRequest, provider, SynchronizeTenants,
+			&SynchronizeTenantsRequest{}, provider.SynchronizeTenants)
 	}
 
 	if provider.CanSynchronizeIdentities() {
-		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeIdentities, &SynchronizeIdentitiesRequest{},
-			pa.SynchronizeIdentities)
+		executeSync(ctx, &wg, &mu, &errs, syncRequest, provider, SynchronizeIdentities,
+			&SynchronizeIdentitiesRequest{}, provider.SynchronizeIdentities)
 	}
 
 	if provider.CanSynchronizeUsers() {
-		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeUsers, &SynchronizeUsersRequest{},
-			pa.SynchronizeUsers)
+		executeSync(ctx, &wg, &mu, &errs, syncRequest, provider, SynchronizeUsers,
+			&SynchronizeUsersRequest{}, provider.SynchronizeUsers)
 	}
 
 	if provider.CanSynchronizeGroups() {
-		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeGroups, &SynchronizeGroupsRequest{},
-			pa.SynchronizeGroups)
+		executeSync(ctx, &wg, &mu, &errs, syncRequest, provider, SynchronizeGroups,
+			&SynchronizeGroupsRequest{}, provider.SynchronizeGroups)
 	}
 
 	if provider.CanSynchronizeResources() {
-		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeResources, &SynchronizeResourcesRequest{},
-			pa.SynchronizeResources)
+		executeSync(ctx, &wg, &mu, &errs, syncRequest, provider, SynchronizeResources,
+			&SynchronizeResourcesRequest{}, provider.SynchronizeResources)
 	}
 
 	if provider.CanSynchronizeRoles() {
-		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizeRoles, &SynchronizeRolesRequest{},
-			pa.SynchronizeRoles)
+		executeSync(ctx, &wg, &mu, &errs, syncRequest, provider, SynchronizeRoles,
+			&SynchronizeRolesRequest{}, provider.SynchronizeRoles)
 	}
 
 	if provider.CanSynchronizePermissions() {
-		executeSync(ctx, &wg, &mu, &errs, syncRequest, SynchronizePermissions, &SynchronizePermissionsRequest{},
-			pa.SynchronizePermissions)
+		executeSync(ctx, &wg, &mu, &errs, syncRequest, provider, SynchronizePermissions,
+			&SynchronizePermissionsRequest{}, provider.SynchronizePermissions)
 	}
 
 	logrus.WithFields(logrus.Fields{
@@ -222,12 +236,59 @@ func Synchronize(
 	return nil
 }
 
+// paginatedSync runs a generic paginated synchronization loop. It calls
+// executePage for each page, routes results to the provider via AddToProvider,
+// and invokes the optional onPage callback. Both the Temporal workflow path
+// (runSyncLoop) and the pure-Go path (executeSync) delegate to this function.
+func paginatedSync[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
+	provider Provider,
+	name SynchronizeCapability,
+	req Req,
+	executePage func(Req) (Resp, error),
+	onPage func(Resp),
+) error {
+	for {
+		logrus.Debugf("Making synchronization request: %s", name)
+
+		resp, err := executePage(req)
+		if err != nil {
+			if errors.Is(err, ErrNotImplemented) {
+				logrus.Debugf("Synchronization operation %s is not implemented, skipping", name)
+				return nil
+			}
+			return err
+		}
+
+		logrus.WithFields(logrus.Fields{
+			"response": provider,
+		}).Debugf("Received synchronization response for %s", name)
+
+		resp.AddToProvider(provider)
+
+		if onPage != nil {
+			onPage(resp)
+		}
+
+		pagination := resp.GetPagination()
+		if pagination == nil || len(pagination.Token) == 0 {
+			logrus.Debugf("Synchronization operation %s completed with no more pages", name)
+			break
+		}
+
+		req.SetPagination(pagination)
+	}
+	return nil
+}
+
+// executeSync launches a paginated synchronization goroutine using paginatedSync.
+// It calls the provider's sync method directly (pure-Go path, no Temporal).
 func executeSync[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 	ctx context.Context,
 	wg *sync.WaitGroup,
 	mu *sync.Mutex,
 	errs *[]error,
 	syncRequest *SynchronizeRequest,
+	provider Provider,
 	name SynchronizeCapability,
 	req Req,
 	syncOp func(context.Context, Req) (Resp, error),
@@ -238,34 +299,18 @@ func executeSync[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 	}
 
 	wg.Go(func() {
-
 		logrus.Infof("Starting synchronization operation: %s", name)
 
-		for {
+		err := paginatedSync(provider, name, req,
+			func(r Req) (Resp, error) { return syncOp(ctx, r) },
+			nil, // no post-page hook in the pure-Go path
+		)
+		if err != nil {
+			logrus.WithError(err).Errorf("Synchronization operation %s failed", name)
 
-			logrus.Debugf("Making synchronization request: %s", name)
-
-			resp, err := syncOp(ctx, req)
-
-			if err != nil {
-				// Ignore not implemented errors
-				if errors.Is(err, ErrNotImplemented) {
-					return
-				}
-				mu.Lock()
-				*errs = append(*errs, fmt.Errorf("%s failed: %w", name, err))
-				mu.Unlock()
-				return
-			}
-
-			pagination := resp.GetPagination()
-
-			if pagination == nil || len(pagination.Token) == 0 {
-				break
-			}
-
-			req.SetPagination(pagination)
-
+			mu.Lock()
+			*errs = append(*errs, fmt.Errorf("%s failed: %w", name, err))
+			mu.Unlock()
 		}
 	})
 }

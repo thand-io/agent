@@ -3,6 +3,7 @@ package models
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -79,11 +80,13 @@ func CreateChildWorkflowID(parentWorkflowID, operation, provider string, req *Wo
 	return fmt.Sprintf("%s_%s_%s", parentWorkflowID, operation, hashStr)
 }
 
-// RegisterWorkflows registers the provider's workflows with Temporal. Providers can override this method to register custom workflows, but by default it does nothing.
-// Note: Providers should not register the primary workflows (synchronize, authorize role, revoke role) here as they are registered globally in the agent. This method is intended for additional custom workflows that a provider may want to define.
-// Careful: This method is called during provider initialization and should not perform any operations that require a Temporal workflow context (like starting workflows or activities) or access non-deterministic data. It should only return the workflow function definitions.
+// runSyncLoop runs a single synchronization capability inside a Temporal workflow
+// goroutine. It delegates to paginatedSync, providing an executor that calls the
+// registered local activity and an onPage hook that fires the upstream patch
+// activity asynchronously.
 func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 	ctx workflow.Context,
+	provider Provider,
 	providerID string,
 	activityMethod SynchronizeCapability,
 	req Req,
@@ -102,53 +105,40 @@ func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 		},
 	}
 
-	ctx = workflow.WithLocalActivityOptions(ctx, ao)
+	activityName := CreateTemporalProviderWorkflowName(providerID, string(activityMethod))
+	actx := workflow.WithLocalActivityOptions(ctx, ao)
 
-	// patchFutures collects the upstream-patch activity futures so that patch
-	// calls do not block page iteration — we drain them after all pages are
-	// fetched.
 	var patchFutures []workflow.Future
 
-	for {
-
-		log.Info("Executing synchronization activity", "provider", providerID, "activity", activityMethod)
-
-		var resp Resp
-
-		activityName := CreateTemporalProviderWorkflowName(
-			providerID,
-			string(activityMethod),
-		)
-
-		err := workflow.ExecuteLocalActivity(
-			ctx,
-			activityName,
-			req,
-		).Get(ctx, &resp)
-
-		if err != nil {
-			log.Error("Error executing synchronization activity", "provider", providerID, "error", err)
-			return err
-		}
-
-		// Fire the patch activity without blocking; collect the future for
-		// later resolution so pagination can proceed immediately.
-		patchFutures = append(patchFutures, workflow.ExecuteLocalActivity(
-			ctx,
-			TemporalPatchProviderUpstreamActivityName,
-			activityMethod,
-			providerID,
-			resp,
-		))
-
-		pagination := resp.GetPagination()
-
-		if pagination == nil || len(pagination.Token) == 0 {
-			break
-		}
-
-		req.SetPagination(pagination)
-
+	err := paginatedSync(provider, activityMethod, req,
+		// executePage: run the local activity and return the deserialized response.
+		func(r Req) (Resp, error) {
+			var resp Resp
+			err := workflow.ExecuteLocalActivity(actx, activityName, r).Get(ctx, &resp)
+			if err != nil {
+				// Normalise Temporal's non-retryable wrapper back to ErrNotImplemented
+				// so paginatedSync can handle it uniformly.
+				var appErr *temporal.ApplicationError
+				if errors.As(err, &appErr) && appErr.Type() == "NotImplementedError" {
+					return resp, ErrNotImplemented
+				}
+			}
+			return resp, err
+		},
+		// onPage: fire the upstream patch activity without blocking.
+		func(resp Resp) {
+			patchFutures = append(patchFutures, workflow.ExecuteLocalActivity(
+				actx,
+				TemporalPatchProviderUpstreamActivityName,
+				activityMethod,
+				providerID,
+				resp,
+			))
+		},
+	)
+	if err != nil {
+		log.Error("Error executing synchronization", "provider", providerID, "activity", activityMethod, "error", err)
+		return err
 	}
 
 	// Drain all patch futures now that every page has been fetched.
@@ -164,149 +154,130 @@ func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 	return nil
 }
 
-// SynchronizeTenants is the default implementation for tenant synchronization; it returns ErrNotImplemented. Providers that support tenant synchronization should override this method with their implementation.
-// Careful: This method may be called within a Temporal workflow, so it should avoid performing any non-deterministic operations (like generating random numbers or accessing the current time) directly in the method. Any such operations should be performed within activities to ensure correct behavior during workflow replay.
-func ProviderSynchronizeWorkflow(
-	ctx workflow.Context,
-	syncReq SynchronizeRequest,
-) (*SynchronizeResponse, error) {
+// CreateProviderSynchronizeWorkflow returns a workflow function that captures the
+// live provider instance via closure. This allows runSyncLoop — and by extension
+// paginatedSync — to call resp.AddToProvider(provider) from within the workflow,
+// keeping the in-memory provider stores up-to-date during both normal execution
+// and Temporal replay.
+func CreateProviderSynchronizeWorkflow(provider Provider) func(workflow.Context, SynchronizeRequest) (*SynchronizeResponse, error) {
+	return func(ctx workflow.Context, syncReq SynchronizeRequest) (*SynchronizeResponse, error) {
 
-	if len(syncReq.ProviderIdentifier) == 0 {
-		return nil, fmt.Errorf("provider identifier is required")
-	}
-
-	log := workflow.GetLogger(ctx)
-	log.Info("Starting synchronization workflow", "provider", syncReq.ProviderIdentifier)
-
-	errChan := workflow.NewChannel(ctx)
-	syncCount := 0
-
-	shouldSync := func(cap SynchronizeCapability) bool {
-		if len(syncReq.Requests) == 0 {
-			return true
+		if len(syncReq.ProviderIdentifier) == 0 {
+			return nil, fmt.Errorf("provider identifier is required")
 		}
-		return slices.Contains(syncReq.Requests, cap)
-	}
 
-	log.Info("Determining which synchronization activities to run", "provider", syncReq.ProviderIdentifier, "requested_activities", syncReq.Requests)
+		log := workflow.GetLogger(ctx)
+		log.Info("Starting synchronization workflow", "provider", syncReq.ProviderIdentifier)
 
-	if shouldSync(SynchronizeTenants) {
-		syncCount++
-		workflow.Go(ctx, func(ctx workflow.Context) {
-			err := runSyncLoop[*SynchronizeTenantsRequest, SynchronizeTenantsResponse](
-				ctx,
-				syncReq.ProviderIdentifier,
-				SynchronizeTenants,
-				&SynchronizeTenantsRequest{},
-			)
-			errChan.Send(ctx, err)
-		})
-	}
+		errChan := workflow.NewChannel(ctx)
+		syncCount := 0
 
-	// Synchronize Identities
-	if shouldSync(SynchronizeIdentities) {
-		syncCount++
-		workflow.Go(ctx, func(ctx workflow.Context) {
-			err := runSyncLoop[*SynchronizeIdentitiesRequest, SynchronizeIdentitiesResponse](
-				ctx,
-				syncReq.ProviderIdentifier,
-				SynchronizeIdentities,
-				&SynchronizeIdentitiesRequest{},
-			)
-			errChan.Send(ctx, err)
-		})
-	}
-
-	// Synchronize Users
-	if shouldSync(SynchronizeUsers) {
-		syncCount++
-		workflow.Go(ctx, func(ctx workflow.Context) {
-			err := runSyncLoop[*SynchronizeUsersRequest, SynchronizeUsersResponse](
-				ctx,
-				syncReq.ProviderIdentifier,
-				SynchronizeUsers,
-				&SynchronizeUsersRequest{},
-			)
-			errChan.Send(ctx, err)
-		})
-	}
-
-	// Synchronize Groups
-	if shouldSync(SynchronizeGroups) {
-		syncCount++
-		workflow.Go(ctx, func(ctx workflow.Context) {
-			err := runSyncLoop[*SynchronizeGroupsRequest, SynchronizeGroupsResponse](
-				ctx,
-				syncReq.ProviderIdentifier,
-				SynchronizeGroups,
-				&SynchronizeGroupsRequest{},
-			)
-			errChan.Send(ctx, err)
-		})
-	}
-
-	// Synchronize Resources
-	if shouldSync(SynchronizeResources) {
-		syncCount++
-		workflow.Go(ctx, func(ctx workflow.Context) {
-			err := runSyncLoop[*SynchronizeResourcesRequest, SynchronizeResourcesResponse](
-				ctx,
-				syncReq.ProviderIdentifier,
-				SynchronizeResources,
-				&SynchronizeResourcesRequest{},
-			)
-			errChan.Send(ctx, err)
-		})
-	}
-
-	// Synchronize Roles
-	if shouldSync(SynchronizeRoles) {
-		syncCount++
-		workflow.Go(ctx, func(ctx workflow.Context) {
-			err := runSyncLoop[*SynchronizeRolesRequest, SynchronizeRolesResponse](
-				ctx,
-				syncReq.ProviderIdentifier,
-				SynchronizeRoles,
-				&SynchronizeRolesRequest{},
-			)
-			errChan.Send(ctx, err)
-		})
-	}
-
-	// Synchronize Permissions
-	if shouldSync(SynchronizePermissions) {
-		syncCount++
-		workflow.Go(ctx, func(ctx workflow.Context) {
-			err := runSyncLoop[*SynchronizePermissionsRequest, SynchronizePermissionsResponse](
-				ctx,
-				syncReq.ProviderIdentifier,
-				SynchronizePermissions,
-				&SynchronizePermissionsRequest{},
-			)
-			errChan.Send(ctx, err)
-		})
-	}
-
-	log.Info("Launched synchronization activities", "provider", syncReq.ProviderIdentifier, "activity_count", syncCount)
-
-	var errs []error
-	for range syncCount {
-		var err error
-		errChan.Receive(ctx, &err)
-		if err != nil {
-			errs = append(errs, err)
+		shouldSync := func(cap SynchronizeCapability) bool {
+			if len(syncReq.Requests) == 0 {
+				return true
+			}
+			return slices.Contains(syncReq.Requests, cap)
 		}
+
+		log.Info("Determining which synchronization activities to run", "provider", syncReq.ProviderIdentifier, "requested_activities", syncReq.Requests)
+
+		if shouldSync(SynchronizeTenants) {
+			syncCount++
+			workflow.Go(ctx, func(syncCtx workflow.Context) {
+				err := runSyncLoop[*SynchronizeTenantsRequest, SynchronizeTenantsResponse](
+					syncCtx, provider, syncReq.ProviderIdentifier,
+					SynchronizeTenants, &SynchronizeTenantsRequest{},
+				)
+				errChan.Send(syncCtx, err)
+			})
+		}
+
+		if shouldSync(SynchronizeIdentities) {
+			syncCount++
+			workflow.Go(ctx, func(syncCtx workflow.Context) {
+				err := runSyncLoop[*SynchronizeIdentitiesRequest, SynchronizeIdentitiesResponse](
+					syncCtx, provider, syncReq.ProviderIdentifier,
+					SynchronizeIdentities, &SynchronizeIdentitiesRequest{},
+				)
+				errChan.Send(syncCtx, err)
+			})
+		}
+
+		if shouldSync(SynchronizeUsers) {
+			syncCount++
+			workflow.Go(ctx, func(syncCtx workflow.Context) {
+				err := runSyncLoop[*SynchronizeUsersRequest, SynchronizeUsersResponse](
+					syncCtx, provider, syncReq.ProviderIdentifier,
+					SynchronizeUsers, &SynchronizeUsersRequest{},
+				)
+				errChan.Send(syncCtx, err)
+			})
+		}
+
+		if shouldSync(SynchronizeGroups) {
+			syncCount++
+			workflow.Go(ctx, func(syncCtx workflow.Context) {
+				err := runSyncLoop[*SynchronizeGroupsRequest, SynchronizeGroupsResponse](
+					syncCtx, provider, syncReq.ProviderIdentifier,
+					SynchronizeGroups, &SynchronizeGroupsRequest{},
+				)
+				errChan.Send(syncCtx, err)
+			})
+		}
+
+		if shouldSync(SynchronizeResources) {
+			syncCount++
+			workflow.Go(ctx, func(syncCtx workflow.Context) {
+				err := runSyncLoop[*SynchronizeResourcesRequest, SynchronizeResourcesResponse](
+					syncCtx, provider, syncReq.ProviderIdentifier,
+					SynchronizeResources, &SynchronizeResourcesRequest{},
+				)
+				errChan.Send(syncCtx, err)
+			})
+		}
+
+		if shouldSync(SynchronizeRoles) {
+			syncCount++
+			workflow.Go(ctx, func(syncCtx workflow.Context) {
+				err := runSyncLoop[*SynchronizeRolesRequest, SynchronizeRolesResponse](
+					syncCtx, provider, syncReq.ProviderIdentifier,
+					SynchronizeRoles, &SynchronizeRolesRequest{},
+				)
+				errChan.Send(syncCtx, err)
+			})
+		}
+
+		if shouldSync(SynchronizePermissions) {
+			syncCount++
+			workflow.Go(ctx, func(syncCtx workflow.Context) {
+				err := runSyncLoop[*SynchronizePermissionsRequest, SynchronizePermissionsResponse](
+					syncCtx, provider, syncReq.ProviderIdentifier,
+					SynchronizePermissions, &SynchronizePermissionsRequest{},
+				)
+				errChan.Send(syncCtx, err)
+			})
+		}
+
+		log.Info("Launched synchronization activities", "provider", syncReq.ProviderIdentifier, "activity_count", syncCount)
+
+		var errs []error
+		for range syncCount {
+			var err error
+			errChan.Receive(ctx, &err)
+			if err != nil {
+				errs = append(errs, err)
+			}
+		}
+
+		if len(errs) > 0 {
+			log.Error("Synchronization workflow encountered errors", "errors", errs)
+			return nil, fmt.Errorf("synchronization failed: %v", errs)
+		}
+
+		log.Info("Completed synchronization workflow", "provider", syncReq.ProviderIdentifier)
+
+		return &SynchronizeResponse{}, nil
 	}
-
-	if len(errs) > 0 {
-		// Log errors but return what we have
-		log.Error("Synchronization workflow encountered errors", "errors", errs)
-		return nil, fmt.Errorf("synchronization failed: %v", errs)
-	}
-
-	log.Info("Completed synchronization workflow", "provider", syncReq.ProviderIdentifier)
-
-	return &SynchronizeResponse{}, nil
 }
 
 type WorkflowRoleRequest struct {

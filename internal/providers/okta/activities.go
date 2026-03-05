@@ -3,6 +3,7 @@ package okta
 import (
 	"context"
 
+	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
 )
 
@@ -29,6 +30,8 @@ func preSynchronizeActivities(
 	// Load static roles first so they are available before the PreSync job runs
 	p.SetRoles(p.getStaticRoles())
 	p.SetPermissions(p.getStaticPermissions())
+
+	logrus.Infoln("Okta shared data set for provider: " + p.GetIdentifier())
 
 	// Carry on with the normal synchronization flow, which will run the PreSync job and then the main Sync job
 	return models.Synchronize(ctx, temporalService, p, req)

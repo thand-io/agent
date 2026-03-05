@@ -146,28 +146,39 @@ type SynchronizeRequestImpl interface {
 
 type SynchronizeResponseImpl interface {
 	GetPagination() *PaginationOptions
+	// AddToProvider routes the response data to the correct Add* method on the
+	// provider. This is the single place that maps response type → provider
+	// store update, shared by both the Temporal and pure-Go sync paths.
+	AddToProvider(provider Provider)
 }
 
 func (r *SynchronizeRolesRequest) SetPagination(p *PaginationOptions) { r.Pagination = p }
 func (r SynchronizeRolesResponse) GetPagination() *PaginationOptions  { return r.Pagination }
+func (r SynchronizeRolesResponse) AddToProvider(p Provider)           { p.AddRoles(r.Roles...) }
 
 func (r *SynchronizePermissionsRequest) SetPagination(p *PaginationOptions) { r.Pagination = p }
 func (r SynchronizePermissionsResponse) GetPagination() *PaginationOptions  { return r.Pagination }
+func (r SynchronizePermissionsResponse) AddToProvider(p Provider)           { p.AddPermissions(r.Permissions...) }
 
 func (r *SynchronizeUsersRequest) SetPagination(p *PaginationOptions) { r.Pagination = p }
 func (r SynchronizeUsersResponse) GetPagination() *PaginationOptions  { return r.Pagination }
+func (r SynchronizeUsersResponse) AddToProvider(p Provider)           { p.AddIdentities(r.Identities...) }
 
 func (r *SynchronizeGroupsRequest) SetPagination(p *PaginationOptions) { r.Pagination = p }
 func (r SynchronizeGroupsResponse) GetPagination() *PaginationOptions  { return r.Pagination }
+func (r SynchronizeGroupsResponse) AddToProvider(p Provider)           { p.AddIdentities(r.Identities...) }
 
 func (r *SynchronizeResourcesRequest) SetPagination(p *PaginationOptions) { r.Pagination = p }
 func (r SynchronizeResourcesResponse) GetPagination() *PaginationOptions  { return r.Pagination }
+func (r SynchronizeResourcesResponse) AddToProvider(p Provider)           { p.AddResources(r.Resources...) }
 
 func (r *SynchronizeIdentitiesRequest) SetPagination(p *PaginationOptions) { r.Pagination = p }
 func (r SynchronizeIdentitiesResponse) GetPagination() *PaginationOptions  { return r.Pagination }
+func (r SynchronizeIdentitiesResponse) AddToProvider(p Provider)           { p.AddIdentities(r.Identities...) }
 
 func (r *SynchronizeTenantsRequest) SetPagination(p *PaginationOptions) { r.Pagination = p }
 func (r SynchronizeTenantsResponse) GetPagination() *PaginationOptions  { return r.Pagination }
+func (r SynchronizeTenantsResponse) AddToProvider(p Provider)           { p.AddTenants(r.Tenants...) }
 
 // ProviderContext is the execution context passed to provider RBAC operations.
 // It is an alias for WorkflowTaskSupport so providers receive both the plain

@@ -44,7 +44,7 @@ func (p *BaseProvider) GetRole(ctx context.Context, role string) (*ProviderRole,
 	if p.rbac == nil || !p.HasCapability(
 		ProviderCapabilityRoles,
 	) {
-		logrus.Warningln("provider has no roles")
+		logrus.Warningln("provider has no roles support for provider: ", p.GetIdentifier())
 		return nil, fmt.Errorf("provider has no roles")
 	}
 
@@ -72,7 +72,7 @@ func (p *BaseProvider) ListRoles(
 	if p.rbac == nil || !p.HasCapability(
 		ProviderCapabilityRoles,
 	) {
-		logrus.Warningln("provider has no roles")
+		logrus.Warningln("provider has no roles support for provider: ", p.GetIdentifier())
 		return nil, fmt.Errorf("provider has no roles")
 	}
 
@@ -128,7 +128,7 @@ func (p *BaseProvider) SetRolesWithKey(
 	keyFunc func(r ProviderRole) []string) {
 
 	if p.rbac == nil {
-		logrus.Warningln("provider has no roles support")
+		logrus.Warningln("provider has no roles support for provider: ", p.GetIdentifier())
 		return
 	}
 
@@ -153,7 +153,7 @@ func (p *BaseProvider) SetRolesWithKey(
 
 	logrus.WithFields(logrus.Fields{
 		"total_roles": len(p.rbac.roles),
-	}).Debug("Set provider roles")
+	}).Debug("Set provider roles for provider: ", p.GetIdentifier())
 
 	// Trigger reindex
 	go func() {
@@ -168,36 +168,57 @@ func (p *BaseProvider) SetRolesWithKey(
 func (p *BaseProvider) AddRoles(roles ...ProviderRole) {
 	// Take existing roles and append new ones
 	if p.rbac == nil {
-		logrus.Warningln("provider has no roles support")
+		logrus.Warningln("provider has no roles support for provider: ", p.GetIdentifier())
 		return
 	}
 
-	p.rbac.mu.RLock()
-	existing := p.rbac.roles
+	// Hold a single write lock for the entire read-modify-write to prevent
+	// concurrent Add* calls from overwriting each other's changes (TOCTOU race).
+	p.rbac.mu.Lock()
 
-	if existing == nil {
-		existing = make([]ProviderRole, 0)
+	if p.rbac.roles == nil {
+		p.rbac.roles = make([]ProviderRole, 0)
 	}
-
-	// Make a copy to avoid data races when appending
-	existingCopy := make([]ProviderRole, len(existing))
-	copy(existingCopy, existing)
+	if p.rbac.rolesMap == nil {
+		p.rbac.rolesMap = make(map[string]*ProviderRole)
+	}
 
 	filtered := FilterDuplicates(
 		roles,
 		p.rbac.rolesMap,
 		CreateKeysFromRoles,
 	)
-	p.rbac.mu.RUnlock()
 
-	combined := append(existingCopy, filtered...)
+	existingCount := len(p.rbac.roles)
+
+	if len(filtered) > 0 {
+		p.rbac.roles = append(p.rbac.roles, filtered...)
+
+		// Update the map in place for the newly added roles.
+		for i := range filtered {
+			role := &p.rbac.roles[existingCount+i]
+			for _, key := range CreateKeysFromRoles(filtered[i]) {
+				p.rbac.rolesMap[strings.ToLower(key)] = role
+			}
+		}
+	}
+
+	totalCount := len(p.rbac.roles)
+	p.rbac.mu.Unlock()
 
 	logrus.WithFields(logrus.Fields{
-		"existing": len(existing),
+		"existing": existingCount,
 		"new":      len(roles),
 		"added":    len(filtered),
-		"total":    len(combined),
-	}).Debug("Adding roles to provider")
+		"total":    totalCount,
+	}).Debug("Adding roles to provider: ", p.GetIdentifier())
 
-	p.SetRoles(combined)
+	if len(filtered) > 0 {
+		// Trigger reindex asynchronously (buildRoleIndices acquires its own lock).
+		go func() {
+			if err := p.buildRoleIndices(); err != nil {
+				logrus.WithError(err).Error("Failed to build role search indices for provider: ", p.GetIdentifier())
+			}
+		}()
+	}
 }

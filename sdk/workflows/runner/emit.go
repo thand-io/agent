@@ -56,10 +56,10 @@ func (r *ResumableWorkflowRunner) ExecuteEmitTask(
 			RetryPolicy:         DefaultRetryPolicy,
 		}
 
-		ctx = workflow.WithLocalActivityOptions(ctx, ao)
+		actx := workflow.WithLocalActivityOptions(ctx, ao)
 
 		fut := workflow.ExecuteLocalActivity(
-			ctx,
+			actx,
 			sdkConstants.TemporalSignalWorkflowActivityName,
 			workflowInfo.WorkflowExecution.ID,
 			workflowInfo.WorkflowExecution.RunID,

@@ -2,8 +2,10 @@ package daemon
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 )
@@ -25,9 +27,26 @@ func (s *Server) getLogsPage(c *gin.Context) {
 		}
 	}
 
-	logs := s.Config.GetEventsWithFilter(config.LogFilter{
-		Limit: 500,
-	})
+	filter := config.LogFilter{
+		Limit:  500,
+		Search: c.Query("search"),
+	}
+
+	// Parse optional limit override
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if n, err := strconv.Atoi(limitStr); err == nil && n > 0 {
+			filter.Limit = n
+		}
+	}
+
+	// Parse optional level filter (single value, e.g. "info", "warning", "error")
+	if levelStr := c.Query("level"); levelStr != "" {
+		if level, err := logrus.ParseLevel(levelStr); err == nil {
+			filter.Levels = []logrus.Level{level}
+		}
+	}
+
+	logs := s.Config.GetEventsWithFilter(filter)
 
 	if s.canAcceptHtml(c) {
 

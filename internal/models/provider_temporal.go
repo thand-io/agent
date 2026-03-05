@@ -62,6 +62,7 @@ func RegisterActivities(temporalClient TemporalImpl, identifier string, s any) e
 		name := method.Name
 
 		if err := validateFnFormat(method.Type, false, false); err != nil {
+			logrus.WithError(err).Errorf("Skipping method %s of struct %s for provider %s due to invalid function signature: %v", name, structType.Name(), identifier, err)
 			return fmt.Errorf("method %s of %s: %w", name, structType.Name(), err)
 		}
 
@@ -74,11 +75,12 @@ func RegisterActivities(temporalClient TemporalImpl, identifier string, s any) e
 			},
 		)
 
-		logrus.Debugf("Registered activity: %s", activityName)
+		logrus.Debugf("Registered activity: %s for provider: %s", activityName, identifier)
 		count++
 	}
 
 	if count == 0 {
+		logrus.Debugf("No public methods found to register as activities for struct %s with provider identifier %s", structType.Name(), identifier)
 		return fmt.Errorf("no activities (public methods) found at %v structure", structType.Name())
 	}
 

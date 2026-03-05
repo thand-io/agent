@@ -46,26 +46,18 @@ func (p *BaseProvider) GetIdentity(ctx context.Context, identity string) (*Ident
 	if p.identity == nil || !p.HasAnyCapability(
 		IdentityCapabilities...,
 	) {
-		logrus.Warningln("provider does not support identities capability")
+		logrus.Warningln("provider does not support identities capability for provider: ", p.GetIdentifier())
 		return nil, fmt.Errorf("provider does not support identities capability")
 	}
 
-	// Try to get from cache first
-	p.identity.mu.RLock()
-	identitiesMap := p.identity.identitiesMap
-	p.identity.mu.RUnlock()
-
-	if identitiesMap != nil {
-		if id, exists := identitiesMap[strings.ToLower(identity)]; exists {
-			return id, nil
-		}
-	}
-
+	// Fast map lookup under read lock
 	p.identity.mu.RLock()
 	defer p.identity.mu.RUnlock()
 
-	if id, exists := p.identity.identitiesMap[strings.ToLower(identity)]; exists {
-		return id, nil
+	if p.identity.identitiesMap != nil {
+		if id, exists := p.identity.identitiesMap[strings.ToLower(identity)]; exists {
+			return id, nil
+		}
 	}
 
 	return nil, fmt.Errorf("identity not found: %s", identity)
@@ -77,7 +69,7 @@ func (p *BaseProvider) ListIdentities(ctx context.Context, searchRequest *Search
 	if p.identity == nil || !p.HasAnyCapability(
 		IdentityCapabilities...,
 	) {
-		logrus.Warningln("provider does not support identities capability")
+		logrus.Warningln("provider does not support identities capability for provider: ", p.GetIdentifier())
 		return nil, fmt.Errorf("provider does not support identities capability")
 	}
 
@@ -136,6 +128,7 @@ func (p *BaseProvider) buildIdentitiyIndices() error {
 	identityMapping := bleve.NewIndexMapping()
 	identityIndex, err := bleve.NewMemOnly(identityMapping)
 	if err != nil {
+		logrus.WithError(err).Error("Failed to create identity search index for provider: ", p.GetIdentifier())
 		return fmt.Errorf("failed to create identity search index: %v", err)
 	}
 
@@ -146,6 +139,7 @@ func (p *BaseProvider) buildIdentitiyIndices() error {
 
 	for _, identity := range identities {
 		if err := identityIndex.Index(identity.ID, identity); err != nil {
+			logrus.WithError(err).Errorf("Failed to index identity %s for provider: %s", identity.ID, p.GetIdentifier())
 			return fmt.Errorf("failed to index identity %s: %v", identity.ID, err)
 		}
 	}
@@ -157,7 +151,7 @@ func (p *BaseProvider) buildIdentitiyIndices() error {
 
 	logrus.WithFields(logrus.Fields{
 		"identities": identityCount,
-	}).Debug("Identity search indices ready")
+	}).Debug("Identity search indices ready for provider: ", p.GetIdentifier())
 
 	return nil
 }
@@ -223,7 +217,7 @@ func (p *BaseProvider) SetIdentitiesWithKey(
 	go func() {
 		err := p.buildIdentitiyIndices()
 		if err != nil {
-			logrus.WithError(err).Error("Failed to build identity search indices")
+			logrus.WithError(err).Error("Failed to build identity search indices for provider: ", p.GetIdentifier())
 			return
 		}
 	}()
@@ -232,35 +226,57 @@ func (p *BaseProvider) SetIdentitiesWithKey(
 func (p *BaseProvider) AddIdentities(identities ...Identity) {
 	// Take existing identities and append new ones
 	if p.identity == nil {
-		logrus.Warningln("provider has no identity support")
+		logrus.Warningln("provider has no identity support for provider: ", p.GetIdentifier())
 		return
 	}
 
-	p.identity.mu.RLock()
-	existing := p.identity.identities
-	if existing == nil {
-		existing = make([]Identity, 0)
-	}
+	// Hold a single write lock for the entire read-modify-write to prevent
+	// concurrent Add* calls from overwriting each other's changes (TOCTOU race).
+	p.identity.mu.Lock()
 
-	// Make a copy to avoid data races when appending
-	existingCopy := make([]Identity, len(existing))
-	copy(existingCopy, existing)
+	if p.identity.identities == nil {
+		p.identity.identities = make([]Identity, 0)
+	}
+	if p.identity.identitiesMap == nil {
+		p.identity.identitiesMap = make(map[string]*Identity)
+	}
 
 	filtered := FilterDuplicates(
 		identities,
 		p.identity.identitiesMap,
 		CreateKeysFromIdentity,
 	)
-	p.identity.mu.RUnlock()
 
-	combined := append(existingCopy, filtered...)
+	existingCount := len(p.identity.identities)
+
+	if len(filtered) > 0 {
+		p.identity.identities = append(p.identity.identities, filtered...)
+
+		// Update the map in place for the newly added identities.
+		for i := range filtered {
+			identity := &p.identity.identities[existingCount+i]
+			for _, key := range CreateKeysFromIdentity(filtered[i]) {
+				p.identity.identitiesMap[strings.ToLower(key)] = identity
+			}
+		}
+	}
+
+	totalCount := len(p.identity.identities)
+	p.identity.mu.Unlock()
 
 	logrus.WithFields(logrus.Fields{
-		"existing": len(existing),
+		"existing": existingCount,
 		"new":      len(identities),
 		"added":    len(filtered),
-		"total":    len(combined),
-	}).Debug("Adding identities to provider")
+		"total":    totalCount,
+	}).Debug("Adding identities to provider: ", p.GetIdentifier())
 
-	p.SetIdentities(combined)
+	if len(filtered) > 0 {
+		// Trigger reindex asynchronously (buildIdentitiyIndices acquires its own lock).
+		go func() {
+			if err := p.buildIdentitiyIndices(); err != nil {
+				logrus.WithError(err).Error("Failed to build identity search indices for provider: ", p.GetIdentifier())
+			}
+		}()
+	}
 }

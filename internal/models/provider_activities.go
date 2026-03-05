@@ -75,171 +75,82 @@ func NewProviderActivities(provider Provider) *ProviderActivities {
 	}
 }
 
+// runProviderActivity is the generic Temporal activity helper. It calls the
+// provider's sync method and wraps ErrNotImplemented into a non-retryable
+// Temporal error. The caller (paginatedSync, via runSyncLoop) is responsible
+// for calling resp.AddToProvider.
+func runProviderActivity[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
+	ctx context.Context,
+	provider Provider,
+	activityName string,
+	req Req,
+	syncFunc func(context.Context, Req) (Resp, error),
+) (Resp, error) {
+
+	log := activity.GetLogger(ctx)
+
+	log.Info("Starting activity for provider: "+provider.GetIdentifier(),
+		"activity", activityName,
+		"pagination", req)
+
+	result, err := handleNotImplementedError(syncFunc(ctx, req))
+	if err != nil {
+		log.Error("Error in activity for provider: "+provider.GetIdentifier(),
+			"activity", activityName,
+			"error", err)
+		return result, err
+	}
+
+	return result, nil
+}
+
 func (a *ProviderActivities) SynchronizeTenants(
 	ctx context.Context,
 	req *SynchronizeTenantsRequest,
 ) (*SynchronizeTenantsResponse, error) {
-
-	logrus.WithFields(logrus.Fields{
-		"pagination": req.Pagination,
-		"provider":   a.provider.GetIdentifier(),
-	}).Infoln("Starting SynchronizeTenants activity")
-
-	result, err := handleNotImplementedError(a.provider.SynchronizeTenants(ctx, req))
-
-	if err != nil {
-		logrus.WithError(err).Errorln("Error synchronizing tenants")
-		return nil, err
-	}
-
-	a.provider.AddTenants(result.Tenants...)
-
-	return result, err
+	return runProviderActivity(ctx, a.provider, string(SynchronizeTenants), req, a.provider.SynchronizeTenants)
 }
 
 func (a *ProviderActivities) SynchronizeIdentities(
 	ctx context.Context,
 	req *SynchronizeIdentitiesRequest,
 ) (*SynchronizeIdentitiesResponse, error) {
-
-	logrus.WithFields(logrus.Fields{
-		"pagination": req.Pagination,
-		"provider":   a.provider.GetIdentifier(),
-	}).Infoln("Starting SynchronizeIdentities activity")
-
-	result, err := handleNotImplementedError(a.provider.SynchronizeIdentities(ctx, req))
-
-	if err != nil {
-		logrus.WithError(err).Errorln("Error synchronizing identities")
-		return nil, err
-	}
-
-	a.provider.AddIdentities(result.Identities...)
-
-	return result, err
+	return runProviderActivity(ctx, a.provider, string(SynchronizeIdentities), req, a.provider.SynchronizeIdentities)
 }
 
 func (a *ProviderActivities) SynchronizeResources(
 	ctx context.Context,
 	req *SynchronizeResourcesRequest,
 ) (*SynchronizeResourcesResponse, error) {
-
-	logrus.WithFields(logrus.Fields{
-		"pagination": req.Pagination,
-		"provider":   a.provider.GetIdentifier(),
-	}).Infoln("Starting SynchronizeResources activity")
-
-	result, err := handleNotImplementedError(a.provider.SynchronizeResources(ctx, req))
-
-	if err != nil {
-		logrus.WithError(err).Errorln("Error synchronizing resources")
-		return nil, err
-	}
-
-	a.provider.AddResources(result.Resources...)
-
-	return result, err
+	return runProviderActivity(ctx, a.provider, string(SynchronizeResources), req, a.provider.SynchronizeResources)
 }
 
-// SynchronizeUsers fetches users from the provider and adds them to the provider's identity store
-// This must be called as a local activity to ensure that the provider's identity store is updated
-// within the same process context
 func (a *ProviderActivities) SynchronizeUsers(
 	ctx context.Context,
 	req *SynchronizeUsersRequest,
 ) (*SynchronizeUsersResponse, error) {
-
-	logrus.WithFields(logrus.Fields{
-		"pagination": req.Pagination,
-		"provider":   a.provider.GetIdentifier(),
-	}).Infoln("Starting SynchronizeUsers activity")
-
-	result, err := handleNotImplementedError(a.provider.SynchronizeUsers(ctx, req))
-
-	if err != nil {
-		logrus.WithError(err).Errorln("Error synchronizing users")
-		return nil, err
-	}
-
-	a.provider.AddIdentities(result.Identities...)
-
-	return result, err
-
+	return runProviderActivity(ctx, a.provider, string(SynchronizeUsers), req, a.provider.SynchronizeUsers)
 }
 
-// SynchronizeGroups fetches groups from the provider and adds them to the provider's identity store
-// This must be called as a local activity to ensure that the provider's identity store is updated
-// within the same process context
 func (a *ProviderActivities) SynchronizeGroups(
 	ctx context.Context,
 	req *SynchronizeGroupsRequest,
 ) (*SynchronizeGroupsResponse, error) {
-
-	logrus.WithFields(logrus.Fields{
-		"pagination": req.Pagination,
-		"provider":   a.provider.GetIdentifier(),
-	}).Infoln("Starting SynchronizeGroups activity")
-
-	result, err := handleNotImplementedError(a.provider.SynchronizeGroups(ctx, req))
-
-	if err != nil {
-		logrus.WithError(err).Errorln("Error synchronizing groups")
-		return nil, err
-	}
-
-	a.provider.AddIdentities(result.Identities...)
-
-	return result, err
+	return runProviderActivity(ctx, a.provider, string(SynchronizeGroups), req, a.provider.SynchronizeGroups)
 }
 
-// SynchronizePermissions fetches permissions from the provider and adds them to the provider's permission store
-// This must be called as a local activity to ensure that the provider's permission store is updated
-// within the same process context
 func (a *ProviderActivities) SynchronizePermissions(
 	ctx context.Context,
 	req *SynchronizePermissionsRequest,
 ) (*SynchronizePermissionsResponse, error) {
-
-	logrus.WithFields(logrus.Fields{
-		"pagination": req.Pagination,
-		"provider":   a.provider.GetIdentifier(),
-	}).Infoln("Starting SynchronizePermissions activity")
-
-	result, err := handleNotImplementedError(a.provider.SynchronizePermissions(ctx, req))
-
-	if err != nil {
-		logrus.WithError(err).Errorln("Error synchronizing permissions")
-		return nil, err
-	}
-
-	a.provider.AddPermissions(result.Permissions...)
-
-	return result, err
+	return runProviderActivity(ctx, a.provider, string(SynchronizePermissions), req, a.provider.SynchronizePermissions)
 }
 
-// SynchronizeRoles fetches roles from the provider and adds them to the provider's role store
-// This must be called as a local activity to ensure that the provider's role store is updated
-// within the same process context
 func (a *ProviderActivities) SynchronizeRoles(
 	ctx context.Context,
 	req *SynchronizeRolesRequest,
 ) (*SynchronizeRolesResponse, error) {
-
-	logrus.WithFields(logrus.Fields{
-		"pagination": req.Pagination,
-		"provider":   a.provider.GetIdentifier(),
-	}).Infoln("Starting SynchronizeRoles activity")
-
-	result, err := handleNotImplementedError(a.provider.SynchronizeRoles(ctx, req))
-
-	if err != nil {
-		logrus.WithError(err).Errorln("Error synchronizing roles")
-		return nil, err
-	}
-
-	a.provider.AddRoles(result.Roles...)
-
-	return result, err
+	return runProviderActivity(ctx, a.provider, string(SynchronizeRoles), req, a.provider.SynchronizeRoles)
 }
 
 func handleNotImplementedError[T any](res T, err error) (T, error) {
