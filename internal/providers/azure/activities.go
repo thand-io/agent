@@ -3,6 +3,7 @@ package azure
 import (
 	"context"
 
+	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
 )
 
@@ -32,11 +33,14 @@ func PreSynchronizeActivities(
 	azureData, err := getSharedData()
 
 	if err != nil {
+		logrus.WithError(err).Errorln("Error getting Azure shared data for synchronization for provider: " + provider.GetIdentifier())
 		return err
 	}
 
 	provider.SetRoles(azureData.roles)
 	provider.SetPermissions(azureData.permissions)
+
+	logrus.Infoln("Azure shared data set for provider: " + provider.GetIdentifier())
 
 	return models.Synchronize(ctx, temporalService, provider, req)
 }

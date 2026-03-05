@@ -202,32 +202,53 @@ func (p *BaseProvider) AddResources(resources ...ProviderResource) {
 		return
 	}
 
-	p.rbac.mu.RLock()
-	existing := p.rbac.resources
+	// Hold a single write lock for the entire read-modify-write to prevent
+	// concurrent Add* calls from overwriting each other's changes (TOCTOU race).
+	p.rbac.mu.Lock()
 
-	if existing == nil {
-		existing = make([]ProviderResource, 0)
+	if p.rbac.resources == nil {
+		p.rbac.resources = make([]ProviderResource, 0)
 	}
-
-	// Make a copy to avoid data races when appending
-	existingCopy := make([]ProviderResource, len(existing))
-	copy(existingCopy, existing)
+	if p.rbac.resourcesMap == nil {
+		p.rbac.resourcesMap = make(map[string]*ProviderResource)
+	}
 
 	filtered := FilterDuplicates(
 		resources,
 		p.rbac.resourcesMap,
 		CreateKeysFromResources,
 	)
-	p.rbac.mu.RUnlock()
 
-	combined := append(existingCopy, filtered...)
+	existingCount := len(p.rbac.resources)
+
+	if len(filtered) > 0 {
+		p.rbac.resources = append(p.rbac.resources, filtered...)
+
+		// Update the map in place for the newly added resources.
+		for i := range filtered {
+			resource := &p.rbac.resources[existingCount+i]
+			for _, key := range CreateKeysFromResources(filtered[i]) {
+				p.rbac.resourcesMap[strings.ToLower(key)] = resource
+			}
+		}
+	}
+
+	totalCount := len(p.rbac.resources)
+	p.rbac.mu.Unlock()
 
 	logrus.WithFields(logrus.Fields{
-		"existing": len(existing),
+		"existing": existingCount,
 		"new":      len(resources),
 		"added":    len(filtered),
-		"total":    len(combined),
+		"total":    totalCount,
 	}).Debug("Adding resources to provider")
 
-	p.SetResources(combined)
+	if len(filtered) > 0 {
+		// Trigger reindex asynchronously (buildResourceIndices acquires its own lock).
+		go func() {
+			if err := p.buildResourceIndices(); err != nil {
+				logrus.WithError(err).Error("Failed to build resources search indices")
+			}
+		}()
+	}
 }

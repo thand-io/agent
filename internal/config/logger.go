@@ -45,8 +45,8 @@ type thandLogger struct {
 func NewThandLogger() *thandLogger {
 	return &thandLogger{
 		sessionUID:  uuid.New(),
-		eventBuffer: make([]*models.LogEntry, 1000),
-		maxSize:     1000,
+		eventBuffer: make([]*models.LogEntry, 10000),
+		maxSize:     10000,
 		currentPos:  0,
 		isFull:      false,
 	}
@@ -295,8 +295,8 @@ func (t *thandLogger) Levels() []logrus.Level {
 		logrus.ErrorLevel,
 		logrus.WarnLevel,
 		logrus.InfoLevel,
-		// logrus.DebugLevel,
-		// logrus.TraceLevel,
+		logrus.DebugLevel,
+		logrus.TraceLevel,
 	}
 }
 
@@ -345,6 +345,8 @@ type LogFilter struct {
 	Until *time.Time `json:"until,omitempty"`
 	// Maximum number of events to return (if 0, no limit)
 	Limit int `json:"limit,omitempty"`
+	// Case-insensitive substring search on the log message (if empty, all messages are included)
+	Search string `json:"search,omitempty"`
 }
 
 func (f *LogFilter) GetLimit() int {
@@ -370,6 +372,8 @@ func (t *thandLogger) GetEventsWithFilter(filter LogFilter) []*models.LogEntry {
 		}
 	}
 
+	searchLower := strings.ToLower(filter.Search)
+
 	for _, entry := range allEvents {
 		// Filter by log level
 		if len(filter.Levels) > 0 && !levelMap[entry.Level] {
@@ -381,6 +385,11 @@ func (t *thandLogger) GetEventsWithFilter(filter LogFilter) []*models.LogEntry {
 			continue
 		}
 		if filter.Until != nil && entry.Time.After(*filter.Until) {
+			continue
+		}
+
+		// Filter by search query (case-insensitive substring match on message)
+		if searchLower != "" && !strings.Contains(strings.ToLower(entry.Message), searchLower) {
 			continue
 		}
 

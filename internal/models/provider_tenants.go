@@ -47,7 +47,7 @@ func (p *BaseProvider) GetTenant(ctx context.Context, tenant string) (*ProviderT
 	if p.tenants == nil || !p.HasCapability(
 		ProviderCapabilityTenants,
 	) {
-		logrus.Warningln("provider has no tenants support")
+		logrus.Warningln("provider has no tenants support for provider: ", p.GetIdentifier())
 		return nil, fmt.Errorf("provider has no tenants support")
 	}
 
@@ -67,7 +67,7 @@ func (p *BaseProvider) ListTenants(ctx context.Context, searchRequest *SearchReq
 	if p.tenants == nil || !p.HasCapability(
 		ProviderCapabilityTenants,
 	) {
-		logrus.Warningln("provider has no tenants support")
+		logrus.Warningln("provider has no tenants support for provider: ", p.GetIdentifier())
 		return nil, fmt.Errorf("provider has no tenants support")
 	}
 
@@ -131,7 +131,7 @@ func (p *BaseProvider) SetTenantsWithKey(
 	keyFunc func(t ProviderTenant) []string) {
 
 	if p.tenants == nil {
-		logrus.Warningln("provider has no tenants support")
+		logrus.Warningln("provider has no tenants support for provider: ", p.GetIdentifier())
 		return
 	}
 
@@ -156,13 +156,13 @@ func (p *BaseProvider) SetTenantsWithKey(
 
 	logrus.WithFields(logrus.Fields{
 		"total_tenants": len(p.tenants.tenants),
-	}).Debug("Set provider tenants")
+	}).Debug("Set provider tenants for provider: ", p.GetIdentifier())
 
 	// Trigger reindex
 	go func() {
 		err := p.buildTenantIndices()
 		if err != nil {
-			logrus.WithError(err).Error("Failed to build tenant search indices")
+			logrus.WithError(err).Error("Failed to build tenant search indices for provider: ", p.GetIdentifier())
 			return
 		}
 	}()
@@ -171,38 +171,59 @@ func (p *BaseProvider) SetTenantsWithKey(
 func (p *BaseProvider) AddTenants(tenants ...ProviderTenant) {
 	// Take existing tenants and append new ones
 	if p.tenants == nil {
-		logrus.Warningln("provider has no tenants support")
+		logrus.Warningln("provider has no tenants support for provider: ", p.GetIdentifier())
 		return
 	}
 
-	p.tenants.mu.RLock()
-	existing := p.tenants.tenants
+	// Hold a single write lock for the entire read-modify-write to prevent
+	// concurrent Add* calls from overwriting each other's changes (TOCTOU race).
+	p.tenants.mu.Lock()
 
-	if existing == nil {
-		existing = make([]ProviderTenant, 0)
+	if p.tenants.tenants == nil {
+		p.tenants.tenants = make([]ProviderTenant, 0)
 	}
-
-	// Make a copy to avoid data races when appending
-	existingCopy := make([]ProviderTenant, len(existing))
-	copy(existingCopy, existing)
+	if p.tenants.tenantsMap == nil {
+		p.tenants.tenantsMap = make(map[string]*ProviderTenant)
+	}
 
 	filtered := FilterDuplicates(
 		tenants,
 		p.tenants.tenantsMap,
 		CreateKeysFromTenants,
 	)
-	p.tenants.mu.RUnlock()
 
-	combined := append(existingCopy, filtered...)
+	existingCount := len(p.tenants.tenants)
+
+	if len(filtered) > 0 {
+		p.tenants.tenants = append(p.tenants.tenants, filtered...)
+
+		// Update the map in place for the newly added tenants.
+		for i := range filtered {
+			tenant := &p.tenants.tenants[existingCount+i]
+			for _, key := range CreateKeysFromTenants(filtered[i]) {
+				p.tenants.tenantsMap[strings.ToLower(key)] = tenant
+			}
+		}
+	}
+
+	totalCount := len(p.tenants.tenants)
+	p.tenants.mu.Unlock()
 
 	logrus.WithFields(logrus.Fields{
-		"existing": len(existing),
+		"existing": existingCount,
 		"new":      len(tenants),
 		"added":    len(filtered),
-		"total":    len(combined),
-	}).Debug("Adding tenants to provider")
+		"total":    totalCount,
+	}).Debug("Adding tenants to provider: ", p.GetIdentifier())
 
-	p.SetTenants(combined)
+	if len(filtered) > 0 {
+		// Trigger reindex asynchronously (buildTenantIndices acquires its own lock).
+		go func() {
+			if err := p.buildTenantIndices(); err != nil {
+				logrus.WithError(err).Error("Failed to build tenant search indices for provider: ", p.GetIdentifier())
+			}
+		}()
+	}
 }
 
 func (p *BaseProvider) buildTenantIndices() error {
@@ -233,6 +254,7 @@ func (p *BaseProvider) buildTenantIndices() error {
 
 	tenantsIndex, err := bleve.NewMemOnly(tenantsMapping)
 	if err != nil {
+		logrus.WithError(err).Error("Failed to create tenant search index")
 		return fmt.Errorf("failed to create tenants search index: %v", err)
 	}
 
@@ -243,6 +265,7 @@ func (p *BaseProvider) buildTenantIndices() error {
 
 	for _, tenant := range tenants {
 		if err := tenantsIndex.Index(tenant.ID, tenant); err != nil {
+			logrus.WithError(err).Errorf("Failed to index tenant %s for provider: %s", tenant.ID, p.GetIdentifier())
 			return fmt.Errorf("failed to index tenant %s: %v", tenant.ID, err)
 		}
 	}
@@ -253,7 +276,7 @@ func (p *BaseProvider) buildTenantIndices() error {
 
 	logrus.WithFields(logrus.Fields{
 		"tenants": len(tenants),
-	}).Debug("Tenant search indices ready")
+	}).Debug("Tenant search indices ready for provider: ", p.GetIdentifier())
 
 	return nil
 }

@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 
+	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
 )
 
@@ -24,14 +25,24 @@ func (p *awsProvider) Synchronize(
 
 func PreSynchronizeActivities(ctx context.Context, temporalService models.TemporalImpl, provider models.Provider) error {
 
+	logrus.Infoln("Starting pre-synchronization for provider: " + provider.GetIdentifier())
+
 	awsData, err := getSharedData()
 
 	if err != nil {
+		logrus.WithError(err).Errorln("Error getting AWS shared data for synchronization for provider: " + provider.GetIdentifier())
 		return err
 	}
 
+	logrus.Infoln("AWS shared data retrieved for provider: " + provider.GetIdentifier())
+
 	provider.SetRoles(awsData.roles)
+
+	logrus.Infoln("AWS roles set for provider: " + provider.GetIdentifier())
+
 	provider.SetPermissions(awsData.permissions)
+
+	logrus.Infoln("AWS shared data set for provider: " + provider.GetIdentifier())
 
 	return models.Synchronize(ctx, temporalService, provider, nil)
 }
