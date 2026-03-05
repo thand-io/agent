@@ -7,12 +7,12 @@ import (
 
 // logrusLogger is an adapter that implements the Temporal log.Logger interface using logrus
 type logrusLogger struct {
-	logger *logrus.Logger
+	logger *logrus.Entry
 }
 
 func newLogrusLogger() log.Logger {
 	return &logrusLogger{
-		logger: logrus.StandardLogger(),
+		logger: logrus.WithField("source", "io.temporal"),
 	}
 }
 

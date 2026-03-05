@@ -3,6 +3,7 @@ package gcp
 import (
 	"context"
 
+	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
 )
 
@@ -35,11 +36,14 @@ func PreSynchronizeActivities(
 	gcpData, err := getSharedData(stage)
 
 	if err != nil {
+		logrus.WithError(err).Errorln("Error getting GCP shared data for synchronization for provider: " + provider.GetIdentifier())
 		return err
 	}
 
 	provider.SetRoles(gcpData.roles)
 	provider.SetPermissions(gcpData.permissions)
+
+	logrus.Infoln("GCP shared data set for provider: " + provider.GetIdentifier())
 
 	return models.Synchronize(ctx, temporalService, provider, req)
 }

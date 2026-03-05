@@ -156,16 +156,16 @@ func (p *BaseProvider) AddPermissions(permissions ...ProviderPermission) {
 		return
 	}
 
-	p.rbac.mu.RLock()
-	existing := p.rbac.permissions
+	// Hold a single write lock for the entire read-modify-write to prevent
+	// concurrent Add* calls from overwriting each other's changes (TOCTOU race).
+	p.rbac.mu.Lock()
 
-	if existing == nil {
-		existing = make([]ProviderPermission, 0)
+	if p.rbac.permissions == nil {
+		p.rbac.permissions = make([]ProviderPermission, 0)
 	}
-
-	// Make a copy to avoid data races when appending
-	existingCopy := make([]ProviderPermission, len(existing))
-	copy(existingCopy, existing)
+	if p.rbac.permissionsMap == nil {
+		p.rbac.permissionsMap = make(map[string]*ProviderPermission)
+	}
 
 	filtered := FilterDuplicates(
 		permissions,
@@ -174,16 +174,35 @@ func (p *BaseProvider) AddPermissions(permissions ...ProviderPermission) {
 			return []string{p.Name}
 		},
 	)
-	p.rbac.mu.RUnlock()
 
-	combined := append(existingCopy, filtered...)
+	existingCount := len(p.rbac.permissions)
+
+	if len(filtered) > 0 {
+		p.rbac.permissions = append(p.rbac.permissions, filtered...)
+
+		// Update the map in place for the newly added permissions.
+		for i := range filtered {
+			perm := &p.rbac.permissions[existingCount+i]
+			p.rbac.permissionsMap[strings.ToLower(perm.Name)] = perm
+		}
+	}
+
+	totalCount := len(p.rbac.permissions)
+	p.rbac.mu.Unlock()
 
 	logrus.WithFields(logrus.Fields{
-		"existing": len(existing),
+		"existing": existingCount,
 		"new":      len(permissions),
 		"added":    len(filtered),
-		"total":    len(combined),
+		"total":    totalCount,
 	}).Debug("Adding permissions to provider")
 
-	p.SetPermissions(combined)
+	if len(filtered) > 0 {
+		// Trigger reindex asynchronously (buildPermissionIndices acquires its own lock).
+		go func() {
+			if err := p.buildPermissionIndices(); err != nil {
+				logrus.WithError(err).Error("Failed to build rbac search indices")
+			}
+		}()
+	}
 }

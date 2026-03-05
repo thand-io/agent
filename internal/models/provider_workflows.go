@@ -3,13 +3,13 @@ package models
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -80,12 +80,21 @@ func CreateChildWorkflowID(parentWorkflowID, operation, provider string, req *Wo
 	return fmt.Sprintf("%s_%s_%s", parentWorkflowID, operation, hashStr)
 }
 
+// runSyncLoop runs a single synchronization capability inside a Temporal workflow
+// goroutine. It delegates to paginatedSync, providing an executor that calls the
+// registered local activity and an onPage hook that buffers patch payloads.
+// Provider store mutations (AddToProvider) happen inside the local activity
+// (runProviderActivity), not here, to keep the workflow deterministic.
 func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 	ctx workflow.Context,
+	provider Provider,
 	providerID string,
 	activityMethod SynchronizeCapability,
 	req Req,
 ) error {
+
+	log := workflow.GetLogger(ctx)
+	log.Debug("Starting synchronization loop", "provider", providerID, "activity", activityMethod)
 
 	ao := workflow.LocalActivityOptions{
 		StartToCloseTimeout: 10 * time.Minute,
@@ -97,210 +106,182 @@ func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 		},
 	}
 
-	ctx = workflow.WithLocalActivityOptions(ctx, ao)
+	activityName := CreateTemporalProviderWorkflowName(providerID, string(activityMethod))
+	actx := workflow.WithLocalActivityOptions(ctx, ao)
 
-	logrus.WithFields(logrus.Fields{
-		"provider": providerID,
-	}).Debug("Starting synchronization")
+	// Buffer page responses during pagination so that no patch activities are
+	// scheduled until every page has been fetched.  This guarantees the local
+	// activity worker slots are fully dedicated to page-fetching activities
+	// even when thousands of pages are produced.
+	var patchPayloads []Resp
 
-	// patchFutures collects the upstream-patch activity futures so that patch
-	// calls do not block page iteration — we drain them after all pages are
-	// fetched.
-	var patchFutures []workflow.Future
+	err := paginatedSync(provider, activityMethod, req,
+		// executePage: run the local activity and return the deserialized response.
+		func(r Req) (Resp, error) {
+			var resp Resp
+			err := workflow.ExecuteLocalActivity(actx, activityName, r).Get(ctx, &resp)
+			if err != nil {
+				// Normalise Temporal's non-retryable wrapper back to ErrNotImplemented
+				// so paginatedSync can handle it uniformly.
+				var appErr *temporal.ApplicationError
+				if errors.As(err, &appErr) && appErr.Type() == "NotImplementedError" {
+					return resp, ErrNotImplemented
+				}
+			}
+			return resp, err
+		},
+		// onPage: stash the response; patch activities are deferred until all
+		// pages have been fetched so they never compete with executePage.
+		func(resp Resp) {
+			patchPayloads = append(patchPayloads, resp)
+		},
+	)
+	if err != nil {
+		log.Error("Error executing synchronization", "provider", providerID, "activity", activityMethod, "error", err)
+		return err
+	}
 
-	for {
-
-		var resp Resp
-
-		activityName := CreateTemporalProviderWorkflowName(
-			providerID,
-			string(activityMethod),
-		)
-
-		err := workflow.ExecuteLocalActivity(
-			ctx,
-			activityName,
-			req,
-		).Get(ctx, &resp)
-
-		if err != nil {
-			logrus.WithFields(logrus.Fields{
-				"provider": providerID,
-				"error":    err,
-			}).Error("Error executing synchronization activity")
-			return err
-		}
-
-		// Fire the patch activity without blocking; collect the future for
-		// later resolution so pagination can proceed immediately.
-		patchFutures = append(patchFutures, workflow.ExecuteLocalActivity(
-			ctx,
+	// Schedule and drain all patch activities in the background so
+	// runSyncLoop returns immediately without blocking the caller.
+	for _, payload := range patchPayloads {
+		if err := workflow.ExecuteLocalActivity(
+			actx,
 			TemporalPatchProviderUpstreamActivityName,
 			activityMethod,
 			providerID,
-			resp,
-		))
-
-		pagination := resp.GetPagination()
-
-		if pagination == nil || len(pagination.Token) == 0 {
-			break
-		}
-
-		req.SetPagination(pagination)
-
-	}
-
-	// Drain all patch futures now that every page has been fetched.
-	for _, f := range patchFutures {
-		if err := f.Get(ctx, nil); err != nil {
-			logrus.WithFields(logrus.Fields{
-				"provider": providerID,
-				"error":    err,
-			}).Error("Error patching synchronization results upstream")
-			return err
+			payload,
+		).Get(actx, nil); err != nil {
+			log.Warn("Error patching synchronization results upstream",
+				"provider", providerID, "error", err)
 		}
 	}
 
-	logrus.WithFields(logrus.Fields{
-		"provider": providerID,
-	}).Debug("Completed synchronization")
+	log.Debug("Completed synchronization", "provider", providerID)
 
 	return nil
 }
 
-func ProviderSynchronizeWorkflow(ctx workflow.Context, syncReq SynchronizeRequest) (*SynchronizeResponse, error) {
+// CreateProviderSynchronizeWorkflow returns a workflow function that captures the
+// live provider instance via closure. Provider store mutations (AddToProvider)
+// happen inside the local activities (runProviderActivity), not in the workflow
+// goroutine, which keeps execution deterministic during Temporal replay.
+func CreateProviderSynchronizeWorkflow(provider Provider) func(workflow.Context, SynchronizeRequest) (*SynchronizeResponse, error) {
+	return func(ctx workflow.Context, syncReq SynchronizeRequest) (*SynchronizeResponse, error) {
 
-	if len(syncReq.ProviderIdentifier) == 0 {
-		return nil, fmt.Errorf("provider identifier is required")
-	}
-
-	log := workflow.GetLogger(ctx)
-	log.Info("Starting synchronization workflow", "provider", syncReq.ProviderIdentifier)
-
-	errChan := workflow.NewChannel(ctx)
-	syncCount := 0
-
-	shouldSync := func(cap SynchronizeCapability) bool {
-		if len(syncReq.Requests) == 0 {
-			return true
+		if len(syncReq.ProviderIdentifier) == 0 {
+			return nil, fmt.Errorf("provider identifier is required")
 		}
-		return slices.Contains(syncReq.Requests, cap)
-	}
 
-	if shouldSync(SynchronizeTenants) {
-		syncCount++
-		workflow.Go(ctx, func(ctx workflow.Context) {
-			err := runSyncLoop[*SynchronizeTenantsRequest, SynchronizeTenantsResponse](
-				ctx,
-				syncReq.ProviderIdentifier,
-				SynchronizeTenants,
-				&SynchronizeTenantsRequest{},
-			)
-			errChan.Send(ctx, err)
-		})
-	}
+		log := workflow.GetLogger(ctx)
+		log.Info("Starting synchronization workflow", "provider", syncReq.ProviderIdentifier)
 
-	// Synchronize Identities
-	if shouldSync(SynchronizeIdentities) {
-		syncCount++
-		workflow.Go(ctx, func(ctx workflow.Context) {
-			err := runSyncLoop[*SynchronizeIdentitiesRequest, SynchronizeIdentitiesResponse](
-				ctx,
-				syncReq.ProviderIdentifier,
-				SynchronizeIdentities,
-				&SynchronizeIdentitiesRequest{},
-			)
-			errChan.Send(ctx, err)
-		})
-	}
+		errChan := workflow.NewChannel(ctx)
+		syncCount := 0
 
-	// Synchronize Users
-	if shouldSync(SynchronizeUsers) {
-		syncCount++
-		workflow.Go(ctx, func(ctx workflow.Context) {
-			err := runSyncLoop[*SynchronizeUsersRequest, SynchronizeUsersResponse](
-				ctx,
-				syncReq.ProviderIdentifier,
-				SynchronizeUsers,
-				&SynchronizeUsersRequest{},
-			)
-			errChan.Send(ctx, err)
-		})
-	}
-
-	// Synchronize Groups
-	if shouldSync(SynchronizeGroups) {
-		syncCount++
-		workflow.Go(ctx, func(ctx workflow.Context) {
-			err := runSyncLoop[*SynchronizeGroupsRequest, SynchronizeGroupsResponse](
-				ctx,
-				syncReq.ProviderIdentifier,
-				SynchronizeGroups,
-				&SynchronizeGroupsRequest{},
-			)
-			errChan.Send(ctx, err)
-		})
-	}
-
-	// Synchronize Resources
-	if shouldSync(SynchronizeResources) {
-		syncCount++
-		workflow.Go(ctx, func(ctx workflow.Context) {
-			err := runSyncLoop[*SynchronizeResourcesRequest, SynchronizeResourcesResponse](
-				ctx,
-				syncReq.ProviderIdentifier,
-				SynchronizeResources,
-				&SynchronizeResourcesRequest{},
-			)
-			errChan.Send(ctx, err)
-		})
-	}
-
-	// Synchronize Roles
-	if shouldSync(SynchronizeRoles) {
-		syncCount++
-		workflow.Go(ctx, func(ctx workflow.Context) {
-			err := runSyncLoop[*SynchronizeRolesRequest, SynchronizeRolesResponse](
-				ctx,
-				syncReq.ProviderIdentifier,
-				SynchronizeRoles,
-				&SynchronizeRolesRequest{},
-			)
-			errChan.Send(ctx, err)
-		})
-	}
-
-	// Synchronize Permissions
-	if shouldSync(SynchronizePermissions) {
-		syncCount++
-		workflow.Go(ctx, func(ctx workflow.Context) {
-			err := runSyncLoop[*SynchronizePermissionsRequest, SynchronizePermissionsResponse](
-				ctx,
-				syncReq.ProviderIdentifier,
-				SynchronizePermissions,
-				&SynchronizePermissionsRequest{},
-			)
-			errChan.Send(ctx, err)
-		})
-	}
-
-	var errs []error
-	for range syncCount {
-		var err error
-		errChan.Receive(ctx, &err)
-		if err != nil {
-			errs = append(errs, err)
+		shouldSync := func(cap SynchronizeCapability) bool {
+			if len(syncReq.Requests) == 0 {
+				return true
+			}
+			return slices.Contains(syncReq.Requests, cap)
 		}
-	}
 
-	if len(errs) > 0 {
-		// Log errors but return what we have
-		log.Error("Synchronization workflow encountered errors", "errors", errs)
-		return nil, fmt.Errorf("synchronization failed: %v", errs)
-	}
+		if shouldSync(SynchronizeTenants) {
+			syncCount++
+			workflow.Go(ctx, func(syncCtx workflow.Context) {
+				err := runSyncLoop[*SynchronizeTenantsRequest, SynchronizeTenantsResponse](
+					syncCtx, provider, syncReq.ProviderIdentifier,
+					SynchronizeTenants, &SynchronizeTenantsRequest{},
+				)
+				errChan.Send(syncCtx, err)
+			})
+		}
 
-	return &SynchronizeResponse{}, nil
+		if shouldSync(SynchronizeIdentities) {
+			syncCount++
+			workflow.Go(ctx, func(syncCtx workflow.Context) {
+				err := runSyncLoop[*SynchronizeIdentitiesRequest, SynchronizeIdentitiesResponse](
+					syncCtx, provider, syncReq.ProviderIdentifier,
+					SynchronizeIdentities, &SynchronizeIdentitiesRequest{},
+				)
+				errChan.Send(syncCtx, err)
+			})
+		}
+
+		if shouldSync(SynchronizeUsers) {
+			syncCount++
+			workflow.Go(ctx, func(syncCtx workflow.Context) {
+				err := runSyncLoop[*SynchronizeUsersRequest, SynchronizeUsersResponse](
+					syncCtx, provider, syncReq.ProviderIdentifier,
+					SynchronizeUsers, &SynchronizeUsersRequest{},
+				)
+				errChan.Send(syncCtx, err)
+			})
+		}
+
+		if shouldSync(SynchronizeGroups) {
+			syncCount++
+			workflow.Go(ctx, func(syncCtx workflow.Context) {
+				err := runSyncLoop[*SynchronizeGroupsRequest, SynchronizeGroupsResponse](
+					syncCtx, provider, syncReq.ProviderIdentifier,
+					SynchronizeGroups, &SynchronizeGroupsRequest{},
+				)
+				errChan.Send(syncCtx, err)
+			})
+		}
+
+		if shouldSync(SynchronizeResources) {
+			syncCount++
+			workflow.Go(ctx, func(syncCtx workflow.Context) {
+				err := runSyncLoop[*SynchronizeResourcesRequest, SynchronizeResourcesResponse](
+					syncCtx, provider, syncReq.ProviderIdentifier,
+					SynchronizeResources, &SynchronizeResourcesRequest{},
+				)
+				errChan.Send(syncCtx, err)
+			})
+		}
+
+		if shouldSync(SynchronizeRoles) {
+			syncCount++
+			workflow.Go(ctx, func(syncCtx workflow.Context) {
+				err := runSyncLoop[*SynchronizeRolesRequest, SynchronizeRolesResponse](
+					syncCtx, provider, syncReq.ProviderIdentifier,
+					SynchronizeRoles, &SynchronizeRolesRequest{},
+				)
+				errChan.Send(syncCtx, err)
+			})
+		}
+
+		if shouldSync(SynchronizePermissions) {
+			syncCount++
+			workflow.Go(ctx, func(syncCtx workflow.Context) {
+				err := runSyncLoop[*SynchronizePermissionsRequest, SynchronizePermissionsResponse](
+					syncCtx, provider, syncReq.ProviderIdentifier,
+					SynchronizePermissions, &SynchronizePermissionsRequest{},
+				)
+				errChan.Send(syncCtx, err)
+			})
+		}
+
+		log.Info("Launched synchronization activities", "provider", syncReq.ProviderIdentifier, "activity_count", syncCount)
+
+		var errs []error
+		for range syncCount {
+			var err error
+			errChan.Receive(ctx, &err)
+			if err != nil {
+				errs = append(errs, err)
+			}
+		}
+
+		if len(errs) > 0 {
+			log.Error("Synchronization workflow encountered errors", "errors", errs)
+			return nil, fmt.Errorf("synchronization failed: %v", errs)
+		}
+
+		log.Info("Completed synchronization workflow", "provider", syncReq.ProviderIdentifier)
+
+		return &SynchronizeResponse{}, nil
+	}
 }
 
 type WorkflowRoleRequest struct {
@@ -347,6 +328,7 @@ type authorizeRoleRequestSideEffect struct {
 // workflow.Context, constructs a WorkflowTaskSupport with it, and delegates to
 // provider.AuthorizeRole — allowing the provider to dispatch activities, use
 // workflow.Go, and manage state just as it does in the primary workflow.
+// Careful: The workflow function returned by this method will be executed as a Temporal workflow, so it must be deterministic and should not perform any non-deterministic operations (like generating random numbers or accessing the current time) directly in the workflow code. Any such operations should be performed within activities or isolated using workflow.SideEffect to ensure correct behavior during workflow replay.
 func CreateProviderAuthorizeRoleWorkflow(cfg ConfigImpl, provider Provider) func(workflow.Context, WorkflowRoleRequest) (*AuthorizeRoleResponse, error) {
 	return func(ctx workflow.Context, req WorkflowRoleRequest) (*AuthorizeRoleResponse, error) {
 
@@ -380,7 +362,7 @@ func CreateProviderAuthorizeRoleWorkflow(cfg ConfigImpl, provider Provider) func
 			return nil, fmt.Errorf("%s", se.Err)
 		}
 
-		log.Info("Constructed authorize role request, invoking provider",
+		log.Debug("Constructed authorize role request, invoking provider",
 			"provider", provider.GetIdentifier(),
 			"authorizeReq", se.Request,
 		)
@@ -396,6 +378,8 @@ type WorkflowRevokeRoleRequest struct {
 
 // CreateProviderRevokeRoleWorkflow returns a workflow function that captures the
 // live provider instance via closure for revocation operations.
+// Careful: The revoke workflow may need to reconstruct the original AuthorizeRoleRequest
+// and must handle it deterministically within a workflow.SideEffect.
 func CreateProviderRevokeRoleWorkflow(cfg ConfigImpl, provider Provider) func(workflow.Context, WorkflowRevokeRoleRequest) (*RevokeRoleResponse, error) {
 	return func(ctx workflow.Context, req WorkflowRevokeRoleRequest) (*RevokeRoleResponse, error) {
 
@@ -432,7 +416,7 @@ func CreateProviderRevokeRoleWorkflow(cfg ConfigImpl, provider Provider) func(wo
 			AuthorizeRoleResponse: req.AuthorizeRoleResponse,
 		}
 
-		log.Info("Constructed revoke role request, invoking provider",
+		log.Debug("Constructed revoke role request, invoking provider",
 			"provider", provider.GetIdentifier(),
 			"revokeReq", revokeReq,
 		)
@@ -441,6 +425,8 @@ func CreateProviderRevokeRoleWorkflow(cfg ConfigImpl, provider Provider) func(wo
 	}
 }
 
+// CreateAuthorizeRoleRequest builds an AuthorizeRoleRequest from a WorkflowRoleRequest by resolving identity and tenant information, validating the requested role, and materializing any composite role configuration for the given provider.
+// Careful: This helper wraps errors from identity, tenant, and role resolution with additional context to make diagnosing workflow failures easier.
 func CreateAuthorizeRoleRequest(
 	cfg ConfigImpl,
 	provider Provider,
@@ -499,18 +485,16 @@ func CreateAuthorizeRoleRequest(
 }
 
 // validateRoleAndBuildOutput validates the role and builds the initial model output
+// Careful: This function is called within a workflow.SideEffect, so it must be deterministic and cannot perform any Temporal operations (activities, child workflows, timers) or access non-deterministic data (current time, random numbers). It can only use the data passed in the parameters and perform pure computations.
 func validateRoleAndBuildOutput(
 	provider Provider,
 	elevateRequest ElevateRequestInternal,
 ) (map[string]any, error) {
+
 	modelOutput := map[string]any{}
 
 	validateOut, err := ValidateRole(provider, elevateRequest)
 	if err != nil {
-		logrus.WithFields(logrus.Fields{
-			"error": err,
-			"role":  elevateRequest.Role,
-		}).Error("Failed to validate role")
 		return nil, err
 	}
 

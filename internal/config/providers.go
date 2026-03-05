@@ -256,7 +256,7 @@ func (c *Config) InitializeProviders() error {
 					// Register the provider Synchronize workflow. This updates roles, permissions,
 					// resources and identities for RBAC. We register this on the provider itself since it's a core part of the provider's functionality, but we register all other workflows and activities separately to allow providers to opt out of Temporal if they want.
 					worker.RegisterWorkflowWithOptions(
-						models.ProviderSynchronizeWorkflow,
+						models.CreateProviderSynchronizeWorkflow(providerResult),
 						workflow.RegisterOptions{
 							Name:               syncWorkflowName,
 							VersioningBehavior: workflow.VersioningBehaviorPinned,
@@ -271,6 +271,7 @@ func (c *Config) InitializeProviders() error {
 
 						logrus.WithFields(logrus.Fields{
 							"workflow": authWorkflowName,
+							"provider": providerResult.GetIdentifier(),
 						}).Infoln("Registering provider authorize role workflow with name", authWorkflowName)
 
 						// Register the provider-specific authorize and revoke role workflows.
@@ -292,6 +293,7 @@ func (c *Config) InitializeProviders() error {
 
 						logrus.WithFields(logrus.Fields{
 							"workflow": revokeWorkflowName,
+							"provider": providerResult.GetIdentifier(),
 						}).Infoln("Registering provider revoke role workflow with name", revokeWorkflowName)
 
 						worker.RegisterWorkflowWithOptions(

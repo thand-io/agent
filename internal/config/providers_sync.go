@@ -15,7 +15,7 @@ func (c *Config) synchronizeProvider(p models.Provider) {
 	}
 
 	if !c.IsServer() {
-		logrus.Debugln("Not a server instance, skipping provider synchronization")
+		logrus.Debugln("Not a server instance, skipping provider synchronization for provider: ", p.GetIdentifier())
 		p.SetReady()
 		return
 	}
@@ -41,6 +41,8 @@ func (c *Config) synchronizeProvider(p models.Provider) {
 		syncRequest := models.SynchronizeRequest{
 			ProviderIdentifier: p.GetIdentifier(),
 		}
+
+		logrus.Infoln("Requesting synchronization for provider: ", p.GetIdentifier())
 
 		err := p.Synchronize(
 			context.Background(),

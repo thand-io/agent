@@ -616,7 +616,16 @@ func (c *Config) resolveCompositeRole(
 		return nil, fmt.Errorf("role '%s' not applicable to identity", baseRole.Name)
 	}
 
-	logrus.WithField("role", baseRole.Name).Debugln("Resolving composite role")
+	var identityInfo string
+	if identity != nil {
+		identityInfo = identity.GetMappableIdentifier()
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"role":      baseRole.Name,
+		"providers": providers,
+		"identity":  identityInfo,
+	}).Debugln("Resolving composite role for role: ", baseRole.Identifier)
 
 	// Build a provider filter from the explicitly-passed providers argument.
 	// When providers are supplied, only provider-prefixed items matching one

@@ -12,6 +12,7 @@ import (
 // mockProviderForSync wraps a BaseProvider with custom sync methods for testing
 type mockProviderForSync struct {
 	*BaseProvider
+	mu                  sync.Mutex // protects tracking fields during concurrent access
 	usersCalled         bool
 	groupsCalled        bool
 	identitiesCalled    bool
@@ -61,8 +62,10 @@ func (m *mockProviderForSync) Initialize(identifier string, provider ProviderCon
 }
 
 func (m *mockProviderForSync) SynchronizeUsers(ctx context.Context, req *SynchronizeUsersRequest) (*SynchronizeUsersResponse, error) {
+	m.mu.Lock()
 	m.usersCalled = true
 	m.usersCallCount++
+	m.mu.Unlock()
 
 	// Use custom function if provided
 	if m.usersFunc != nil {
@@ -105,7 +108,9 @@ func (m *mockProviderForSync) SynchronizeUsers(ctx context.Context, req *Synchro
 }
 
 func (m *mockProviderForSync) SynchronizeGroups(ctx context.Context, req *SynchronizeGroupsRequest) (*SynchronizeGroupsResponse, error) {
+	m.mu.Lock()
 	m.groupsCalled = true
+	m.mu.Unlock()
 	if m.groupsError != nil {
 		return nil, m.groupsError
 	}
@@ -138,7 +143,9 @@ func (m *mockProviderForSync) SynchronizeGroups(ctx context.Context, req *Synchr
 }
 
 func (m *mockProviderForSync) SynchronizeIdentities(ctx context.Context, req *SynchronizeIdentitiesRequest) (*SynchronizeIdentitiesResponse, error) {
+	m.mu.Lock()
 	m.identitiesCalled = true
+	m.mu.Unlock()
 	if m.identitiesError != nil {
 		return nil, m.identitiesError
 	}
@@ -164,7 +171,9 @@ func (m *mockProviderForSync) SynchronizeIdentities(ctx context.Context, req *Sy
 }
 
 func (m *mockProviderForSync) SynchronizeResources(ctx context.Context, req *SynchronizeResourcesRequest) (*SynchronizeResourcesResponse, error) {
+	m.mu.Lock()
 	m.resourcesCalled = true
+	m.mu.Unlock()
 	if m.resourcesError != nil {
 		return nil, m.resourcesError
 	}
@@ -179,7 +188,9 @@ func (m *mockProviderForSync) SynchronizeResources(ctx context.Context, req *Syn
 }
 
 func (m *mockProviderForSync) SynchronizeRoles(ctx context.Context, req *SynchronizeRolesRequest) (*SynchronizeRolesResponse, error) {
+	m.mu.Lock()
 	m.rolesCalled = true
+	m.mu.Unlock()
 	if m.rolesError != nil {
 		return nil, m.rolesError
 	}
@@ -194,7 +205,9 @@ func (m *mockProviderForSync) SynchronizeRoles(ctx context.Context, req *Synchro
 }
 
 func (m *mockProviderForSync) SynchronizePermissions(ctx context.Context, req *SynchronizePermissionsRequest) (*SynchronizePermissionsResponse, error) {
+	m.mu.Lock()
 	m.permissionsCalled = true
+	m.mu.Unlock()
 	if m.permissionsError != nil {
 		return nil, m.permissionsError
 	}
@@ -209,7 +222,9 @@ func (m *mockProviderForSync) SynchronizePermissions(ctx context.Context, req *S
 }
 
 func (m *mockProviderForSync) SynchronizeTenants(ctx context.Context, req *SynchronizeTenantsRequest) (*SynchronizeTenantsResponse, error) {
+	m.mu.Lock()
 	m.tenantsCalled = true
+	m.mu.Unlock()
 	if m.tenantsError != nil {
 		return nil, m.tenantsError
 	}

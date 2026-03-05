@@ -37,7 +37,7 @@
                 <!-- Log Level Filter -->
                 <div style="display: flex; align-items: center; gap: 0.5rem;">
                     <label style="font-size: 0.875rem;">Level:</label>
-                    <select x-model="selectedLevel" @change="filterLogs()" 
+                    <select x-model="selectedLevel" @change="fetchLogs()" 
                             style="padding: 0.5rem; border: 1px solid hsl(var(--border)); border-radius: 0.25rem; background: hsl(var(--background)); color: hsl(var(--foreground)); font-size: 0.75rem;">
                         <option value="">All</option>
                         <option value="ERROR">Error</option>
@@ -71,7 +71,7 @@
             <div style="flex: 0 0 300px; min-width: 250px;">
                 <input type="text" 
                        x-model="searchQuery" 
-                       @input="filterLogs()"
+                       @input="debouncedFetch()"
                        placeholder="Search logs..."
                        style="width: 100%; padding: 0.75rem; border: 1px solid hsl(var(--border)); border-radius: 0.5rem; background: hsl(var(--background)); color: hsl(var(--foreground)); font-size: 0.875rem;">
             </div>
@@ -205,6 +205,7 @@ function logViewer() {
         autoRefresh: false,
         refreshInterval: 5000,
         refreshTimer: null,
+        searchTimer: null,
         selectedLevel: '',
         searchQuery: '',
         lastUpdated: '',
@@ -213,12 +214,25 @@ function logViewer() {
             this.fetchLogs();
         },
 
+        buildLogsUrl() {
+            const params = new URLSearchParams();
+            if (this.searchQuery) params.set('search', this.searchQuery);
+            if (this.selectedLevel) params.set('level', this.selectedLevel.toLowerCase());
+            const qs = params.toString();
+            return '{{.Config.ApiBasePath}}/logs' + (qs ? '?' + qs : '');
+        },
+
+        debouncedFetch() {
+            clearTimeout(this.searchTimer);
+            this.searchTimer = setTimeout(() => this.fetchLogs(), 300);
+        },
+
         async fetchLogs() {
             this.loading = true;
             this.error = null;
 
             try {
-                const response = await fetch('{{.Config.ApiBasePath}}/logs');
+                const response = await fetch(this.buildLogsUrl());
                 
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -237,33 +251,14 @@ function logViewer() {
         },
 
         filterLogs() {
-            let filtered = [...this.logs];
-
-            // Filter by level
-            if (this.selectedLevel) {
-                filtered = filtered.filter(log => 
-                    (log.level || '').toUpperCase() === this.selectedLevel.toUpperCase()
-                );
-            }
-
-            // Filter by search query
-            if (this.searchQuery) {
-                const query = this.searchQuery.toLowerCase();
-                filtered = filtered.filter(log => 
-                    (log.message || '').toLowerCase().includes(query) ||
-                    (log.source || '').toLowerCase().includes(query) ||
-                    (log.level || '').toLowerCase().includes(query)
-                );
-            }
-
-            // Sort by timestamp in descending order (most recent first)
-            filtered.sort((a, b) => {
+            // Filtering is done server-side; just sort the returned results here.
+            const sorted = [...this.logs];
+            sorted.sort((a, b) => {
                 const timeA = new Date(a.time || a.timestamp || 0);
                 const timeB = new Date(b.time || b.timestamp || 0);
                 return timeB - timeA; // Descending order (newest first)
             });
-
-            this.filteredLogs = filtered;
+            this.filteredLogs = sorted;
         },
 
         toggleAutoRefresh() {
@@ -298,7 +293,7 @@ function logViewer() {
         clearFilters() {
             this.selectedLevel = '';
             this.searchQuery = '';
-            this.filterLogs();
+            this.fetchLogs();
         },
 
         formatTimestamp(timestamp) {

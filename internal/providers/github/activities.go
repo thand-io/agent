@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 
+	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
 )
 
@@ -21,6 +22,8 @@ func (p *githubProvider) Synchronize(
 	// Before we kick off the synchronize lets update the static roles and permissions
 
 	p.SetRoles(GitHubOrganisationRoles)
+
+	logrus.Infoln("GitHub shared data set for provider: " + p.GetIdentifier())
 
 	return models.Synchronize(ctx, temporalService, p, req)
 }
