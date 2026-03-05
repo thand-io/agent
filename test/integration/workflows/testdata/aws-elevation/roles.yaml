@@ -14,5 +14,6 @@ roles:
     providers:
       - aws-localstack
     scopes:
-      users:
-        - testuser@thand.io
+      allow:
+        users:
+          - testuser@thand.io

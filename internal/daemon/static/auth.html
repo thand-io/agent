@@ -10,13 +10,13 @@
                     <div class="sso-provider">
                         {{$baseUrl := printf "%s/auth/request/%s" $.Config.ApiBasePath $key}}
                         {{if and $.Callback $.Code}}
-                        <a href="{{$baseUrl}}?callback={{$.Callback}}&amp;code={{$.Code}}" class="sso-button">
+                        <a href="{{$baseUrl}}?callback={{$.Callback}}&amp;code={{$.Code}}" class="sso-button" data-provider="{{$key}}">
                         {{else if $.Callback}}
-                        <a href="{{$baseUrl}}?callback={{$.Callback}}" class="sso-button">
+                        <a href="{{$baseUrl}}?callback={{$.Callback}}" class="sso-button" data-provider="{{$key}}">
                         {{else if $.Code}}
-                        <a href="{{$baseUrl}}?code={{$.Code}}" class="sso-button">
+                        <a href="{{$baseUrl}}?code={{$.Code}}" class="sso-button" data-provider="{{$key}}">
                         {{else}}
-                        <a href="{{$baseUrl}}" class="sso-button">
+                        <a href="{{$baseUrl}}" class="sso-button" data-provider="{{$key}}">
                         {{end}}
                             <div class="sso-icon">
                                 {{if eq $provider.Provider "oauth2.google"}}
