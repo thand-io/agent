@@ -124,10 +124,12 @@ func SetupGetWorkflowTaskQueryHandler(
 func SetupSignalChannels(ctx workflow.Context) (workflow.ReceiveChannel, workflow.ReceiveChannel) {
 	resumeSignal := workflow.GetSignalChannel(ctx, sdkWorkflowsModel.TemporalResumeSignalName)
 	terminateSignal := workflow.GetSignalChannel(ctx, sdkWorkflowsModel.TemporalTerminateSignalName)
+
 	return resumeSignal, terminateSignal
 }
 
 // setupTerminationHandler sets up the background termination handler
+// It listens for the external terminate signal and handles workflow termination accordingly
 func SetupTerminationHandler(
 	rootCtx workflow.Context,
 	terminateSignal workflow.ReceiveChannel,
@@ -140,11 +142,13 @@ func SetupTerminationHandler(
 		log.Info("Listening for terminate signal in background goroutine")
 
 		terminateSelector := workflow.NewSelector(ctx)
+
+		// Listen for external terminate signals
 		terminateSelector.AddReceive(terminateSignal, func(c workflow.ReceiveChannel, more bool) {
 			var req models.TemporalTerminationRequest
 			c.Receive(ctx, &req)
 			*terminationRequest = &req
-			log.Info("Terminate Signal Received")
+			log.Info("External Terminate Signal Received")
 		})
 
 		terminateSelector.Select(ctx)

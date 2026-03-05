@@ -60,13 +60,37 @@ type TestInfrastructure struct {
 	TemporalEndpoint  string
 	TemporalClient    client.Client
 
+	// Keycloak (Identity Provider - optional)
+	keycloakContainer testcontainers.Container
+	KeycloakEndpoint  string
+
 	// Cleanup callbacks - called before container teardown to gracefully shutdown workers
 	cleanupCallbacks []func()
 }
 
+// SetupOption configures optional infrastructure components.
+type SetupOption func(*setupConfig)
+
+type setupConfig struct {
+	keycloakRealmPath string
+}
+
+// WithKeycloak enables the Keycloak container with the given realm JSON file path.
+func WithKeycloak(realmFilePath string) SetupOption {
+	return func(cfg *setupConfig) {
+		cfg.keycloakRealmPath = realmFilePath
+	}
+}
+
 // SetupTestInfrastructure creates and starts all containers (Temporal, LocalStack, MailHog).
-func SetupTestInfrastructure(t *testing.T, ctx context.Context) *TestInfrastructure {
+// Pass optional SetupOption values to enable additional containers (e.g. Keycloak).
+func SetupTestInfrastructure(t *testing.T, ctx context.Context, opts ...SetupOption) *TestInfrastructure {
 	t.Helper()
+
+	scfg := &setupConfig{}
+	for _, opt := range opts {
+		opt(scfg)
+	}
 
 	infra := &TestInfrastructure{
 		t:   t,
@@ -81,6 +105,11 @@ func SetupTestInfrastructure(t *testing.T, ctx context.Context) *TestInfrastruct
 
 	// Start Temporal
 	infra.startTemporal(ctx)
+
+	// Optionally start Keycloak
+	if scfg.keycloakRealmPath != "" {
+		infra.startKeycloak(ctx, scfg.keycloakRealmPath)
+	}
 
 	return infra
 }
@@ -438,6 +467,12 @@ func (infra *TestInfrastructure) Teardown() {
 		}
 	}
 
+	if infra.keycloakContainer != nil {
+		if err := infra.keycloakContainer.Terminate(terminateCtx); err != nil {
+			infra.t.Logf("Warning: Failed to terminate Keycloak container: %v", err)
+		}
+	}
+
 	infra.t.Log("Test infrastructure teardown complete")
 }
 
@@ -509,4 +544,9 @@ func (infra *TestInfrastructure) TemporalHostPort() (string, int) {
 	port := 7233
 	fmt.Sscanf(portStr, "%d", &port)
 	return host, port
+}
+
+// Testing returns the *testing.T associated with this infrastructure.
+func (infra *TestInfrastructure) Testing() *testing.T {
+	return infra.t
 }

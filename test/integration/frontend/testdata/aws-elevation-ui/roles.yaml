@@ -1,0 +1,18 @@
+version: "1.0"
+roles:
+  # Simple AWS admin role for UI testing
+  aws_test_admin:
+    name: Test Admin
+    description: Test admin role for UI integration testing
+    enabled: true
+    workflows:
+      - aws_self_approval_ui
+    inherits:
+      - arn:aws:iam::aws:policy/AdministratorAccess
+    providers:
+      - aws-localstack
+    scopes:
+      allow:
+        users:
+          - testuser@thand.io
+          - "*"  # Allow any authenticated user for testing

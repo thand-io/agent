@@ -1,0 +1,51 @@
+version: "1.0"
+workflows:
+  # AWS elevation workflow requiring manager approval
+  aws_manager_approval_ui:
+    name: AWS Manager Approval UI
+    description: AWS access elevation requiring manager approval via email for UI testing
+    authentication: oidc-test
+    enabled: true
+    workflow:
+      document:
+        dsl: "1.0.0-alpha5"
+        namespace: "thand-test"
+        name: "aws-manager-approval-ui"
+        version: "1.0.0"
+      do:
+        - approvals:
+            thand: approvals
+            on:
+              approved: authorize
+              denied: denied
+            with:
+              approvals: 1
+              selfApprove: false  # Manager approval required
+              notifiers:
+                email:
+                  provider: email-test
+                  to: manager@thand.io
+                  subject: "AWS Production Access Approval Required"
+                  message: "An engineer is requesting AWS production admin access. Please review and approve."
+            then: denied
+        - authorize:
+            thand: authorize
+            with:
+              revocation: revoke
+            then: monitor
+        - monitor:
+            thand: monitor
+            then: revoke
+        - revoke:
+            thand: revoke
+            then: end
+        - denied:
+            thand: notify
+            with:
+              notifiers:
+                email:
+                  provider: email-test
+                  to: ${ $context.identities // [$context.user.email] }
+                  subject: "AWS Access Request Denied"
+                  message: "Your access request has been denied."
+            then: end

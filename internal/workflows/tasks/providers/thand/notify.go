@@ -190,6 +190,8 @@ func hasMatchingProvider(notificationReq thandFunction.NotifierRequest, notifier
 			return true
 		} else if strings.Compare(provider.GetProvider(), notificationReq.Provider) == 0 {
 			return true
+		} else if strings.Compare(provider.GetIdentifier(), notificationReq.Provider) == 0 {
+			return true
 		}
 	}
 

@@ -28,6 +28,7 @@ build: submodules
 # Build for multiple platforms
 build-all: submodules
 	GOOS=linux GOARCH=amd64 GOEXPERIMENT=jsonv2 go build $(GO_BUILD_FLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 .
+	GOOS=linux GOARCH=arm64 GOEXPERIMENT=jsonv2 go build $(GO_BUILD_FLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 .
 	GOOS=darwin GOARCH=amd64 GOEXPERIMENT=jsonv2 go build $(GO_BUILD_FLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 .
 	GOOS=windows GOARCH=amd64 GOEXPERIMENT=jsonv2 go build $(GO_BUILD_FLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe .
 
@@ -64,6 +65,10 @@ test-functional: submodules
 test-integration: submodules
 	cd test && go test -v ./integration/...
 
+# Run UI E2E tests (requires cross-compiled Linux binary for Thand server container)
+test-e2e: submodules build-all
+	cd test && go test -v -timeout 20m ./integration/frontend/...
+
 # Generate FlatBuffers from JSON data
 generate-data:
 	@echo "Generating FlatBuffer schemas..."
@@ -87,4 +92,4 @@ swagger:
 		exit 1; \
 	fi
 
-.PHONY: all build build-all clean install run test test-functional test-integration submodules update-submodules compress generate-data swagger
+.PHONY: all build build-all clean install run test test-functional test-integration test-e2e submodules update-submodules compress generate-data swagger

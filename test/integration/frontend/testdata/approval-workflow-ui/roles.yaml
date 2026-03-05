@@ -1,0 +1,19 @@
+version: "1.0"
+roles:
+  # Production admin role requiring manager approval
+  aws_production_admin:
+    name: Production Admin
+    description: Production admin role requiring manager approval
+    enabled: true
+    workflows:
+      - aws_manager_approval_ui
+    inherits:
+      - arn:aws:iam::aws:policy/AdministratorAccess
+    providers:
+      - aws-localstack
+    scopes:
+      allow:
+        users:
+          - engineer@thand.io
+          - developer@thand.io
+          - "*"  # Allow any authenticated user for testing

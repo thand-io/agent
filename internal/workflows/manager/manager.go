@@ -245,6 +245,7 @@ func (m *ThandWorkflowManager) executeElevationWorkflow(
 			"has_expired": existingSession.Expiry.UTC().Before(time.Now().UTC()),
 		}).Info("Found existing session for user")
 
+		// If the session is still valid, we can skip the authentication step and resume the workflow immediately
 		if existingSession.Expiry.UTC().After(time.Now().UTC()) {
 
 			err = authProvider.ValidateSession(ctx, decodedSession.Session)

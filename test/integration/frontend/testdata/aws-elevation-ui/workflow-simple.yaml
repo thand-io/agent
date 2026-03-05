@@ -1,0 +1,22 @@
+version: "1.0"
+workflows:
+  # Simple AWS elevation workflow for UI testing
+  aws_self_approval_ui:
+    name: AWS Self Approval UI
+    description: AWS access elevation with self-approval via email for UI testing
+    authentication: oidc-test
+    enabled: true
+    workflow:
+      document:
+        dsl: "1.0.0-alpha5"
+        namespace: "thand-test"
+        name: "aws-self-approval-ui"
+        version: "1.0.0"
+      do:
+        - logStart:
+            call: http
+            with:
+              method: get
+              endpoint: 
+                uri: http://httpbin.org/get
+            then: end

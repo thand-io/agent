@@ -56,10 +56,11 @@ const (
 // WorkflowTask represents a task within a workflow and implements TaskSupport
 type WorkflowTask struct {
 	mu              sync.Mutex
-	internalContext context.Context    `json:"-"`
-	state           *WorkflowTaskState `json:"-"`
-	localExprVars   map[string]any     `json:"-"` // local variables for expressions
-	taskQueue       string             `json:"-"` // task queue override for routing activities to specific agents
+	internalContext context.Context     `json:"-"`
+	state           *WorkflowTaskState  `json:"-"`
+	localExprVars   map[string]any      `json:"-"` // local variables for expressions
+	cancelFunc      workflow.CancelFunc `json:"-"` // cancel function for workflow context
+	taskQueue       string              `json:"-"` // task queue override for routing activities to specific agents
 
 	// Core workfork/task fields
 	WorkflowID   string `json:"id"`
