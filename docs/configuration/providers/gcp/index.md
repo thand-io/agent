@@ -85,14 +85,15 @@ gcloud organizations add-iam-policy-binding $ORG_ID \
     --role="roles/iam.organizationRoleAdmin"
 ```
 
-> **Important**: If `organization_id` is set but the service account does not have `iam.roles.create` on the organization, the provider will **fail to initialize** with a clear error. Grant this role before starting the agent.
+> **Important**: If `organization_id` is set but the service account does not have `iam.roles.create` on the organization, the provider will **fail to initialize** with an error. Grant `roles/iam.organizationRoleAdmin` at the organization level before starting the agent.
 
-> **Missing permission error**: If the service account has `organization_id` configured but is missing this role, access requests will fail with an error similar to:
+> **Missing permission error**: If the service account has `organization_id` configured but is missing this role, the provider initialization will fail with an error similar to:
 > ```
-> failed to authorize: user@example.com - returned with the error: application error:
-> failed to create custom role my_role_name: Organizations.Roles.Create: googleapi: Error 403
+> failed to verify organization role creation permissions: organization_id is configured
+> but iam.roles.create permission is missing for organization <org-id>; grant
+> roles/iam.organizationRoleAdmin at the organization level
 > ```
-> This means the service account can authenticate but cannot create roles on the organization. Grant `roles/iam.organizationRoleAdmin` at the **organization level** (not the project level) to resolve it.
+> Grant `roles/iam.organizationRoleAdmin` at the **organization level** (not the project level) to resolve it.
 
 ### Service Account Role Configuration
 
@@ -473,23 +474,11 @@ The provider includes comprehensive GCP IAM permissions data, enabling:
    - Ensure IAM API is enabled
 
 4. **Organization Role Initialization Failure**
-   - Error: `organization_id is set but service account lacks iam.roles.create on organization ...`
+   - Error: `organization_id is configured but iam.roles.create permission is missing for organization ...`
    - The service account does not have `roles/iam.organizationRoleAdmin` on the organization
    - Fix: Grant the role (see [Organization-Level Permissions (Organization Role Management)](#organization-level-permissions-organization-role-management)) or remove `organization_id` from the config to fall back to project-scoped roles
 
-5. **`Organizations.Roles.Create` Error During Access Request**
-   - Error: `failed to authorize: user@example.com - ... failed to create custom role <name>: Organizations.Roles.Create: googleapi: Error 403`
-   - This occurs when `organization_id` is set and the agent reaches grant time but the service account is missing `iam.roles.create` on the organization. The init-time permission check may have been skipped (e.g. the SA had the permission when the agent started but it was later revoked), or the agent was started before the permission was propagated.
-   - Fix:
-     ```bash
-     ORG_ID=$(gcloud organizations list --format="value(ID)")
-     gcloud organizations add-iam-policy-binding $ORG_ID \
-         --member="serviceAccount:YOUR_SA@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
-         --role="roles/iam.organizationRoleAdmin"
-     ```
-   - After granting, restart the agent so the init-time permission probe re-runs.
-
-6. **Role Cannot Be Applied to a Different Project**
+5. **Role Cannot Be Applied to a Different Project**
    - Cause: A custom role defined as `projects/{A}/roles/my-role` cannot be bound to project B's IAM policy — GCP enforces this at the API level
    - Fix: Add `organization_id` to the provider config so the role is created at org scope instead, or use a GCP predefined role (`roles/...`) which is always portable
 

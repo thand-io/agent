@@ -902,7 +902,7 @@ func (p *gcpProvider) patchRoleIfStale(ctx context.Context, existingRole *iam.Ro
 		updated *iam.Role
 		err     error
 	)
-	if strings.HasPrefix(existingRole.Name, "organizations/") {
+	if isOrganizationRoleParent(existingRole.Name) {
 		updated, err = p.iamClient.Organizations.Roles.Patch(existingRole.Name, existingRole).
 			UpdateMask("includedPermissions").
 			Context(ctx).
