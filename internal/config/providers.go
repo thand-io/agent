@@ -362,8 +362,6 @@ func (c *Config) InitializeProviders() error {
 // initializeSingleProvider initializes a single provider
 func (c *Config) initializeSingleProvider(providerKey string, p *models.ProviderConfig) (models.Provider, error) {
 
-	logrus.Errorf("DEBUG initializeSingleProvider: key=%s provider=%s config=%v", providerKey, p.Provider, p.Config.AsMap())
-
 	impl, err := c.getProviderImplementation(providerKey, p.Provider)
 
 	if err != nil {

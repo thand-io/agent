@@ -93,7 +93,7 @@ func runElevationE2E(t *testing.T, parentCtx context.Context, testCaseName strin
 	require.NoError(t, err, "Failed to load test case with interpolation")
 
 	// Detect auth type and test parameters
-	
+
 	users := GetTestUsers(testCase)
 	roleName := GetFirstRoleName(testCase)
 	workflowName := GetFirstWorkflowName(testCase)
@@ -105,7 +105,7 @@ func runElevationE2E(t *testing.T, parentCtx context.Context, testCaseName strin
 	t.Logf("Manager approval required: %v", needsManagerApproval)
 
 	// Phase 4: Create config and workflow manager
-	cfg, err := loader.CreateUIConfigFromTestCase(testCase)
+	cfg, err := loader.CreateUIConfigFromTestCase(t, testCase)
 	require.NoError(t, err, "Failed to create config")
 
 	infra.RegisterCleanup(func() {
@@ -150,7 +150,7 @@ func runElevationE2E(t *testing.T, parentCtx context.Context, testCaseName strin
 	t.Run("Submit elevation request", func(t *testing.T) {
 		workflowID, err := browser.CompleteElevationWorkflow(
 			ctx,
-			
+
 			requestUser.Username,
 			requestUser.Password,
 			roleName,
@@ -177,7 +177,7 @@ func runElevationE2E(t *testing.T, parentCtx context.Context, testCaseName strin
 
 		wfID, err := browser.CompleteElevationWorkflow(
 			ctx,
-			
+
 			requestUser.Username,
 			requestUser.Password,
 			roleName,
@@ -225,7 +225,7 @@ func runElevationE2E(t *testing.T, parentCtx context.Context, testCaseName strin
 		if needsManagerApproval {
 			managerUser := users["manager"]
 			t.Log("Manager approving the request...")
-			err = browser.ApproveAsManager(ctx, 
+			err = browser.ApproveAsManager(ctx,
 				managerUser.Username, managerUser.Password, workflowID)
 			require.NoError(t, err, "Manager should be able to approve")
 		} else {
@@ -324,12 +324,11 @@ func TestElevationE2EDenial(t *testing.T) {
 		testCase, err := loader.LoadTestCase(testCaseName)
 		require.NoError(t, err)
 
-		
 		users := GetTestUsers(testCase)
 		roleName := GetFirstRoleName(testCase)
 		awsProviderName := GetAWSProviderName(testCase)
 
-		cfg, err := loader.CreateUIConfigFromTestCase(testCase)
+		cfg, err := loader.CreateUIConfigFromTestCase(t, testCase)
 		require.NoError(t, err)
 		infra.RegisterCleanup(func() {
 			if cfg.GetServices().HasTemporal() {
@@ -355,7 +354,7 @@ func TestElevationE2EDenial(t *testing.T) {
 
 		// Step 1: Engineer submits elevation request
 		workflowID, err := browser.CompleteElevationWorkflow(
-			ctx, 
+			ctx,
 			engineerUser.Username, engineerUser.Password,
 			roleName, awsProviderName,
 			"Testing denial flow", "PT1H",
@@ -385,7 +384,7 @@ func TestElevationE2EDenial(t *testing.T) {
 
 		// Step 3: Manager denies the request
 		managerUser := users["manager"]
-		err = browser.DenyAsManager(ctx, 
+		err = browser.DenyAsManager(ctx,
 			managerUser.Username, managerUser.Password, workflowID)
 		require.NoError(t, err, "Manager should be able to deny")
 
@@ -399,14 +398,10 @@ func TestElevationE2EDenial(t *testing.T) {
 				finalStatus == enums.WORKFLOW_EXECUTION_STATUS_CANCELED,
 			"Workflow should complete or cancel after denial")
 
-		// Step 5: Verify no IAM role was created (or it was immediately revoked)
+		// Step 5: Verify no IAM role was created (denial should prevent provisioning)
 		if HasAWSProvider(testCase) {
-			// After denial, the role should either not exist or have a Deny policy
 			iamClient := CreateLocalStackIAMClient(t, ctx, infra.LocalStackEndpoint)
-			_, err := iamClient.GetRole(ctx, nil)
-			// We expect the role to either not exist or be denied
-			t.Log("Verified no unauthorized IAM role exists after denial")
-			_ = err
+			VerifyIAMRoleAbsent(t, ctx, iamClient, roleName)
 		}
 
 		// Step 6: Verify denial notification email was sent

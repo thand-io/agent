@@ -2,6 +2,7 @@ package ui_e2e
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
+	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/enums/v1"
@@ -54,7 +56,8 @@ func CreateTestIAMUser(t *testing.T, ctx context.Context, iamClient *iam.Client,
 	})
 	if err != nil {
 		// User may already exist from a previous test run
-		if !strings.Contains(err.Error(), "EntityAlreadyExists") {
+		var alreadyExists *iamtypes.EntityAlreadyExistsException
+		if !errors.As(err, &alreadyExists) {
 			require.NoError(t, err, "Failed to create test IAM user")
 		}
 		t.Logf("IAM user %s already exists, continuing", username)
@@ -126,6 +129,22 @@ func VerifyIAMRoleRevoked(t *testing.T, ctx context.Context, iamClient *iam.Clie
 		"Role should have Deny policy after revocation")
 
 	t.Logf("Role has been correctly revoked (Deny policy in place)")
+}
+
+// VerifyIAMRoleAbsent checks that the IAM role does not exist after a denial.
+// After a workflow is denied, no IAM role should have been provisioned.
+func VerifyIAMRoleAbsent(t *testing.T, ctx context.Context, iamClient *iam.Client, roleName string) {
+	t.Helper()
+	t.Logf("Verifying IAM role '%s' does not exist after denial...", roleName)
+
+	_, err := iamClient.GetRole(ctx, &iam.GetRoleInput{
+		RoleName: aws.String(roleName),
+	})
+	require.Error(t, err, "IAM role should not exist after denial, but role '%s' was found", roleName)
+	var noSuchEntity *iamtypes.NoSuchEntityException
+	require.True(t, errors.As(err, &noSuchEntity),
+		"Expected NoSuchEntityException for role '%s', got: %v", roleName, err)
+	t.Logf("Confirmed: IAM role '%s' does not exist (as expected after denial)", roleName)
 }
 
 // VerifyAssumeRole calls STS AssumeRole and verifies temporary credentials are returned.

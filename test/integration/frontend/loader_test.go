@@ -3,6 +3,8 @@ package ui_e2e
 import (
 	"os"
 	"path/filepath"
+	"strings"
+	"testing"
 
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
@@ -30,7 +32,14 @@ func NewTestCaseLoader(infra *UITestInfrastructure) *TestCaseLoader {
 
 // CreateUIConfigFromTestCase creates a Config object from a test case,
 // configured for use with the Thand server container.
-func (l *TestCaseLoader) CreateUIConfigFromTestCase(tc *TestCase) (*config.Config, error) {
+func (l *TestCaseLoader) CreateUIConfigFromTestCase(t *testing.T, tc *TestCase) (*config.Config, error) {
+	// Set env vars so that ResolveConfig can expand ${ .VARNAME } jq expressions when
+	// InitializeProviders runs. providerEnvVars holds host.docker.internal URLs for the
+	// Thand container; replace with localhost for the Go test-process context.
+	for k, v := range l.uiInfra.providerEnvVars {
+		t.Setenv(k, strings.ReplaceAll(v, "host.docker.internal", "localhost"))
+	}
+
 	// Use the base loader to create the config (handles providers, roles, workflows, Temporal)
 	cfg, err := l.TestCaseLoader.CreateConfigFromTestCase(tc)
 	if err != nil {

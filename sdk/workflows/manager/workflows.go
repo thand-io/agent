@@ -129,7 +129,7 @@ func SetupSignalChannels(ctx workflow.Context) (workflow.ReceiveChannel, workflo
 }
 
 // setupTerminationHandler sets up the background termination handler
-// It listens on both the external terminate signal and an internal channel for scheduled revocations
+// It listens for the external terminate signal and handles workflow termination accordingly
 func SetupTerminationHandler(
 	rootCtx workflow.Context,
 	terminateSignal workflow.ReceiveChannel,

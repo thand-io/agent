@@ -34,7 +34,8 @@ type UITestInfrastructure struct {
 	thandContainer    testcontainers.Container
 	ThandEndpoint     string
 	ThandAPIEndpoint  string
-	allocatedHostPort int // pre-allocated host port for deterministic URLs
+	allocatedHostPort int          // pre-allocated host port for deterministic URLs
+	portListener      net.Listener // held open until startThandServer closes it just before Docker binds
 
 	// providerEnvVars are injected into the server container so that ResolveConfig
 	// can substitute ${ .VARNAME } jq expressions in provider definition YAML files.
@@ -79,7 +80,7 @@ func SetupUITestInfrastructure(t *testing.T, ctx context.Context, testCase *Test
 	listener, err := net.Listen("tcp", ":0")
 	require.NoError(t, err, "Failed to allocate a free port for Thand server")
 	infra.allocatedHostPort = listener.Addr().(*net.TCPAddr).Port
-	listener.Close()
+	infra.portListener = listener // keep open; closed in startThandServer just before container bind
 
 	// Set endpoint URLs early so createConfigDir can interpolate ${THAND_SERVER_URL}
 	infra.ThandEndpoint = fmt.Sprintf("http://localhost:%d", infra.allocatedHostPort)
@@ -289,7 +290,7 @@ workflows:
 	}
 
 	req := testcontainers.ContainerRequest{
-		Image: "alpine:latest",
+		Image: "alpine:3.18",
 		Cmd: []string{
 			"/app/agent", "server", "--config", "/app/config.yaml",
 		},
@@ -309,9 +310,19 @@ workflows:
 					{HostIP: "0.0.0.0", HostPort: strconv.Itoa(infra.allocatedHostPort)},
 				},
 			}
+			// Ensure host.docker.internal resolves on Linux Docker (not only Docker Desktop).
+			hc.ExtraHosts = []string{"host.docker.internal:host-gateway"}
 		},
 		WaitingFor: wait.ForListeningPort(ThandServerPort + "/tcp").
 			WithStartupTimeout(120 * time.Second),
+	}
+
+	// Release the pre-allocated listener as late as possible so that the port
+	// stays bound on the host – and therefore unavailable to other processes –
+	// right up until Docker's port-proxy claims it.
+	if infra.portListener != nil {
+		infra.portListener.Close()
+		infra.portListener = nil
 	}
 
 	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
@@ -330,22 +341,24 @@ workflows:
 	actualEndpoint := fmt.Sprintf("http://%s:%s", host, mappedPort.Port())
 	t.Logf("Thand server started at %s (expected %s)", actualEndpoint, infra.ThandEndpoint)
 
-	// Debug: exec into container and cat the provider file to see what the server actually reads
-	exitCode, output, err := container.Exec(ctx, []string{"cat", "/app/definitions/providers.yaml"})
-	if err == nil {
-		buf := make([]byte, 4096)
-		n, _ := output.Read(buf)
-		t.Logf("DEBUG container /app/definitions/providers.yaml (exit=%d):\n%s", exitCode, string(buf[:n]))
-	} else {
-		t.Logf("DEBUG: Failed to exec cat in container: %v", err)
-	}
+	if os.Getenv("THAND_E2E_DEBUG") == "true" {
+		// Debug: exec into container and cat the provider file to see what the server actually reads
+		exitCode, output, err := container.Exec(ctx, []string{"cat", "/app/definitions/providers.yaml"})
+		if err == nil {
+			buf := make([]byte, 4096)
+			n, _ := output.Read(buf)
+			t.Logf("DEBUG container /app/definitions/providers.yaml (exit=%d):\n%s", exitCode, string(buf[:n]))
+		} else {
+			t.Logf("DEBUG: Failed to exec cat in container: %v", err)
+		}
 
-	// Debug: cat the server config.yaml
-	exitCode2, output2, err2 := container.Exec(ctx, []string{"cat", "/app/config.yaml"})
-	if err2 == nil {
-		buf := make([]byte, 2048)
-		n, _ := output2.Read(buf)
-		t.Logf("DEBUG container /app/config.yaml (exit=%d):\n%s", exitCode2, string(buf[:n]))
+		// Debug: cat the server config.yaml
+		exitCode2, output2, err2 := container.Exec(ctx, []string{"cat", "/app/config.yaml"})
+		if err2 == nil {
+			buf := make([]byte, 2048)
+			n, _ := output2.Read(buf)
+			t.Logf("DEBUG container /app/config.yaml (exit=%d):\n%s", exitCode2, string(buf[:n]))
+		}
 	}
 }
 
@@ -353,6 +366,12 @@ workflows:
 func (infra *UITestInfrastructure) Teardown() {
 	terminateCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
+	// Release the port listener if startThandServer was skipped (empty test case).
+	if infra.portListener != nil {
+		infra.portListener.Close()
+		infra.portListener = nil
+	}
 
 	// Terminate UI-specific containers first
 	if infra.thandContainer != nil {

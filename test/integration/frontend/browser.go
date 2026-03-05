@@ -16,11 +16,12 @@ import (
 
 // Browser represents a chromedp browser automation instance
 type Browser struct {
-	t       *testing.T
-	baseURL string
-	timeout time.Duration
-	ctx     context.Context
-	cancel  context.CancelFunc
+	t           *testing.T
+	baseURL     string
+	timeout     time.Duration
+	ctx         context.Context
+	cancel      context.CancelFunc
+	allocCancel context.CancelFunc
 }
 
 // NewBrowser creates a new chromedp browser instance
@@ -43,15 +44,16 @@ func NewBrowser(t *testing.T, baseURL string) *Browser {
 		t.Log("Running browser in visible mode (THAND_SHOW_BROWSER=true)")
 	}
 
-	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
-	ctx, _ := chromedp.NewContext(allocCtx)
+	allocCtx, allocCancel := chromedp.NewExecAllocator(context.Background(), opts...)
+	ctx, cancel := chromedp.NewContext(allocCtx)
 
 	return &Browser{
-		t:       t,
-		baseURL: baseURL,
-		timeout: 30 * time.Second,
-		ctx:     ctx,
-		cancel:  cancel,
+		t:           t,
+		baseURL:     baseURL,
+		timeout:     30 * time.Second,
+		ctx:         ctx,
+		cancel:      cancel,
+		allocCancel: allocCancel,
 	}
 }
 
@@ -60,16 +62,34 @@ func (b *Browser) Close() {
 	if b.cancel != nil {
 		b.cancel()
 	}
+	if b.allocCancel != nil {
+		b.allocCancel()
+	}
+}
+
+// withCallerCtx returns a context derived from b.ctx that is also cancelled when
+// the provided ctx is cancelled or its deadline fires, threading caller
+// timeouts/cancellation into chromedp operations without creating a new tab.
+func (b *Browser) withCallerCtx(ctx context.Context) (context.Context, context.CancelFunc) {
+	derived, cancel := context.WithCancel(b.ctx)
+	stop := context.AfterFunc(ctx, cancel)
+	return derived, func() {
+		stop()
+		cancel()
+	}
 }
 
 // LoginWithOIDC performs OIDC login flow via Keycloak.
 func (b *Browser) LoginWithOIDC(ctx context.Context, username, password string) error {
 	b.t.Log("Logging in with OIDC via Keycloak...")
 
+	chromedpCtx, cancel := b.withCallerCtx(ctx)
+	defer cancel()
+
 	loginURL := b.baseURL + "/auth"
 
 	// Step 1: Navigate to auth page and click OIDC button
-	err := chromedp.Run(b.ctx,
+	err := chromedp.Run(chromedpCtx,
 		chromedp.Navigate(loginURL),
 		chromedp.WaitVisible(`[data-provider="oidc-test"]`, chromedp.ByQuery),
 		chromedp.Click(`[data-provider="oidc-test"]`, chromedp.ByQuery),
@@ -83,7 +103,7 @@ func (b *Browser) LoginWithOIDC(ctx context.Context, username, password string) 
 	var currentURL string
 	var pageTitle string
 	var bodyText string
-	_ = chromedp.Run(b.ctx,
+	_ = chromedp.Run(chromedpCtx,
 		chromedp.Location(&currentURL),
 		chromedp.Title(&pageTitle),
 		chromedp.Text(`body`, &bodyText, chromedp.ByQuery),
@@ -102,7 +122,7 @@ func (b *Browser) LoginWithOIDC(ctx context.Context, username, password string) 
 
 	// Step 2: Fill in Keycloak login form
 	// Keycloak login form uses #username, #password, #kc-login
-	err = chromedp.Run(b.ctx,
+	err = chromedp.Run(chromedpCtx,
 		chromedp.WaitVisible(`#username`, chromedp.ByID),
 		chromedp.SendKeys(`#username`, username, chromedp.ByID),
 		chromedp.SendKeys(`#password`, password, chromedp.ByID),
@@ -114,7 +134,7 @@ func (b *Browser) LoginWithOIDC(ctx context.Context, username, password string) 
 		// Capture error state for debugging
 		var errURL string
 		var errBody string
-		_ = chromedp.Run(b.ctx,
+		_ = chromedp.Run(chromedpCtx,
 			chromedp.Location(&errURL),
 			chromedp.Text(`body`, &errBody, chromedp.ByQuery),
 		)
@@ -144,9 +164,12 @@ func (b *Browser) Login(ctx context.Context, username, password string) error {
 func (b *Browser) NavigateToElevatePage(ctx context.Context) error {
 	b.t.Log("Navigating to elevate page...")
 
+	chromedpCtx, cancel := b.withCallerCtx(ctx)
+	defer cancel()
+
 	elevateURL := b.baseURL + "/elevate/static"
 
-	err := chromedp.Run(b.ctx,
+	err := chromedp.Run(chromedpCtx,
 		chromedp.Navigate(elevateURL),
 		chromedp.WaitVisible(`form#elevate-form`, chromedp.ByQuery),
 	)
@@ -214,6 +237,9 @@ func (b *Browser) selectChoicesOption(selectID, value string) error {
 func (b *Browser) FillElevateForm(ctx context.Context, role, provider, reason, duration string) error {
 	b.t.Log("Filling elevate form...")
 
+	chromedpCtx, cancel := b.withCallerCtx(ctx)
+	defer cancel()
+
 	// 1. Wait for Alpine.js to populate the provider select options, then select the provider.
 	//    "option[value!='']" is not valid CSS (jQuery-only), so we poll via JS instead.
 	b.t.Logf("Selecting provider: %s", provider)
@@ -231,7 +257,7 @@ func (b *Browser) FillElevateForm(ctx context.Context, role, provider, reason, d
 	var providerReady bool
 	providerDeadline := time.Now().Add(20 * time.Second)
 	for time.Now().Before(providerDeadline) {
-		if err := chromedp.Run(b.ctx, chromedp.Evaluate(waitProviderJS, &providerReady)); err == nil && providerReady {
+		if err := chromedp.Run(chromedpCtx, chromedp.Evaluate(waitProviderJS, &providerReady)); err == nil && providerReady {
 			break
 		}
 		time.Sleep(500 * time.Millisecond)
@@ -240,7 +266,7 @@ func (b *Browser) FillElevateForm(ctx context.Context, role, provider, reason, d
 		return fmt.Errorf("timed out waiting for provider option %q to appear in select", provider)
 	}
 
-	err := chromedp.Run(b.ctx,
+	err := chromedp.Run(chromedpCtx,
 		chromedp.SetValue(`select[name="provider"]`, provider, chromedp.ByQuery),
 		chromedp.Sleep(500*time.Millisecond),
 	)
@@ -263,7 +289,7 @@ func (b *Browser) FillElevateForm(ctx context.Context, role, provider, reason, d
 	var rolesReady bool
 	rolesDeadline := time.Now().Add(20 * time.Second)
 	for time.Now().Before(rolesDeadline) {
-		if err := chromedp.Run(b.ctx, chromedp.Evaluate(waitRolesJS, &rolesReady)); err == nil && rolesReady {
+		if err := chromedp.Run(chromedpCtx, chromedp.Evaluate(waitRolesJS, &rolesReady)); err == nil && rolesReady {
 			break
 		}
 		time.Sleep(500 * time.Millisecond)
@@ -296,7 +322,7 @@ func (b *Browser) FillElevateForm(ctx context.Context, role, provider, reason, d
 	var roleResult string
 	roleDeadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(roleDeadline) {
-		if err := chromedp.Run(b.ctx, chromedp.Evaluate(selectRoleJS, &roleResult)); err == nil && roleResult == "ok" {
+		if err := chromedp.Run(chromedpCtx, chromedp.Evaluate(selectRoleJS, &roleResult)); err == nil && roleResult == "ok" {
 			break
 		}
 		time.Sleep(500 * time.Millisecond)
@@ -308,7 +334,7 @@ func (b *Browser) FillElevateForm(ctx context.Context, role, provider, reason, d
 
 	// 4. Set duration via Alpine.js native select.
 	b.t.Logf("Setting duration: %s", duration)
-	err = chromedp.Run(b.ctx,
+	err = chromedp.Run(chromedpCtx,
 		chromedp.SetValue(`select[name="duration"]`, duration, chromedp.ByQuery),
 	)
 	if err != nil {
@@ -317,7 +343,7 @@ func (b *Browser) FillElevateForm(ctx context.Context, role, provider, reason, d
 
 	// 5. Fill reason using SetValue (dispatches input+change for Alpine x-model).
 	b.t.Logf("Filling reason: %s", reason)
-	err = chromedp.Run(b.ctx,
+	err = chromedp.Run(chromedpCtx,
 		chromedp.WaitVisible(`textarea[name="reason"]`, chromedp.ByQuery),
 		chromedp.SetValue(`textarea[name="reason"]`, reason, chromedp.ByQuery),
 	)
@@ -345,7 +371,7 @@ func (b *Browser) FillElevateForm(ctx context.Context, role, provider, reason, d
 	var identityResult string
 	idDeadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(idDeadline) {
-		if err := chromedp.Run(b.ctx, chromedp.Evaluate(ensureIdentityJS, &identityResult)); err == nil &&
+		if err := chromedp.Run(chromedpCtx, chromedp.Evaluate(ensureIdentityJS, &identityResult)); err == nil &&
 			identityResult != "" && identityResult != "no-select" && identityResult != "no-options" {
 			b.t.Logf("Identity selection: %s", identityResult)
 			break
@@ -364,9 +390,12 @@ func (b *Browser) FillElevateForm(ctx context.Context, role, provider, reason, d
 func (b *Browser) SubmitElevateForm(ctx context.Context) (string, error) {
 	b.t.Log("Submitting elevate form...")
 
+	chromedpCtx, cancel := b.withCallerCtx(ctx)
+	defer cancel()
+
 	var currentURL string
 
-	err := chromedp.Run(b.ctx,
+	err := chromedp.Run(chromedpCtx,
 		chromedp.Click(`button[type="submit"]`, chromedp.ByQuery),
 		chromedp.Sleep(2*time.Second), // Wait for redirect
 		chromedp.Location(&currentURL),
@@ -399,6 +428,9 @@ func (b *Browser) SubmitElevateForm(ctx context.Context) (string, error) {
 func (b *Browser) WaitForWorkflowCompletion(ctx context.Context, workflowID string, timeout time.Duration) (string, error) {
 	b.t.Log("Waiting for workflow completion...")
 
+	chromedpCtx, cancel := b.withCallerCtx(ctx)
+	defer cancel()
+
 	apiPath := fmt.Sprintf("/api/v1/execution/%s", url.PathEscape(workflowID))
 	deadline := time.Now().Add(timeout)
 
@@ -415,7 +447,7 @@ func (b *Browser) WaitForWorkflowCompletion(ctx context.Context, workflowID stri
 	for time.Now().Before(deadline) {
 		var rawStatus string
 
-		iterCtx, iterCancel := context.WithTimeout(b.ctx, 12*time.Second)
+		iterCtx, iterCancel := context.WithTimeout(chromedpCtx, 12*time.Second)
 		err := chromedp.Run(iterCtx, chromedp.Evaluate(fetchStatusJS, &rawStatus, func(p *runtime.EvaluateParams) *runtime.EvaluateParams {
 			return p.WithAwaitPromise(true)
 		}))
@@ -451,20 +483,23 @@ func (b *Browser) WaitForWorkflowCompletion(ctx context.Context, workflowID stri
 func (b *Browser) ClickApproveButton(ctx context.Context, workflowID string) error {
 	b.t.Log("Clicking approve button in execution UI...")
 
+	chromedpCtx, cancel := b.withCallerCtx(ctx)
+	defer cancel()
+
 	executionURL := fmt.Sprintf("%s/execution/%s", b.baseURL, url.PathEscape(workflowID))
 
 	// Navigate to the execution page.
-	if err := chromedp.Run(b.ctx, chromedp.Navigate(executionURL)); err != nil {
+	if err := chromedp.Run(chromedpCtx, chromedp.Navigate(executionURL)); err != nil {
 		return fmt.Errorf("failed to navigate to execution page: %w", err)
 	}
 
 	// Register a listener that auto-accepts the native confirm() dialog that
 	// signalApproval() shows before calling the approvals API.
-	chromedp.ListenTarget(b.ctx, func(ev interface{}) {
+	chromedp.ListenTarget(chromedpCtx, func(ev interface{}) {
 		if _, ok := ev.(*page.EventJavascriptDialogOpening); ok {
 			b.t.Log("Auto-accepting confirm() dialog for approval")
 			go func() {
-				if err := chromedp.Run(b.ctx, page.HandleJavaScriptDialog(true)); err != nil {
+				if err := chromedp.Run(chromedpCtx, page.HandleJavaScriptDialog(true)); err != nil {
 					b.t.Logf("Warning: failed to handle dialog: %v", err)
 				}
 			}()
@@ -487,7 +522,7 @@ func (b *Browser) ClickApproveButton(ctx context.Context, workflowID string) err
 	var clicked bool
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
-		if err := chromedp.Run(b.ctx, chromedp.Evaluate(clickApproveJS, &clicked)); err == nil && clicked {
+		if err := chromedp.Run(chromedpCtx, chromedp.Evaluate(clickApproveJS, &clicked)); err == nil && clicked {
 			break
 		}
 		time.Sleep(1 * time.Second)
@@ -504,9 +539,12 @@ func (b *Browser) ClickApproveButton(ctx context.Context, workflowID string) err
 
 // TakeScreenshot captures a screenshot of the current page
 func (b *Browser) TakeScreenshot(ctx context.Context, filepath string) error {
+	chromedpCtx, cancel := b.withCallerCtx(ctx)
+	defer cancel()
+
 	var buf []byte
 
-	err := chromedp.Run(b.ctx,
+	err := chromedp.Run(chromedpCtx,
 		chromedp.CaptureScreenshot(&buf),
 	)
 
@@ -534,6 +572,9 @@ func (b *Browser) CompleteElevationWorkflow(
 ) (string, error) {
 	b.t.Log("Starting elevation workflow via UI form...")
 
+	chromedpCtx, cancel := b.withCallerCtx(ctx)
+	defer cancel()
+
 	// 1. Login.
 	if err := b.Login(ctx, username, password); err != nil {
 		return "", fmt.Errorf("login failed: %w", err)
@@ -542,7 +583,7 @@ func (b *Browser) CompleteElevationWorkflow(
 
 	// 2. Navigate to the static elevation form and wait for it to be ready.
 	b.t.Log("Navigating to /elevate/static...")
-	err := chromedp.Run(b.ctx,
+	err := chromedp.Run(chromedpCtx,
 		chromedp.Navigate(b.baseURL+"/elevate/static"),
 		chromedp.WaitVisible(`form#elevate-form`, chromedp.ByQuery),
 	)
@@ -562,7 +603,7 @@ func (b *Browser) CompleteElevationWorkflow(
 	//    new FormData() picks up our injected native options (role, identity) correctly.
 	b.t.Log("Building submit URL from form...")
 	var submitURL string
-	err = chromedp.Run(b.ctx, chromedp.Evaluate(
+	err = chromedp.Run(chromedpCtx, chromedp.Evaluate(
 		`(function() {
 			const form = document.getElementById('elevate-form');
 			const params = new URLSearchParams(new FormData(form));
@@ -576,7 +617,7 @@ func (b *Browser) CompleteElevationWorkflow(
 	b.t.Logf("Navigating to submit URL: %s", submitURL)
 
 	var currentURL string
-	err = chromedp.Run(b.ctx,
+	err = chromedp.Run(chromedpCtx,
 		// chromedp.Navigate follows 307 redirects and waits for the final page to load.
 		chromedp.Navigate(submitURL),
 		chromedp.Location(&currentURL),
@@ -602,7 +643,7 @@ func (b *Browser) CompleteElevationWorkflow(
 	// Poll briefly in case the page is still rendering.
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		if err := chromedp.Run(b.ctx, chromedp.Evaluate(extractJS, &workflowID)); err == nil && workflowID != "" {
+		if err := chromedp.Run(chromedpCtx, chromedp.Evaluate(extractJS, &workflowID)); err == nil && workflowID != "" {
 			break
 		}
 		time.Sleep(500 * time.Millisecond)
@@ -679,19 +720,22 @@ func (b *Browser) ApproveAsManager(
 func (b *Browser) ClickDenyButton(ctx context.Context, workflowID string) error {
 	b.t.Log("Clicking reject button in execution UI...")
 
+	chromedpCtx, cancel := b.withCallerCtx(ctx)
+	defer cancel()
+
 	executionURL := fmt.Sprintf("%s/execution/%s", b.baseURL, url.PathEscape(workflowID))
 
 	// Navigate to the execution page.
-	if err := chromedp.Run(b.ctx, chromedp.Navigate(executionURL)); err != nil {
+	if err := chromedp.Run(chromedpCtx, chromedp.Navigate(executionURL)); err != nil {
 		return fmt.Errorf("failed to navigate to execution page: %w", err)
 	}
 
 	// Register a listener that auto-accepts the confirm() dialog.
-	chromedp.ListenTarget(b.ctx, func(ev interface{}) {
+	chromedp.ListenTarget(chromedpCtx, func(ev interface{}) {
 		if _, ok := ev.(*page.EventJavascriptDialogOpening); ok {
 			b.t.Log("Auto-accepting confirm() dialog for rejection")
 			go func() {
-				if err := chromedp.Run(b.ctx, page.HandleJavaScriptDialog(true)); err != nil {
+				if err := chromedp.Run(chromedpCtx, page.HandleJavaScriptDialog(true)); err != nil {
 					b.t.Logf("Warning: failed to handle dialog: %v", err)
 				}
 			}()
@@ -713,7 +757,7 @@ func (b *Browser) ClickDenyButton(ctx context.Context, workflowID string) error 
 	var clicked bool
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
-		if err := chromedp.Run(b.ctx, chromedp.Evaluate(clickRejectJS, &clicked)); err == nil && clicked {
+		if err := chromedp.Run(chromedpCtx, chromedp.Evaluate(clickRejectJS, &clicked)); err == nil && clicked {
 			break
 		}
 		time.Sleep(1 * time.Second)
@@ -733,19 +777,22 @@ func (b *Browser) ClickDenyButton(ctx context.Context, workflowID string) error 
 func (b *Browser) CancelWorkflowViaUI(ctx context.Context, workflowID string) error {
 	b.t.Log("Cancelling workflow via UI...")
 
+	chromedpCtx, cancel := b.withCallerCtx(ctx)
+	defer cancel()
+
 	executionURL := fmt.Sprintf("%s/execution/%s", b.baseURL, url.PathEscape(workflowID))
 
 	// Navigate to the execution page.
-	if err := chromedp.Run(b.ctx, chromedp.Navigate(executionURL)); err != nil {
+	if err := chromedp.Run(chromedpCtx, chromedp.Navigate(executionURL)); err != nil {
 		return fmt.Errorf("failed to navigate to execution page: %w", err)
 	}
 
 	// Register a listener that auto-accepts the confirm() dialog.
-	chromedp.ListenTarget(b.ctx, func(ev interface{}) {
+	chromedp.ListenTarget(chromedpCtx, func(ev interface{}) {
 		if _, ok := ev.(*page.EventJavascriptDialogOpening); ok {
 			b.t.Log("Auto-accepting confirm() dialog for cancel")
 			go func() {
-				if err := chromedp.Run(b.ctx, page.HandleJavaScriptDialog(true)); err != nil {
+				if err := chromedp.Run(chromedpCtx, page.HandleJavaScriptDialog(true)); err != nil {
 					b.t.Logf("Warning: failed to handle dialog: %v", err)
 				}
 			}()
@@ -767,7 +814,7 @@ func (b *Browser) CancelWorkflowViaUI(ctx context.Context, workflowID string) er
 	var clicked bool
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
-		if err := chromedp.Run(b.ctx, chromedp.Evaluate(clickCancelJS, &clicked)); err == nil && clicked {
+		if err := chromedp.Run(chromedpCtx, chromedp.Evaluate(clickCancelJS, &clicked)); err == nil && clicked {
 			break
 		}
 		time.Sleep(1 * time.Second)
