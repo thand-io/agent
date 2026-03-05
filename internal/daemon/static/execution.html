@@ -939,6 +939,11 @@
                     if (this.execution?.reason) {
                         params.set('reason', this.execution.reason);
                     }
+
+                    // Get tenant from execution
+                    if (this.execution?.tenant) {
+                        params.set('tenant', this.execution.tenant);
+                    }
                     
                     // Get duration - convert seconds to ISO 8601 duration format if needed
                     if (this.execution?.input?.duration) {

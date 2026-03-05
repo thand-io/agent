@@ -209,3 +209,50 @@ func TestGCPProviderRoles(t *testing.T) {
 			"Empty filter should return all roles")
 	})
 }
+
+func TestCreateGcpConfig_WithOrganizationID(t *testing.T) {
+	cfg := &models.BasicConfig{
+		"project_id":      "test-project",
+		"organization_id": "1234567890",
+	}
+
+	gcpCfg, err := CreateGcpConfig(cfg)
+	require.NoError(t, err)
+	assert.Equal(t, "test-project", gcpCfg.ProjectID)
+	assert.Equal(t, "1234567890", gcpCfg.OrganizationID)
+}
+
+func TestParseCustomRolePath(t *testing.T) {
+	t.Run("project role path", func(t *testing.T) {
+		parent, roleName, err := parseCustomRolePath("projects/test-project/roles/custom_role")
+		require.NoError(t, err)
+		assert.Equal(t, "projects/test-project", parent)
+		assert.Equal(t, "custom_role", roleName)
+	})
+
+	t.Run("organization role path", func(t *testing.T) {
+		parent, roleName, err := parseCustomRolePath("organizations/1234567890/roles/custom_role")
+		require.NoError(t, err)
+		assert.Equal(t, "organizations/1234567890", parent)
+		assert.Equal(t, "custom_role", roleName)
+	})
+
+	t.Run("invalid path", func(t *testing.T) {
+		_, _, err := parseCustomRolePath("folders/123/roles/custom_role")
+		require.Error(t, err)
+	})
+}
+
+func TestGetCustomRoleParent(t *testing.T) {
+	provider := &gcpProvider{
+		client: &GcpConfigurationProvider{
+			ProjectID:      "default-project",
+			OrganizationID: "1234567890",
+		},
+	}
+
+	assert.Equal(t, "organizations/1234567890", provider.getCustomRoleParent("tenant-project"))
+
+	provider.client.OrganizationID = ""
+	assert.Equal(t, "projects/tenant-project", provider.getCustomRoleParent("tenant-project"))
+}

@@ -82,6 +82,7 @@ func (p *gcpProvider) Initialize(identifier string, provider models.ProviderConf
 		return fmt.Errorf("failed to create Resource Manager v3 client: %w", err)
 	}
 	p.crmV3Client = crmV3Service
+	p.checkOrganizationRoleCreatePermission(ctx)
 
 	return nil
 }
@@ -99,6 +100,41 @@ func (p *gcpProvider) GetProjectId() string {
 
 func (p *gcpProvider) GetStage() string {
 	return p.client.Stage
+}
+
+func (p *gcpProvider) GetOrganizationId() string {
+	if p.client == nil {
+		return ""
+	}
+	return p.client.OrganizationID
+}
+
+func (p *gcpProvider) checkOrganizationRoleCreatePermission(ctx context.Context) {
+	organizationID := p.GetOrganizationId()
+	if len(organizationID) == 0 || p.crmV3Client == nil {
+		return
+	}
+
+	resource := "organizations/" + organizationID
+	resp, err := p.crmV3Client.Organizations.TestIamPermissions(resource, &crmv3.TestIamPermissionsRequest{
+		Permissions: []string{"iam.roles.create"},
+	}).Context(ctx).Do()
+	if err != nil {
+		logrus.WithError(err).WithField("organization_id", organizationID).
+			Warn("Failed to verify organization custom role create permission")
+		return
+	}
+
+	for _, permission := range resp.Permissions {
+		if permission == "iam.roles.create" {
+			logrus.WithField("organization_id", organizationID).
+				Info("Organization custom role creation is enabled")
+			return
+		}
+	}
+
+	logrus.WithField("organization_id", organizationID).
+		Warn("organization_id is configured but iam.roles.create is missing; organization custom role creation may fail")
 }
 
 func CreateGcpConfig(gcpConfig *models.BasicConfig) (*GcpConfigurationProvider, error) {
@@ -126,6 +162,7 @@ func CreateGcpConfig(gcpConfig *models.BasicConfig) (*GcpConfigurationProvider, 
 	}
 
 	projectStage := gcpConfig.GetStringWithDefault("stage", DefaultStage)
+	organizationID := gcpConfig.GetStringWithDefault("organization_id", "")
 
 	// Check for service account key file path
 	serviceAccountKeyPath, foundKeyPath := gcpConfig.GetString("service_account_key_path")
@@ -170,6 +207,7 @@ func CreateGcpConfig(gcpConfig *models.BasicConfig) (*GcpConfigurationProvider, 
 
 	return &GcpConfigurationProvider{
 		ProjectID:       projectId,
+		OrganizationID:  organizationID,
 		Stage:           projectStage,
 		ClientOptions:   clientOptions,
 		credentialsData: credentialsData, // do not allow exporting this field
@@ -192,9 +230,10 @@ func (g *GcpConfigurationProvider) CreateJWTConfig(scopes ...string) (*jwt.Confi
 }
 
 type GcpConfigurationProvider struct {
-	ProjectID     string
-	Stage         string
-	ClientOptions []option.ClientOption
+	ProjectID      string
+	OrganizationID string
+	Stage          string
+	ClientOptions  []option.ClientOption
 
 	// Unexported: only accessible within this package
 	credentialsData []byte

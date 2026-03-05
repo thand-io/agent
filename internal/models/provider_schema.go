@@ -78,6 +78,7 @@ type GCPServiceAccountCredentials struct {
 // GCPCredentials represents common GCP authentication configuration
 type GCPCredentials struct {
 	ProjectID             string                        `json:"project_id" mapstructure:"project_id" validate:"required"`
+	OrganizationID        string                        `json:"organization_id" mapstructure:"organization_id" validate:"omitempty"`
 	Stage                 string                        `json:"stage" mapstructure:"stage" validate:"omitempty,oneof=GA BETA ALPHA"`
 	ServiceAccountKeyPath string                        `json:"service_account_key_path" mapstructure:"service_account_key_path"`
 	ServiceAccountKey     string                        `json:"service_account_key" mapstructure:"service_account_key" sensitive:"true"`

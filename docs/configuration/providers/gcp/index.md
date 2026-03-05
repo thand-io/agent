@@ -63,6 +63,37 @@ permissions:
 
 > **Note**: For full tenant synchronization capabilities (listing all projects and folders in your organization), grant the `roles/browser` role at the organization level. This allows the agent to discover and track your entire GCP resource hierarchy.
 
+#### Organization-Level Permissions (Organization Role Management)
+
+Required **only** when `organization_id` is set in the provider config. These permissions allow the agent to create and manage custom IAM roles at the organization level, making them reusable across all projects in your organization.
+
+```yaml
+permissions:
+  - iam.roles.create    # Create new custom roles at org level
+  - iam.roles.update    # Patch existing custom roles when permissions change
+  - iam.roles.delete    # Delete composite roles on revocation
+  - iam.roles.list      # Synchronize org roles into the provider
+  - iam.roles.get       # Read an existing org role before patching
+```
+
+**Recommended Role**: `roles/iam.organizationRoleAdmin`
+
+```bash
+ORG_ID=$(gcloud organizations list --format="value(ID)")
+gcloud organizations add-iam-policy-binding $ORG_ID \
+    --member="serviceAccount:YOUR_SA@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+    --role="roles/iam.organizationRoleAdmin"
+```
+
+> **Important**: If `organization_id` is set but the service account does not have `iam.roles.create` on the organization, the provider will **fail to initialize** with a clear error. Grant this role before starting the agent.
+
+> **Missing permission error**: If the service account has `organization_id` configured but is missing this role, access requests will fail with an error similar to:
+> ```
+> failed to authorize: user@example.com - returned with the error: application error:
+> failed to create custom role my_role_name: Organizations.Roles.Create: googleapi: Error 403
+> ```
+> This means the service account can authenticate but cannot create roles on the organization. Grant `roles/iam.organizationRoleAdmin` at the **organization level** (not the project level) to resolve it.
+
 ### Service Account Role Configuration
 
 You'll then need to configure the necessary roles for this service account. Click on the **+ Add Another Role** button and add the following roles:
@@ -155,12 +186,60 @@ providers:
 
 | Option | Type | Required | Default | Description |
 |--------|------|----------|---------|-------------|
-| `project_id` | string | Yes | - | GCP project ID |
+| `project_id` | string | Yes | - | GCP project ID used for authentication, custom role storage (when no `organization_id`), and as the default project for tenant operations |
+| `organization_id` | string | No | - | GCP organization ID (numeric). When set, custom roles are created and managed at the organization level instead of the project level. See [Project Roles vs Organization Roles](#project-roles-vs-organization-roles). |
 | `service_account_key_path` | string | No | - | Path to service account key file |
 | `service_account_key` | string | No | - | Service account key JSON content |
 | `credentials` | object | No | - | Structured service account credentials |
 | `stage` | string | No | `GA` | GCP API stage (GA, BETA, ALPHA) |
 | `region` | string | No | - | Default GCP region (informational) |
+
+## Project Roles vs Organization Roles
+
+> **⚠️ Important**: Choosing between project-scoped and organization-scoped custom roles affects how roles are shared across your GCP tenants. Read this section before configuring the provider.
+
+GCP custom roles exist at two levels:
+
+| | Project Roles (`projects/{id}/roles/…`) | Organization Roles (`organizations/{id}/roles/…`) |
+|---|---|---|
+| **Scope** | Single project only | All projects and folders within the organization |
+| **Portability** | Cannot be applied to a different project's IAM policy | Can be bound to any resource in the organization |
+| **Config** | `organization_id` not set (default) | `organization_id` set |
+| **Required SA permission** | `roles/iam.roleAdmin` on the project | `roles/iam.organizationRoleAdmin` on the org |
+| **Best for** | Single-project deployments | Multi-project / multi-tenant deployments |
+
+### When to use project-level roles (default)
+
+If your deployment manages access within a **single GCP project**, or you have separate provider configs per project, leave `organization_id` unset. Custom roles are created in the provider's `project_id` and IAM bindings are applied within that project.
+
+```yaml
+# Project-scoped roles (default)
+config:
+  project_id: my-project
+```
+
+### When to use organization-level roles
+
+If you manage access **across multiple GCP projects or folders** (multi-tenant), set `organization_id`. Custom roles are created once at the organization level and can be bound to any project or folder IAM policy without duplication.
+
+```yaml
+# Organization-scoped roles
+config:
+  project_id: my-admin-project   # still required for authentication context
+  organization_id: "123456789012"
+```
+
+> **⚠️ Warning — role scope cannot be changed mid-deployment**: Switching from project-scoped to org-scoped roles (or vice versa) after active sessions exist will leave orphaned role bindings. If you need to change scope, revoke all active sessions first, then update the config.
+
+> **⚠️ Warning — project roles are not cross-project portable**: Do not attempt to reference a `projects/{A}/roles/my-role` in an IAM binding on project B. GCP will reject this. If you need a custom role to apply to multiple projects, use `organization_id`.
+
+### Finding your organization ID
+
+```bash
+gcloud organizations list
+# or
+gcloud projects get-ancestors YOUR_PROJECT_ID
+```
 
 ## Getting Credentials
 
@@ -297,6 +376,29 @@ providers:
       # Uses Application Default Credentials
 ```
 
+### Organization-Scoped Roles (Multi-Tenant)
+
+Use this when you want custom roles created at the organization level so they can be applied to any project or folder in your organization. Requires `roles/iam.organizationRoleAdmin` granted to the service account on the organization.
+
+```yaml
+version: "1.0"
+providers:
+  gcp-org:
+    name: GCP Organization
+    description: Organization-wide GCP provider with org-level custom roles
+    provider: gcp
+    enabled: true
+    config:
+      project_id: YOUR_ADMIN_PROJECT_ID       # Used for authentication and API calls
+      organization_id: "YOUR_ORG_ID"          # Numeric org ID — enables org-scoped roles
+      service_account_key_path: /etc/agent/org-admin-key.json
+```
+
+With this configuration:
+- Custom roles defined via `permissions.allow` are created as `organizations/{org}/roles/{name}` and are reusable across all tenant projects and folders.
+- Custom roles are **not** duplicated per project — one role definition covers all tenants.
+- The service account must have `roles/iam.organizationRoleAdmin` on the organization **in addition to** `roles/iam.securityAdmin` (or equivalent) on each project for IAM binding management.
+
 ### Using Default Credentials
 
 ```yaml
@@ -370,7 +472,28 @@ The provider includes comprehensive GCP IAM permissions data, enabling:
    - Check if organization policies restrict access
    - Ensure IAM API is enabled
 
-4. **Tenant Synchronization Issues**
+4. **Organization Role Initialization Failure**
+   - Error: `organization_id is set but service account lacks iam.roles.create on organization ...`
+   - The service account does not have `roles/iam.organizationRoleAdmin` on the organization
+   - Fix: Grant the role (see [Organization-Level Permissions (Organization Role Management)](#organization-level-permissions-organization-role-management)) or remove `organization_id` from the config to fall back to project-scoped roles
+
+5. **`Organizations.Roles.Create` Error During Access Request**
+   - Error: `failed to authorize: user@example.com - ... failed to create custom role <name>: Organizations.Roles.Create: googleapi: Error 403`
+   - This occurs when `organization_id` is set and the agent reaches grant time but the service account is missing `iam.roles.create` on the organization. The init-time permission check may have been skipped (e.g. the SA had the permission when the agent started but it was later revoked), or the agent was started before the permission was propagated.
+   - Fix:
+     ```bash
+     ORG_ID=$(gcloud organizations list --format="value(ID)")
+     gcloud organizations add-iam-policy-binding $ORG_ID \
+         --member="serviceAccount:YOUR_SA@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+         --role="roles/iam.organizationRoleAdmin"
+     ```
+   - After granting, restart the agent so the init-time permission probe re-runs.
+
+6. **Role Cannot Be Applied to a Different Project**
+   - Cause: A custom role defined as `projects/{A}/roles/my-role` cannot be bound to project B's IAM policy — GCP enforces this at the API level
+   - Fix: Add `organization_id` to the provider config so the role is created at org scope instead, or use a GCP predefined role (`roles/...`) which is always portable
+
+7. **Tenant Synchronization Issues**
    - Verify Cloud Resource Manager API is enabled
    - Check service account has `roles/browser` permission at organization level
    - Ensure projects and folders are in `ACTIVE` state
@@ -400,3 +523,5 @@ The GCP provider also supports standard Google Cloud environment variables:
 Ensure the following APIs are enabled in your GCP project:
 - **Identity and Access Management (IAM) API**
 - **Cloud Resource Manager API**
+
+When `organization_id` is set, the IAM API must also be enabled with organization-level access (this is the same API — no additional enablement is needed, but the service account must hold `roles/iam.organizationRoleAdmin` at org scope).

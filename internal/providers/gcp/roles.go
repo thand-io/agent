@@ -9,6 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/data"
 	"github.com/thand-io/agent/internal/models"
+	iam "google.golang.org/api/iam/v1"
 )
 
 // SynchronizeRoles fetches roles from the GCP IAM API for the configured project
@@ -27,6 +28,7 @@ func (p *gcpProvider) SynchronizeRoles(ctx context.Context, req *models.Synchron
 	if len(projectId) == 0 {
 		return nil, fmt.Errorf("GCP project ID is not configured")
 	}
+	roleParent := p.getCustomRoleParent(projectId)
 
 	if req.Pagination == nil {
 		req.Pagination = &models.PaginationOptions{
@@ -39,18 +41,31 @@ func (p *gcpProvider) SynchronizeRoles(ctx context.Context, req *models.Synchron
 		pageSize = 100
 	}
 
-	listCall := p.iamClient.Projects.Roles.List("projects/" + projectId).
-		Context(ctx).
-		PageSize(int64(pageSize)).
-		View("BASIC")
-
-	if req.Pagination.Token != "" {
-		listCall = listCall.PageToken(req.Pagination.Token)
+	var (
+		resp *iam.ListRolesResponse
+		err  error
+	)
+	if isOrganizationRoleParent(roleParent) {
+		listCall := p.iamClient.Organizations.Roles.List(roleParent).
+			Context(ctx).
+			PageSize(int64(pageSize)).
+			View("BASIC")
+		if req.Pagination.Token != "" {
+			listCall = listCall.PageToken(req.Pagination.Token)
+		}
+		resp, err = listCall.Do()
+	} else {
+		listCall := p.iamClient.Projects.Roles.List(roleParent).
+			Context(ctx).
+			PageSize(int64(pageSize)).
+			View("BASIC")
+		if req.Pagination.Token != "" {
+			listCall = listCall.PageToken(req.Pagination.Token)
+		}
+		resp, err = listCall.Do()
 	}
-
-	resp, err := listCall.Do()
 	if err != nil {
-		return nil, fmt.Errorf("failed to list GCP project roles: %w", err)
+		return nil, fmt.Errorf("failed to list GCP roles for %s: %w", roleParent, err)
 	}
 
 	providerRoles := make([]models.ProviderRole, 0, len(resp.Roles))
