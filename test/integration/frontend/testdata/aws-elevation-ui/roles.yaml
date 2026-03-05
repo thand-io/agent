@@ -12,6 +12,7 @@ roles:
     providers:
       - aws-localstack
     scopes:
-      users:
-        - testuser@thand.io
-        - "*"  # Allow any authenticated user for testing
+      allow:
+        users:
+          - testuser@thand.io
+          - "*"  # Allow any authenticated user for testing

@@ -12,7 +12,8 @@ roles:
     providers:
       - aws-localstack
     scopes:
-      users:
-        - engineer@thand.io
-        - developer@thand.io
-        - "*"  # Allow any authenticated user for testing
+      allow:
+        users:
+          - engineer@thand.io
+          - developer@thand.io
+          - "*"  # Allow any authenticated user for testing

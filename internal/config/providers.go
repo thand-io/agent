@@ -381,11 +381,6 @@ func (c *Config) initializeSingleProvider(providerKey string, p *models.Provider
 	err = providerSdk.ValidateConfig(p.Provider, p.Config)
 
 	if err != nil {
-		// DEBUG: log the actual config map values to diagnose validation failures
-		logrus.WithFields(logrus.Fields{
-			"provider": providerKey,
-			"config":   fmt.Sprintf("%v", p.Config.AsMap()),
-		}).Errorf("DEBUG provider config that failed validation: %+v", p.Config.AsMap())
 		return nil, fmt.Errorf("provider config validation failed for provider %s: %w", providerKey, err)
 	}
 

@@ -49,3 +49,5 @@ workflows:
               notifiers:
                 email:
                   provider: email-test
+              to: testuser@thand.io
+              message: "User is requesting AWS admin access. Please approve."
