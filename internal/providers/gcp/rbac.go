@@ -60,6 +60,17 @@ func isPrimitiveRole(roleName string) bool {
 	return slices.Contains(primitiveRoles, roleName)
 }
 
+func isOrganizationRoleParent(parent string) bool {
+	return strings.HasPrefix(parent, "organizations/")
+}
+
+func (p *gcpProvider) getCustomRoleParent(resourceID string) string {
+	if organizationID := p.GetOrganizationId(); len(organizationID) > 0 {
+		return "organizations/" + organizationID
+	}
+	return "projects/" + resourceID
+}
+
 // AuthorizeRole grants access for a user to a role.
 //
 // Role lifecycle:
@@ -108,10 +119,10 @@ func (p *gcpProvider) AuthorizeRole(
 	}
 	stage := config.GetStringWithDefault("stage", "GA")
 
-	// GCP custom roles are project-scoped only (created via Projects.Roles API).
-	// Reject requests that attempt to use custom permissions on a folder tenant.
+	// Folder resources cannot host custom roles; custom roles are created at
+	// project scope (default) or organization scope when organization_id is set.
 	if isFolderResource(tenant) && len(role.Permissions.Allow) > 0 {
-		return nil, fmt.Errorf("custom roles (permissions.allow) are not supported for folder-level resources (%s); GCP custom roles can only be created at the project level", projectId)
+		return nil, fmt.Errorf("custom roles (permissions.allow) are not supported for folder-level resources (%s); custom roles are created at project or organization scope", projectId)
 	}
 
 	var assignedRoles []string
@@ -152,13 +163,14 @@ func (p *gcpProvider) AuthorizeRole(
 	// Composite roles get a unique name; non-composite roles share a base identifier.
 	if len(role.Permissions.Allow) > 0 {
 		customRoleName := gcpRoleID(role.GetName())
+		roleParent := p.getCustomRoleParent(projectId)
 
-		existingRole, err := p.getRole(localCtx, projectId, customRoleName)
+		existingRole, err := p.getRole(localCtx, roleParent, customRoleName)
 		if err != nil {
 			// If role doesn't exist, create it
 			existingRole, err = p.createRole(
 				localCtx,
-				projectId,
+				roleParent,
 				customRoleName,
 				role.Role.GetName(),
 				role.GetDescription(),
@@ -176,21 +188,21 @@ func (p *gcpProvider) AuthorizeRole(
 				)
 			}
 
-			// For non-composite roles, record the version in a project label.
-			if !isComposite {
+			// For project-scoped non-composite roles, record version in project labels.
+			if !isComposite && !isOrganizationRoleParent(roleParent) {
 				p.setRoleVersionLabel(localCtx, projectId, customRoleName, role.GetVersionString())
 			}
 
 			logrus.WithFields(logrus.Fields{
 				"role_name":    customRoleName,
-				"project_id":   projectId,
+				"role_parent":  roleParent,
 				"is_composite": isComposite,
 				"permissions":  role.Permissions.Allow,
 			}).Info("Created custom GCP role")
 		} else {
 			// Role already exists — for non-composite roles, check version first.
 			needsUpdate := true
-			if !isComposite {
+			if !isComposite && !isOrganizationRoleParent(roleParent) {
 				storedVersion := p.getRoleVersionLabel(localCtx, projectId, customRoleName)
 				requestedVersion := role.GetVersionString()
 				if storedVersion == requestedVersion {
@@ -203,12 +215,12 @@ func (p *gcpProvider) AuthorizeRole(
 			}
 
 			if needsUpdate {
-				existingRole, err = p.patchRoleIfStale(localCtx, projectId, existingRole, role.Permissions)
+				existingRole, err = p.patchRoleIfStale(localCtx, existingRole, role.Permissions)
 				if err != nil {
 					return nil, fmt.Errorf("failed to update custom role %s: %w", customRoleName, err)
 				}
 				// Update version label after patching (non-composite only).
-				if !isComposite {
+				if !isComposite && !isOrganizationRoleParent(roleParent) {
 					p.setRoleVersionLabel(localCtx, projectId, customRoleName, role.GetVersionString())
 				}
 			}
@@ -315,12 +327,12 @@ func (p *gcpProvider) RevokeRole(
 			}).Info("Successfully unbound user from predefined GCP role")
 		} else {
 			// Custom role - get the role object and unbind
-			customRoleName, err := parseCustomRolePath(roleName)
+			roleParent, customRoleName, err := parseCustomRolePath(roleName)
 			if err != nil {
 				return nil, err
 			}
 
-			existingRole, err := p.getRole(localCtx, projectId, customRoleName)
+			existingRole, err := p.getRole(localCtx, roleParent, customRoleName)
 			if err != nil {
 				return nil, temporal.NewApplicationErrorWithOptions(
 					fmt.Sprintf("failed to get custom role %s: %v", customRoleName, err),
@@ -353,7 +365,7 @@ func (p *gcpProvider) RevokeRole(
 			// Composite: delete the custom role after unbinding.
 			// Non-composite: retain the role for future authorizations.
 			if isComposite {
-				err = p.deleteRole(localCtx, projectId, customRoleName)
+				err = p.deleteRole(localCtx, roleParent, customRoleName)
 				if err != nil {
 					return nil, temporal.NewApplicationErrorWithOptions(
 						fmt.Sprintf("failed to delete custom role %s: %v", customRoleName, err),
@@ -449,10 +461,10 @@ func (p *gcpProvider) authorizeRoleTemporal(
 		return nil, fmt.Errorf("role %s has no inherits or permissions defined", role.Name)
 	}
 
-	// GCP custom roles are project-scoped only (created via Projects.Roles API).
-	// Reject requests that attempt to use custom permissions on a folder tenant.
+	// Folder resources cannot host custom roles; custom roles are created at
+	// project scope (default) or organization scope when organization_id is set.
 	if isFolderResource(tenant) && len(role.Permissions.Allow) > 0 {
-		return nil, fmt.Errorf("custom roles (permissions.allow) are not supported for folder-level resources (%s); GCP custom roles can only be created at the project level", projectID)
+		return nil, fmt.Errorf("custom roles (permissions.allow) are not supported for folder-level resources (%s); custom roles are created at project or organization scope", projectID)
 	}
 
 	var assignedRoles []string
@@ -585,8 +597,8 @@ func (p *gcpProvider) revokeRoleTemporal(
 	return &models.RevokeRoleResponse{}, nil
 }
 
-// createRole creates a custom role.
-func (p *gcpProvider) createRole(ctx context.Context, projectID, name, title, description, stage string, permissions models.RolePermissions) (*iam.Role, error) {
+// createRole creates a custom role under projects/{id} or organizations/{id}.
+func (p *gcpProvider) createRole(ctx context.Context, roleParent, name, title, description, stage string, permissions models.RolePermissions) (*iam.Role, error) {
 	service := p.GetIamClient()
 
 	// Convert permissions to GCP format
@@ -601,28 +613,49 @@ func (p *gcpProvider) createRole(ctx context.Context, projectID, name, title, de
 		},
 		RoleId: name,
 	}
-	role, err := service.Projects.Roles.Create("projects/"+projectID, request).Context(ctx).Do()
+	if isOrganizationRoleParent(roleParent) {
+		role, err := service.Organizations.Roles.Create(roleParent, request).Context(ctx).Do()
+		if err != nil {
+			return nil, fmt.Errorf("Organizations.Roles.Create: %w", err)
+		}
+		return role, nil
+	}
+
+	role, err := service.Projects.Roles.Create(roleParent, request).Context(ctx).Do()
 	if err != nil {
 		return nil, fmt.Errorf("Projects.Roles.Create: %w", err)
 	}
 	return role, nil
 }
 
-func (p *gcpProvider) getRole(ctx context.Context, projectID, roleName string) (*iam.Role, error) {
+func (p *gcpProvider) getRole(ctx context.Context, roleParent, roleName string) (*iam.Role, error) {
 	service := p.GetIamClient()
-
-	role, err := service.Projects.Roles.Get("projects/" + projectID + "/roles/" + roleName).Context(ctx).Do()
+	roleResource := roleParent + "/roles/" + roleName
+	var (
+		role *iam.Role
+		err  error
+	)
+	if isOrganizationRoleParent(roleParent) {
+		role, err = service.Organizations.Roles.Get(roleResource).Context(ctx).Do()
+	} else {
+		role, err = service.Projects.Roles.Get(roleResource).Context(ctx).Do()
+	}
 	if err != nil {
 		return nil, err
 	}
 	return role, nil
 }
 
-// deleteRole deletes a custom role.
-func (p *gcpProvider) deleteRole(ctx context.Context, projectID, roleName string) error {
+// deleteRole deletes a custom role under projects/{id} or organizations/{id}.
+func (p *gcpProvider) deleteRole(ctx context.Context, roleParent, roleName string) error {
 	service := p.GetIamClient()
-
-	_, err := service.Projects.Roles.Delete("projects/" + projectID + "/roles/" + roleName).Context(ctx).Do()
+	roleResource := roleParent + "/roles/" + roleName
+	var err error
+	if isOrganizationRoleParent(roleParent) {
+		_, err = service.Organizations.Roles.Delete(roleResource).Context(ctx).Do()
+	} else {
+		_, err = service.Projects.Roles.Delete(roleResource).Context(ctx).Do()
+	}
 	if err != nil {
 		return fmt.Errorf("failed to delete role: %w", err)
 	}
@@ -750,14 +783,19 @@ func removeMemberFromPolicy(policy *cloudresourcemanager.Policy, roleName, membe
 	return false // Binding not found
 }
 
-// parseCustomRolePath extracts the short role name from a full custom role resource path.
-// Expected format: projects/{project}/roles/{roleName}
-func parseCustomRolePath(fullPath string) (string, error) {
+// parseCustomRolePath parses a full custom role resource path.
+// Expected formats:
+//   - projects/{project}/roles/{roleName}
+//   - organizations/{organization}/roles/{roleName}
+func parseCustomRolePath(fullPath string) (string, string, error) {
 	parts := strings.Split(fullPath, "/")
-	if len(parts) != 4 || len(parts[3]) == 0 {
-		return "", fmt.Errorf("invalid custom role name format: %q, expected projects/{project}/roles/{roleName}", fullPath)
+	if len(parts) != 4 || len(parts[1]) == 0 || parts[2] != "roles" || len(parts[3]) == 0 {
+		return "", "", fmt.Errorf("invalid custom role name format: %q, expected projects/{project}/roles/{roleName} or organizations/{organization}/roles/{roleName}", fullPath)
 	}
-	return parts[3], nil
+	if parts[0] != "projects" && parts[0] != "organizations" {
+		return "", "", fmt.Errorf("invalid custom role parent in %q: expected projects or organizations", fullPath)
+	}
+	return parts[0] + "/" + parts[1], parts[3], nil
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -849,22 +887,32 @@ func isEtagConflict(err error) bool {
 }
 
 // patchRoleIfStale updates a custom role's included permissions when they differ from the desired set.
-func (p *gcpProvider) patchRoleIfStale(ctx context.Context, projectID string, existingRole *iam.Role, permissions models.RolePermissions) (*iam.Role, error) {
+func (p *gcpProvider) patchRoleIfStale(ctx context.Context, existingRole *iam.Role, permissions models.RolePermissions) (*iam.Role, error) {
 	desired := permissionsToGcpPermissions(permissions)
 	if permissionsEqual(existingRole.IncludedPermissions, desired) {
 		return existingRole, nil
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"role":       existingRole.Name,
-		"project_id": projectID,
+		"role": existingRole.Name,
 	}).Info("Updating stale custom GCP role permissions")
 
 	existingRole.IncludedPermissions = desired
-	updated, err := p.iamClient.Projects.Roles.Patch(existingRole.Name, existingRole).
-		UpdateMask("includedPermissions").
-		Context(ctx).
-		Do()
+	var (
+		updated *iam.Role
+		err     error
+	)
+	if strings.HasPrefix(existingRole.Name, "organizations/") {
+		updated, err = p.iamClient.Organizations.Roles.Patch(existingRole.Name, existingRole).
+			UpdateMask("includedPermissions").
+			Context(ctx).
+			Do()
+	} else {
+		updated, err = p.iamClient.Projects.Roles.Patch(existingRole.Name, existingRole).
+			UpdateMask("includedPermissions").
+			Context(ctx).
+			Do()
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to patch custom role permissions: %w", err)
 	}

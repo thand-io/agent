@@ -14,6 +14,9 @@ type ConfigSchema struct {
 	// GCP Project ID (required)
 	ProjectID string `json:"project_id" mapstructure:"project_id" validate:"required"`
 
+	// Optional GCP Organization ID used for organization-scoped custom roles
+	OrganizationID string `json:"organization_id" mapstructure:"organization_id" validate:"omitempty"`
+
 	// API Stage (optional, defaults to GA)
 	Stage string `json:"stage" mapstructure:"stage" validate:"omitempty,oneof=GA BETA ALPHA"`
 
