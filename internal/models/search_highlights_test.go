@@ -24,7 +24,10 @@ type highlightTestRole struct {
 // This mirrors Elasticsearch highlight behaviour: the returned term is what exists
 // in the indexed text, not what the user typed.
 func TestHighlightTermsAreIndexedTokens(t *testing.T) {
-	idx, _ := bleve.NewMemOnly(bleve.NewIndexMapping())
+	idx, err := bleve.NewMemOnly(bleve.NewIndexMapping())
+	if err != nil {
+		t.Fatal(err)
+	}
 	idx.Index("aws-admin", highlightTestRole{
 		Name:     "AWS Admin",
 		Inherits: "administratoraccess poweruseraccess",
@@ -121,7 +124,10 @@ func TestHighlightTermsAreIndexedTokens(t *testing.T) {
 // TestHighlightDoesNotEchoQueryWhenTokenDiffers verifies that mixed-case queries
 // return the analysed indexed token, not the original casing of the query.
 func TestHighlightDoesNotEchoQueryWhenTokenDiffers(t *testing.T) {
-	idx, _ := bleve.NewMemOnly(bleve.NewIndexMapping())
+	idx, err := bleve.NewMemOnly(bleve.NewIndexMapping())
+	if err != nil {
+		t.Fatal(err)
+	}
 	idx.Index("r1", highlightTestRole{
 		Name:     "ReadOnly",
 		Inherits: "arn:aws:iam::aws:policy/administratoraccess",
@@ -168,7 +174,10 @@ func TestHighlightDoesNotEchoQueryWhenTokenDiffers(t *testing.T) {
 // TestHighlightMultipleFieldsAndTerms verifies that when multiple fields match,
 // all distinct matched indexed tokens per field are returned.
 func TestHighlightMultipleFieldsAndTerms(t *testing.T) {
-	idx, _ := bleve.NewMemOnly(bleve.NewIndexMapping())
+	idx, err := bleve.NewMemOnly(bleve.NewIndexMapping())
+	if err != nil {
+		t.Fatal(err)
+	}
 	idx.Index("r1", highlightTestRole{
 		Name:     "EC2 Admin",
 		Inherits: "ec2fullaccess",
@@ -227,7 +236,10 @@ func highlightKeys(m map[string][]string) []string {
 // ("id", "identifier") are suppressed from _highlights. Human-readable fields like
 // name, label, and description surface when they match.
 func TestHighlightOnlyRawIDsAreSuppressed(t *testing.T) {
-	idx, _ := bleve.NewMemOnly(bleve.NewIndexMapping())
+	idx, err := bleve.NewMemOnly(bleve.NewIndexMapping())
+	if err != nil {
+		t.Fatal(err)
+	}
 	idx.Index("aws_admin", highlightTestRole{
 		Name:     "admin",
 		Inherits: "aws_user arn:aws:iam::aws:policy/administratoraccess",
@@ -273,7 +285,10 @@ func TestHighlightOnlyRawIDsAreSuppressed(t *testing.T) {
 // config/roles/aws.yaml: searching "admin" must return highlights from name,
 // description (when it contains "admin"), and inherits — all in one result.
 func TestHighlightAdminSearchHitsMultipleFields(t *testing.T) {
-	idx, _ := bleve.NewMemOnly(bleve.NewIndexMapping())
+	idx, err := bleve.NewMemOnly(bleve.NewIndexMapping())
+	if err != nil {
+		t.Fatal(err)
+	}
 	idx.Index("aws_admin", highlightTestRole{
 		Name:        "admin",
 		Description: "full admin access to all resources and capabilities",

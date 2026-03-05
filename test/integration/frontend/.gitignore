@@ -1,0 +1,12 @@
+# Screenshots and artifacts
+*.png
+*.jpg
+*.mp4
+
+# Temporary config directories
+/tmp/
+thand-ui-test-*/
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,295 @@
+{
+  "id": "thand-test",
+  "realm": "thand-test",
+  "enabled": true,
+  "displayName": "Thand Test Realm",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": false,
+  "accessTokenLifespan": 3600,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "roles": {
+    "realm": [
+      {
+        "name": "user",
+        "description": "Default user role",
+        "composite": false
+      },
+      {
+        "name": "manager",
+        "description": "Manager role for approvals",
+        "composite": false
+      }
+    ]
+  },
+  "users": [
+    {
+      "username": "testuser@thand.io",
+      "email": "testuser@thand.io",
+      "firstName": "Test",
+      "lastName": "User",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "testpass123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "user"
+      ],
+      "attributes": {
+        "name": [
+          "Test User"
+        ]
+      }
+    },
+    {
+      "username": "manager@thand.io",
+      "email": "manager@thand.io",
+      "firstName": "Manager",
+      "lastName": "User",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "managerpass123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "user",
+        "manager"
+      ],
+      "attributes": {
+        "name": [
+          "Manager User"
+        ]
+      }
+    },
+    {
+      "username": "engineer@thand.io",
+      "email": "engineer@thand.io",
+      "firstName": "Engineer",
+      "lastName": "User",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "testpass123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "user"
+      ],
+      "attributes": {
+        "name": [
+          "Engineer User"
+        ]
+      }
+    },
+    {
+      "username": "developer@thand.io",
+      "email": "developer@thand.io",
+      "firstName": "Developer",
+      "lastName": "User",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "testpass123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "user"
+      ],
+      "attributes": {
+        "name": [
+          "Developer User"
+        ]
+      }
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "thand-oidc",
+      "name": "Thand OIDC Client",
+      "description": "OIDC client for Thand UI E2E tests",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "thand-oidc-secret",
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "*"
+      ],
+      "webOrigins": [
+        "*"
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "+"
+      },
+      "protocolMappers": [
+        {
+          "name": "email",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "email",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "email",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-full-name-mapper",
+          "consentRequired": false,
+          "config": {
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "username",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "preferred_username",
+            "jsonType.label": "String"
+          }
+        }
+      ],
+      "defaultClientScopes": [
+        "openid"
+      ],
+      "optionalClientScopes": [
+        "email",
+        "profile"
+      ]
+    },
+    {
+      "clientId": "thand-saml",
+      "name": "Thand SAML Client",
+      "description": "SAML client for Thand UI E2E tests",
+      "enabled": true,
+      "protocol": "saml",
+      "frontchannelLogout": true,
+      "attributes": {
+        "saml.assertion.signature": "true",
+        "saml.server.signature": "true",
+        "saml.client.signature": "false",
+        "saml.force.post.binding": "true",
+        "saml_force_name_id_format": "true",
+        "saml_name_id_format": "email",
+        "saml.authnstatement": "true",
+        "saml_single_logout_service_url_redirect": "",
+        "saml.signature.algorithm": "RSA_SHA256"
+      },
+      "redirectUris": [
+        "*"
+      ],
+      "baseUrl": "/",
+      "adminUrl": "",
+      "protocolMappers": [
+        {
+          "name": "email",
+          "protocol": "saml",
+          "protocolMapper": "saml-user-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "email",
+            "friendly.name": "email",
+            "attribute.name": "email",
+            "attribute.nameformat": "URI Reference"
+          }
+        },
+        {
+          "name": "name",
+          "protocol": "saml",
+          "protocolMapper": "saml-user-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "firstName",
+            "friendly.name": "name",
+            "attribute.name": "name",
+            "attribute.nameformat": "URI Reference"
+          }
+        },
+        {
+          "name": "username",
+          "protocol": "saml",
+          "protocolMapper": "saml-user-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "username",
+            "friendly.name": "username",
+            "attribute.name": "username",
+            "attribute.nameformat": "URI Reference"
+          }
+        }
+      ]
+    }
+  ],
+  "clientScopes": [
+    {
+      "name": "email",
+      "description": "OpenID Connect built-in scope: email",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      }
+    },
+    {
+      "name": "profile",
+      "description": "OpenID Connect built-in scope: profile",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      }
+    },
+    {
+      "name": "openid",
+      "description": "OpenID Connect built-in scope: openid",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      }
+    }
+  ],
+  "defaultDefaultClientScopes": [
+    "openid"
+  ],
+  "defaultOptionalClientScopes": [
+    "email",
+    "profile"
+  ]
+}

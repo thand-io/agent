@@ -93,8 +93,14 @@ func (p *awsProvider) GetAuthorizedAccessUrl(
 
 // shouldUseIdentityCenter determines if we should use Identity Center based on user context
 func (p *awsProvider) shouldUseIdentityCenter(user *models.User) bool {
-	// For now, assume Identity Center if user source suggests SSO
-	// You could also check for specific configuration flags
+	// Explicit override via iam_mode config: "traditional" forces IAM, "identity_center" forces IC
+	switch p.GetConfig().GetStringWithDefault("iam_mode", "") {
+	case "traditional":
+		return false
+	case "identity_center":
+		return true
+	}
+
 	useIC := true
 	if len(user.Email) == 0 && len(user.Username) > 0 {
 		// We only have a username, likely IAM
