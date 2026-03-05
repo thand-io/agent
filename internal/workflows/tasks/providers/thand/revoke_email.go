@@ -17,18 +17,18 @@ func (r *revokeNotifier) createRevokeEmailBody() (string, string) {
 	plainText.WriteString("Your access has been revoked.\n\n")
 
 	if elevationReq.Role != nil {
-		plainText.WriteString(fmt.Sprintf("Role: %s\n", elevationReq.Role.Name))
+		fmt.Fprintf(&plainText, "Role: %s\n", elevationReq.Role.Name)
 		if len(elevationReq.Role.Description) > 0 {
-			plainText.WriteString(fmt.Sprintf("Description: %s\n", elevationReq.Role.Description))
+			fmt.Fprintf(&plainText, "Description: %s\n", elevationReq.Role.Description)
 		}
 	}
 
 	if len(elevationReq.Providers) > 0 {
-		plainText.WriteString(fmt.Sprintf("Providers: %s\n", strings.Join(elevationReq.Providers, ", ")))
+		fmt.Fprintf(&plainText, "Providers: %s\n", strings.Join(elevationReq.Providers, ", "))
 	}
 
 	if len(elevationReq.Duration) > 0 {
-		plainText.WriteString(fmt.Sprintf("Duration: %s\n", elevationReq.Duration))
+		fmt.Fprintf(&plainText, "Duration: %s\n", elevationReq.Duration)
 	}
 
 	plainText.WriteString("\nYour access has been successfully revoked. If you need access again, please submit a new request.")
@@ -51,7 +51,7 @@ func (r *revokeNotifier) createRevokeEmailBody() (string, string) {
 
 		// Add permissions if available
 		if len(elevationReq.Role.Permissions.Allow) > 0 {
-			data["Permissions"] = elevationReq.Role.Permissions.Allow
+			data["Permissions"] = sortedStatementsWithSortedFields(elevationReq.Role.Permissions.Allow)
 		}
 	}
 

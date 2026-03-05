@@ -142,8 +142,8 @@ func (a *approvalsNotifier) addInheritedRolesSection(blocks *[]slack.Block, elev
 		var inheritsText strings.Builder
 		inheritsText.WriteString("*Inherited Roles:*\n")
 
-		for _, inheritedRole := range elevateRequest.Role.Inherits {
-			inheritsText.WriteString(fmt.Sprintf("- %s\n", inheritedRole))
+		for _, inheritedRole := range sortedStrings(elevateRequest.Role.Inherits) {
+			fmt.Fprintf(&inheritsText, "- %s\n", inheritedRole)
 		}
 
 		*blocks = append(*blocks, slack.NewSectionBlock(
@@ -167,24 +167,24 @@ func (a *approvalsNotifier) addPermissionsSection(blocks *[]slack.Block, elevate
 
 		if len(elevateRequest.Role.Permissions.Allow) > 0 {
 			permissionsText.WriteString("*Allowed:*\n")
-			for _, stmt := range elevateRequest.Role.Permissions.Allow {
+			for _, stmt := range sortedStatementsWithSortedFields(elevateRequest.Role.Permissions.Allow) {
 				if len(stmt.Operations) > 0 {
-					permissionsText.WriteString(fmt.Sprintf("- Operations: `%s`\n", strings.Join(stmt.Operations, "`, `")))
+					fmt.Fprintf(&permissionsText, "- Operations: `%s`\n", strings.Join(stmt.Operations, "`, `"))
 				}
 				if len(stmt.Targets) > 0 {
-					permissionsText.WriteString(fmt.Sprintf("  Targets: `%s`\n", strings.Join(stmt.Targets, "`, `")))
+					fmt.Fprintf(&permissionsText, "  Targets: `%s`\n", strings.Join(stmt.Targets, "`, `"))
 				}
 			}
 		}
 
 		if len(elevateRequest.Role.Permissions.Deny) > 0 {
 			permissionsText.WriteString("*Denied:*\n")
-			for _, stmt := range elevateRequest.Role.Permissions.Deny {
+			for _, stmt := range sortedStatementsWithSortedFields(elevateRequest.Role.Permissions.Deny) {
 				if len(stmt.Operations) > 0 {
-					permissionsText.WriteString(fmt.Sprintf("- Operations: `%s`\n", strings.Join(stmt.Operations, "`, `")))
+					fmt.Fprintf(&permissionsText, "- Operations: `%s`\n", strings.Join(stmt.Operations, "`, `"))
 				}
 				if len(stmt.Targets) > 0 {
-					permissionsText.WriteString(fmt.Sprintf("  Targets: `%s`\n", strings.Join(stmt.Targets, "`, `")))
+					fmt.Fprintf(&permissionsText, "  Targets: `%s`\n", strings.Join(stmt.Targets, "`, `"))
 				}
 			}
 		}
@@ -209,7 +209,7 @@ func (a *approvalsNotifier) addUserInfoSection(blocks *[]slack.Block, elevateReq
 		userText.WriteString("*Requested by:*\n")
 		userText.WriteString(fmt.Sprintf("*User:* %s\n", elevateRequest.User.Name))
 		if len(elevateRequest.User.Email) > 0 {
-			userText.WriteString(fmt.Sprintf("*Email:* %s\n", elevateRequest.User.Email))
+			fmt.Fprintf(&userText, "*Email:* %s\n", elevateRequest.User.Email)
 		}
 
 		*blocks = append(*blocks, slack.NewSectionBlock(
@@ -241,11 +241,11 @@ func (a *approvalsNotifier) addIdentitiesSection(blocks *[]slack.Block, elevateR
 		for _, identity := range elevateRequest.Identities {
 
 			if resolved, ok := resolvedIdentities[identity]; ok {
-				identitiesText.WriteString(fmt.Sprintf("- %s\n", resolved.String()))
+				fmt.Fprintf(&identitiesText, "- %s\n", resolved.String())
 				continue
 			}
 
-			identitiesText.WriteString(fmt.Sprintf("- %s\n", identity))
+			fmt.Fprintf(&identitiesText, "- %s\n", identity)
 		}
 
 		*blocks = append(*blocks, slack.NewSectionBlock(
