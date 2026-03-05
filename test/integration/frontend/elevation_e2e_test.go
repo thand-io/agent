@@ -161,9 +161,6 @@ func runElevationE2E(t *testing.T, testCaseName string) {
 		require.NoError(t, err, "Should be able to submit elevation request")
 		require.NotEmpty(t, workflowID, "Workflow ID should be returned")
 		t.Logf("Workflow started with ID: %s", workflowID)
-
-		// Store workflow ID for subsequent subtests
-		t.Setenv("E2E_WORKFLOW_ID", workflowID)
 	})
 
 	// Get workflow ID (set by previous subtest via convention — use a variable instead)

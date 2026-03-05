@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/thand-io/agent/internal/config"
@@ -22,6 +23,10 @@ type TestCaseLoader struct {
 	uiInfra *UITestInfrastructure
 }
 
+// providerEnvMu serializes the set-env → InitializeProviders → restore-env window
+// so that parallel UI subtests do not race on shared environment variable keys.
+var providerEnvMu sync.Mutex
+
 // NewTestCaseLoader creates a new test case loader for UI E2E tests.
 func NewTestCaseLoader(infra *UITestInfrastructure) *TestCaseLoader {
 	return &TestCaseLoader{
@@ -32,16 +37,31 @@ func NewTestCaseLoader(infra *UITestInfrastructure) *TestCaseLoader {
 
 // CreateUIConfigFromTestCase creates a Config object from a test case,
 // configured for use with the Thand server container.
-func (l *TestCaseLoader) CreateUIConfigFromTestCase(t *testing.T, tc *TestCase) (*config.Config, error) {
-	// Set env vars so that ResolveConfig can expand ${ .VARNAME } jq expressions when
-	// InitializeProviders runs. providerEnvVars holds host.docker.internal URLs for the
-	// Thand container; replace with localhost for the Go test-process context.
+func (l *TestCaseLoader) CreateUIConfigFromTestCase(_ *testing.T, tc *TestCase) (*config.Config, error) {
+	// providerEnvVars holds host.docker.internal URLs for the Thand container.
+	// ResolveConfig reads os.Environ() to expand ${ .VARNAME } jq expressions, so we must
+	// temporarily set the process environment with localhost-mapped values before calling
+	// InitializeProviders. A mutex serializes this window so parallel subtests don't race.
+	providerEnvMu.Lock()
+	prev := make(map[string]string, len(l.uiInfra.providerEnvVars))
 	for k, v := range l.uiInfra.providerEnvVars {
-		t.Setenv(k, strings.ReplaceAll(v, "host.docker.internal", "localhost"))
+		prev[k] = os.Getenv(k)
+		os.Setenv(k, strings.ReplaceAll(v, "host.docker.internal", "localhost")) //nolint:errcheck
 	}
 
 	// Use the base loader to create the config (handles providers, roles, workflows, Temporal)
 	cfg, err := l.TestCaseLoader.CreateConfigFromTestCase(tc)
+
+	// Restore original env values before releasing the lock.
+	for k, old := range prev {
+		if old == "" {
+			os.Unsetenv(k) //nolint:errcheck
+		} else {
+			os.Setenv(k, old) //nolint:errcheck
+		}
+	}
+	providerEnvMu.Unlock()
+
 	if err != nil {
 		return nil, err
 	}

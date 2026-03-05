@@ -47,6 +47,17 @@ func NewBrowser(t *testing.T, baseURL string) *Browser {
 	allocCtx, allocCancel := chromedp.NewExecAllocator(context.Background(), opts...)
 	ctx, cancel := chromedp.NewContext(allocCtx)
 
+	// Run a no-op action on b.ctx immediately so that the browser is
+	// allocated (and browser.run started) with the long-lived b.ctx, not
+	// with the short-lived per-operation derived contexts created by
+	// withCallerCtx. Without this, the first chromedp.Run call (inside
+	// Login) starts browser.run with Login's context, and when Login's
+	// context is cancelled on return the browser connection is torn down,
+	// causing all subsequent operations to fail with "context canceled".
+	if err := chromedp.Run(ctx); err != nil {
+		t.Logf("Warning: browser warm-up failed: %v", err)
+	}
+
 	return &Browser{
 		t:           t,
 		baseURL:     baseURL,
