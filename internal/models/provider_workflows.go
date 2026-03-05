@@ -108,7 +108,11 @@ func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 	activityName := CreateTemporalProviderWorkflowName(providerID, string(activityMethod))
 	actx := workflow.WithLocalActivityOptions(ctx, ao)
 
-	var patchFutures []workflow.Future
+	// Buffer page responses during pagination so that no patch activities are
+	// scheduled until every page has been fetched.  This guarantees the local
+	// activity worker slots are fully dedicated to page-fetching activities
+	// even when thousands of pages are produced.
+	var patchPayloads []Resp
 
 	err := paginatedSync(provider, activityMethod, req,
 		// executePage: run the local activity and return the deserialized response.
@@ -125,15 +129,10 @@ func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 			}
 			return resp, err
 		},
-		// onPage: fire the upstream patch activity without blocking.
+		// onPage: stash the response; patch activities are deferred until all
+		// pages have been fetched so they never compete with executePage.
 		func(resp Resp) {
-			patchFutures = append(patchFutures, workflow.ExecuteLocalActivity(
-				actx,
-				TemporalPatchProviderUpstreamActivityName,
-				activityMethod,
-				providerID,
-				resp,
-			))
+			patchPayloads = append(patchPayloads, resp)
 		},
 	)
 	if err != nil {
@@ -141,11 +140,18 @@ func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 		return err
 	}
 
-	// Drain all patch futures now that every page has been fetched.
-	for _, f := range patchFutures {
-		if err := f.Get(ctx, nil); err != nil {
-			log.Error("Error patching synchronization results upstream", "provider", providerID, "error", err)
-			return err
+	// Schedule and drain all patch activities in the background so
+	// runSyncLoop returns immediately without blocking the caller.
+	for _, payload := range patchPayloads {
+		if err := workflow.ExecuteLocalActivity(
+			actx,
+			TemporalPatchProviderUpstreamActivityName,
+			activityMethod,
+			providerID,
+			payload,
+		).Get(actx, nil); err != nil {
+			log.Error("Error patching synchronization results upstream",
+				"provider", providerID, "error", err)
 		}
 	}
 
