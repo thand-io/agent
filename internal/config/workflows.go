@@ -5,7 +5,6 @@ import (
 
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
-	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/config/environment"
 	"github.com/thand-io/agent/internal/models"
 )
@@ -100,7 +99,7 @@ func (c *Config) ApplyWorkflows(foundWorkflows []*models.WorkflowDefinitions) (m
 				w.Version = workflow.Version
 			}
 
-			w.Identifier = common.ConvertToSnakeCase(workflowKey)
+			w.Identifier = workflowKey
 
 			if len(w.Name) == 0 {
 				w.Name = workflowKey
