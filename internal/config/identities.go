@@ -188,10 +188,10 @@ func (c *Config) GetIdentity(identity string) (*models.Identity, error) {
 	var providerID string
 	var identityKey string
 
-	if colonIdx := strings.Index(identity, ":"); colonIdx != -1 {
+	if before, after, ok := strings.Cut(identity, ":"); ok {
 		// Has provider prefix
-		providerID = identity[:colonIdx]
-		identityKey = identity[colonIdx+1:]
+		providerID = before
+		identityKey = after
 	} else {
 		// No prefix, use the full identity
 		identityKey = identity

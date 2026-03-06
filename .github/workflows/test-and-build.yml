@@ -133,10 +133,7 @@ jobs:
         cache: true
 
     - name: Build linux/amd64 binary
-      run: |
-        mkdir -p bin
-        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo \
-          -o bin/thand-linux-amd64 .
+      run: make build-linux-amd64
 
     - name: Upload linux/amd64 binary
       uses: actions/upload-artifact@v4
