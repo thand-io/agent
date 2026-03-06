@@ -203,7 +203,7 @@ func (t *thandTask) executeApprovalsTask(
 			logrus.WithError(err).WithFields(logrus.Fields{
 				"taskName":         taskName,
 				"approverIdentity": approverIdentityID,
-			}).Warn("Failed to resolve approver identity from event")
+			}).Error("Failed to resolve approver identity from event - identity not found in any provider")
 			return &defaultFlowState, nil
 		}
 

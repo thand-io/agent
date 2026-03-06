@@ -113,7 +113,7 @@ func (p *gcpProvider) GetOrganizationID() string {
 }
 
 func (p *gcpProvider) checkOrganizationRoleCreatePermission(ctx context.Context) error {
-	organizationID := p.GetOrganizationId()
+	organizationID := p.GetOrganizationID()
 	if len(organizationID) == 0 || p.crmV3Client == nil {
 		return nil
 	}

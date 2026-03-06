@@ -65,7 +65,7 @@ func isOrganizationRoleParent(parent string) bool {
 }
 
 func (p *gcpProvider) getCustomRoleParent(resourceID string) string {
-	if organizationID := p.GetOrganizationId(); len(organizationID) > 0 {
+	if organizationID := p.GetOrganizationID(); len(organizationID) > 0 {
 		return "organizations/" + organizationID
 	}
 	return "projects/" + resourceID
