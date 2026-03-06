@@ -138,6 +138,12 @@ func (c *Config) processProviderDefinitions(foundProviders []*models.ProviderDef
 				continue
 			}
 
+			// Identifier is not set here as its a provider config.
+			// The identifier is set during provider initialization when we
+			// have the full provider config with all defaults applied.
+			// This allows providers to be referenced by their key in the config,
+			// but also allows the provider implementation to override the identifier if needed.
+
 			defs[providerKey] = p
 
 			logrus.WithFields(logrus.Fields{
