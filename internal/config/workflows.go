@@ -5,7 +5,6 @@ import (
 
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
-	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/config/environment"
 	"github.com/thand-io/agent/internal/models"
 )
@@ -100,7 +99,12 @@ func (c *Config) ApplyWorkflows(foundWorkflows []*models.WorkflowDefinitions) (m
 				w.Version = workflow.Version
 			}
 
-			w.Identifier = common.ConvertToSnakeCase(workflowKey)
+			// Keep the original workflow key format (kebab-case) as the identifier.
+		// This ensures the identifier matches the config map storage key and prevents
+		// potential key collisions that could occur with snake_case normalization.
+		// For example: "auto-approve" and "auto_approve" would both normalize to
+		// "auto_approve", violating YAML's unique key constraint.
+		w.Identifier = workflowKey
 
 			if len(w.Name) == 0 {
 				w.Name = workflowKey
