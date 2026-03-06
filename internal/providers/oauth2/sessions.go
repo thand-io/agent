@@ -111,11 +111,12 @@ func (p *oauth2Provider) CreateSession(ctx context.Context, authRequest *models.
 	}
 
 	// Log the identity information being added
+	// ONLY log in debug to avoid PII leakage
 	logrus.WithFields(logrus.Fields{
 		"user_id":    user.ID,
 		"user_email": user.Email,
 		"user_name":  user.Name,
-	}).Info("Adding OAuth2 user identity to provider")
+	}).Debug("Adding OAuth2 user identity to provider")
 
 	p.AddIdentities(models.Identity{
 		ID:    user.ID,

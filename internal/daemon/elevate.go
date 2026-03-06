@@ -286,7 +286,7 @@ func (s *Server) elevate(c *gin.Context, request models.ElevateRequest) {
 			"providers": providers,
 		}
 		if foundUser != nil && foundUser.User != nil {
-			properties["principal"] = foundUser.User.GetIdentity()
+			properties["principal"] = foundUser.AsIdentity()
 		}
 		if err := s.Config.GetAnalytics().Capture(
 			"elevate-request", properties,
@@ -708,11 +708,7 @@ func (s *Server) getElevationPagePrefill(c *gin.Context) ElevateStaticPageData {
 		if err == nil && session != nil {
 			user := session.User
 			if user != nil {
-				validIdentities = append(validIdentities, models.Identity{
-					ID:    user.GetIdentity(),
-					Label: user.GetName(),
-					User:  user,
-				})
+				validIdentities = append(validIdentities, *session.AsIdentity())
 			}
 		}
 	}

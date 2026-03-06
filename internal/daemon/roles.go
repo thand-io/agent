@@ -274,11 +274,7 @@ func (s *Server) getRolePage(c *gin.Context) {
 	}
 
 	// Create identity from the authenticated user
-	identity := &models.Identity{
-		ID:    foundSession.User.GetIdentity(),
-		Label: foundSession.User.GetName(),
-		User:  foundSession.User,
-	}
+	identity := foundSession.AsIdentity()
 
 	// Evaluate the composite role with all inherited permissions resolved
 	compositeRole, err := s.Config.GetCompositeRole(identity, baseRole)

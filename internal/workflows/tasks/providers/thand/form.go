@@ -194,6 +194,10 @@ func (t *thandTask) executeFormTask(
 		return nil, err
 	}
 
+	defaultFlowState := model.FlowDirective{
+		Value: taskName, // loop back to await more approvals
+	}
+
 	// Process the form submission
 	var formData map[string]any
 
@@ -202,17 +206,26 @@ func (t *thandTask) executeFormTask(
 		extensions := formEvent.Extensions()
 
 		userIdentity, userExists := extensions[sdkConstants.VarsContextUser].(string)
-		if userExists {
-			log.WithFields(logrus.Fields{
+
+		if !userExists {
+			logrus.Warn("Form submission event missing user extension")
+			return &defaultFlowState, nil
+		}
+
+		// Convert userIdentity to models.Identity
+		approverIdentityObj, err := models.NewIdentityFromBase64(userIdentity)
+
+		if err != nil {
+			logrus.WithError(err).WithFields(logrus.Fields{
 				"taskName": taskName,
-				"user":     userIdentity,
-			}).Info("Form submitted by user")
+			}).Warn("Failed to convert approver identity to models.Identity")
+			return &defaultFlowState, nil
 		}
 
 		// Store form submission data in context
 		workflowTask.SetContextKeyValue("form_submission", map[string]any{
 			"values":       formData["values"],
-			"submitted_by": userIdentity,
+			"submitted_by": approverIdentityObj.GetMappableIdentifier(),
 			"submitted_at": formData["submitted_at"],
 		})
 	}

@@ -99,7 +99,9 @@ func (s *Service) Resume(ctx context.Context, input ResumeInput) (*models.Elevat
 	if input.User != nil {
 		event := workflow.GetInputAsCloudEvent()
 		if event != nil {
-			event.SetExtension(sdkConstants.VarsContextUser, input.User.GetIdentity())
+			identity := input.User.AsIdentity()
+			event.SetExtension(sdkConstants.VarsContextUser,
+				identity.EncodeBase64())
 
 			if len(event.FieldErrors) > 0 {
 				logrus.WithField("errors", event.FieldErrors).

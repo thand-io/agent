@@ -31,6 +31,19 @@ type EncodingWrapper struct {
 	Data any `json:"data"`
 }
 
+func NewEncodingWrapper(typeName string, data any) *EncodingWrapper {
+	return &EncodingWrapper{
+		Type: typeName,
+		Data: data,
+	}
+}
+
+func NewDecodingWrapper(typeName string) *EncodingWrapper {
+	return &EncodingWrapper{
+		Type: typeName,
+	}
+}
+
 func (e EncodingWrapper) EncodeAndEncrypt(encryptor EncryptionImpl) string {
 	return e.encodeBase64(encryptor)
 }

@@ -236,7 +236,7 @@ func (p *kubernetesProvider) authorizeNamespacedRole(
 	}
 
 	logFields := logrus.Fields{
-		"user":      user.GetIdentity(),
+		"user":      user.GetMappableIdentifier(),
 		"role":      role.Name,
 		"namespace": namespace,
 		"binding":   bindingName,
@@ -342,7 +342,7 @@ func (p *kubernetesProvider) authorizeClusterRole(
 	}
 
 	logFields := logrus.Fields{
-		"user":    user.GetIdentity(),
+		"user":    user.GetMappableIdentifier(),
 		"role":    role.Name,
 		"binding": bindingName,
 	}
@@ -574,7 +574,7 @@ func (p *kubernetesProvider) revokeNamespacedRole(
 	}
 
 	logFields := logrus.Fields{
-		"user":      user.GetIdentity(),
+		"user":      user.GetMappableIdentifier(),
 		"role":      role.Name,
 		"namespace": namespace,
 		"binding":   bindingName,
@@ -619,7 +619,7 @@ func (p *kubernetesProvider) revokeClusterRole(
 	}
 
 	logFields := logrus.Fields{
-		"user":    user.GetIdentity(),
+		"user":    user.GetMappableIdentifier(),
 		"role":    role.Name,
 		"binding": bindingName,
 		"scope":   "cluster",

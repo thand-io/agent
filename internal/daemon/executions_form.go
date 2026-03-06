@@ -240,7 +240,8 @@ func (s *Server) submitForm(c *gin.Context) {
 
 	// Set user extension
 	if foundUser != nil && foundUser.User != nil {
-		event.SetExtension(sdkConstants.VarsContextUser, foundUser.User.GetIdentity())
+		event.SetExtension(sdkConstants.VarsContextUser,
+			foundUser.AsIdentity().EncodeBase64())
 	}
 
 	// Set form data

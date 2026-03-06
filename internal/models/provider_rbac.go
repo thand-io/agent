@@ -309,11 +309,7 @@ func ValidateRole(
 	}
 
 	// Check the user has access to the required scopes etc
-	identity := Identity{
-		ID:    elevateRequest.User.GetIdentity(),
-		Label: elevateRequest.User.GetName(),
-		User:  elevateRequest.User,
-	}
+	identity := elevateRequest.User.AsIdentity()
 
 	res, err := provider.ValidateRole(
 		context.Background(),

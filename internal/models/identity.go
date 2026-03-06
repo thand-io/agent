@@ -2,6 +2,9 @@ package models
 
 import (
 	"strings"
+
+	"github.com/thand-io/agent/internal/common"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
 // Identity represents either a user or a group in the system.
@@ -75,32 +78,53 @@ func (i *Identity) GetMappableIdentifier() string {
 func (i *Identity) mapableIdentifier() string {
 
 	if i.User != nil {
-
-		if len(i.User.Email) > 0 {
-			return i.User.Email
-		}
-
-		if len(i.User.Username) > 0 {
-			return i.User.Username
-		}
-
-		return i.ID
-
+		return i.User.GetMappableIdentifier()
 	} else if i.Group != nil {
-
-		if len(i.Group.Email) > 0 {
-			return i.Group.Email
-		}
-
-		if len(i.Group.Name) > 0 {
-			return i.Group.Name
-		}
-
-		return i.ID
+		return i.Group.GetMappableIdentifier()
 	}
 
 	return i.ID
 
+}
+
+func (i *Identity) EncodeBytes() []byte {
+	return NewEncodingWrapper(
+		sdkConstants.ENCODED_IDENTITY,
+		i,
+	).encodeBytes()
+}
+
+func (i *Identity) EncodeBase64() string {
+	return NewEncodingWrapper(
+		sdkConstants.ENCODED_IDENTITY,
+		i,
+	).EncodeBase64()
+}
+
+func NewIdentityFromBytes(input []byte) (*Identity, error) {
+	wrapper := NewDecodingWrapper(sdkConstants.ENCODED_IDENTITY)
+	decodedWrapper, err := wrapper.DecodeBytes(input)
+	if err != nil {
+		return nil, err
+	}
+	var identity Identity
+	if err := common.ConvertInterfaceToInterface(decodedWrapper.Data, &identity); err != nil {
+		return nil, err
+	}
+	return &identity, nil
+}
+
+func NewIdentityFromBase64(input string) (*Identity, error) {
+	wrapper := NewDecodingWrapper(sdkConstants.ENCODED_IDENTITY)
+	decodedWrapper, err := wrapper.Decode(input)
+	if err != nil {
+		return nil, err
+	}
+	var identity Identity
+	if err := common.ConvertInterfaceToInterface(decodedWrapper.Data, &identity); err != nil {
+		return nil, err
+	}
+	return &identity, nil
 }
 
 func (i *Identity) GetLabel() string {

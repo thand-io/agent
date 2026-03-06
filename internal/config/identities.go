@@ -175,6 +175,15 @@ func (c *Config) GetIdentitiesCount() int64 {
 	return identitiesCount
 }
 
+// getProviderNames returns a list of provider names for logging
+func getProviderNames(providerMap map[string]models.Provider) []string {
+	names := make([]string, 0, len(providerMap))
+	for name := range providerMap {
+		names = append(names, name)
+	}
+	return names
+}
+
 // GetIdentity looks up an identity by its identifier.
 // The identity string can optionally include a provider prefix (e.g., "aws-prod:username").
 // If a prefix is provided, it queries only that specific provider.
@@ -230,6 +239,11 @@ func (c *Config) GetIdentity(identity string) (*models.Identity, error) {
 	}
 	results := make([]providerResult, 0)
 
+	logrus.WithFields(logrus.Fields{
+		"identity":          identityKey,
+		"providers_queried": len(providerMap),
+	}).Debug("Searching for identity across providers")
+
 	for _, provider := range providerMap {
 		wg.Add(1)
 		go func(p models.Provider) {
@@ -258,8 +272,13 @@ func (c *Config) GetIdentity(identity string) (*models.Identity, error) {
 	// Wait for all goroutines to complete
 	wg.Wait()
 
-	// If no results found, return error
+	// If no results found, return error with diagnostic info
 	if len(results) == 0 {
+		logrus.WithFields(logrus.Fields{
+			"identity":        identityKey,
+			"providers_count": len(providerMap),
+			"provider_names":  getProviderNames(providerMap),
+		}).Warn("Identity not found in any provider during query")
 		return nil, fmt.Errorf("identity not found: %s", identityKey)
 	}
 
