@@ -230,7 +230,7 @@ spec:
           name: http
         command: ["./agent", "server", "--config", "/app/config/config.yaml"]
         env:
-        - name: THAND_LOG_LEVEL
+        - name: THAND_LOGGING_LEVEL
           value: "info"
         volumeMounts:
         - name: config

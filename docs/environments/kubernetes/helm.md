@@ -293,7 +293,7 @@ Add custom environment variables:
 
 ```yaml
 env:
-  - name: THAND_LOG_LEVEL
+  - name: THAND_LOGGING_LEVEL
     value: "debug"
   - name: CUSTOM_VAR
     value: "custom-value"

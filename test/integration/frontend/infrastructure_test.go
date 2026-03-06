@@ -284,7 +284,7 @@ workflows:
 		"THAND_MODE":               "server",
 		"THAND_TEMPORAL_ENDPOINT":  temporalEndpoint,
 		"THAND_TEMPORAL_NAMESPACE": testinfra.TemporalTestNamespace,
-		"THAND_LOG_LEVEL":          "debug",
+		"THAND_LOGGING_LEVEL":      "debug",
 	}
 	for k, v := range infra.providerEnvVars {
 		containerEnv[k] = v

@@ -197,6 +197,12 @@ func (t *thandTask) executeApprovalsTask(
 			return &defaultFlowState, nil
 		}
 
+		logrus.WithFields(logrus.Fields{
+			"taskName":         taskName,
+			"approverIdentity": approverIdentityID,
+			"approvalData":     approvalData,
+		}).Info("Received approval event")
+
 		approverIdentity, err := t.config.GetIdentity(approverIdentityID)
 
 		if err != nil {

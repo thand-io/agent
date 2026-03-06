@@ -73,7 +73,7 @@ spec:
           value: "/app/config/providers/"
         - name: THAND_WORKFLOWS_PATH
           value: "/app/config/workflows/"
-        - name: THAND_LOG_LEVEL
+        - name: THAND_LOGGING_LEVEL
           value: "debug"
         - name: THAND_LOGIN_ENDPOINT
           value: http://localhost:8081/
