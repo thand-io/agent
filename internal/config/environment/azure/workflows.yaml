@@ -1,6 +1,6 @@
 version: "1.0"
 workflows:
-  azure_simple_elevation:
+  azure-simple-elevation:
     name: "Azure Simple Elevation"
     description: Simple Azure access elevation without approval
     authentication: default
@@ -32,7 +32,7 @@ workflows:
             thand: revoke
             then: end
   
-  azure_email_approval:
+  azure-email-approval:
     name: "Azure Email Approval"
     description: Azure access elevation with email approval
     authentication: default

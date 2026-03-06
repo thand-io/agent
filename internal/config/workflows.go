@@ -99,12 +99,10 @@ func (c *Config) ApplyWorkflows(foundWorkflows []*models.WorkflowDefinitions) (m
 				w.Version = workflow.Version
 			}
 
-			// Keep the original workflow key format (kebab-case) as the identifier.
-		// This ensures the identifier matches the config map storage key and prevents
-		// potential key collisions that could occur with snake_case normalization.
-		// For example: "auto-approve" and "auto_approve" would both normalize to
-		// "auto_approve", violating YAML's unique key constraint.
-		w.Identifier = workflowKey
+			// This ensures the identifier matches the config map storage key and
+			// avoids potential key collisions that could occur if keys were
+			// normalized to a different format (for example, snake_case).
+			w.Identifier = workflowKey
 
 			if len(w.Name) == 0 {
 				w.Name = workflowKey

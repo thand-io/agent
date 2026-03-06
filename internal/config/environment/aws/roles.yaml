@@ -1,11 +1,11 @@
 version: "1.0"
 roles:
   # Read-Only Access
-  aws_readonly:
+  aws-readonly:
     name: AWS Read-Only
     description: Read-only access to AWS resources across all services
     workflows: 
-      - aws_simple_elevation
+      - aws-simple-elevation
     inherits:
       - arn:aws:iam::aws:policy/ReadOnlyAccess
     permissions:
@@ -24,11 +24,11 @@ roles:
     enabled: true
 
   # Administrator Access
-  aws_admin:
+  aws-admin:
     name: AWS Administrator
     description: Full administrative access to all AWS resources
     workflows: 
-      - aws_email_approval
+      - aws-email-approval
     inherits:
       - arn:aws:iam::aws:policy/AdministratorAccess
     permissions:
@@ -39,11 +39,11 @@ roles:
     enabled: true
 
   # Secrets Manager Access
-  aws_secrets_manager:
+  aws-secrets-manager:
     name: AWS Secrets Manager
     description: Full access to AWS Secrets Manager for managing secrets
     workflows:
-      - aws_email_approval
+      - aws-email-approval
     inherits:
       - arn:aws:iam::aws:policy/SecretsManagerReadWrite
     permissions:
@@ -57,11 +57,11 @@ roles:
     enabled: true
 
   # Database Administrator
-  aws_database_admin:
+  aws-database-admin:
     name: AWS Database Administrator
     description: Full access to RDS, DynamoDB, and database services
     workflows:
-      - aws_email_approval
+      - aws-email-approval
     inherits:
       - arn:aws:iam::aws:policy/AmazonRDSFullAccess
       - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
@@ -76,11 +76,11 @@ roles:
     enabled: true
 
   # Storage Administrator
-  aws_storage_admin:
+  aws-storage-admin:
     name: AWS Storage Administrator
     description: Full access to S3, EFS, and storage services
     workflows:
-      - aws_email_approval
+      - aws-email-approval
     inherits:
       - arn:aws:iam::aws:policy/AmazonS3FullAccess
       - arn:aws:iam::aws:policy/AmazonElasticFileSystemFullAccess
@@ -95,11 +95,11 @@ roles:
     enabled: true
 
   # Network Administrator
-  aws_network_admin:
+  aws-network-admin:
     name: AWS Network Administrator
     description: Full access to VPC, networking, and connectivity services
     workflows:
-      - aws_email_approval
+      - aws-email-approval
     inherits:
       - arn:aws:iam::aws:policy/job-function/NetworkAdministrator
     permissions:
@@ -117,11 +117,11 @@ roles:
     enabled: true
 
   # Security Auditor
-  aws_security_auditor:
+  aws-security-auditor:
     name: AWS Security Auditor
     description: Read access to security-related services and audit logs
     workflows:
-      - aws_simple_elevation
+      - aws-simple-elevation
     inherits:
       - arn:aws:iam::aws:policy/SecurityAudit
     permissions:
@@ -138,11 +138,11 @@ roles:
     enabled: true
 
   # Compute Administrator
-  aws_compute_admin:
+  aws-compute-admin:
     name: AWS Compute Administrator
     description: Full access to EC2, Lambda, ECS, and compute services
     workflows:
-      - aws_email_approval
+      - aws-email-approval
     inherits:
       - arn:aws:iam::aws:policy/AmazonEC2FullAccess
       - arn:aws:iam::aws:policy/AWSLambda_FullAccess
@@ -159,11 +159,11 @@ roles:
     enabled: true
 
   # Developer Access
-  aws_developer:
+  aws-developer:
     name: AWS Developer
     description: Developer access with limited permissions
     workflows:
-      - aws_simple_elevation
+      - aws-simple-elevation
     inherits:
       - arn:aws:iam::aws:policy/PowerUserAccess
     permissions:

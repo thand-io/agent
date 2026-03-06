@@ -1,6 +1,6 @@
 version: "1.0"
 workflows:
-  k8s_simple_elevation:
+  k8s-simple-elevation:
     name: "Kubernetes Simple Elevation"
     description: Simple Kubernetes access elevation without approval
     authentication: default

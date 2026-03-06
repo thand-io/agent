@@ -1,6 +1,6 @@
 version: "1.0"
 workflows:
-  local_simple_elevation:
+  local-simple-elevation:
     name: "Local Simple Elevation"
     description: Simple local access elevation without approval for development
     authentication: default

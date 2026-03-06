@@ -15,7 +15,6 @@ import (
 	"github.com/blevesearch/bleve/v2/search"
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
-	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/config/environment"
 	"github.com/thand-io/agent/internal/models"
 )
@@ -139,7 +138,10 @@ func (c *Config) ApplyRoles(foundRoles []*models.RoleDefinitions) (map[string]mo
 
 		for roleKey, r := range role.Roles {
 
-			r.Identifier = common.ConvertToSnakeCase(roleKey)
+			// This ensures the identifier matches the config map storage key and
+			// avoids potential key collisions that could occur if keys were
+			// normalized to a different format (for example, snake_case).
+			r.Identifier = roleKey
 
 			if err := r.Validate(); err != nil {
 				logrus.WithError(err).Errorln("Role definition validation failed")

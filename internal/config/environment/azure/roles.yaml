@@ -1,11 +1,11 @@
 version: "1.0"
 roles:
   # Reader Access
-  azure_reader:
+  azure-reader:
     name: Azure Reader
     description: Read-only access to all Azure resources
     workflows: 
-      - azure_simple_elevation
+      - azure-simple-elevation
     inherits:
       - Reader
     permissions:
@@ -16,11 +16,11 @@ roles:
     enabled: true
 
   # Contributor Access
-  azure_contributor:
+  azure-contributor:
     name: Azure Contributor
     description: Full access to manage Azure resources (excluding access management)
     workflows: 
-      - azure_email_approval
+      - azure-email-approval
     inherits:
       - Contributor
     permissions:
@@ -35,11 +35,11 @@ roles:
     enabled: true
 
   # Owner Access
-  azure_owner:
+  azure-owner:
     name: Azure Owner
     description: Full administrative access to all Azure resources
     workflows:
-      - azure_email_approval
+      - azure-email-approval
     inherits:
       - Owner
     permissions:
@@ -50,11 +50,11 @@ roles:
     enabled: true
 
   # Key Vault Secrets Officer
-  azure_secrets_admin:
+  azure-secrets-admin:
     name: Azure Key Vault Secrets Officer
     description: Full access to Azure Key Vault secrets
     workflows:
-      - azure_email_approval
+      - azure-email-approval
     inherits:
       - "Key Vault Secrets Officer"
       - "Key Vault Administrator"
@@ -68,11 +68,11 @@ roles:
     enabled: true
 
   # Database Administrator
-  azure_database_admin:
+  azure-database-admin:
     name: Azure Database Administrator
     description: Full access to Azure SQL, Cosmos DB, and database services
     workflows:
-      - azure_email_approval
+      - azure-email-approval
     inherits:
       - "SQL DB Contributor"
       - "Cosmos DB Account Contributor"
@@ -89,11 +89,11 @@ roles:
     enabled: true
 
   # Storage Administrator
-  azure_storage_admin:
+  azure-storage-admin:
     name: Azure Storage Administrator
     description: Full access to Azure Storage accounts and services
     workflows:
-      - azure_email_approval
+      - azure-email-approval
     inherits:
       - "Storage Account Contributor"
       - "Storage Blob Data Owner"
@@ -106,11 +106,11 @@ roles:
     enabled: true
 
   # Network Administrator
-  azure_network_admin:
+  azure-network-admin:
     name: Azure Network Administrator
     description: Full access to Azure networking services
     workflows:
-      - azure_email_approval
+      - azure-email-approval
     inherits:
       - "Network Contributor"
     permissions:
@@ -123,11 +123,11 @@ roles:
     enabled: true
 
   # Security Administrator
-  azure_security_admin:
+  azure-security-admin:
     name: Azure Security Administrator
     description: Full access to security and compliance services
     workflows:
-      - azure_email_approval
+      - azure-email-approval
     inherits:
       - "Security Admin"
     permissions:
@@ -142,11 +142,11 @@ roles:
     enabled: true
 
   # Compute Administrator
-  azure_compute_admin:
+  azure-compute-admin:
     name: Azure Compute Administrator
     description: Full access to virtual machines, containers, and compute services
     workflows:
-      - azure_email_approval
+      - azure-email-approval
     inherits:
       - "Virtual Machine Contributor"
       - "Azure Kubernetes Service Contributor"
@@ -161,11 +161,11 @@ roles:
     enabled: true
 
   # Developer Access
-  azure_developer:
+  azure-developer:
     name: Azure Developer
     description: Developer access with limited permissions
     workflows:
-      - azure_simple_elevation
+      - azure-simple-elevation
     inherits:
       - Contributor
     permissions:
@@ -185,11 +185,11 @@ roles:
     enabled: true
 
   # Monitoring Administrator
-  azure_monitoring_admin:
+  azure-monitoring-admin:
     name: Azure Monitoring Administrator
     description: Full access to monitoring and diagnostics
     workflows:
-      - azure_simple_elevation
+      - azure-simple-elevation
     inherits:
       - "Monitoring Contributor"
     permissions:
@@ -200,3 +200,4 @@ roles:
     providers:
       - azure
     enabled: true
+

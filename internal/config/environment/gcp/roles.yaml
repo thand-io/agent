@@ -1,11 +1,11 @@
 version: "1.0"
 roles:
   # Viewer Access
-  gcp_viewer:
+  gcp-viewer:
     name: GCP Viewer
     description: Read-only access to all GCP resources
     workflows: 
-      - gcp_simple_elevation
+      - gcp-simple-elevation
     inherits:
       - roles/viewer
     providers:
@@ -13,11 +13,11 @@ roles:
     enabled: true
 
   # Administrator Access
-  gcp_admin:
+  gcp-admin:
     name: GCP Administrator
     description: Full administrative access to all GCP resources
     workflows: 
-      - gcp_simple_elevation
+      - gcp-simple-elevation
     inherits:
       - roles/owner
     providers:
@@ -25,11 +25,11 @@ roles:
     enabled: true
 
   # Secret Manager Access
-  gcp_secret_manager:
+  gcp-secret-manager:
     name: GCP Secret Manager Admin
     description: Full access to Secret Manager for managing secrets
     workflows:
-      - gcp_simple_elevation
+      - gcp-simple-elevation
     inherits:
       - roles/secretmanager.admin
     providers:
@@ -37,11 +37,11 @@ roles:
     enabled: true
 
   # Database Administrator
-  gcp_database_admin:
+  gcp-database-admin:
     name: GCP Database Administrator
     description: Full access to Cloud SQL, Spanner, and database services
     workflows:
-      - gcp_simple_elevation
+      - gcp-simple-elevation
     inherits:
       - roles/cloudsql.admin
       - roles/spanner.admin
@@ -51,11 +51,11 @@ roles:
     enabled: true
 
   # Storage Administrator
-  gcp_storage_admin:
+  gcp-storage-admin:
     name: GCP Storage Administrator
     description: Full access to Cloud Storage and storage services
     workflows:
-      - gcp_email_approval
+      - gcp-email-approval
     inherits:
       - roles/storage.admin
     providers:
@@ -63,11 +63,11 @@ roles:
     enabled: true
 
   # Network Administrator
-  gcp_network_admin:
+  gcp-network-admin:
     name: GCP Network Administrator
     description: Full access to VPC, networking, and connectivity services
     workflows:
-      - gcp_email_approval
+      - gcp-email-approval
     inherits:
       - roles/compute.networkAdmin
     providers:
@@ -75,11 +75,11 @@ roles:
     enabled: true
 
   # Security Administrator
-  gcp_security_admin:
+  gcp-security-admin:
     name: GCP Security Administrator
     description: Full access to security and IAM services
     workflows:
-      - gcp_email_approval
+      - gcp-email-approval
     inherits:
       - roles/iam.securityAdmin
       - roles/securitycenter.admin
@@ -88,11 +88,11 @@ roles:
     enabled: true
 
   # Compute Administrator
-  gcp_compute_admin:
+  gcp-compute-admin:
     name: GCP Compute Administrator
     description: Full access to Compute Engine, GKE, and compute services
     workflows:
-      - gcp_email_approval
+      - gcp-email-approval
     inherits:
       - roles/compute.admin
       - roles/container.admin
@@ -101,11 +101,11 @@ roles:
     enabled: true
 
   # Developer Access
-  gcp_developer:
+  gcp-developer:
     name: GCP Developer
     description: Developer access with limited permissions
     workflows:
-      - gcp_simple_elevation
+      - gcp-simple-elevation
     inherits:
       - roles/editor
     providers:
@@ -113,14 +113,15 @@ roles:
     enabled: true
 
   # Monitoring Administrator
-  gcp_monitoring_admin:
+  gcp-monitoring-admin:
     name: GCP Monitoring Administrator
     description: Full access to monitoring, logging, and observability
     workflows:
-      - gcp_simple_elevation
+      - gcp-simple-elevation
     inherits:
       - roles/monitoring.admin
       - roles/logging.admin
     providers:
       - gcp
     enabled: true
+

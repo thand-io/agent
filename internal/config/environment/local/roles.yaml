@@ -1,11 +1,11 @@
 version: "1.0"
 roles:
   # Administrator Group
-  local_admin:
+  local-admin:
     name: Local Administrator
     description: Administrator group with full system access
     workflows: 
-      - local_simple_elevation
+      - local-simple-elevation
     groups:  # Use of system groups for elevated access
       allow:
         - admin
@@ -22,11 +22,11 @@ roles:
     enabled: true
 
   # Power Users Group
-  local_poweruser:
+  local-poweruser:
     name: Local Power User
     description: Power users group with elevated privileges
     workflows: 
-      - local_simple_elevation
+      - local-simple-elevation
     groups:  # Add the user to system groups
       allow:
         - poweruser
@@ -44,11 +44,11 @@ roles:
     enabled: true
 
   # Users Group
-  local_user:
+  local-user:
     name: Local User
     description: Standard users group with basic access
     workflows: 
-      - local_simple_elevation
+      - local-simple-elevation
     groups:  # Add the user to system groups
       allow:
         - user
@@ -65,11 +65,11 @@ roles:
     enabled: true
 
   # Operators Group
-  local_operator:
+  local-operator:
     name: Local Operator
     description: System operators group with service management access
     workflows: 
-      - local_simple_elevation
+      - local-simple-elevation
     groups:  # Use of system roles for elevated access
       allow:
         - operator

@@ -1,6 +1,6 @@
 version: "1.0"
 workflows:
-  gcp_simple_elevation:
+  gcp-simple-elevation:
     name: "GCP Simple Elevation"
     description: Simple GCP access elevation without approval
     authentication: default
@@ -31,4 +31,77 @@ workflows:
         - revoke:
             thand: revoke
             then: end
+
+  gcp-email-approval:
+    name: "GCP Email Approval"
+    description: GCP access elevation with email approval
+    authentication: default
+    enabled: true
+    workflow:
+      document:
+        dsl: "1.0.0-alpha5"
+        namespace: "thand"
+        name: "gcp-email-approval"
+        version: "1.0.0"
+      do:
+        - validate:
+            thand: validate
+            with:
+              validator: static
+            then: approvals
+        - approvals:
+            thand: approvals
+            on:
+              approved: authorize
+              denied: denied
+            with:
+              approvals: 1
+              selfApprove: false
+              notifiers:
+                email:
+                  provider: gcp-email
+                  to: ${ $context.identities // [$context.user.email] }
+                  subject: "GCP Access Request Approval Required"
+                  message: >
+                    ${ "User \($context.user.name) is requesting access to GCP resources.\n\nRole: \($context.role)\nReason: \($context.reason)" }
+            then: denied
+        - authorize:
+            thand: authorize
+            with:
+              revocation: revoke
+              notifiers:
+                email:
+                  provider: gcp-email
+                  to: ${ $context.identities // [$context.user.email] }
+                  subject: "GCP Access Granted"
+                  message: >
+                    Your access request has been approved and granted.
+            then: monitor
+        - monitor:
+            thand: monitor
+            with:
+              monitor: llm
+              threshold: 10
+            then: revoke
+        - revoke:
+            thand: revoke
+            with:
+              notifiers:
+                email:
+                  provider: gcp-email
+                  to: ${ $context.identities // [$context.user.email] }
+                  subject: "GCP Access Revoked"
+                  message: >
+                    Your GCP access has been revoked.
+            then: end
+        - denied:
+            thand: notify
+            with:
+              provider: gcp-email
+              to: ${ $context.identities // [$context.user.email] }
+              subject: "GCP Access Request Denied"
+              message: >
+                Your access request has been denied.
+            then: end
+
   

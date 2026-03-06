@@ -1,11 +1,11 @@
 version: "1.0"
 roles:
   # Read-Only Access
-  k8s_readonly:
+  k8s-readonly:
     name: Kubernetes Read-Only
     description: Read-only access to view pods, services, and basic resources
     workflows:
-      - k8s_simple_elevation
+      - k8s-simple-elevation
     permissions:
       allow:
         - k8s:pods:get,list,watch
@@ -21,11 +21,11 @@ roles:
     enabled: true
 
   # Developer Access
-  k8s_developer:
+  k8s-developer:
     name: Kubernetes Developer
     description: Developer access to deploy and manage applications in development namespace
     workflows:
-      - k8s_simple_elevation
+      - k8s-simple-elevation
     resources:
       allow:
         - namespace:development
@@ -47,11 +47,11 @@ roles:
     enabled: true
 
   # Cluster Viewer
-  k8s_cluster_viewer:
+  k8s-cluster-viewer:
     name: Kubernetes Cluster Viewer
     description: Read-only access across all namespaces and cluster-level resources
     workflows:
-      - k8s_simple_elevation
+      - k8s-simple-elevation
     permissions:
       allow:
         - k8s:pods:get,list,watch
@@ -72,11 +72,11 @@ roles:
     enabled: true
 
   # Deployment Manager
-  k8s_deployment_manager:
+  k8s-deployment-manager:
     name: Kubernetes Deployment Manager
     description: Manage deployments and workloads across staging namespaces
     workflows:
-      - k8s_simple_elevation
+      - k8s-simple-elevation
     resources:
       allow:
         - namespace:staging
@@ -99,11 +99,11 @@ roles:
     enabled: true
 
   # Secrets Manager
-  k8s_secrets_manager:
+  k8s-secrets-manager:
     name: Kubernetes Secrets Manager
     description: Manage secrets and config maps across namespaces
     workflows:
-      - k8s_simple_elevation
+      - k8s-simple-elevation
     permissions:
       allow:
         - k8s:secrets:get,list,create,update,delete
@@ -115,11 +115,11 @@ roles:
     enabled: true
 
   # Network Administrator
-  k8s_network_admin:
+  k8s-network-admin:
     name: Kubernetes Network Administrator
     description: Manage networking resources including ingress and network policies
     workflows:
-      - k8s_simple_elevation
+      - k8s-simple-elevation
     permissions:
       allow:
         - k8s:networking.k8s.io/ingresses:get,list,create,update,patch,delete
@@ -134,11 +134,11 @@ roles:
     enabled: true
 
   # Storage Administrator
-  k8s_storage_admin:
+  k8s-storage-admin:
     name: Kubernetes Storage Administrator
     description: Manage persistent volumes and storage resources
     workflows:
-      - k8s_simple_elevation
+      - k8s-simple-elevation
     permissions:
       allow:
         - k8s:persistentvolumes:get,list,create,update,patch,delete
@@ -152,11 +152,11 @@ roles:
     enabled: true
 
   # Namespace Administrator
-  k8s_namespace_admin:
+  k8s-namespace-admin:
     name: Kubernetes Namespace Administrator
     description: Full administrative access within specific namespaces
     workflows:
-      - k8s_simple_elevation
+      - k8s-simple-elevation
     resources:
       allow:
         - namespace:*
@@ -168,11 +168,11 @@ roles:
     enabled: true
 
   # Cluster Administrator
-  k8s_cluster_admin:
+  k8s-cluster-admin:
     name: Kubernetes Cluster Administrator
     description: Full administrative access to the entire Kubernetes cluster
     workflows:
-      - k8s_simple_elevation
+      - k8s-simple-elevation
     permissions:
       allow:
         - k8s:*:*
@@ -181,11 +181,11 @@ roles:
     enabled: true
 
   # Security Auditor
-  k8s_security_auditor:
+  k8s-security-auditor:
     name: Kubernetes Security Auditor
     description: Read-only access to security-related resources for auditing
     workflows:
-      - k8s_simple_elevation
+      - k8s-simple-elevation
     permissions:
       allow:
         - k8s:pods:get,list,watch
@@ -206,11 +206,11 @@ roles:
     enabled: true
 
   # Production Deployer
-  k8s_prod_deployer:
+  k8s-prod-deployer:
     name: Kubernetes Production Deployer
     description: Deploy and manage applications in production with strict approval
     workflows:
-      - k8s_simple_elevation
+      - k8s-simple-elevation
     resources:
       allow:
         - namespace:production
