@@ -196,7 +196,18 @@ func TestAWSElevationApprovalsWorkflow(t *testing.T) {
 			"approved": true,
 		})
 		// Approver 1 with ID "user-id-001" but we test they're equal via email
-		approvalEvent1.SetExtension("user", "approver1@thand.io")
+		// Encode the approver identity as a base64 object (signals now include the user as an object)
+		approver1Identity := &models.Identity{
+			ID:    "approver1@thand.io",
+			Label: "Approver 1",
+			User: &models.User{
+				ID:       "user-id-001",
+				Email:    "approver1@thand.io",
+				Username: "approver1",
+				Name:     "Approver 1",
+			},
+		}
+		approvalEvent1.SetExtension("user", approver1Identity.EncodeBase64())
 
 		// Signal the workflow with approval
 		temporalClient := infra.TemporalClient
@@ -230,7 +241,18 @@ func TestAWSElevationApprovalsWorkflow(t *testing.T) {
 			"approved": true,
 		})
 		// Approver 2 with ID "user-id-002" but we test they're equal via email
-		approvalEvent2.SetExtension("user", "approver2@thand.io")
+		// Encode the approver identity as a base64 object (signals now include the user as an object)
+		approver2Identity := &models.Identity{
+			ID:    "approver2@thand.io",
+			Label: "Approver 2",
+			User: &models.User{
+				ID:       "user-id-002",
+				Email:    "approver2@thand.io",
+				Username: "approver2",
+				Name:     "Approver 2",
+			},
+		}
+		approvalEvent2.SetExtension("user", approver2Identity.EncodeBase64())
 
 		// Signal the workflow with approval
 		err = temporalClient.SignalWorkflow(

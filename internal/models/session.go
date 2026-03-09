@@ -30,6 +30,17 @@ type Session struct {
 	Expiry       time.Time `json:"expiry"`
 }
 
+func (s *Session) AsIdentity() *Identity {
+	if s.User == nil {
+		return nil
+	}
+	return &Identity{
+		ID:    s.User.GetMappableIdentifier(),
+		Label: s.User.Name,
+		User:  s.User,
+	}
+}
+
 func (s *Session) IsExpired() bool {
 	return time.Now().After(s.Expiry)
 }

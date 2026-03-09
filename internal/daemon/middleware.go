@@ -573,7 +573,7 @@ func (s *Server) getSession(c *gin.Context, authProviders ...string) (string, *m
 		if foundUser != nil {
 
 			// We have a user now lets resolve a user based on all the identities we have
-			compositeIdentity, err := s.Config.GetIdentity(foundUser.GetIdentity())
+			compositeIdentity, err := s.Config.GetIdentity(foundUser.GetMappableIdentifier())
 
 			if err != nil {
 				logrus.WithError(err).

@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/thand-io/agent/internal/models"
@@ -293,6 +294,46 @@ func TestEncodingWrapper_EncodeDecodeRoundTrip(t *testing.T) {
 				t.Error("Round trip lost data")
 			}
 		})
+	}
+}
+
+func TestEncodingWrapper_EncodeBase64_UsesURLSafeEncoding(t *testing.T) {
+	wrapper := models.EncodingWrapper{
+		Type: sdkConstants.ENCODED_IDENTITY,
+		Data: map[string]any{
+			"email": "encode@example.com",
+		},
+	}
+
+	encoded := wrapper.EncodeBase64()
+
+	if strings.ContainsAny(encoded, "+/") {
+		t.Errorf("EncodeBase64() produced non-URL-safe output: %q", encoded)
+	}
+}
+
+func TestEncodingWrapper_Decode_SupportsLegacyStdBase64(t *testing.T) {
+	wrapper := models.EncodingWrapper{
+		Type: sdkConstants.ENCODED_IDENTITY,
+		Data: map[string]any{
+			"email": "legacy@example.com",
+		},
+	}
+
+	legacyStdBase64 := base64.StdEncoding.EncodeToString(wrapper.EncodeBytes())
+
+	var decoder models.EncodingWrapper
+	decoded, err := decoder.Decode(legacyStdBase64)
+	if err != nil {
+		t.Fatalf("Decode() should support legacy std base64 input, got error: %v", err)
+	}
+
+	if decoded == nil {
+		t.Fatal("Decode() returned nil wrapper")
+	}
+
+	if decoded.Type != wrapper.Type {
+		t.Errorf("Decode() Type = %v, want %v", decoded.Type, wrapper.Type)
 	}
 }
 

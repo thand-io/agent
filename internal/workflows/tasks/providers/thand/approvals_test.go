@@ -739,7 +739,7 @@ func TestGetIdentityVariations(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			identity := tt.user.GetIdentity()
+			identity := tt.user.GetMappableIdentifier()
 			assert.Equal(t, tt.expectedIdentity, identity, "Test: %s", tt.description)
 		})
 	}
@@ -761,6 +761,11 @@ func TestApprovalsTask_Helpers(t *testing.T) {
 		taskEmpty := &ApprovalsTask{}
 		assert.False(t, taskEmpty.HasNotifiers())
 	})
+}
+
+func encodeUserIdentityForEvent(userID string) string {
+	identity := (&models.User{ID: userID, Email: userID}).AsIdentity()
+	return identity.EncodeBase64()
 }
 
 func TestExecuteApprovalsTask_ProcessEvent(t *testing.T) {
@@ -826,7 +831,7 @@ func TestExecuteApprovalsTask_ProcessEvent(t *testing.T) {
 	event := cloudevents.NewEvent()
 	event.SetType(ThandApprovalEventType)
 	event.SetSource("test-source")
-	event.SetExtension(sdkConstants.VarsContextUser, approverID)
+	event.SetExtension(sdkConstants.VarsContextUser, encodeUserIdentityForEvent(approverID))
 	event.SetData(cloudevents.ApplicationJSON, map[string]any{
 		"approved": true,
 	})
@@ -903,7 +908,7 @@ func TestExecuteApprovalsTask_SelfApprovalDenied(t *testing.T) {
 	event := cloudevents.NewEvent()
 	event.SetType(ThandApprovalEventType)
 	event.SetSource("test-source")
-	event.SetExtension(sdkConstants.VarsContextUser, requesterID)
+	event.SetExtension(sdkConstants.VarsContextUser, encodeUserIdentityForEvent(requesterID))
 	event.SetData(cloudevents.ApplicationJSON, map[string]any{"approved": true})
 
 	taskHandler := &thandTask{config: cfg}
@@ -980,7 +985,7 @@ func TestExecuteApprovalsTask_NonExistentIdentity(t *testing.T) {
 	event := cloudevents.NewEvent()
 	event.SetType(ThandApprovalEventType)
 	event.SetSource("test-source")
-	event.SetExtension(sdkConstants.VarsContextUser, approverID)
+	event.SetExtension(sdkConstants.VarsContextUser, encodeUserIdentityForEvent(approverID))
 	event.SetData(cloudevents.ApplicationJSON, map[string]any{
 		"approved": true,
 	})
@@ -997,14 +1002,16 @@ func TestExecuteApprovalsTask_NonExistentIdentity(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	// Verify FlowDirective - should loop back to taskName because identity wasn't found
+	// Verify FlowDirective - encoded identity in event is now authoritative, so approval is processed
 	directive, ok := result.(*model.FlowDirective)
 	require.True(t, ok)
-	assert.Equal(t, taskName, directive.Value, "Should stay in same state when identity is missing")
+	assert.Equal(t, "authorize", directive.Value, "Should authorize when encoded identity in event is valid")
 
-	// Verify Context Update - approvals should NOT contain the non-existent approver
+	// Verify Context Update - approvals should contain the approver from the encoded event identity
 	approvals := workflowTask.Context.(map[string]any)["approvals"].(map[string]any)
-	assert.NotContains(t, approvals, approverID)
+	assert.Contains(t, approvals, approverID)
+	approvalData := approvals[approverID].(map[string]any)
+	assert.Equal(t, true, approvalData["approved"])
 }
 
 func TestExecuteApprovalsTask_Denial(t *testing.T) {
@@ -1070,7 +1077,7 @@ func TestExecuteApprovalsTask_Denial(t *testing.T) {
 	event := cloudevents.NewEvent()
 	event.SetType(ThandApprovalEventType)
 	event.SetSource("test-source")
-	event.SetExtension(sdkConstants.VarsContextUser, approverID)
+	event.SetExtension(sdkConstants.VarsContextUser, encodeUserIdentityForEvent(approverID))
 	event.SetData(cloudevents.ApplicationJSON, map[string]any{
 		"approved": false,
 	})
@@ -1176,7 +1183,7 @@ func TestExecuteApprovalsTask_ApprovalThenDenial(t *testing.T) {
 	event := cloudevents.NewEvent()
 	event.SetType(ThandApprovalEventType)
 	event.SetSource("test-source")
-	event.SetExtension(sdkConstants.VarsContextUser, approver2ID)
+	event.SetExtension(sdkConstants.VarsContextUser, encodeUserIdentityForEvent(approver2ID))
 	event.SetData(cloudevents.ApplicationJSON, map[string]any{
 		"approved": false,
 	})

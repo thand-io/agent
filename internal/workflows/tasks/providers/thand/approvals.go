@@ -190,24 +190,30 @@ func (t *thandTask) executeApprovalsTask(
 		approvalEvent.DataAs(&approvalData)
 		extensions := approvalEvent.Extensions()
 
-		approverIdentityID, userExists := extensions[sdkConstants.VarsContextUser].(string)
+		approverIdentity, userExists := extensions[sdkConstants.VarsContextUser].(string)
 
 		if !userExists {
 			logrus.Warn("Approval event missing user extension")
 			return &defaultFlowState, nil
 		}
 
-		approverIdentity, err := t.config.GetIdentity(approverIdentityID)
+		logrus.WithFields(logrus.Fields{
+			"taskName":         taskName,
+			"approverIdentity": approverIdentity,
+			"approvalData":     approvalData,
+		}).Info("Received approval event")
+
+		// Convert approverIdentity to models.Identity
+		approverIdentityObj, err := models.NewIdentityFromBase64(approverIdentity)
 
 		if err != nil {
 			logrus.WithError(err).WithFields(logrus.Fields{
-				"taskName":         taskName,
-				"approverIdentity": approverIdentityID,
-			}).Warn("Failed to resolve approver identity from event")
+				"taskName": taskName,
+			}).Warn("Failed to convert approver identity to models.Identity")
 			return &defaultFlowState, nil
 		}
 
-		approverUser := approverIdentity.GetUser()
+		approverUser := approverIdentityObj.GetUser()
 
 		if approverUser == nil {
 			logrus.WithFields(logrus.Fields{
@@ -304,7 +310,7 @@ func (t *thandTask) executeApprovalsTask(
 				return &defaultFlowState, nil
 			}
 
-			approvals[approverIdentityID] = map[string]any{
+			approvals[approverIdentityObj.GetMappableIdentifier()] = map[string]any{
 				"approved":  approved,
 				"timestamp": time.Now().UTC().Format(time.RFC3339),
 			}

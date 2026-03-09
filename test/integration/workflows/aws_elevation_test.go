@@ -407,7 +407,13 @@ func TestAWSElevationWithTemporal(t *testing.T) {
 		approvalEvent.SetData(cloudevents.ApplicationJSON, map[string]any{
 			"approved": true,
 		})
-		approvalEvent.SetExtension("user", testUser.Email)
+		// Encode the approver identity as a base64 object (signals now include the user as an object)
+		approverIdentity := &models.Identity{
+			ID:    testUser.Email,
+			Label: testUser.Name,
+			User:  testUser,
+		}
+		approvalEvent.SetExtension("user", approverIdentity.EncodeBase64())
 
 		// Signal the workflow with approval
 		temporalClient := infra.TemporalClient

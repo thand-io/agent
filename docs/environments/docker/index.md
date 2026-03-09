@@ -139,7 +139,7 @@ docker run -d \
   --name thand-agent \
   -p 8080:8080 \
   -e THAND_SERVER_PORT=8080 \
-  -e THAND_LOG_LEVEL=info \
+  -e THAND_LOGGING_LEVEL=info \
   -e THAND_PROVIDERS_PATH=/app/config/providers/ \
   -e THAND_ROLES_PATH=/app/config/roles/ \
   -e THAND_WORKFLOWS_PATH=/app/config/workflows/ \
@@ -194,7 +194,7 @@ docker run -d \
   -v $(pwd)/config:/app/config:ro \
   -v $(pwd)/logs:/app/logs \
   -e THAND_CONFIG_PATH=/app/config/config.yaml \
-  -e THAND_LOG_LEVEL=info \
+  -e THAND_LOGGING_LEVEL=info \
   -e THAND_LOG_OUTPUT=/app/logs/agent.log \
   ghcr.io/thand-io/agent:latest
 ```
@@ -413,7 +413,7 @@ Run with debug logging:
 docker run -d \
   --name thand-agent-debug \
   -p 8080:8080 \
-  -e THAND_LOG_LEVEL=debug \
+  -e THAND_LOGGING_LEVEL=debug \
   -v $(pwd)/thand-config:/app/config:ro \
   ghcr.io/thand-io/agent:latest
 ```

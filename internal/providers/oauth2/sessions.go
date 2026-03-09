@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
 	"golang.org/x/oauth2"
 )
@@ -108,6 +109,14 @@ func (p *oauth2Provider) CreateSession(ctx context.Context, authRequest *models.
 		RefreshToken: token.RefreshToken,
 		Expiry:       token.Expiry,
 	}
+
+	// Log the identity information being added
+	// ONLY log in debug to avoid PII leakage
+	logrus.WithFields(logrus.Fields{
+		"user_id":    user.ID,
+		"user_email": user.Email,
+		"user_name":  user.Name,
+	}).Debug("Adding OAuth2 user identity to provider")
 
 	p.AddIdentities(models.Identity{
 		ID:    user.ID,

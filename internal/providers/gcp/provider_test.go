@@ -210,7 +210,7 @@ func TestGCPProviderRoles(t *testing.T) {
 	})
 }
 
-func TestCreateGcpConfig_WithOrganizationID(t *testing.T) {
+func TestCreateGCPConfig_WithOrganizationID(t *testing.T) {
 	cfg := &models.BasicConfig{
 		"project_id":      "test-project",
 		"organization_id": "1234567890",

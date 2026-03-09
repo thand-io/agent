@@ -82,7 +82,10 @@ func (p *gcpProvider) Initialize(identifier string, provider models.ProviderConf
 		return fmt.Errorf("failed to create Resource Manager v3 client: %w", err)
 	}
 	p.crmV3Client = crmV3Service
-	p.checkOrganizationRoleCreatePermission(ctx)
+
+	if err := p.checkOrganizationRoleCreatePermission(ctx); err != nil {
+		return fmt.Errorf("failed to verify organization role creation permissions: %w", err)
+	}
 
 	return nil
 }
@@ -102,17 +105,17 @@ func (p *gcpProvider) GetStage() string {
 	return p.client.Stage
 }
 
-func (p *gcpProvider) GetOrganizationId() string {
+func (p *gcpProvider) GetOrganizationID() string {
 	if p.client == nil {
 		return ""
 	}
 	return p.client.OrganizationID
 }
 
-func (p *gcpProvider) checkOrganizationRoleCreatePermission(ctx context.Context) {
-	organizationID := p.GetOrganizationId()
+func (p *gcpProvider) checkOrganizationRoleCreatePermission(ctx context.Context) error {
+	organizationID := p.GetOrganizationID()
 	if len(organizationID) == 0 || p.crmV3Client == nil {
-		return
+		return nil
 	}
 
 	resource := "organizations/" + organizationID
@@ -120,21 +123,18 @@ func (p *gcpProvider) checkOrganizationRoleCreatePermission(ctx context.Context)
 		Permissions: []string{"iam.roles.create"},
 	}).Context(ctx).Do()
 	if err != nil {
-		logrus.WithError(err).WithField("organization_id", organizationID).
-			Warn("Failed to verify organization custom role create permission")
-		return
+		return fmt.Errorf("failed to verify organization custom role create permission for organization %s: %w", organizationID, err)
 	}
 
 	for _, permission := range resp.Permissions {
 		if permission == "iam.roles.create" {
 			logrus.WithField("organization_id", organizationID).
 				Info("Organization custom role creation is enabled")
-			return
+			return nil
 		}
 	}
 
-	logrus.WithField("organization_id", organizationID).
-		Warn("organization_id is configured but iam.roles.create is missing; organization custom role creation may fail")
+	return fmt.Errorf("organization_id is configured but iam.roles.create permission is missing for organization %s; grant roles/iam.organizationRoleAdmin at the organization level", organizationID)
 }
 
 func CreateGcpConfig(gcpConfig *models.BasicConfig) (*GcpConfigurationProvider, error) {

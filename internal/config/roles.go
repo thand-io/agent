@@ -893,7 +893,7 @@ func (c *Config) identityMatchesScopeIdentities(identity *models.Identity, scope
 
 		// Check user scopes (identity, email, username, ID, name)
 		if len(scopes.Users) > 0 {
-			userIdentity := user.GetIdentity()
+			userIdentity := user.GetMappableIdentifier()
 			for _, allowed := range scopes.Users {
 				if strings.EqualFold(allowed, userIdentity) ||
 					strings.EqualFold(allowed, user.Email) ||

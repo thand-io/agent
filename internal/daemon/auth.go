@@ -511,7 +511,7 @@ func (s *Server) getAuthCallbackPage(c *gin.Context, auth models.AuthWrapper) {
 			"provider": provider.GetProvider(),
 		}
 		if session.User != nil {
-			properties["principal"] = session.User.GetIdentity()
+			properties["principal"] = session.User.GetMappableIdentifier()
 		}
 		if err := s.Config.GetAnalytics().Capture(
 			"auth-callback", properties,

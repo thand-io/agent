@@ -576,9 +576,15 @@ func (s *Server) signalRunningWorkflow(c *gin.Context) {
 		return
 	}
 
+	if foundSession == nil || foundSession.User == nil {
+		s.getErrorPage(c, http.StatusUnauthorized, "Unauthorized: user information is incomplete", nil)
+		return
+	}
+
 	// Convert state to cloudevent Signal
 	// Tasks may contain sensitive information, ensure encryption is used
-	decodedTask, err := models.EncodingWrapper{}.DecodeAndDecrypt(input, s.Config.GetServices().GetEncryption())
+	decodedTask, err := models.EncodingWrapper{}.DecodeAndDecrypt(
+		input, s.Config.GetServices().GetEncryption())
 
 	if err != nil {
 		s.getErrorPage(c, http.StatusBadRequest, "Failed to decode workflow state", err)
@@ -604,7 +610,8 @@ func (s *Server) signalRunningWorkflow(c *gin.Context) {
 	}
 
 	// Extensions only support basic types so we need to set the user identity as a string
-	signal.SetExtension(sdkConstants.VarsContextUser, foundSession.User.GetIdentity())
+	signal.SetExtension(sdkConstants.VarsContextUser,
+		foundSession.AsIdentity().EncodeBase64())
 
 	if len(signal.FieldErrors) > 0 {
 		logrus.WithField("errors", signal.FieldErrors).
@@ -697,7 +704,8 @@ func (s *Server) approveRunningWorkflow(c *gin.Context) {
 	event.SetData(cloudevents.ApplicationJSON, map[string]any{"approved": approved})
 
 	// Attach user identity as extension
-	event.SetExtension(sdkConstants.VarsContextUser, foundUser.User.GetIdentity())
+	event.SetExtension(sdkConstants.VarsContextUser,
+		foundUser.AsIdentity().EncodeBase64())
 
 	// If Temporal is available signal directly
 	serviceClient := s.Config.GetServices()

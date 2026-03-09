@@ -69,3 +69,23 @@ func (g *Group) GetName() string {
 func (g *Group) GetEmail() string {
 	return g.Email
 }
+
+func (g *Group) AsIdentity() Identity {
+	return Identity{
+		ID:    g.GetMappableIdentifier(),
+		Label: g.GetName(),
+		Group: g,
+	}
+}
+
+func (g *Group) GetMappableIdentifier() string {
+	if len(g.GetEmail()) > 0 {
+		return g.GetEmail()
+	}
+
+	if len(g.GetName()) > 0 {
+		return g.GetName()
+	}
+
+	return g.ID
+}

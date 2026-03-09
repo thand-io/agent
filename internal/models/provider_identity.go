@@ -200,12 +200,10 @@ func (p *BaseProvider) SetIdentitiesWithKey(
 	// Build the identities map
 	p.identity.identitiesMap = make(map[string]*Identity)
 	for i := range identities {
-
-		identity := identities[i]
-		keys := keyFunc(identity)
+		keys := keyFunc(identities[i])
 
 		for _, key := range keys {
-			p.identity.identitiesMap[strings.ToLower(key)] = &identity
+			p.identity.identitiesMap[strings.ToLower(key)] = &identities[i]
 		}
 	}
 
@@ -269,13 +267,20 @@ func (p *BaseProvider) AddIdentities(identities ...Identity) {
 		"new":      len(identities),
 		"added":    len(filtered),
 		"total":    totalCount,
+		"provider": p.GetIdentifier(),
 	}).Debug("Adding identities to provider: ", p.GetIdentifier())
 
 	if len(filtered) > 0 {
+		logrus.WithFields(logrus.Fields{
+			"provider": p.GetIdentifier(),
+			"count":    len(filtered),
+		}).Debug("Added identities to provider")
+
 		// Trigger reindex asynchronously (buildIdentitiyIndices acquires its own lock).
 		go func() {
 			if err := p.buildIdentitiyIndices(); err != nil {
 				logrus.WithError(err).Error("Failed to build identity search indices for provider: ", p.GetIdentifier())
+				return
 			}
 		}()
 	}

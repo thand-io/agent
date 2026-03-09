@@ -32,6 +32,10 @@ build-all: submodules
 	GOOS=darwin GOARCH=amd64 GOEXPERIMENT=jsonv2 go build $(GO_BUILD_FLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 .
 	GOOS=windows GOARCH=amd64 GOEXPERIMENT=jsonv2 go build $(GO_BUILD_FLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe .
 
+# Build linux/amd64 binary for frontend E2E tests
+build-linux-amd64: submodules
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOEXPERIMENT=jsonv2 go build $(GO_BUILD_FLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 .
+
 # Clean build artifacts
 clean:
 	rm -rf $(BUILD_DIR)
@@ -65,8 +69,8 @@ test-functional: submodules
 test-integration: submodules
 	cd test && go test -v ./integration/...
 
-# Run UI E2E tests (requires cross-compiled Linux binary for Thand server container)
-test-e2e: submodules build-all
+# Run UI E2E tests (requires linux/amd64 binary for Thand server container)
+test-e2e: submodules build-linux-amd64
 	cd test && go test -v -timeout 20m ./integration/frontend/...
 
 # Generate FlatBuffers from JSON data
@@ -92,4 +96,4 @@ swagger:
 		exit 1; \
 	fi
 
-.PHONY: all build build-all clean install run test test-functional test-integration test-e2e submodules update-submodules compress generate-data swagger
+.PHONY: all build build-all build-linux-amd64 clean install run test test-functional test-integration test-e2e submodules update-submodules compress generate-data swagger

@@ -104,7 +104,7 @@ You can also configure the agent using environment variables:
 ```bash
 export THAND_SERVER_URL="https://your-thand-server.com"
 export THAND_AGENT_PORT="8080"
-export THAND_LOG_LEVEL="info"
+export THAND_LOGGING_LEVEL="info"
 ```
 
 ---

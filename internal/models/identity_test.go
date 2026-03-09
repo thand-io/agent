@@ -1,6 +1,7 @@
 package models_test
 
 import (
+	"encoding/base64"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -163,7 +164,7 @@ func TestIdentity_GetMappableIdentifier(t *testing.T) {
 				ID:   "user-id",
 				User: &models.User{},
 			},
-			expected: "user-id",
+			expected: "",
 		},
 		{
 			name: "Group Email",
@@ -185,12 +186,26 @@ func TestIdentity_GetMappableIdentifier(t *testing.T) {
 				ID:    "group-id",
 				Group: &models.Group{},
 			},
-			expected: "group-id",
+			expected: "",
 		},
 		{
-			name: "Identity ID only",
+			name: "User Email Trimmed And Lowercased",
 			identity: models.Identity{
-				ID: "some-id",
+				User: &models.User{Email: "  MiXeD@Example.COM  "},
+			},
+			expected: "mixed@example.com",
+		},
+		{
+			name: "Group Name Trimmed And Lowercased",
+			identity: models.Identity{
+				Group: &models.Group{Name: "  Team-Admins  "},
+			},
+			expected: "team-admins",
+		},
+		{
+			name: "Identity ID Only Trimmed And Lowercased",
+			identity: models.Identity{
+				ID: "  Some-ID  ",
 			},
 			expected: "some-id",
 		},
@@ -200,6 +215,44 @@ func TestIdentity_GetMappableIdentifier(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.expected, tt.identity.GetMappableIdentifier())
 		})
+	}
+}
+
+func TestIdentity_EncodeBase64_RoundTrip(t *testing.T) {
+	identity := &models.Identity{
+		ID:    "user-123",
+		Label: "Alice",
+		User: &models.User{
+			Email: "alice@example.com",
+			Name:  "Alice Example",
+		},
+	}
+
+	encoded := identity.EncodeBase64()
+	decoded, err := models.NewIdentityFromBase64(encoded)
+
+	if assert.NoError(t, err) && assert.NotNil(t, decoded) {
+		assert.Equal(t, identity.ID, decoded.ID)
+		assert.NotNil(t, decoded.User)
+		assert.Equal(t, identity.User.Email, decoded.User.Email)
+	}
+}
+
+func TestIdentity_NewIdentityFromBase64_SupportsLegacyStdBase64(t *testing.T) {
+	identity := &models.Identity{
+		ID: "legacy-id",
+		Group: &models.Group{
+			Name: "Legacy Group",
+		},
+	}
+
+	legacyEncoded := base64.StdEncoding.EncodeToString(identity.EncodeBytes())
+	decoded, err := models.NewIdentityFromBase64(legacyEncoded)
+
+	if assert.NoError(t, err) && assert.NotNil(t, decoded) {
+		assert.Equal(t, identity.ID, decoded.ID)
+		assert.NotNil(t, decoded.Group)
+		assert.Equal(t, identity.Group.Name, decoded.Group.Name)
 	}
 }
 

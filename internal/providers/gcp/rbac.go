@@ -65,7 +65,7 @@ func isOrganizationRoleParent(parent string) bool {
 }
 
 func (p *gcpProvider) getCustomRoleParent(resourceID string) string {
-	if organizationID := p.GetOrganizationId(); len(organizationID) > 0 {
+	if organizationID := p.GetOrganizationID(); len(organizationID) > 0 {
 		return "organizations/" + organizationID
 	}
 	return "projects/" + resourceID
@@ -902,7 +902,7 @@ func (p *gcpProvider) patchRoleIfStale(ctx context.Context, existingRole *iam.Ro
 		updated *iam.Role
 		err     error
 	)
-	if strings.HasPrefix(existingRole.Name, "organizations/") {
+	if isOrganizationRoleParent(existingRole.Name) {
 		updated, err = p.iamClient.Organizations.Roles.Patch(existingRole.Name, existingRole).
 			UpdateMask("includedPermissions").
 			Context(ctx).

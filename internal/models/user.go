@@ -99,7 +99,7 @@ func (u *User) GetUsername() string {
 	return ""
 }
 
-func (u *User) GetIdentity() string {
+func (u *User) GetMappableIdentifier() string {
 	if len(u.Email) > 0 {
 		return u.Email
 	} else if len(u.Username) > 0 {
@@ -142,6 +142,14 @@ func (u *User) GetDomain() string {
 		}
 	}
 	return ""
+}
+
+func (u *User) AsIdentity() Identity {
+	return Identity{
+		ID:    u.GetMappableIdentifier(),
+		Label: u.GetName(),
+		User:  u,
+	}
 }
 
 func (u *User) AsMap() map[string]any {

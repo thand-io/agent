@@ -201,7 +201,7 @@ func (infra *UITestInfrastructure) startThandServer(t *testing.T, ctx context.Co
 		agentBinaryPath = filepath.Join("..", "..", "..", "bin", "thand-linux-amd64")
 	}
 	if _, err := os.Stat(agentBinaryPath); os.IsNotExist(err) {
-		t.Fatalf("Linux agent binary not found at %s. Run 'make build-all' first.", agentBinaryPath)
+		t.Fatalf("Linux agent binary not found at %s. Run 'make build-linux-amd64' first.", agentBinaryPath)
 	}
 	t.Logf("Using agent binary: %s (arch: %s)", agentBinaryPath, goarch)
 
@@ -284,6 +284,7 @@ workflows:
 		"THAND_MODE":               "server",
 		"THAND_TEMPORAL_ENDPOINT":  temporalEndpoint,
 		"THAND_TEMPORAL_NAMESPACE": testinfra.TemporalTestNamespace,
+		"THAND_LOG_LEVEL":          "debug",
 	}
 	for k, v := range infra.providerEnvVars {
 		containerEnv[k] = v

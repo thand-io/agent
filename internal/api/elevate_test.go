@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 )
 
@@ -271,9 +272,17 @@ func TestResume_UserSet_WithValidCEInput_StampsUserExtension(t *testing.T) {
 	ce := result.GetInputAsCloudEvent()
 	require.NotNil(t, ce, "CE must remain parseable after Resume")
 
-	extVal, ok := ce.Extensions()["user"]
-	require.True(t, ok, "user extension must be present after CE stamping")
-	assert.Equal(t, user.GetIdentity(), extVal)
+	extVal, ok := ce.Extensions()[sdkConstants.VarsContextUser].(string)
+	require.True(t, ok, "user extension must be present in CE")
+
+	// CloudEvents stores []byte as base64 string, so decode it
+	approverIdentityObj, err := models.NewIdentityFromBase64(extVal)
+	require.NoError(t, err, "failed to convert user extension to Identity")
+
+	approverUser := approverIdentityObj.GetUser()
+	assert.NotNil(t, approverUser, "user extension must be convertible to Identity with non-nil User")
+	assert.Equal(t, user.Email, approverUser.Email, "stamped user email must match input user email")
+
 }
 
 func TestResume_RunnerError(t *testing.T) {
