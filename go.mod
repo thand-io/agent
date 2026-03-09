@@ -39,7 +39,7 @@ require (
 	github.com/crewjam/saml v0.5.1
 	github.com/denisbrodbeck/machineid v1.0.1
 	github.com/docker/docker v28.5.2+incompatible
-	github.com/evanphx/json-patch v0.5.2
+	github.com/evanphx/json-patch v5.9.11+incompatible
 	github.com/getkin/kin-openapi v0.133.0
 	github.com/gin-contrib/sessions v1.0.4
 	github.com/gin-gonic/gin v1.12.0
