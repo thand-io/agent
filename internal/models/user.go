@@ -146,7 +146,7 @@ func (u *User) GetDomain() string {
 
 func (u *User) AsIdentity() Identity {
 	return Identity{
-		ID:    u.ID,
+		ID:    u.GetMappableIdentifier(),
 		Label: u.GetName(),
 		User:  u,
 	}

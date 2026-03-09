@@ -35,7 +35,7 @@ func (s *Session) AsIdentity() *Identity {
 		return nil
 	}
 	return &Identity{
-		ID:    s.User.ID,
+		ID:    s.User.GetMappableIdentifier(),
 		Label: s.User.Name,
 		User:  s.User,
 	}
