@@ -286,7 +286,7 @@ func (s *Server) elevate(c *gin.Context, request models.ElevateRequest) {
 			"providers": providers,
 		}
 		if foundUser != nil && foundUser.User != nil {
-			properties["principal"] = foundUser.AsIdentity()
+			properties["principal"] = foundUser.User.GetMappableIdentifier()
 		}
 		if err := s.Config.GetAnalytics().Capture(
 			"elevate-request", properties,

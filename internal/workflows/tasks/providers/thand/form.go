@@ -208,7 +208,7 @@ func (t *thandTask) executeFormTask(
 		userIdentity, userExists := extensions[sdkConstants.VarsContextUser].(string)
 
 		if !userExists {
-			logrus.Warn("Form submission event missing user extension")
+			log.Warn("Form submission event missing user extension")
 			return &defaultFlowState, nil
 		}
 
@@ -216,7 +216,7 @@ func (t *thandTask) executeFormTask(
 		approverIdentityObj, err := models.NewIdentityFromBase64(userIdentity)
 
 		if err != nil {
-			logrus.WithError(err).WithFields(logrus.Fields{
+			log.WithError(err).WithFields(logrus.Fields{
 				"taskName": taskName,
 			}).Warn("Failed to convert approver identity to models.Identity")
 			return &defaultFlowState, nil

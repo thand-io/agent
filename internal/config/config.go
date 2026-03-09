@@ -238,13 +238,9 @@ func bindVaultEnvVars(v *viper.Viper) {
 
 // bindLoggingEnvVars binds logging configuration environment variables
 func bindLoggingEnvVars(v *viper.Viper) {
-	v.BindEnv("logging.level", "THAND_LOGGING_LEVEL")
-	v.BindEnv("logging.format", "THAND_LOGGING_FORMAT")
-	v.BindEnv("logging.output", "THAND_LOGGING_OUTPUT")
-
-	v.BindEnv("logging.level", "THAND_LOG_LEVEL")
-	v.BindEnv("logging.format", "THAND_LOG_FORMAT")
-	v.BindEnv("logging.output", "THAND_LOG_OUTPUT")
+	v.BindEnv("logging.level", "THAND_LOGGING_LEVEL", "THAND_LOG_LEVEL")
+	v.BindEnv("logging.format", "THAND_LOGGING_FORMAT", "THAND_LOG_FORMAT")
+	v.BindEnv("logging.output", "THAND_LOGGING_OUTPUT", "THAND_LOG_OUTPUT")
 }
 
 // bindServiceEnvVars binds service configuration environment variables

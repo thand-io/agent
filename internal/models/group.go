@@ -72,7 +72,7 @@ func (g *Group) GetEmail() string {
 
 func (g *Group) AsIdentity() Identity {
 	return Identity{
-		ID:    g.ID,
+		ID:    g.GetMappableIdentifier(),
 		Label: g.GetName(),
 		Group: g,
 	}

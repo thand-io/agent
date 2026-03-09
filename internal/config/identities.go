@@ -275,10 +275,9 @@ func (c *Config) GetIdentity(identity string) (*models.Identity, error) {
 	// If no results found, return error with diagnostic info
 	if len(results) == 0 {
 		logrus.WithFields(logrus.Fields{
-			"identity":        identityKey,
 			"providers_count": len(providerMap),
 			"provider_names":  getProviderNames(providerMap),
-		}).Warn("Identity not found in any provider during query")
+		}).Debug("Identity not found in any provider during query")
 		return nil, fmt.Errorf("identity not found: %s", identityKey)
 	}
 

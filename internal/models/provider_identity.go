@@ -271,17 +271,10 @@ func (p *BaseProvider) AddIdentities(identities ...Identity) {
 	}).Debug("Adding identities to provider: ", p.GetIdentifier())
 
 	if len(filtered) > 0 {
-		// Log the actual identities being added for debugging
-		for _, id := range filtered {
-			keys := CreateKeysFromIdentity(id)
-			logrus.WithFields(logrus.Fields{
-				"provider": p.GetIdentifier(),
-				"id":       id.ID,
-				"label":    id.Label,
-				"email":    getIdentityEmail(&id),
-				"keys":     keys,
-			}).Debug("Added identity to provider")
-		}
+		logrus.WithFields(logrus.Fields{
+			"provider": p.GetIdentifier(),
+			"count":    len(filtered),
+		}).Debug("Added identities to provider")
 
 		// Trigger reindex asynchronously (buildIdentitiyIndices acquires its own lock).
 		go func() {
@@ -291,12 +284,4 @@ func (p *BaseProvider) AddIdentities(identities ...Identity) {
 			}
 		}()
 	}
-}
-
-// getIdentityEmail safely extracts a user email from identity for debug logging.
-func getIdentityEmail(id *Identity) string {
-	if id == nil || id.User == nil {
-		return ""
-	}
-	return id.User.Email
 }
