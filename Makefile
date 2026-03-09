@@ -34,7 +34,7 @@ build-all: submodules
 
 # Build linux/amd64 binary for frontend E2E tests
 build-linux-amd64: submodules
-	GOOS=linux GOARCH=amd64 GOEXPERIMENT=jsonv2 go build $(GO_BUILD_FLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 .
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOEXPERIMENT=jsonv2 go build $(GO_BUILD_FLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 .
 
 # Clean build artifacts
 clean:
