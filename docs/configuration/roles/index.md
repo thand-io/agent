@@ -216,6 +216,7 @@ Each permission statement is an object with the following fields:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
+| `id` | string | No | Identifier for this statement, used to derive per-statement custom role names (snake_case, max 64 chars) |
 | `operations` | array | Yes | Actions that can be performed (provider-specific) |
 | `targets` | array | No | Resources the operations apply to (provider-specific) |
 | `conditions` | object | No | Provider-specific conditions that must be met |
@@ -224,7 +225,8 @@ Each permission statement is an object with the following fields:
 ```yaml
 permissions:
   allow:
-    - operations:          # What actions to allow
+    - id: secret_read      # Optional: identifier for per-statement role naming
+      operations:          # What actions to allow
         - action1
         - action2
       targets:             # Which resources these actions apply to

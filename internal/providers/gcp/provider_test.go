@@ -466,3 +466,45 @@ func TestResolveCustomRoleTenant(t *testing.T) {
 		assert.NotContains(t, warningText, "permissions.allow statements are missing 'binding'; inferring project from targets")
 	})
 }
+
+func TestStatementRoleID(t *testing.T) {
+	t.Run("single statement uses base name", func(t *testing.T) {
+		stmt := models.Statement{Operations: []string{"secretmanager.secrets.get"}}
+		id := statementRoleID("my_role", stmt, 0, 1)
+		assert.Equal(t, gcpRoleID("my_role"), id)
+	})
+
+	t.Run("multi-statement with name uses name suffix", func(t *testing.T) {
+		stmt := models.Statement{
+			ID:         "secrets_read",
+			Operations: []string{"secretmanager.secrets.get"},
+		}
+		id := statementRoleID("my_role", stmt, 0, 2)
+		assert.Equal(t, gcpRoleID("my_role_secrets_read"), id)
+	})
+
+	t.Run("multi-statement without name uses index suffix", func(t *testing.T) {
+		stmt := models.Statement{Operations: []string{"secretmanager.secrets.get"}}
+		id0 := statementRoleID("my_role", stmt, 0, 3)
+		id1 := statementRoleID("my_role", stmt, 1, 3)
+		id2 := statementRoleID("my_role", stmt, 2, 3)
+		assert.Equal(t, gcpRoleID("my_role_s0"), id0)
+		assert.Equal(t, gcpRoleID("my_role_s1"), id1)
+		assert.Equal(t, gcpRoleID("my_role_s2"), id2)
+	})
+
+	t.Run("different names produce different IDs", func(t *testing.T) {
+		stmtA := models.Statement{ID: "read", Operations: []string{"storage.get"}}
+		stmtB := models.Statement{ID: "write", Operations: []string{"storage.put"}}
+		idA := statementRoleID("my_role", stmtA, 0, 2)
+		idB := statementRoleID("my_role", stmtB, 1, 2)
+		assert.NotEqual(t, idA, idB)
+	})
+
+	t.Run("deterministic across calls", func(t *testing.T) {
+		stmt := models.Statement{ID: "kms", Operations: []string{"cloudkms.get"}}
+		id1 := statementRoleID("my_role", stmt, 0, 2)
+		id2 := statementRoleID("my_role", stmt, 0, 2)
+		assert.Equal(t, id1, id2)
+	})
+}

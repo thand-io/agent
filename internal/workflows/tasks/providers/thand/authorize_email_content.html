@@ -40,7 +40,7 @@
     <h3 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 0.75rem;">Permissions</h3>
     <ul style="list-style: none; padding: 0; margin: 0;">
     {{range .Permissions}}
-        <li style="padding: 0.5rem; background-color: #f1f5f9; margin-bottom: 0.25rem; border-radius: 0.25rem;">✓ Operations: {{range $i, $op := .Operations}}{{if $i}}, {{end}}{{$op}}{{end}}{{if .Targets}}<br/>&nbsp;&nbsp;Targets: {{range $i, $t := .Targets}}{{if $i}}, {{end}}{{$t}}{{end}}{{end}}</li>
+        <li style="padding: 0.5rem; background-color: #f1f5f9; margin-bottom: 0.25rem; border-radius: 0.25rem;">✓ Operations: {{range $i, $op := .Operations}}{{if $i}}, {{end}}{{$op}}{{end}}{{if .Binding}}<br/>&nbsp;&nbsp;Binding: {{.Binding}}{{end}}{{if .Targets}}<br/>&nbsp;&nbsp;Targets: {{range $i, $t := .Targets}}{{if $i}}, {{end}}{{$t}}{{end}}{{end}}</li>
     {{end}}
     </ul>
 </div>

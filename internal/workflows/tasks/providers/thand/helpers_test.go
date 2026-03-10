@@ -168,6 +168,18 @@ func TestSortedStatementsWithSortedFields(t *testing.T) {
 		assert.Equal(t, conditions, result[0].Conditions)
 	})
 
+	t.Run("binding is preserved on each statement", func(t *testing.T) {
+		stmts := models.RoleStatements{
+			{
+				Operations: []string{"secretmanager.secrets.get"},
+				Targets:    []string{"projects/sourcegraph-secrets/secrets/*"},
+				Binding:    "projects/sourcegraph-secrets",
+			},
+		}
+		result := sortedStatementsWithSortedFields(stmts)
+		assert.Equal(t, "projects/sourcegraph-secrets", result[0].Binding)
+	})
+
 	t.Run("original slice and its elements are not mutated", func(t *testing.T) {
 		original := models.RoleStatements{
 			{

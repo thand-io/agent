@@ -549,6 +549,7 @@ func validatePermissions(providerPermissions []SearchResult[ProviderPermission],
 
 		// Create validated statement with expanded operations
 		validatedStatements = append(validatedStatements, Statement{
+			ID:         stmt.ID,
 			Operations: validatedOperations,
 			Targets:    stmt.Targets,
 			Conditions: stmt.Conditions,
@@ -639,6 +640,7 @@ func ExpandWildcardPermissionsForProvider(provider Provider, role *Role) {
 			}
 			if len(ops) > 0 {
 				result = append(result, Statement{
+					ID:         stmt.ID,
 					Operations: ops,
 					Targets:    stmt.Targets,
 					Conditions: stmt.Conditions,

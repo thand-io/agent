@@ -78,6 +78,31 @@ func validateRoleLimits(roleKey string, role *models.Role) error {
 	return nil
 }
 
+// isGcpRole checks if a role is configured for the GCP provider
+func isGcpRole(role *models.Role) bool {
+	for _, provider := range role.Providers {
+		if strings.HasPrefix(provider, "gcp") {
+			return true
+		}
+	}
+	return false
+}
+
+// hasTargetsInStatements checks if a role's permission statements contain targets
+func hasTargetsInStatements(role *models.Role) bool {
+	for _, stmt := range role.Permissions.Allow {
+		if len(stmt.Targets) > 0 {
+			return true
+		}
+	}
+	for _, stmt := range role.Permissions.Deny {
+		if len(stmt.Targets) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // LoadRoles loads roles from a file or URL
 func (c *Config) LoadRoles() (map[string]models.Role, error) {
 	vaultData, err := c.loadRolesVaultData()
@@ -168,6 +193,12 @@ func (c *Config) ApplyRoles(foundRoles []*models.RoleDefinitions) (map[string]mo
 				logrus.WithError(err).Warnln("Role exceeds limits, skipping:", roleKey)
 				continue
 			}
+
+			// Warn if GCP role has targets (targets are ignored by GCP provider)
+			if isGcpRole(&r) && hasTargetsInStatements(&r) {
+				logrus.Warnf("Role '%s' is configured for GCP provider but contains statement targets. GCP ignores targets in role definitions; use binding field to control IAM assignment scope.", roleKey)
+			}
+
 			defs[roleKey] = r
 		}
 	}
@@ -1295,6 +1326,7 @@ func (c *Config) filterStatementsListByProvider(stmts models.RoleStatements, all
 		filteredTargets := c.filterByProvider(stmt.Targets, allowedProviders)
 
 		result = append(result, models.Statement{
+			ID:         stmt.ID,
 			Operations: filteredOps,
 			Targets:    filteredTargets,
 			Conditions: stmt.Conditions,

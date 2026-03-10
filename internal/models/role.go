@@ -506,6 +506,13 @@ func (s *RoleStatements) UnmarshalJSON(data []byte) error {
 // This design allows passing through provider-native conditions without requiring
 // this system to understand every provider's condition syntax.
 type Statement struct {
+	// ID is an optional identifier for this statement, used to derive
+	// deterministic per-statement custom role IDs in providers like GCP.
+	// Must be strict snake_case (lowercase alphanumeric and underscores,
+	// starting with a letter). When omitted, the statement's index in the
+	// list is used as a fallback suffix.
+	ID string `json:"id,omitempty" validate:"omitempty,snake_case,min=1,max=64"`
+
 	// Operations contains provider-specific actions/permissions.
 	// Examples: ["s3:GetObject", "s3:PutObject"] for AWS, ["storage.buckets.get"] for GCP
 	Operations []string `json:"operations" validate:"max=500,dive,min=1,max=500"`

@@ -167,8 +167,8 @@ func TestGetValidator(t *testing.T) {
 
 	// Test that custom validators are registered
 	type TestStruct struct {
-		SemverField      string `validate:"semver_pattern"`
-		AlphanumHyphen   string `validate:"alphanum_hyphen"`
+		SemverField    string `validate:"semver_pattern"`
+		AlphanumHyphen string `validate:"alphanum_hyphen"`
 	}
 
 	tests := []struct {
@@ -223,6 +223,41 @@ func TestGetValidator(t *testing.T) {
 			err := v1.Struct(test.input)
 			if (err != nil) != test.wantErr {
 				t.Errorf("Validate(%+v) error = %v, wantErr %v", test.input, err, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestSnakeCaseValidator(t *testing.T) {
+	v := GetValidator()
+
+	type TestStruct struct {
+		Name string `validate:"omitempty,snake_case"`
+	}
+
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"valid simple", "secrets_read", false},
+		{"valid single word", "read", false},
+		{"valid with numbers", "kms_v2", false},
+		{"valid long", "gcp_secret_manager_folder", false},
+		{"empty is valid (omitempty)", "", false},
+		{"invalid uppercase", "Secrets_Read", true},
+		{"invalid starts with number", "2secrets", true},
+		{"invalid has hyphen", "secrets-read", true},
+		{"invalid has dot", "secrets.read", true},
+		{"invalid starts with underscore", "_secrets", true},
+		{"invalid has space", "secrets read", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := v.Struct(TestStruct{Name: tt.value})
+			if (err != nil) != tt.wantErr {
+				t.Errorf("snake_case(%q) error = %v, wantErr %v", tt.value, err, tt.wantErr)
 			}
 		})
 	}
