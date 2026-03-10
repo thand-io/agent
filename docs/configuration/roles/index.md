@@ -219,6 +219,7 @@ Each permission statement is an object with the following fields:
 | `operations` | array | Yes | Actions that can be performed (provider-specific) |
 | `targets` | array | No | Resources the operations apply to (provider-specific) |
 | `conditions` | object | No | Provider-specific conditions that must be met |
+| `binding` | string | No | Explicit CSP resource where the role is created and bound (see [Binding](#binding)) |
 
 ```yaml
 permissions:
@@ -232,6 +233,7 @@ permissions:
       conditions:          # Optional provider-specific conditions
         ConditionOperator:
           ConditionKey: ConditionValue
+      binding: ""          # Optional: explicit scope for role creation / IAM binding
   deny:
     - operations:
         - action3
@@ -491,6 +493,95 @@ permissions:
 
 {: .note}
 Conditions follow the same structure as AWS IAM policy conditions. The outer key is the condition operator (e.g., `StringEquals`, `IpAddress`, `Bool`), and the inner key-value pair is the condition key and expected value. Refer to the [AWS IAM Condition documentation](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_condition.html) for the full list of supported operators and keys.
+
+### Binding
+
+The `binding` field on a statement explicitly declares **where** a provider-managed custom role is created and where the resulting IAM binding is applied. This is separate from `targets`, which declares *what resources* the operations act on.
+
+This field is most important when the **request tenant** (the GCP folder, Azure subscription, or AWS account making the access request) differs from the **scope** where the custom role must be created. For example:
+
+- A request tenant is a **GCP folder** — but custom GCP roles can only be created at the `project` or `organization` level.
+- A statement's `targets` reference resources inside a specific project — so the custom role should be created in that project.
+
+Without an explicit `binding`, the GCP provider attempts to infer a project from `targets` (legacy behaviour, emits a deprecation warning). Setting `binding` explicitly eliminates the ambiguity and the warning.
+
+#### Format per provider
+
+| Provider | Format | Example |
+|----------|--------|---------|
+| GCP | `projects/{id}` | `projects/my-project` |
+| Azure | `/subscriptions/{id}` or `/subscriptions/{id}/resourceGroups/{rg}` | `/subscriptions/00000000-0000-0000-0000-000000000000` |
+| AWS | `arn:aws:iam::{account-id}:root` | `arn:aws:iam::123456789012:root` |
+
+{: .note}
+**GCP organization scope**: creating custom roles at organization scope via the `binding` field is not currently supported. To use organization-scoped custom roles, set `organization_id` in the provider configuration instead. Specifying `binding: "organizations/..."` will produce a configuration error.
+
+#### Resolution order
+
+1. If `binding` is set on **all** statements in the role, that value is used.
+2. If `binding` is absent from one or more statements, the provider falls back to inferring a scope from `targets` (legacy, deprecated — a warning is logged). If **some** statements have `binding` set but not all, the explicit binding values are ignored and a targeted warning is emitted.
+3. If inference also fails, the request tenant is used as-is (may produce an error if the tenant type is unsupported for custom roles).
+
+All statements in a role that set `binding` must agree on the same value. Conflicting `binding` values across statements produce a validation error.
+
+#### GCP example — folder tenant with project-scoped custom role
+
+```yaml
+roles:
+  secrets-reader:
+    name: Secrets Reader
+    description: Read-only access to Secret Manager secrets in the secrets project
+    enabled: true
+    
+    permissions:
+      allow:
+        # Create the custom role in 'thand-secrets', not in the folder tenant
+        - binding: "projects/thand-secrets"
+          operations:
+            - "gcp-prod:secretmanager.secrets.get"
+            - "gcp-prod:secretmanager.secrets.list"
+            - "gcp-prod:secretmanager.versions.access"
+          targets:
+            - "projects/thand-secrets/*"
+
+# This role can now be requested via a folder-level tenant (e.g. folders/205090528354).
+# The custom role is created in 'thand-secrets' and the IAM binding is applied at
+# the project level (projects/thand-secrets), not at the folder level.
+```
+
+#### Azure example
+
+```yaml
+roles:
+  storage-reader:
+    name: Storage Reader
+    permissions:
+      allow:
+        - binding: "/subscriptions/00000000-0000-0000-0000-000000000000"
+          operations:
+            - "Microsoft.Storage/storageAccounts/read"
+          targets:
+            - "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/data/*"
+```
+
+#### AWS example
+
+```yaml
+roles:
+  s3-reader:
+    name: S3 Reader
+    permissions:
+      allow:
+        - binding: "arn:aws:iam::123456789012:root"
+          operations:
+            - "s3:GetObject"
+            - "s3:ListBucket"
+          targets:
+            - "arn:aws:s3:::my-bucket/*"
+```
+
+{: .important}
+`binding` is about **where** a custom role is created / where the IAM binding is applied. It is not an additional resource restriction — `targets` still controls which resources the operations act on.
 
 ### Allow/Deny Conflict Resolution
 

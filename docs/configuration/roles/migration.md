@@ -237,6 +237,53 @@ See the [Conditions documentation](./index#conditions) for full details and AWS 
 
 ---
 
+## 6. New: Binding Field on Statements
+
+The `binding` field is an optional property on permission statements that declares the explicit CSP resource where a custom role should be created and where the resulting IAM binding should be applied.
+
+### Why it exists
+
+Some providers create custom roles at a different scope than the request tenant. The most common case is **GCP**: custom roles can only be created at the `projects/{id}` or `organizations/{id}` level, but a request tenant may be a folder (`folders/{id}`). Without `binding`, the GCP provider would fail when asked to create a custom role for a folder tenant.
+
+The field exists to resolve this explicitly and cleanly, regardless of provider. See [Binding](./index#binding) in the reference documentation for the full format per provider.
+
+### No migration required — but a deprecation warning may appear
+
+If your existing roles have `permissions.allow` statements that include `targets` pointing at a specific project (e.g. `projects/my-project/...`), the GCP provider previously attempted to infer the binding project from those targets whenever the request tenant was a folder. This inference still works, but it now emits a **deprecation warning** in the agent logs:
+
+```
+WARN: binding not set on statement with permissions.allow; inferring project from targets (deprecated — set binding explicitly)
+```
+
+To silence the warning and make the intent explicit, add `binding` to the relevant statements:
+
+```yaml
+# Before (still works, but logs a deprecation warning)
+permissions:
+  allow:
+    - operations:
+        - "gcp-prod:secretmanager.secrets.get"
+      targets:
+        - "projects/my-project/secrets/*"
+
+# After (explicit, no warning)
+permissions:
+  allow:
+    - binding: "projects/my-project"
+      operations:
+        - "gcp-prod:secretmanager.secrets.get"
+      targets:
+        - "projects/my-project/secrets/*"
+```
+
+### Validation
+
+- All statements within the same role that set `binding` must agree on the same value. Conflicting values produce a configuration error.
+- `binding: "folders/..."` is rejected by the GCP provider — folders are not a valid scope for custom role creation.
+- `binding` does not restrict which resources the operations act on; `targets` continues to control that.
+
+---
+
 ## Summary
 
 | Feature | Manual Action Required | Notes |
@@ -248,6 +295,7 @@ See the [Conditions documentation](./index#conditions) for full details and AWS 
 | Deny scopes | Optional | New feature, add when ready |
 | Conditions | Optional | New feature, AWS-only currently |
 | Composite field | No | System-managed, do not set |
+| Binding field | Recommended | Silences deprecation warning when tenant ≠ role creation scope |
 
 {: .note}
 While auto-migration ensures your existing configurations continue to work, we recommend updating your YAML files to the new format when convenient. The new format is more expressive, supports conditions and domain scopes, and makes the relationship between operations and their target resources explicit.

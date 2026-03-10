@@ -256,3 +256,177 @@ func TestGetCustomRoleParent(t *testing.T) {
 	provider.client.OrganizationID = ""
 	assert.Equal(t, "projects/tenant-project", provider.getCustomRoleParent("tenant-project"))
 }
+
+func TestProjectIDFromRoleParent(t *testing.T) {
+	t.Run("project parent", func(t *testing.T) {
+		projectID, ok := projectIDFromRoleParent("projects/thand-secrets")
+		require.True(t, ok)
+		assert.Equal(t, "thand-secrets", projectID)
+	})
+
+	t.Run("organization parent", func(t *testing.T) {
+		_, ok := projectIDFromRoleParent("organizations/1234567890")
+		require.False(t, ok)
+	})
+}
+
+func TestProjectIDFromTarget(t *testing.T) {
+	t.Run("simple project target", func(t *testing.T) {
+		projectID, ok := projectIDFromTarget("projects/thand-secrets/*")
+		require.True(t, ok)
+		assert.Equal(t, "thand-secrets", projectID)
+	})
+
+	t.Run("provider prefixed target", func(t *testing.T) {
+		projectID, ok := projectIDFromTarget("gcp-prod:projects/thand-secrets/secrets/*")
+		require.True(t, ok)
+		assert.Equal(t, "thand-secrets", projectID)
+	})
+
+	t.Run("wildcard project not allowed", func(t *testing.T) {
+		_, ok := projectIDFromTarget("projects/*/secrets/*")
+		require.False(t, ok)
+	})
+}
+
+func TestInferProjectIDFromPermissionTargets(t *testing.T) {
+	t.Run("single project across statements", func(t *testing.T) {
+		projectID, err := inferProjectIDFromPermissionTargets(models.RoleStatements{
+			{
+				Operations: []string{"gcp-prod:secretmanager.secrets.get"},
+				Targets:    []string{"projects/thand-secrets/secrets/*"},
+			},
+			{
+				Operations: []string{"gcp-prod:secretmanager.versions.access"},
+				Targets:    []string{"projects/thand-secrets/*"},
+			},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "thand-secrets", projectID)
+	})
+
+	t.Run("statement without targets errors", func(t *testing.T) {
+		_, err := inferProjectIDFromPermissionTargets(models.RoleStatements{
+			{
+				Operations: []string{"gcp-prod:secretmanager.secrets.get"},
+			},
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "missing targets")
+	})
+
+	t.Run("multiple projects error", func(t *testing.T) {
+		_, err := inferProjectIDFromPermissionTargets(models.RoleStatements{
+			{
+				Operations: []string{"gcp-prod:secretmanager.secrets.get"},
+				Targets:    []string{"projects/thand-secrets/*"},
+			},
+			{
+				Operations: []string{"gcp-prod:secretmanager.versions.access"},
+				Targets:    []string{"projects/other-project/*"},
+			},
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "multiple projects")
+	})
+}
+
+func TestResolveCustomRoleTenant(t *testing.T) {
+	t.Run("explicit binding on all statements — single project", func(t *testing.T) {
+		tenant, err := resolveCustomRoleTenant(models.RoleStatements{
+			{
+				Operations: []string{"secretmanager.secrets.get"},
+				Binding:    "projects/thand-secrets",
+			},
+			{
+				Operations: []string{"secretmanager.versions.access"},
+				Binding:    "projects/thand-secrets",
+			},
+		}, "folders/205090528354")
+		require.NoError(t, err)
+		assert.Equal(t, "thand-secrets", tenant.ID)
+		assert.Equal(t, "project", tenant.Type)
+	})
+
+	t.Run("explicit binding without projects/ prefix accepted", func(t *testing.T) {
+		tenant, err := resolveCustomRoleTenant(models.RoleStatements{
+			{
+				Operations: []string{"secretmanager.secrets.get"},
+				Binding:    "thand-secrets",
+			},
+		}, "folders/205090528354")
+		require.NoError(t, err)
+		assert.Equal(t, "thand-secrets", tenant.ID)
+	})
+
+	t.Run("folder binding rejected", func(t *testing.T) {
+		_, err := resolveCustomRoleTenant(models.RoleStatements{
+			{
+				Operations: []string{"secretmanager.secrets.get"},
+				Binding:    "folders/205090528354",
+			},
+		}, "folders/205090528354")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "folder")
+	})
+
+	t.Run("conflicting bindings across statements error", func(t *testing.T) {
+		_, err := resolveCustomRoleTenant(models.RoleStatements{
+			{
+				Operations: []string{"secretmanager.secrets.get"},
+				Binding:    "projects/proj-a",
+			},
+			{
+				Operations: []string{"secretmanager.versions.access"},
+				Binding:    "projects/proj-b",
+			},
+		}, "folders/205090528354")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "conflicting bindings")
+	})
+
+	t.Run("missing binding falls back to target inference", func(t *testing.T) {
+		// One statement has no Binding — triggers legacy target-inference path
+		tenant, err := resolveCustomRoleTenant(models.RoleStatements{
+			{
+				Operations: []string{"secretmanager.secrets.get"},
+				Targets:    []string{"projects/thand-secrets/*"},
+				// No Binding
+			},
+		}, "folders/205090528354")
+		require.NoError(t, err)
+		assert.Equal(t, "thand-secrets", tenant.ID)
+	})
+
+	t.Run("organization binding rejected", func(t *testing.T) {
+		_, err := resolveCustomRoleTenant(models.RoleStatements{
+			{
+				Operations: []string{"secretmanager.secrets.get"},
+				Binding:    "organizations/123456789",
+			},
+		}, "folders/205090528354")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "organization")
+		assert.Contains(t, err.Error(), "organization_id")
+	})
+
+	t.Run("partial binding falls back to target inference with specific warning", func(t *testing.T) {
+		// First statement has binding, second does not — explicit binding should be
+		// ignored and inference used instead (with a warning logged).
+		tenant, err := resolveCustomRoleTenant(models.RoleStatements{
+			{
+				Operations: []string{"secretmanager.secrets.get"},
+				Targets:    []string{"projects/thand-secrets/*"},
+				Binding:    "projects/thand-secrets", // set
+			},
+			{
+				Operations: []string{"secretmanager.versions.access"},
+				Targets:    []string{"projects/thand-secrets/*"},
+				// Binding intentionally absent
+			},
+		}, "folders/205090528354")
+		require.NoError(t, err)
+		// Despite the explicit binding on the first statement, inference wins
+		assert.Equal(t, "thand-secrets", tenant.ID)
+	})
+}
