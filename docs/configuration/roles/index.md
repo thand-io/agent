@@ -520,7 +520,7 @@ Without an explicit `binding`, the GCP provider attempts to infer a project from
 
 1. If `binding` is set on **all** statements in the role, that value is used.
 2. If `binding` is absent from one or more statements, the provider falls back to inferring a scope from `targets` (legacy, deprecated — a warning is logged). If **some** statements have `binding` set but not all, the explicit binding values are ignored and a targeted warning is emitted.
-3. If inference also fails, the request tenant is used as-is (may produce an error if the tenant type is unsupported for custom roles).
+3. If inference also fails, a configuration error is returned and the request is rejected.
 
 All statements in a role that set `binding` must agree on the same value. Conflicting `binding` values across statements produce a validation error.
 

@@ -941,10 +941,12 @@ func resolveCustomRoleTenant(statements models.RoleStatements, fallbackTenantID 
 	}
 
 	// ── Step 2: legacy fallback – infer from targets ──────────────────────────
-	logrus.WithField("fallback_tenant", fallbackTenantID).Warn(
-		"permissions.allow statements are missing 'binding'; inferring project from targets. " +
-			"Set an explicit 'binding' on each statement to remove this warning.",
-	)
+	if !anyHaveBinding {
+		logrus.WithField("fallback_tenant", fallbackTenantID).Warn(
+			"permissions.allow statements are missing 'binding'; inferring project from targets. " +
+				"Set an explicit 'binding' on each statement to remove this warning.",
+		)
+	}
 	projectID, err := inferProjectIDFromPermissionTargets(statements)
 	if err != nil {
 		return nil, err

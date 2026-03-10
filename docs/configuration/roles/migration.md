@@ -252,7 +252,13 @@ The field exists to resolve this explicitly and cleanly, regardless of provider.
 If your existing roles have `permissions.allow` statements that include `targets` pointing at a specific project (e.g. `projects/my-project/...`), the GCP provider previously attempted to infer the binding project from those targets whenever the request tenant was a folder. This inference still works, but it now emits a **deprecation warning** in the agent logs:
 
 ```
-WARN: binding not set on statement with permissions.allow; inferring project from targets (deprecated — set binding explicitly)
+level=warning msg="permissions.allow statements are missing 'binding'; inferring project from targets. Set an explicit 'binding' on each statement to remove this warning."
+```
+
+If only some statements in the role set `binding`, a different warning is emitted:
+
+```
+level=warning msg="some permissions.allow statements have 'binding' set but not all; the explicit binding values will be ignored and the project will be inferred from targets instead. Set 'binding' on every statement or remove it from all statements."
 ```
 
 To silence the warning and make the intent explicit, add `binding` to the relevant statements:

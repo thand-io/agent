@@ -1,9 +1,12 @@
 package gcp
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"testing"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -332,6 +335,25 @@ func TestInferProjectIDFromPermissionTargets(t *testing.T) {
 }
 
 func TestResolveCustomRoleTenant(t *testing.T) {
+	captureWarnings := func(t *testing.T) *bytes.Buffer {
+		t.Helper()
+
+		logger := logrus.StandardLogger()
+		originalOut := logger.Out
+		originalLevel := logger.Level
+
+		buffer := &bytes.Buffer{}
+		logger.SetOutput(buffer)
+		logger.SetLevel(logrus.WarnLevel)
+
+		t.Cleanup(func() {
+			logger.SetOutput(originalOut)
+			logger.SetLevel(originalLevel)
+		})
+
+		return buffer
+	}
+
 	t.Run("explicit binding on all statements — single project", func(t *testing.T) {
 		tenant, err := resolveCustomRoleTenant(models.RoleStatements{
 			{
@@ -386,6 +408,8 @@ func TestResolveCustomRoleTenant(t *testing.T) {
 	})
 
 	t.Run("missing binding falls back to target inference", func(t *testing.T) {
+		buffer := captureWarnings(t)
+
 		// One statement has no Binding — triggers legacy target-inference path
 		tenant, err := resolveCustomRoleTenant(models.RoleStatements{
 			{
@@ -396,6 +420,10 @@ func TestResolveCustomRoleTenant(t *testing.T) {
 		}, "folders/205090528354")
 		require.NoError(t, err)
 		assert.Equal(t, "thand-secrets", tenant.ID)
+
+		warningOutput, err := io.ReadAll(buffer)
+		require.NoError(t, err)
+		assert.Contains(t, string(warningOutput), "permissions.allow statements are missing 'binding'; inferring project from targets")
 	})
 
 	t.Run("organization binding rejected", func(t *testing.T) {
@@ -411,6 +439,8 @@ func TestResolveCustomRoleTenant(t *testing.T) {
 	})
 
 	t.Run("partial binding falls back to target inference with specific warning", func(t *testing.T) {
+		buffer := captureWarnings(t)
+
 		// First statement has binding, second does not — explicit binding should be
 		// ignored and inference used instead (with a warning logged).
 		tenant, err := resolveCustomRoleTenant(models.RoleStatements{
@@ -428,5 +458,11 @@ func TestResolveCustomRoleTenant(t *testing.T) {
 		require.NoError(t, err)
 		// Despite the explicit binding on the first statement, inference wins
 		assert.Equal(t, "thand-secrets", tenant.ID)
+
+		warningOutput, err := io.ReadAll(buffer)
+		require.NoError(t, err)
+		warningText := string(warningOutput)
+		assert.Contains(t, warningText, "some permissions.allow statements have 'binding' set but not all")
+		assert.NotContains(t, warningText, "permissions.allow statements are missing 'binding'; inferring project from targets")
 	})
 }
