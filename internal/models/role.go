@@ -545,7 +545,7 @@ type Statement struct {
 	// When omitted, the provider falls back to the request tenant for binding scope.
 	// Providers may additionally attempt to infer a binding resource from Targets
 	// for backwards compatibility.
-	Binding string `json:"binding,omitempty" validate:"max=500"`
+	Binding string `json:"binding,omitempty" validate:"omitempty,csp_binding,max=500"`
 }
 
 // ScopeIdentities defines identity-based restrictions for users, groups, and domains.

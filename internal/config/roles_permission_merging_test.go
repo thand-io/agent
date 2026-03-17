@@ -734,5 +734,104 @@ func TestGCPStylePermissionHandling(t *testing.T) {
 	})
 }
 
+func TestStatementIDAndBindingPreservation(t *testing.T) {
+	t.Run("ID and binding survive inheritance merging", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"base": {
+				Name: "base",
+				Permissions: models.RolePermissions{
+					Allow: models.RoleStatements{
+						{Operations: []string{"secretmanager.secrets.list"}},
+					},
+				},
+				Enabled: true,
+			},
+			"child": {
+				Name:     "child",
+				Inherits: []string{"base"},
+				Permissions: models.RolePermissions{
+					Allow: models.RoleStatements{
+						{
+							ID:         "stmt_one",
+							Binding:    "projects/proj-a",
+							Operations: []string{"secretmanager.secrets.get"},
+						},
+						{
+							ID:         "stmt_two",
+							Binding:    "projects/proj-b",
+							Operations: []string{"secretmanager.secrets.get"},
+						},
+					},
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+		identity := &models.Identity{ID: "user", User: &models.User{Username: "u", Email: "u@e.com"}}
+
+		result, err := config.GetCompositeRoleByName(identity, "child")
+		require.NoError(t, err)
+
+		// Find statements by ID
+		var foundOne, foundTwo bool
+		for _, stmt := range result.Permissions.Allow {
+			switch stmt.ID {
+			case "stmt_one":
+				foundOne = true
+				assert.Equal(t, "projects/proj-a", stmt.Binding)
+				assert.Contains(t, stmt.Operations, "secretmanager.secrets.get")
+			case "stmt_two":
+				foundTwo = true
+				assert.Equal(t, "projects/proj-b", stmt.Binding)
+				assert.Contains(t, stmt.Operations, "secretmanager.secrets.get")
+			}
+		}
+
+		assert.True(t, foundOne, "statement stmt_one must survive merge, got: %v", result.Permissions.Allow)
+		assert.True(t, foundTwo, "statement stmt_two must survive merge, got: %v", result.Permissions.Allow)
+	})
+
+	t.Run("ID and binding survive conflict resolution", func(t *testing.T) {
+		roles := map[string]models.Role{
+			"role": {
+				Name: "role",
+				Permissions: models.RolePermissions{
+					Allow: models.RoleStatements{
+						{
+							ID:         "keep_me",
+							Binding:    "projects/proj-x",
+							Operations: []string{"compute.instances.get"},
+						},
+						{Operations: []string{"compute.instances.list"}},
+					},
+					Deny: models.RoleStatements{
+						{Operations: []string{"compute.instances.list"}},
+					},
+				},
+				Enabled: true,
+			},
+		}
+
+		config := &Config{Roles: RoleConfig{Definitions: roles}}
+		identity := &models.Identity{ID: "user", User: &models.User{Username: "u", Email: "u@e.com"}}
+
+		result, err := config.GetCompositeRoleByName(identity, "role")
+		require.NoError(t, err)
+
+		// The allow/deny conflict on compute.instances.list should be resolved,
+		// but the ID/Binding statement should survive.
+		var found bool
+		for _, stmt := range result.Permissions.Allow {
+			if stmt.ID == "keep_me" {
+				found = true
+				assert.Equal(t, "projects/proj-x", stmt.Binding)
+				assert.Contains(t, stmt.Operations, "compute.instances.get")
+			}
+		}
+		assert.True(t, found, "statement keep_me must survive conflict resolution, got: %v", result.Permissions.Allow)
+	})
+}
+
 // Note: Helper functions expandCondensedActions and condenseActions
 // are now implemented in roles.go

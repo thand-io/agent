@@ -262,3 +262,36 @@ func TestSnakeCaseValidator(t *testing.T) {
 		})
 	}
 }
+
+func TestCSPBindingValidator(t *testing.T) {
+	v := GetValidator()
+
+	type TestStruct struct {
+		Binding string `validate:"omitempty,csp_binding"`
+	}
+
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"empty is valid (omitempty)", "", false},
+		{"GCP project", "projects/my-project", false},
+		{"GCP organization", "organizations/123456789", false},
+		{"GCP folder", "folders/205090528354", false},
+		{"Azure subscription", "/subscriptions/sub-123", false},
+		{"AWS ARN", "arn:aws:iam::123456789:root", false},
+		{"invalid bare project ID", "my-project", true},
+		{"invalid random string", "foobar", true},
+		{"invalid empty prefix", "/projects/foo", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := v.Struct(TestStruct{Binding: tt.value})
+			if (err != nil) != tt.wantErr {
+				t.Errorf("csp_binding(%q) error = %v, wantErr %v", tt.value, err, tt.wantErr)
+			}
+		})
+	}
+}

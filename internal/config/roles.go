@@ -1008,16 +1008,18 @@ func (c *Config) mergeRolePermissions(composite *models.Role, inherited *models.
 // normalizeStatements expands all statement operations and creates a map by operation.
 // Returns a map where key is operation and value is the set of targets associated with that operation.
 // normalizeStatements separates statements into two groups:
-// 1. Normalized map (for statements WITHOUT conditions) - can be merged and deduplicated
-// 2. Preserved statements (for statements WITH conditions) - kept as complete units
-// This ensures conditions are not lost during merge operations.
+// 1. Normalized map (for plain statements) - can be merged and deduplicated
+// 2. Preserved statements (those with conditions, ID, or binding) - kept as complete units
+// This ensures metadata that cannot survive the normalize/rebuild cycle is not lost.
 func normalizeStatements(stmts models.RoleStatements) (map[string]map[string]bool, models.RoleStatements) {
 	result := make(map[string]map[string]bool)
 	preservedStmts := make(models.RoleStatements, 0)
 
 	for _, stmt := range stmts {
-		// Statements WITH conditions are preserved as-is
-		if len(stmt.Conditions) > 0 {
+		// Statements with conditions, ID, or binding are preserved as complete
+		// units — they carry metadata that cannot survive the normalize/rebuild
+		// cycle (which reduces statements to operation→targets maps).
+		if len(stmt.Conditions) > 0 || stmt.ID != "" || stmt.Binding != "" {
 			preservedStmts = append(preservedStmts, stmt)
 			continue
 		}
@@ -1076,6 +1078,11 @@ func deduplicatePreservedStatements(allow, deny models.RoleStatements) (models.R
 // statementsEqual checks if two statements are equal by comparing their operations, targets, and conditions.
 // String slices are compared in sorted order to ensure consistent comparison.
 func statementsEqual(a, b models.Statement) bool {
+	// Compare ID and Binding
+	if a.ID != b.ID || a.Binding != b.Binding {
+		return false
+	}
+
 	// Compare operations (sorted)
 	if !stringSlicesEqual(a.Operations, b.Operations) {
 		return false
@@ -1330,6 +1337,7 @@ func (c *Config) filterStatementsListByProvider(stmts models.RoleStatements, all
 			Operations: filteredOps,
 			Targets:    filteredTargets,
 			Conditions: stmt.Conditions,
+			Binding:    stmt.Binding,
 		})
 	}
 	return result

@@ -41,7 +41,12 @@ func gcpRoleID(name string) string {
 
 	// Truncate to GCP maximum of 64 characters
 	if len(id) > 64 {
-		id = strings.TrimRight(id[:64], "_")
+		trimmed := strings.TrimRight(id[:64], "_")
+		if len(trimmed) > 0 {
+			id = trimmed
+		} else {
+			id = id[:3] // degenerate case: first 64 chars were all underscores
+		}
 	}
 
 	// Pad if too short (minimum 3 characters)
@@ -67,6 +72,14 @@ func statementRoleID(baseName string, stmt models.Statement, index, count int) s
 		return gcpRoleID(baseName + "_" + stmt.ID)
 	}
 	return gcpRoleID(baseName + "_s" + strconv.Itoa(index))
+}
+
+// stmtLabel returns a human-readable label for a statement in error/log messages.
+func stmtLabel(stmt models.Statement, index int) string {
+	if stmt.ID != "" {
+		return stmt.ID
+	}
+	return "s" + strconv.Itoa(index)
 }
 
 // primitiveRoles are GCP basic/primitive roles that do not support IAM conditions.
@@ -175,7 +188,7 @@ func (p *gcpProvider) AuthorizeRole(
 	for stmtIdx, stmt := range role.Permissions.Allow {
 		stmtTenant, err := resolveStatementBindingTenant(stmt, tenant, projectId)
 		if err != nil {
-			return nil, fmt.Errorf("failed to resolve binding for statement %d: %w", stmtIdx, err)
+			return nil, fmt.Errorf("failed to resolve binding for statement %s (index %d): %w", stmtLabel(stmt, stmtIdx), stmtIdx, err)
 		}
 		stmtResourceID := stmtTenant.ID
 
@@ -218,9 +231,12 @@ func (p *gcpProvider) AuthorizeRole(
 				"is_composite": isComposite,
 				"stmt_index":   stmtIdx,
 				"stmt_id":      stmt.ID,
-				"binding":      stmt.Binding,
-				"operations":   stmt.Operations,
 			}).Info("Created custom GCP role for statement")
+			logrus.WithFields(logrus.Fields{
+				"role_name":  customRoleName,
+				"binding":    stmt.Binding,
+				"operations": stmt.Operations,
+			}).Debug("Custom GCP role statement details")
 		} else {
 			needsUpdate := true
 			if !isComposite && !isOrganizationRoleParent(roleParent) {
@@ -517,7 +533,7 @@ func (p *gcpProvider) authorizeRoleTemporal(
 	for stmtIdx, stmt := range role.Permissions.Allow {
 		stmtTenant, err := resolveStatementBindingTenant(stmt, tenant, projectID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to resolve binding for statement %d: %w", stmtIdx, err)
+			return nil, fmt.Errorf("failed to resolve binding for statement %s (index %d): %w", stmtLabel(stmt, stmtIdx), stmtIdx, err)
 		}
 
 		customRoleName := statementRoleID(role.GetName(), stmt, stmtIdx, stmtCount)
@@ -541,7 +557,7 @@ func (p *gcpProvider) authorizeRoleTemporal(
 				Tenant:      stmtTenant,
 			},
 		).Get(wfCtx, &resp); err != nil {
-			return nil, fmt.Errorf("GetOrCreateAndBindCustomRole activity failed for statement %d: %w", stmtIdx, err)
+			return nil, fmt.Errorf("GetOrCreateAndBindCustomRole activity failed for statement %s (index %d): %w", stmtLabel(stmt, stmtIdx), stmtIdx, err)
 		}
 		assignedRoles = append(assignedRoles, resp.RoleName)
 	}
@@ -857,93 +873,6 @@ func projectIDFromRoleParent(roleParent string) (string, bool) {
 		return "", false
 	}
 	return projectID, true
-}
-
-// resolveCustomRoleTenant determines the project tenant to use when creating and
-// binding a custom GCP role for a set of permission statements.
-//
-// Resolution order:
-//  1. If every statement has an explicit Binding set, and all bindings resolve to
-//     the same project, use that project.  A folders/ binding is rejected because
-//     GCP does not support custom roles at folder scope.
-//  2. Otherwise fall back to inferring the project from Targets (legacy behaviour,
-//     emits a deprecation warning so operators can migrate to explicit Binding).
-//  3. If neither succeeds the error from inference is returned.
-func resolveCustomRoleTenant(statements models.RoleStatements, fallbackTenantID string) (*models.ProviderTenant, error) {
-	// ── Step 1: explicit Binding on all statements ────────────────────────────
-	anyHaveBinding := false
-	allHaveBinding := len(statements) > 0
-	for _, stmt := range statements {
-		if stmt.Binding != "" {
-			anyHaveBinding = true
-		} else {
-			allHaveBinding = false
-		}
-	}
-
-	// Warn loudly when a user sets binding on some statements but not all — the
-	// explicit binding values will be silently ignored in the fallback path,
-	// which is almost certainly not what was intended.
-	if anyHaveBinding && !allHaveBinding {
-		logrus.WithField("fallback_tenant", fallbackTenantID).Warn(
-			"some permissions.allow statements have 'binding' set but not all; " +
-				"the explicit binding values will be ignored and the project will be inferred from targets instead. " +
-				"Set 'binding' on every statement or remove it from all statements.",
-		)
-	}
-
-	if allHaveBinding {
-		projectIDs := make(map[string]struct{})
-		for _, stmt := range statements {
-			binding := strings.TrimSpace(stmt.Binding)
-			if strings.HasPrefix(binding, "folders/") {
-				return nil, fmt.Errorf("binding %q targets a folder; GCP custom roles must be created at project or organization scope", binding)
-			}
-			// Organization-level role creation via the binding field is not currently
-			// implemented: the org IAM API path is not wired up in bindUserToRoleByName.
-			// Use the provider-level 'organization_id' config to create roles at org scope.
-			if strings.HasPrefix(binding, "organizations/") {
-				return nil, fmt.Errorf(
-					"binding %q targets an organization; organization-level role creation via the 'binding' field is not currently supported — "+
-						"set 'organization_id' in the provider configuration to create custom roles at organization scope",
-					binding,
-				)
-			}
-			// For GCP we need a project ID, not a full resource string.
-			// Accept either "projects/{id}" or bare "{id}".
-			projectID := strings.TrimPrefix(binding, "projects/")
-			if len(projectID) == 0 {
-				return nil, fmt.Errorf("binding %q does not resolve to a project", binding)
-			}
-			projectIDs[projectID] = struct{}{}
-		}
-
-		if len(projectIDs) > 1 {
-			projects := make([]string, 0, len(projectIDs))
-			for p := range projectIDs {
-				projects = append(projects, p)
-			}
-			sort.Strings(projects)
-			return nil, fmt.Errorf("permission statements have conflicting bindings %v; all statements in a role must bind to the same project", projects)
-		}
-
-		for projectID := range projectIDs {
-			return &models.ProviderTenant{ID: projectID, Type: "project", Name: projectID}, nil
-		}
-	}
-
-	// ── Step 2: legacy fallback – infer from targets ──────────────────────────
-	if !anyHaveBinding {
-		logrus.WithField("fallback_tenant", fallbackTenantID).Warn(
-			"permissions.allow statements are missing 'binding'; inferring project from targets. " +
-				"Set an explicit 'binding' on each statement to remove this warning.",
-		)
-	}
-	projectID, err := inferProjectIDFromPermissionTargets(statements)
-	if err != nil {
-		return nil, err
-	}
-	return &models.ProviderTenant{ID: projectID, Type: "project", Name: projectID}, nil
 }
 
 // resolveStatementBindingTenant determines the project tenant for a single permission
