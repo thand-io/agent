@@ -176,8 +176,8 @@
                         </h3>
                         
                         <!-- Error message -->
-                        <div x-show="evaluationError" style="background-color: #fee; border: 1px solid #fcc; border-radius: 4px; padding: 1rem; margin-bottom: 1rem;">
-                            <p style="margin: 0; font-size: 0.875rem; color: #c00;">
+                        <div x-show="evaluationError" style="background-color: var(--error-bg); border: 1px solid var(--error-border); border-radius: 4px; padding: 1rem; margin-bottom: 1rem;">
+                            <p style="margin: 0; font-size: 0.875rem; color: var(--error-text);">
                                 <strong>⚠️ Error:</strong> <span x-text="evaluationError"></span>
                             </p>
                         </div>
