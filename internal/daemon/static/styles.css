@@ -14,6 +14,13 @@
     --ring: 240 10% 3.9%;
     --status-active: 160 84% 39%;
     --status-inactive: 43 96% 56%;
+    --text-muted: #666;
+    --code-bg: #f5f5f5;
+    --code-bg-dark: #e8e8e8;
+    --border-color: #e0e0e0;
+    --error-bg: #fee;
+    --error-border: #fcc;
+    --error-text: #c00;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -33,6 +40,13 @@
         --ring: 240 4.9% 83.9%;
         --status-active: 160 84% 45%;
         --status-inactive: 43 96% 65%;
+        --text-muted: #999;
+        --code-bg: hsl(240 3.7% 20%);
+        --code-bg-dark: hsl(240 3.7% 25%);
+        --border-color: hsl(240 3.7% 15.9%);
+        --error-bg: hsl(0 40% 15%);
+        --error-border: hsl(0 40% 25%);
+        --error-text: hsl(0 80% 65%);
     }
 }
 
@@ -694,7 +708,10 @@ footer p {
     outline-offset: 2px;
 }
 
-/* Choices.js custom styling to match theme */
+/* Choices.js custom styling to match theme
+   CDN selectors use .choices__list[aria-expanded] (specificity 0,1,1) which
+   beats a plain class selector (0,1,0). We mirror the CDN's compound selectors
+   so our theme overrides always win. */
 .choices {
     margin-bottom: 0;
     font-size: 0.875rem;
@@ -708,16 +725,12 @@ footer p {
     color: hsl(var(--foreground));
 }
 
-.choices[data-type*="select-one"]:after {
+.choices[data-type*="select-one"]::after {
     border-color: hsl(var(--muted-foreground)) transparent transparent transparent;
 }
 
 .choices__input:focus {
     outline: none;
-}
-
-.choices {
-    margin-bottom: 0;
 }
 
 .choices__inner {
@@ -737,26 +750,41 @@ footer p {
     margin-bottom: 0.25rem;
 }
 
-.choices__list--dropdown {
+/* Mirror CDN's compound selector to beat [aria-expanded] specificity */
+.choices__list--dropdown,
+.choices__list[aria-expanded] {
     background-color: hsl(var(--card));
     border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     max-height: 300px;
 }
 
-.choices__item--choice {
+/* Dropdown item text — match CDN specificity */
+.choices__list--dropdown .choices__item,
+.choices__list[aria-expanded] .choices__item {
     color: hsl(var(--foreground));
     padding: 0.5rem;
-    color: black !important;
 }
 
-.choices__item--choice:hover {
+/* Hover state */
+.choices__list--dropdown .choices__item:hover,
+.choices__list[aria-expanded] .choices__item:hover {
     background-color: hsl(var(--secondary));
+    color: hsl(var(--foreground));
 }
 
-.choices__item--choice.is-highlighted {
+/* Highlighted (keyboard navigation) — beat CDN's .choices__item--selectable.is-highlighted */
+.choices__list--dropdown .choices__item--selectable.is-highlighted,
+.choices__list[aria-expanded] .choices__item--selectable.is-highlighted {
     background-color: hsl(var(--primary));
     color: hsl(var(--primary-foreground));
+}
+
+/* Select-one search input — CDN uses .choices[data-type*=select-one] .choices__input */
+.choices[data-type*="select-one"] .choices__input {
+    background-color: hsl(var(--input));
+    color: hsl(var(--foreground));
+    border-bottom: 1px solid hsl(var(--border));
 }
 
 .choices__input {
