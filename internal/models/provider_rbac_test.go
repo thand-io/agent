@@ -213,6 +213,28 @@ func TestExpandPermissionsWildcard(t *testing.T) {
 			pattern: "Microsoft.Compute/[invalid",
 			wantErr: true,
 		},
+		// ── Azure leading-wildcard (*/suffix) ───────────────────────────────
+		{
+			name:    "azure: */read matches all read ops across namespaces",
+			perms:   azureComputePerms,
+			pattern: "*/read",
+			wantMatches: []string{
+				"Microsoft.Compute/availabilitySets/read",
+				"Microsoft.Compute/availabilitySets/vmSizes/read",
+				"Microsoft.Compute/disks/read",
+				"Microsoft.Compute/virtualMachines/read",
+			},
+		},
+		{
+			name:    "azure: */write matches all write ops",
+			perms:   azureComputePerms,
+			pattern: "*/write",
+			wantMatches: []string{
+				"Microsoft.Compute/availabilitySets/write",
+				"Microsoft.Compute/disks/write",
+				"Microsoft.Compute/virtualMachines/write",
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -329,6 +351,12 @@ func TestValidatePermissions(t *testing.T) {
 			perms:      azurePerms,
 			statements: stmtOps("Microsoft.Fake/fake/read"),
 			wantErrMsg: "the requested permission: Microsoft.Fake/fake/read was not found",
+		},
+		{
+			name:       "azure: */read condensed back to wildcard (supportsWildcards=true)",
+			perms:      azurePerms,
+			statements: stmtOps("*/read"),
+			wantOps:    []string{"*/read"},
 		},
 		// ── AWS ──────────────────────────────────────────────────────────────
 		{

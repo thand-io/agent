@@ -558,6 +558,20 @@ func expandPermissionsWildcard(providerPermissions []SearchResult[ProviderPermis
 
 	expandedPermissions := []string{}
 
+	// Special case: "*/suffix" (e.g. "*/read", "*/write") should match any permission
+	// ending with /suffix at any path depth. Go's path.Match treats * as a single-segment
+	// wildcard (never crosses /), but Azure RBAC uses "*/read" to mean all read actions
+	// across all providers regardless of namespace depth.
+	if strings.HasPrefix(permission, "*/") && !strings.Contains(permission[2:], "*") {
+		suffix := permission[1:] // e.g. "/read"
+		for _, providerPerm := range providerPermissions {
+			if strings.HasSuffix(providerPerm.Result.Name, suffix) {
+				expandedPermissions = append(expandedPermissions, providerPerm.Result.Name)
+			}
+		}
+		return expandedPermissions, nil
+	}
+
 	for _, providerPerm := range providerPermissions {
 		matched, err := path.Match(permission, providerPerm.Result.Name)
 		if err != nil {
@@ -668,15 +682,27 @@ func condenseToOriginalWildcards(operations []string, originalWildcards []string
 	for _, wildcard := range originalWildcards {
 		// Collect every individual permission that this wildcard covers.
 		var covered []string
-		for op := range opSet {
-			matched, err := path.Match(wildcard, op)
-			if err != nil {
-				continue
+
+		// Special case: "*/suffix" uses suffix matching to mirror expandPermissionsWildcard.
+		if strings.HasPrefix(wildcard, "*/") && !strings.Contains(wildcard[2:], "*") {
+			suffix := wildcard[1:]
+			for op := range opSet {
+				if strings.HasSuffix(op, suffix) {
+					covered = append(covered, op)
+				}
 			}
-			if matched {
-				covered = append(covered, op)
+		} else {
+			for op := range opSet {
+				matched, err := path.Match(wildcard, op)
+				if err != nil {
+					continue
+				}
+				if matched {
+					covered = append(covered, op)
+				}
 			}
 		}
+
 		if len(covered) > 0 {
 			// Remove the individual permissions and add back the wildcard.
 			for _, op := range covered {
