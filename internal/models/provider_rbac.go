@@ -561,8 +561,9 @@ func expandPermissionsWildcard(providerPermissions []SearchResult[ProviderPermis
 	// Special case: "*/suffix" (e.g. "*/read", "*/write") should match any permission
 	// ending with /suffix at any path depth. Go's path.Match treats * as a single-segment
 	// wildcard (never crosses /), but Azure RBAC uses "*/read" to mean all read actions
-	// across all providers regardless of namespace depth.
-	if strings.HasPrefix(permission, "*/") && !strings.Contains(permission[2:], "*") {
+	// across all providers regardless of namespace depth. Only treat this as a fast-path
+	// when the suffix is a plain string without additional glob metacharacters.
+	if strings.HasPrefix(permission, "*/") && !strings.ContainsAny(permission[2:], `*?[]\`) {
 		suffix := permission[1:] // e.g. "/read"
 		for _, providerPerm := range providerPermissions {
 			if strings.HasSuffix(providerPerm.Result.Name, suffix) {
@@ -684,7 +685,8 @@ func condenseToOriginalWildcards(operations []string, originalWildcards []string
 		var covered []string
 
 		// Special case: "*/suffix" uses suffix matching to mirror expandPermissionsWildcard.
-		if strings.HasPrefix(wildcard, "*/") && !strings.Contains(wildcard[2:], "*") {
+		// Only activate for plain suffixes (no additional glob metacharacters).
+		if strings.HasPrefix(wildcard, "*/") && !strings.ContainsAny(wildcard[2:], `*?[]\`) {
 			suffix := wildcard[1:]
 			for op := range opSet {
 				if strings.HasSuffix(op, suffix) {
