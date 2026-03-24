@@ -15,6 +15,30 @@ import (
 
 const PrincipalIdentifierMetadataKey = "principal_id"
 const RoleDefinitionIdentifierMetadataKey = "role_definition_id"
+const BuiltInRoleDefinitionIdsMetadataKey = "built_in_role_definition_ids"
+
+// extractStringSlice safely extracts a []string from a map[string]any value.
+// After JSON round-trip through Temporal, []string is deserialized as []interface{},
+// so both types are handled.
+func extractStringSlice(m map[string]any, key string) []string {
+	v, ok := m[key]
+	if !ok || v == nil {
+		return nil
+	}
+	switch val := v.(type) {
+	case []string:
+		return val
+	case []interface{}:
+		result := make([]string, 0, len(val))
+		for _, item := range val {
+			if s, ok := item.(string); ok {
+				result = append(result, s)
+			}
+		}
+		return result
+	}
+	return nil
+}
 
 // Authorize grants access for a user to a role.
 //
@@ -69,12 +93,26 @@ func (p *azureProvider) AuthorizeRole(
 		return nil, fmt.Errorf("failed to create role assignment: %w", err)
 	}
 
+	// Assign inherited built-in Azure roles (e.g. "Reader" from role.Inherits)
+	builtInRoleDefIDs := make([]string, 0, len(role.Inherits))
+	for _, inheritedRoleName := range role.Inherits {
+		builtInDef, err := p.getRoleDefinition(localCtx, inheritedRoleName)
+		if err != nil {
+			return nil, fmt.Errorf("inherited Azure role '%s' not found: %w", inheritedRoleName, err)
+		}
+		if _, err = p.createRoleAssignment(localCtx, user, *builtInDef.ID); err != nil {
+			return nil, fmt.Errorf("failed to assign inherited role '%s': %w", inheritedRoleName, err)
+		}
+		builtInRoleDefIDs = append(builtInRoleDefIDs, *builtInDef.ID)
+	}
+
 	return &models.AuthorizeRoleResponse{
 		UserId: user.Email,
 		Roles:  []string{roleName},
 		Metadata: map[string]any{
 			PrincipalIdentifierMetadataKey:      principalID,
 			RoleDefinitionIdentifierMetadataKey: *existingRole.ID,
+			BuiltInRoleDefinitionIdsMetadataKey: builtInRoleDefIDs,
 		},
 	}, nil
 }
@@ -136,6 +174,14 @@ func (p *azureProvider) RevokeRole(
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to delete role assignment: %w", err)
+		}
+
+		// Revoke inherited built-in role assignments
+		builtInDefIDs := extractStringSlice(req.AuthorizeRoleResponse.Metadata, BuiltInRoleDefinitionIdsMetadataKey)
+		for _, builtInDefID := range builtInDefIDs {
+			if err := p.deleteRoleAssignment(localCtx, user, builtInDefID, principalID); err != nil {
+				return nil, fmt.Errorf("failed to revoke inherited role assignment '%s': %w", builtInDefID, err)
+			}
 		}
 
 	} else {
@@ -210,12 +256,28 @@ func (p *azureProvider) authorizeRoleTemporal(
 		return nil, fmt.Errorf("CreateRoleAssignment activity failed: %w", err)
 	}
 
+	// Step 3 — Assign inherited built-in Azure roles (e.g. "Reader" from role.Inherits)
+	var builtInResp AssignBuiltInRolesResponse
+	if len(role.Inherits) > 0 {
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(identifier, AssignBuiltInRolesActivityName),
+			&AssignBuiltInRolesRequest{
+				User:      user,
+				RoleNames: role.Inherits,
+			},
+		).Get(wfCtx, &builtInResp); err != nil {
+			return nil, fmt.Errorf("AssignBuiltInRoles activity failed: %w", err)
+		}
+	}
+
 	return &models.AuthorizeRoleResponse{
 		UserId: user.Email,
 		Roles:  []string{roleName},
 		Metadata: map[string]any{
 			PrincipalIdentifierMetadataKey:      assignResp.PrincipalID,
 			RoleDefinitionIdentifierMetadataKey: roleDefResp.RoleDefinitionID,
+			BuiltInRoleDefinitionIdsMetadataKey: builtInResp.RoleDefinitionIDs,
 		},
 	}, nil
 }
@@ -287,7 +349,23 @@ func (p *azureProvider) revokeRoleTemporal(
 		return nil, fmt.Errorf("DeleteRoleAssignment activity failed: %w", err)
 	}
 
-	// Step 3 — For composite roles, delete the role definition.
+	// Step 3 — Revoke inherited built-in role assignments (if any were stored)
+	builtInDefIDs := extractStringSlice(req.AuthorizeRoleResponse.Metadata, BuiltInRoleDefinitionIdsMetadataKey)
+	if len(builtInDefIDs) > 0 {
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(identifier, RevokeBuiltInRolesActivityName),
+			&RevokeBuiltInRolesRequest{
+				User:              user,
+				PrincipalID:       principalID,
+				RoleDefinitionIDs: builtInDefIDs,
+			},
+		).Get(wfCtx, nil); err != nil {
+			return nil, fmt.Errorf("RevokeBuiltInRoles activity failed: %w", err)
+		}
+	}
+
+	// Step 4 — For composite roles, delete the role definition.
 	if isComposite {
 		if err := workflow.ExecuteActivity(
 			wfCtx,

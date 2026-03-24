@@ -58,6 +58,21 @@ type DeleteRoleDefinitionRequest struct {
 	RoleDefinitionID string `json:"role_definition_id"`
 }
 
+type AssignBuiltInRolesRequest struct {
+	User      *models.User `json:"user"`
+	RoleNames []string     `json:"role_names"`
+}
+
+type AssignBuiltInRolesResponse struct {
+	RoleDefinitionIDs []string `json:"role_definition_ids"`
+}
+
+type RevokeBuiltInRolesRequest struct {
+	User              *models.User `json:"user"`
+	PrincipalID       string       `json:"principal_id"`
+	RoleDefinitionIDs []string     `json:"role_definition_ids"`
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Activity implementations
 // ─────────────────────────────────────────────────────────────────────────────
@@ -162,6 +177,63 @@ func (a *azureProviderActivities) DeleteRoleDefinition(
 				Cause:          err,
 			},
 		)
+	}
+	return nil
+}
+
+// AssignBuiltInRoles looks up each inherited Azure role by name and creates a
+// direct role assignment for the user against each one. Returns the list of
+// role definition IDs that were assigned, which must be stored in
+// AuthorizeRoleResponse.Metadata for later revocation.
+func (a *azureProviderActivities) AssignBuiltInRoles(
+	ctx context.Context,
+	req *AssignBuiltInRolesRequest,
+) (*AssignBuiltInRolesResponse, error) {
+	roleDefinitionIDs := make([]string, 0, len(req.RoleNames))
+	for _, roleName := range req.RoleNames {
+		roleDef, err := a.provider.getRoleDefinition(ctx, roleName)
+		if err != nil {
+			return nil, temporal.NewApplicationErrorWithOptions(
+				fmt.Sprintf("inherited Azure role '%s' not found: %v", roleName, err),
+				"AzureBuiltInRoleNotFoundError",
+				temporal.ApplicationErrorOptions{
+					NextRetryDelay: 3 * time.Second,
+					Cause:          err,
+				},
+			)
+		}
+		if _, err = a.provider.createRoleAssignment(ctx, req.User, *roleDef.ID); err != nil {
+			return nil, temporal.NewApplicationErrorWithOptions(
+				fmt.Sprintf("failed to assign inherited role '%s' to user '%s': %v", roleName, req.User.Email, err),
+				"AzureBuiltInRoleAssignmentError",
+				temporal.ApplicationErrorOptions{
+					NextRetryDelay: 3 * time.Second,
+					Cause:          err,
+				},
+			)
+		}
+		roleDefinitionIDs = append(roleDefinitionIDs, *roleDef.ID)
+	}
+	return &AssignBuiltInRolesResponse{RoleDefinitionIDs: roleDefinitionIDs}, nil
+}
+
+// RevokeBuiltInRoles removes the direct role assignments for each inherited
+// built-in role that was assigned during authorization.
+func (a *azureProviderActivities) RevokeBuiltInRoles(
+	ctx context.Context,
+	req *RevokeBuiltInRolesRequest,
+) error {
+	for _, roleDefID := range req.RoleDefinitionIDs {
+		if err := a.provider.deleteRoleAssignment(ctx, req.User, roleDefID, req.PrincipalID); err != nil {
+			return temporal.NewApplicationErrorWithOptions(
+				fmt.Sprintf("failed to delete built-in role assignment '%s' for user '%s': %v", roleDefID, req.User.Email, err),
+				"AzureBuiltInRoleRevocationError",
+				temporal.ApplicationErrorOptions{
+					NextRetryDelay: 3 * time.Second,
+					Cause:          err,
+				},
+			)
+		}
 	}
 	return nil
 }
