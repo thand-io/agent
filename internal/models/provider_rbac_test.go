@@ -235,6 +235,84 @@ func TestExpandPermissionsWildcard(t *testing.T) {
 				"Microsoft.Compute/virtualMachines/write",
 			},
 		},
+		{
+			name:    "azure: */action matches deep paths like virtualMachines/start/action",
+			perms:   azureComputePerms,
+			pattern: "*/action",
+			wantMatches: []string{
+				"Microsoft.Compute/virtualMachines/start/action",
+			},
+		},
+		{
+			name:    "azure: */delete matches all delete ops",
+			perms:   azureComputePerms,
+			pattern: "*/delete",
+			wantMatches: []string{
+				"Microsoft.Compute/availabilitySets/delete",
+				"Microsoft.Compute/virtualMachines/delete",
+			},
+		},
+		// ── */suffix guard: metacharacters bypass fast-path ─────────────────
+		{
+			name:    "azure: */?read falls through to path.Match (valid glob, matches nothing)",
+			perms:   azureComputePerms,
+			pattern: "*/?read",
+			// ? is a glob metacharacter, so this does NOT use the suffix fast-path.
+			// path.Match treats * as single-segment so it won't cross /, matching nothing.
+			wantMatches: []string{},
+		},
+		{
+			name:    "azure: */[invalid falls through to path.Match and errors",
+			perms:   azureComputePerms,
+			pattern: "*/[invalid",
+			wantErr: true,
+		},
+		{
+			name:        "azure: */suffix with no matching perms returns empty",
+			perms:       azureComputePerms,
+			pattern:     "*/nonexistent",
+			wantMatches: []string{},
+		},
+		// ── Multi-segment suffix ────────────────────────────────────────────
+		{
+			name:    "azure: */vmSizes/read matches multi-segment suffix",
+			perms:   azureComputePerms,
+			pattern: "*/vmSizes/read",
+			wantMatches: []string{
+				"Microsoft.Compute/availabilitySets/vmSizes/read",
+			},
+		},
+		{
+			name:    "azure: */start/action matches multi-segment suffix",
+			perms:   azureComputePerms,
+			pattern: "*/start/action",
+			wantMatches: []string{
+				"Microsoft.Compute/virtualMachines/start/action",
+			},
+		},
+		// ── Case sensitivity ──────────────────────────────────────────────
+		{
+			name: "azure: */action is case-sensitive (does not match /Action)",
+			perms: makePerms(
+				"Microsoft.Authorization/elevateAccess/Action",
+				"Microsoft.Compute/virtualMachines/start/action",
+			),
+			pattern: "*/action",
+			wantMatches: []string{
+				"Microsoft.Compute/virtualMachines/start/action",
+			},
+		},
+		{
+			name: "azure: */Action only matches capital-A Action",
+			perms: makePerms(
+				"Microsoft.Authorization/elevateAccess/Action",
+				"Microsoft.Compute/virtualMachines/start/action",
+			),
+			pattern: "*/Action",
+			wantMatches: []string{
+				"Microsoft.Authorization/elevateAccess/Action",
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -357,6 +435,38 @@ func TestValidatePermissions(t *testing.T) {
 			perms:      azurePerms,
 			statements: stmtOps("*/read"),
 			wantOps:    []string{"*/read"},
+		},
+		{
+			name:       "azure: */[invalid falls through and returns error",
+			perms:      azurePerms,
+			statements: stmtOps("*/[invalid"),
+			wantErrMsg: "invalid wildcard pattern",
+		},
+		{
+			name:       "azure: */nonexistent matches nothing and returns error",
+			perms:      azurePerms,
+			statements: stmtOps("*/nonexistent"),
+			wantErrMsg: "matched no permissions",
+		},
+		{
+			name:  "azure: */read combined with exact perm round-trips correctly",
+			perms: azurePerms,
+			statements: stmtOps(
+				"*/read",
+				"Microsoft.Compute/availabilitySets/write",
+			),
+			wantOps: []string{
+				"*/read",
+				"Microsoft.Compute/availabilitySets/write",
+			},
+		},
+		{
+			name:  "azure: */action is case-sensitive through full validate pipeline",
+			perms: azurePerms,
+			// azurePerms has elevateAccess/Action (capital A) and virtualMachines/start/action
+			statements: stmtOps("*/action"),
+			// Should only match lowercase 'action'
+			wantOps: []string{"*/action"},
 		},
 		// ── AWS ──────────────────────────────────────────────────────────────
 		{
@@ -552,6 +662,78 @@ func TestCondenseToOriginalWildcards(t *testing.T) {
 			wildcards: []string{"ec2:*"},
 			want:      []string{},
 		},
+		// ── */suffix in condense ─────────────────────────────────────────────
+		{
+			name: "*/read condenses all read ops across namespaces",
+			ops: []string{
+				"Microsoft.Compute/availabilitySets/read",
+				"Microsoft.Compute/disks/read",
+				"Microsoft.Compute/virtualMachines/read",
+				"Microsoft.Storage/storageAccounts/read",
+			},
+			wildcards: []string{"*/read"},
+			want:      []string{"*/read"},
+		},
+		{
+			name: "*/read condenses reads but leaves non-reads alone",
+			ops: []string{
+				"Microsoft.Compute/availabilitySets/read",
+				"Microsoft.Compute/availabilitySets/write",
+				"Microsoft.Compute/disks/read",
+			},
+			wildcards: []string{"*/read"},
+			want:      []string{"*/read", "Microsoft.Compute/availabilitySets/write"},
+		},
+		{
+			name: "*/action condenses deep-path permissions",
+			ops: []string{
+				"Microsoft.Compute/virtualMachines/start/action",
+				"Microsoft.Compute/virtualMachines/restart/action",
+				"Microsoft.Compute/disks/read",
+			},
+			wildcards: []string{"*/action"},
+			want:      []string{"*/action", "Microsoft.Compute/disks/read"},
+		},
+		{
+			name: "*/[invalid falls through to path.Match (invalid glob skipped)",
+			ops: []string{
+				"Microsoft.Compute/disks/read",
+			},
+			wildcards: []string{"*/[invalid"},
+			// path.Match returns error for bad pattern; condense skips it gracefully
+			want: []string{"Microsoft.Compute/disks/read"},
+		},
+		{
+			name: "*/read is case-sensitive in condense (does not absorb /Read)",
+			ops: []string{
+				"Microsoft.Compute/availabilitySets/read",
+				"Microsoft.Compute/disks/Read",
+			},
+			wildcards: []string{"*/read"},
+			want:      []string{"*/read", "Microsoft.Compute/disks/Read"},
+		},
+		{
+			name: "wildcard already present in opSet is idempotent",
+			ops: []string{
+				"Microsoft.Compute/availabilitySets/read",
+				"Microsoft.Compute/disks/read",
+				"*/read",
+			},
+			wildcards: []string{"*/read"},
+			// */read itself matches HasSuffix("/read"), so it gets consumed and re-added.
+			// The two concrete reads also get consumed. Net result: just the wildcard.
+			want: []string{"*/read"},
+		},
+		{
+			name: "*/vmSizes/read condenses multi-segment suffix",
+			ops: []string{
+				"Microsoft.Compute/availabilitySets/vmSizes/read",
+				"Microsoft.Network/loadBalancers/vmSizes/read",
+				"Microsoft.Compute/disks/write",
+			},
+			wildcards: []string{"*/vmSizes/read"},
+			want:      []string{"*/vmSizes/read", "Microsoft.Compute/disks/write"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -578,36 +760,60 @@ func TestValidatePermissionsRoundTrip(t *testing.T) {
 		"rds:DescribeDBInstances",
 	)
 
+	azurePerms := makePerms(
+		"Microsoft.Compute/availabilitySets/read",
+		"Microsoft.Compute/availabilitySets/write",
+		"Microsoft.Compute/virtualMachines/read",
+		"Microsoft.Compute/disks/read",
+	)
+
 	tests := []struct {
 		name    string
+		perms   []SearchResult[ProviderPermission]
 		input   []string
 		wantOps []string
 	}{
 		{
 			name:    "wildcard + exact: ec2:* and s3:GetObject",
+			perms:   allPerms,
 			input:   []string{"ec2:*", "s3:GetObject"},
 			wantOps: []string{"ec2:*", "s3:GetObject"},
 		},
 		{
 			name:    "multiple wildcards: ec2:* and s3:*",
+			perms:   allPerms,
 			input:   []string{"ec2:*", "s3:*"},
 			wantOps: []string{"ec2:*", "s3:*"},
 		},
 		{
 			name:    "single wildcard with suffix: ec2:Describe*",
+			perms:   allPerms,
 			input:   []string{"ec2:Describe*"},
 			wantOps: []string{"ec2:Describe*"},
 		},
 		{
 			name:    "all perms via top-level wildcard pattern",
+			perms:   allPerms,
 			input:   []string{"*"},
 			wantOps: []string{"*"},
+		},
+		{
+			name:    "azure: */read round-trips with condensation",
+			perms:   azurePerms,
+			input:   []string{"*/read"},
+			wantOps: []string{"*/read"},
+		},
+		{
+			name:    "azure: */read + exact perm round-trips together",
+			perms:   azurePerms,
+			input:   []string{"*/read", "Microsoft.Compute/availabilitySets/write"},
+			wantOps: []string{"*/read", "Microsoft.Compute/availabilitySets/write"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := validatePermissions(allPerms, stmtOps(tt.input...), true)
+			got, err := validatePermissions(tt.perms, stmtOps(tt.input...), true)
 			require.NoError(t, err)
 			gotOps := ops(got)
 			sort.Strings(tt.wantOps)
@@ -685,6 +891,21 @@ func TestValidatePermissionsNoWildcardSupport(t *testing.T) {
 			perms:   gcpPerms,
 			input:   []string{"compute.instances.get"},
 			wantOps: []string{"compute.instances.get"},
+		},
+		{
+			name: "azure: */read stays expanded when supportsWildcards=false",
+			perms: makePerms(
+				"Microsoft.Compute/availabilitySets/read",
+				"Microsoft.Compute/virtualMachines/read",
+				"Microsoft.Compute/disks/read",
+				"Microsoft.Compute/availabilitySets/write",
+			),
+			input: []string{"*/read"},
+			wantOps: []string{
+				"Microsoft.Compute/availabilitySets/read",
+				"Microsoft.Compute/disks/read",
+				"Microsoft.Compute/virtualMachines/read",
+			},
 		},
 	}
 
