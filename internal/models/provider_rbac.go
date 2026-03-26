@@ -558,6 +558,19 @@ func expandPermissionsWildcard(providerPermissions []SearchResult[ProviderPermis
 
 	expandedPermissions := []string{}
 
+	// Special case: "*/suffix" (e.g. "*/read", "*/write") should match any permission
+	// ending with /suffix at any path depth. Go's path.Match treats * as a single-segment
+	// wildcard (never crosses /), but Azure RBAC uses "*/read" to mean all read actions
+	// across all providers regardless of namespace depth.
+	if suffix, ok := plainSuffixWildcard(permission); ok {
+		for _, providerPerm := range providerPermissions {
+			if strings.HasSuffix(providerPerm.Result.Name, suffix) {
+				expandedPermissions = append(expandedPermissions, providerPerm.Result.Name)
+			}
+		}
+		return expandedPermissions, nil
+	}
+
 	for _, providerPerm := range providerPermissions {
 		matched, err := path.Match(permission, providerPerm.Result.Name)
 		if err != nil {
@@ -648,12 +661,23 @@ func ExpandWildcardPermissionsForProvider(provider Provider, role *Role) {
 	role.Permissions.Deny = expand(role.Permissions.Deny)
 }
 
+// plainSuffixWildcard reports whether pattern is a "*/suffix" wildcard with a
+// plain suffix (no additional glob metacharacters). If so, it returns the suffix
+// including the leading "/" (e.g. "/read") and true; otherwise returns "", false.
+func plainSuffixWildcard(pattern string) (string, bool) {
+	if strings.HasPrefix(pattern, "*/") && !strings.ContainsAny(pattern[2:], `*?[]\`) {
+		return pattern[1:], true
+	}
+	return "", false
+}
+
 // condenseToOriginalWildcards replaces individually-expanded permissions with
-// their original wildcard patterns.  Any permission in operations that matches
-// an original wildcard (via path.Match) is removed and the wildcard is added
-// back in its place — even if some expansions were removed during validation.
-// It only restores wildcards that appeared in the original input; it never
-// discovers new wildcard groupings.
+// their original wildcard patterns. Any permission in operations that matches
+// an original wildcard is removed and the wildcard is added back in its place —
+// even if some expansions were removed during validation. Matching uses
+// path.Match for most patterns and strings.HasSuffix for "*/suffix" wildcards
+// (see plainSuffixWildcard). It only restores wildcards that appeared in the
+// original input; it never discovers new wildcard groupings.
 func condenseToOriginalWildcards(operations []string, originalWildcards []string) []string {
 	if len(originalWildcards) == 0 {
 		return operations
@@ -668,15 +692,26 @@ func condenseToOriginalWildcards(operations []string, originalWildcards []string
 	for _, wildcard := range originalWildcards {
 		// Collect every individual permission that this wildcard covers.
 		var covered []string
-		for op := range opSet {
-			matched, err := path.Match(wildcard, op)
-			if err != nil {
-				continue
+
+		if suffix, ok := plainSuffixWildcard(wildcard); ok {
+			// "*/suffix" patterns use suffix matching to mirror expandPermissionsWildcard.
+			for op := range opSet {
+				if strings.HasSuffix(op, suffix) {
+					covered = append(covered, op)
+				}
 			}
-			if matched {
-				covered = append(covered, op)
+		} else {
+			for op := range opSet {
+				matched, err := path.Match(wildcard, op)
+				if err != nil {
+					continue
+				}
+				if matched {
+					covered = append(covered, op)
+				}
 			}
 		}
+
 		if len(covered) > 0 {
 			// Remove the individual permissions and add back the wildcard.
 			for _, op := range covered {

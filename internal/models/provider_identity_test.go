@@ -375,9 +375,6 @@ func TestBaseProvider_ListIdentities_Search(t *testing.T) {
 
 	p.SetIdentities([]models.Identity{identity})
 
-	// Wait for index to be built
-	time.Sleep(500 * time.Millisecond)
-
 	ctx := context.Background()
 	// Simulate what identities.go does: append *
 	searchReq := &models.SearchRequest{
@@ -385,7 +382,20 @@ func TestBaseProvider_ListIdentities_Search(t *testing.T) {
 		Terms: []string{userEmail},
 	}
 
-	results, err := p.ListIdentities(ctx, searchReq)
+	// Poll until the async Bleve index build completes or we time out.
+	// The Bleve search path sets SearchResult.ID; the fallback filter path does
+	// not, so we wait until results[0].ID is populated to confirm the index is ready.
+	var results []models.SearchResult[models.Identity]
+	var err error
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		results, err = p.ListIdentities(ctx, searchReq)
+		if err == nil && len(results) > 0 && results[0].ID != "" {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
 	assert.NoError(t, err)
 	assert.NotEmpty(t, results, "Should find identity by email")
 
