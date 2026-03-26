@@ -23,6 +23,8 @@ const (
 	GetRoleDefinitionActivityName         = "GetRoleDefinition"
 	DeleteRoleAssignmentActivityName      = "DeleteRoleAssignment"
 	DeleteRoleDefinitionActivityName      = "DeleteRoleDefinition"
+	AssignBuiltInRolesActivityName        = "AssignBuiltInRoles"
+	RevokeBuiltInRolesActivityName        = "RevokeBuiltInRoles"
 )
 
 // UseLatestVersion is the version string passed to Azure Key Vault APIs when the
