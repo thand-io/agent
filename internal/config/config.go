@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/user"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
@@ -29,6 +28,8 @@ import (
 
 var ErrNoActiveLoginSession = fmt.Errorf(
 	"you must login first. No valid session found to sync with login server")
+
+const configPathEnvVar = "THAND_CONFIG_PATH"
 
 func DefaultConfig() *Config {
 
@@ -111,9 +112,8 @@ func setupViperConfig(v *viper.Viper, configFile string) error {
 	v.AddConfigPath(".")
 	v.AddConfigPath("./config")
 	v.AddConfigPath("/etc/thand")
-	v.AddConfigPath("~/.config/thand")
 
-	if len(configFile) > 0 {
+	if configFile = resolveConfigFileOverride(configFile); len(configFile) > 0 {
 		v.SetConfigFile(configFile)
 	}
 
@@ -133,21 +133,23 @@ func setupViperConfig(v *viper.Viper, configFile string) error {
 	return nil
 }
 
+func resolveConfigFileOverride(configFile string) string {
+	configFile = strings.TrimSpace(configFile)
+	if len(configFile) > 0 {
+		return configFile
+	}
+
+	return strings.TrimSpace(os.Getenv(configPathEnvVar))
+}
+
 // setupHomeConfigPath adds the home directory config path if available
 func setupHomeConfigPath(v *viper.Viper) error {
-	home := os.Getenv("HOME")
-	if len(home) == 0 {
+	home, err := os.UserHomeDir()
+	if err != nil || len(home) == 0 {
 		return nil
 	}
 
-	// Get the user's home directory
-	usr, err := user.Current()
-	if err != nil {
-		logrus.Fatalf("Failed to get current user: %v", err)
-	}
-
-	// Expand the session manager path to use the actual home directory
-	sessionPath := filepath.Join(usr.HomeDir, ".config", "thand")
+	sessionPath := filepath.Join(home, ".config", "thand")
 	v.AddConfigPath(sessionPath)
 
 	// Check if the folder exists and create it if it does not exist

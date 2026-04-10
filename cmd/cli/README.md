@@ -21,7 +21,7 @@ thand request access --provider aws-prod --role admin --duration 4h --reason "Da
 
 All commands support these global flags:
 
-- `--config <path>` - Config file (default: `$HOME/.thand/config.yaml`)
+- `--config <path>` - Config file (default: `$HOME/.config/thand/config.yaml`)
 - `--login-server <url>` - Override default login server URL (e.g., `http://localhost:8080`)
 - `--verbose`, `-v` - Enable verbose output
 
@@ -214,7 +214,7 @@ Launches a guided wizard that walks through creating an access request with prop
 
 ## Configuration
 
-The agent uses a YAML configuration file located at `$HOME/.thand/config.yaml` by default. You can specify a different config file using the `--config` flag.
+The agent uses a YAML configuration file located at `$HOME/.config/thand/config.yaml` by default. You can specify a different config file using the `--config` flag.
 
 **Example configuration:**
 ```yaml
