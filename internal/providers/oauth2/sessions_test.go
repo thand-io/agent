@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/thand-io/agent/internal/models"
@@ -18,10 +19,16 @@ func TestCreateSessionOmitsOAuthTokens(t *testing.T) {
 		"name":           "Example User",
 		"email_verified": true,
 	})
+	var mu sync.Mutex
+	var unexpectedTokenPath string
 
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/token" {
-			t.Fatalf("unexpected token request path: %s", r.URL.Path)
+			mu.Lock()
+			unexpectedTokenPath = r.URL.Path
+			mu.Unlock()
+			http.Error(w, "unexpected token request path", http.StatusBadRequest)
+			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -61,6 +68,13 @@ func TestCreateSessionOmitsOAuthTokens(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("create session: %v", err)
+	}
+
+	mu.Lock()
+	gotUnexpectedTokenPath := unexpectedTokenPath
+	mu.Unlock()
+	if gotUnexpectedTokenPath != "" {
+		t.Fatalf("unexpected token request path: %s", gotUnexpectedTokenPath)
 	}
 
 	if session == nil {
