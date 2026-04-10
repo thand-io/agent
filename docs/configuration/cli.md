@@ -54,6 +54,8 @@ thand --verbose server
 
 ```
 
+`--config` takes precedence over `THAND_CONFIG_PATH`. `THAND_CONFIG_PATH` chooses the config file location, while other `THAND_*` environment variables override values loaded from that file.
+
 ---
 
 ## Main Command

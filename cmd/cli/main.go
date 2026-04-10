@@ -311,7 +311,7 @@ func init() {
 
 	// Add global flags
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output")
-	rootCmd.PersistentFlags().String("config", "", "Config file (default is $HOME/.thand/config.yaml)")
+	rootCmd.PersistentFlags().String("config", "", "Config file (default is $HOME/.config/thand/config.yaml)")
 	// Add the login-server flag
 	rootCmd.PersistentFlags().String("login-server", "", "Override the default login server URL (e.g., http://localhost:8080)")
 

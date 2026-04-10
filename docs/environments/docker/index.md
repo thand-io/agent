@@ -126,9 +126,10 @@ docker run -d \
   -p 8080:8080 \
   -v $(pwd)/thand-config:/app/config:ro \
   -e THAND_CONFIG_PATH=/app/config/config.yaml \
-  ghcr.io/thand-io/agent:latest \
-  ./thand server --config /app/config/config.yaml
+  ghcr.io/thand-io/agent:latest
 ```
+
+`THAND_CONFIG_PATH` selects the config file to load inside the container. Other `THAND_*` variables still override values from that file.
 
 ### Option 2: Environment Variables
 
@@ -425,4 +426,3 @@ docker run -d \
 - Set up [approval workflows](../../configuration/workflows)
 - Integrate with your existing authentication systems
 - Set up monitoring and alerting for production deployments
-
