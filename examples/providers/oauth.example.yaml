@@ -1,16 +1,16 @@
 version: "1.0"
 providers:
   oauth:
-    name: Oauth example
-    description: Oauth example provider
+    name: OAuth2 example
+    description: Generic OAuth2 / OIDC example provider
     provider: oauth2
     enabled: false
     config:
-      authority: https://accounts.google.com/o/oauth2
-      endpoints:
-        token: /token
-        auth: /auth
-      grant: client_credentials
-      client:
-        id: google_client_id
-        secret: google_client_secret
+      client_id: example_client_id
+      client_secret: example_client_secret
+      auth_url: https://auth.example.com/oauth2/authorize
+      token_url: https://auth.example.com/oauth2/token
+      scopes:
+        - openid
+        - profile
+        - email
