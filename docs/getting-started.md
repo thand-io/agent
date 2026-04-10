@@ -85,13 +85,9 @@ The binary will be available at `bin/agent`.
 Create a configuration file at `~/.config/thand/config.yaml`:
 
 ```yaml
-server:
-  url: "https://your-thand-server.com"
-  
-agent:
-  listen_port: 8080
-  session_timeout: "1h"
-  
+login:
+  endpoint: "https://your-login-server.com"
+
 logging:
   level: "info"
   format: "json"
@@ -102,8 +98,7 @@ logging:
 You can also configure the agent using environment variables:
 
 ```bash
-export THAND_SERVER_URL="https://your-thand-server.com"
-export THAND_AGENT_PORT="8080"
+export THAND_LOGIN_ENDPOINT="https://your-login-server.com"
 export THAND_LOGGING_LEVEL="info"
 ```
 
@@ -113,16 +108,16 @@ export THAND_LOGGING_LEVEL="info"
 
 ### 1. Authenticate
 
-Initialize your authentication with the Thand server:
+Initialize your authentication with the login server:
 
 ```bash
 thand login
 ```
 
-Or via a thand login server.
+Or override the configured login server for a single command.
 
 ```bash
-thand login --server http://localhost:9090
+thand login --login-server http://localhost:9090
 ```
 
 This will open your browser for authentication or provide a device code flow. Once authenticated, your session will be cached locally. You can view your current session with:
