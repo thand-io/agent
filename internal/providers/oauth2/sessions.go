@@ -99,16 +99,7 @@ func (p *oauth2Provider) CreateSession(ctx context.Context, authRequest *models.
 		}
 	}
 
-	idToken, _ := token.Extra("id_token").(string)
-
-	session := models.Session{
-		UUID:         uuid.New(),
-		User:         user,
-		Token:        idToken,
-		AccessToken:  token.AccessToken,
-		RefreshToken: token.RefreshToken,
-		Expiry:       token.Expiry,
-	}
+	session := buildAuthOnlySession(user, token)
 
 	// Log the identity information being added
 	// ONLY log in debug to avoid PII leakage
@@ -124,7 +115,24 @@ func (p *oauth2Provider) CreateSession(ctx context.Context, authRequest *models.
 		User:  user,
 	})
 
-	return &session, nil
+	return session, nil
+}
+
+func buildAuthOnlySession(user *models.User, token *oauth2.Token) *models.Session {
+	session := &models.Session{
+		UUID: uuid.New(),
+		User: user,
+	}
+
+	if token != nil {
+		session.Expiry = token.Expiry
+	}
+
+	// Generic oauth2 providers in this repo are used for browser authentication
+	// and identity discovery only. Persisting raw OAuth tokens in cookies can
+	// easily exceed browser size limits, while later generic oauth2 validation
+	// paths do not consume those token fields.
+	return session
 }
 
 // getUserInfoFromIDToken tries to extract user info from the ID token JWT claims.
