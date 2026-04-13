@@ -14,7 +14,8 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write  # needed to add/create labels
+  issues: write         # needed to create/update repo labels
+  pull-requests: write  # needed to add labels to PRs
 
 jobs:
   check-and-label:
