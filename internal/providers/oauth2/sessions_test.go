@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/thand-io/agent/internal/models"
+	"golang.org/x/oauth2"
 )
 
 func TestConfigSchemaValidate(t *testing.T) {
@@ -1191,6 +1192,24 @@ func TestCreateSessionRejectsUserInfoWithoutSubject(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "sub") {
 		t.Fatalf("expected missing sub error, got %v", err)
+	}
+}
+
+func TestGetUserInfoFromIDTokenRejectsMissingSubject(t *testing.T) {
+	token := &oauth2.Token{}
+	token = token.WithExtra(map[string]any{
+		"id_token": createTestIDToken(t, map[string]any{
+			"email": "missing-sub@example.com",
+			"name":  "Missing Subject",
+		}),
+	})
+
+	_, err := getUserInfoFromIDToken(token, "")
+	if err == nil {
+		t.Fatal("expected getUserInfoFromIDToken to fail when id_token is missing sub")
+	}
+	if !strings.Contains(err.Error(), "id_token missing sub") {
+		t.Fatalf("expected id_token missing sub error, got %v", err)
 	}
 }
 

@@ -171,7 +171,7 @@ func getUserInfoFromIDToken(token *oauth2.Token, usernameClaim string) (*models.
 		return nil, fmt.Errorf("failed to parse JWT claims: %w", err)
 	}
 
-	return userFromClaims(claims, usernameClaim)
+	return userFromClaims(claims, usernameClaim, "id_token")
 }
 
 // getUserInfoFromEndpoint calls the OIDC userinfo endpoint to get user details.
@@ -197,13 +197,13 @@ func getUserInfoFromEndpoint(ctx context.Context, userInfoURL string, accessToke
 		return nil, err
 	}
 
-	return userFromClaims(info, usernameClaim)
+	return userFromClaims(info, usernameClaim, "userinfo response")
 }
 
-func userFromClaims(claims map[string]interface{}, usernameClaim string) (*models.User, error) {
+func userFromClaims(claims map[string]interface{}, usernameClaim string, subjectSource string) (*models.User, error) {
 	sub, _ := claims["sub"].(string)
 	if sub == "" {
-		return nil, fmt.Errorf("userinfo response missing sub")
+		return nil, fmt.Errorf("%s missing sub", subjectSource)
 	}
 
 	email, _ := claims["email"].(string)

@@ -87,14 +87,15 @@ type GCPCredentials struct {
 
 // OAuth2Config represents common OAuth2 configuration
 type OAuth2Config struct {
-	ClientID     string   `json:"client_id" mapstructure:"client_id" validate:"required"`
-	ClientSecret string   `json:"client_secret" mapstructure:"client_secret" validate:"required" sensitive:"true"`
-	Scopes       []string `json:"scopes" mapstructure:"scopes"`
-	RedirectURL  string   `json:"redirect_url" mapstructure:"redirect_url" validate:"omitempty,url"`
-	Authority    string   `json:"authority" mapstructure:"authority" validate:"omitempty,url"`
-	AuthURL      string   `json:"auth_url" mapstructure:"auth_url" validate:"omitempty,url"`
-	TokenURL     string   `json:"token_url" mapstructure:"token_url" validate:"omitempty,url"`
-	UserInfoURL  string   `json:"userinfo_url" mapstructure:"userinfo_url" validate:"omitempty,url"`
+	ClientID      string   `json:"client_id" mapstructure:"client_id" validate:"required"`
+	ClientSecret  string   `json:"client_secret" mapstructure:"client_secret" validate:"required" sensitive:"true"`
+	Scopes        []string `json:"scopes" mapstructure:"scopes"`
+	RedirectURL   string   `json:"redirect_url" mapstructure:"redirect_url" validate:"omitempty,url"`
+	UsernameClaim string   `json:"username_claim" mapstructure:"username_claim"`
+	Authority     string   `json:"authority" mapstructure:"authority" validate:"omitempty,url"`
+	AuthURL       string   `json:"auth_url" mapstructure:"auth_url" validate:"omitempty,url"`
+	TokenURL      string   `json:"token_url" mapstructure:"token_url" validate:"omitempty,url"`
+	UserInfoURL   string   `json:"userinfo_url" mapstructure:"userinfo_url" validate:"omitempty,url"`
 }
 
 // SMTPConfig represents SMTP email configuration
