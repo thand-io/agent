@@ -14,7 +14,7 @@ on:
 
 permissions:
   contents: read
-  issues: write         # needed to create/update repo labels
+  # issues: write         # needed to create/update repo labels
   pull-requests: write  # needed to add labels to PRs
 
 jobs:
@@ -23,21 +23,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Ensure type labels exist in the repo
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-        run: |
-          # Create labels if they don't already exist.
-          # `gh label create` exits non-zero when the label already exists,
-          # so we suppress that with --force (update colour/description if changed).
-          gh label create "feat"     --color "0075ca" --description "New feature (minor version bump)"              --force --repo "$REPO"
-          gh label create "fix"      --color "e4e669" --description "Bug fix (patch version bump)"                  --force --repo "$REPO"
-          gh label create "refactor" --color "cfd3d7" --description "Code refactoring, no functional change"        --force --repo "$REPO"
-          gh label create "docs"     --color "0052cc" --description "Documentation only"                            --force --repo "$REPO"
-          gh label create "test"     --color "bfd4f2" --description "Adding or updating tests"                      --force --repo "$REPO"
-          gh label create "chore"    --color "d4c5f9" --description "Build, CI, dependency updates"                 --force --repo "$REPO"
-          gh label create "major"    --color "d93f0b" --description "Breaking change (major version bump)"          --force --repo "$REPO"
+      # - name: Ensure type labels exist in the repo
+      #   env:
+      #     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #     REPO: ${{ github.repository }}
+      #   run: |
+      #     # Create labels if they don't already exist.
+      #     # `gh label create` exits non-zero when the label already exists,
+      #     # so we suppress that with --force (update colour/description if changed).
+      #     gh label create "feat"     --color "0075ca" --description "New feature (minor version bump)"              --force --repo "$REPO"
+      #     gh label create "fix"      --color "e4e669" --description "Bug fix (patch version bump)"                  --force --repo "$REPO"
+      #     gh label create "refactor" --color "cfd3d7" --description "Code refactoring, no functional change"        --force --repo "$REPO"
+      #     gh label create "docs"     --color "0052cc" --description "Documentation only"                            --force --repo "$REPO"
+      #     gh label create "test"     --color "bfd4f2" --description "Adding or updating tests"                      --force --repo "$REPO"
+      #     gh label create "chore"    --color "d4c5f9" --description "Build, CI, dependency updates"                 --force --repo "$REPO"
+      #     gh label create "major"    --color "d93f0b" --description "Breaking change (major version bump)"          --force --repo "$REPO"
 
       - name: Check labels and apply from title / commits if missing
         id: label-check
