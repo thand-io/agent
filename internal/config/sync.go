@@ -58,26 +58,21 @@ func (c *Config) MergeConfiguration(config *RegistrationResponse) error {
 		return err
 	}
 
-	// Create a patch to see the differences between existing and new
-	incomingPatch, err := jsonpatch.CreateMergePatch(existingData, newData)
+	// Convert the merged configuration back to a struct so the in-memory
+	// config reflects the fully merged remote+local state rather than a
+	// sparse diff payload. Unmarshaling the sparse merge patch here would
+	// collapse omitted fields to zero values in typed structs.
+	var mergedConfig ConfigPatchRequest
+	err = json.Unmarshal(newData, &mergedConfig)
 
 	if err != nil {
-		logrus.WithError(err).Errorln("Failed to create merge patch for configuration diffing")
+		logrus.WithError(err).Errorln("Failed to unmarshal merged configuration")
 		return err
 	}
 
-	// Convert patches back to structs - these are the NEW changes from the remote
-	// server that we need to apply to our existing configuration
-	var incomingDiff ConfigPatchRequest
-	err = json.Unmarshal(incomingPatch, &incomingDiff)
-
-	if err != nil {
-		logrus.WithError(err).Errorln("Failed to unmarshal incoming patch")
-		return err
-	}
-
-	// Add these new changes to our existing configuration
-	err = c.applyPatch(incomingDiff)
+	// Apply the desired end state directly. applyPatch remains the helper for
+	// callers that actually have partial section diffs to merge locally first.
+	err = c.applyMergedConfig(mergedConfig)
 
 	if err != nil {
 		logrus.WithError(err).Errorln("Failed to apply incoming configuration patch")
@@ -139,6 +134,8 @@ func (c *Config) MergeConfiguration(config *RegistrationResponse) error {
 }
 
 func (c *Config) applyPatch(diff ConfigPatchRequest) error {
+	// applyPatch is the partial-patch helper: merge the incoming section diff
+	// with the current live section, then normalize and persist the result.
 	// Apply role changes
 	if diff.RoleConfig != nil {
 		err := c.updateRoles(diff.RoleConfig)
@@ -169,23 +166,149 @@ func (c *Config) applyPatch(diff ConfigPatchRequest) error {
 	return nil
 }
 
+// applyMergedConfig applies a fully merged server state. It normalizes each
+// definitions map and stores it directly without re-merging the same sections.
+func (c *Config) applyMergedConfig(config ConfigPatchRequest) error {
+	if config.RoleConfig != nil {
+		if err := c.storeRoleDefinitions(config.RoleConfig.Definitions); err != nil {
+			logrus.WithError(err).Errorln("Failed to apply merged role configuration")
+			return err
+		}
+	}
+
+	if config.WorkflowConfig != nil {
+		if err := c.storeWorkflowDefinitions(config.WorkflowConfig.Definitions); err != nil {
+			logrus.WithError(err).Errorln("Failed to apply merged workflow configuration")
+			return err
+		}
+	}
+
+	if config.ProviderConfig != nil {
+		if err := c.storeProviderDefinitions(config.ProviderConfig.Definitions); err != nil {
+			logrus.WithError(err).Errorln("Failed to apply merged provider configuration")
+			return err
+		}
+	}
+
+	return nil
+}
+
+func mergeConfigSection(current any, incoming any, out any) error {
+	currentData, err := json.Marshal(current)
+	if err != nil {
+		return err
+	}
+
+	incomingData, err := json.Marshal(incoming)
+	if err != nil {
+		return err
+	}
+
+	mergedData, err := jsonpatch.MergePatch(currentData, incomingData)
+	if err != nil {
+		return err
+	}
+
+	return json.Unmarshal(mergedData, out)
+}
+
 func (c *Config) updateRoles(roleConfig *RoleConfig) error {
-	_, err := c.ApplyRoles([]*models.RoleDefinitions{{
-		Roles: roleConfig.Definitions,
-	}})
-	return err
+	c.mu.RLock()
+	current := RoleConfig{
+		Path:        c.Roles.Path,
+		URL:         c.Roles.URL,
+		Vault:       c.Roles.Vault,
+		Definitions: c.Roles.Definitions,
+	}
+	c.mu.RUnlock()
+
+	var merged RoleConfig
+	if err := mergeConfigSection(current, *roleConfig, &merged); err != nil {
+		return err
+	}
+
+	return c.storeRoleDefinitions(merged.Definitions)
 }
 
 func (c *Config) updateWorkflows(workflowConfig *WorkflowConfig) error {
-	_, err := c.ApplyWorkflows([]*models.WorkflowDefinitions{{
-		Workflows: workflowConfig.Definitions,
-	}})
-	return err
+	c.mu.RLock()
+	current := WorkflowConfig{
+		Path:        c.Workflows.Path,
+		URL:         c.Workflows.URL,
+		Vault:       c.Workflows.Vault,
+		Plugins:     c.Workflows.Plugins,
+		Definitions: c.Workflows.Definitions,
+	}
+	c.mu.RUnlock()
+
+	var merged WorkflowConfig
+	if err := mergeConfigSection(current, *workflowConfig, &merged); err != nil {
+		return err
+	}
+
+	return c.storeWorkflowDefinitions(merged.Definitions)
 }
 
 func (c *Config) updateProviders(providerConfig *ProviderDefinitionsConfig) error {
-	_, err := c.ApplyProviders([]*models.ProviderDefinitions{{
-		Providers: providerConfig.Definitions,
+	c.mu.RLock()
+	current := ProviderDefinitionsConfig{
+		Path:        c.Providers.Path,
+		URL:         c.Providers.URL,
+		Vault:       c.Providers.Vault,
+		Plugins:     c.Providers.Plugins,
+		Definitions: c.Providers.Definitions,
+	}
+	c.mu.RUnlock()
+
+	var merged ProviderDefinitionsConfig
+	if err := mergeConfigSection(current, *providerConfig, &merged); err != nil {
+		return err
+	}
+
+	return c.storeProviderDefinitions(merged.Definitions)
+}
+
+func (c *Config) storeRoleDefinitions(definitions map[string]models.Role) error {
+	defs, err := c.ApplyRoles([]*models.RoleDefinitions{{
+		Roles: definitions,
 	}})
-	return err
+	if err != nil {
+		return err
+	}
+
+	c.mu.Lock()
+	c.Roles.Definitions = defs
+	c.mu.Unlock()
+
+	return nil
+}
+
+func (c *Config) storeWorkflowDefinitions(definitions map[string]models.Workflow) error {
+	defs, err := c.ApplyWorkflows([]*models.WorkflowDefinitions{{
+		Workflows: definitions,
+	}})
+	if err != nil {
+		return err
+	}
+
+	c.mu.Lock()
+	c.Workflows.Definitions = defs
+	c.mu.Unlock()
+
+	return nil
+}
+
+func (c *Config) storeProviderDefinitions(definitions map[string]models.ProviderConfig) error {
+	defs, err := c.ApplyProviders([]*models.ProviderDefinitions{{
+		Providers: definitions,
+	}})
+	if err != nil {
+		return err
+	}
+
+	c.mu.Lock()
+	c.Providers.Definitions = defs
+	c.mu.Unlock()
+
+	return nil
 }
