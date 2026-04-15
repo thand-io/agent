@@ -10,6 +10,7 @@ import (
 	"time"
 
 	jsonpatch "github.com/evanphx/json-patch"
+	"github.com/hashicorp/go-version"
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -128,6 +129,16 @@ func makeTestWorkflow(name, description string) models.Workflow {
 	}
 }
 
+func makeNormalizedRole(name, description string) models.Role {
+	return models.Role{
+		Version:     version.Must(version.NewVersion("1.0")),
+		Identifier:  name,
+		Name:        name,
+		Description: description,
+		Enabled:     true,
+	}
+}
+
 func makeTestProvider(name, description string) models.ProviderConfig {
 	return models.ProviderConfig{
 		Name:        name,
@@ -135,6 +146,16 @@ func makeTestProvider(name, description string) models.ProviderConfig {
 		Provider:    "mock",
 		Enabled:     true,
 	}
+}
+
+func makeTestProviderWithConfig(name, description string, config map[string]any) models.ProviderConfig {
+	provider := makeTestProvider(name, description)
+	basicConfig := models.BasicConfig{}
+	for key, value := range config {
+		basicConfig[key] = value
+	}
+	provider.Config = &basicConfig
+	return provider
 }
 
 // waitForPatch waits for a single PATCH call on the channel, or times out.
@@ -330,7 +351,7 @@ func TestMergeConfiguration_IdenticalConfigs(t *testing.T) {
 	server, patchCh := newSyncTestServer(t)
 
 	roles := map[string]models.Role{
-		"viewer": {Name: "viewer", Description: "Read-only", Enabled: true},
+		"viewer": makeNormalizedRole("viewer", "Read-only"),
 	}
 
 	config := newSyncTestConfig(t, roles, nil, nil, server.URL)
@@ -340,8 +361,37 @@ func TestMergeConfiguration_IdenticalConfigs(t *testing.T) {
 
 	err := config.MergeConfiguration(reg)
 	require.NoError(t, err)
+	assert.Equal(t, uint64(0), config.configGeneration, "identical sync should not advance the generation")
 
 	// The outgoing goroutine still fires (with an empty or no-op patch)
+	_, ok := waitForPatch(patchCh, 5*time.Second)
+	require.True(t, ok, "expected outgoing PATCH call")
+}
+
+func TestMergeConfiguration_MetadataOnlyRoleChangesAreIgnored(t *testing.T) {
+	server, patchCh := newSyncTestServer(t)
+
+	config := newSyncTestConfig(t,
+		map[string]models.Role{
+			"existing": makeNormalizedRole("existing", "same"),
+		},
+		nil, nil, server.URL,
+	)
+	config.Roles.Path = "./local-roles"
+
+	reg := makeRegistrationResponse(
+		map[string]models.Role{
+			"existing": makeNormalizedRole("existing", "same"),
+		},
+		nil, nil,
+	)
+	reg.Roles.Path = "./remote-roles"
+
+	err := config.MergeConfiguration(reg)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(0), config.configGeneration, "metadata-only sync changes should not advance generation")
+	assert.Equal(t, "./local-roles", config.Roles.Path, "definitions-only sync should not rewrite role metadata")
+
 	_, ok := waitForPatch(patchCh, 5*time.Second)
 	require.True(t, ok, "expected outgoing PATCH call")
 }
@@ -616,6 +666,28 @@ func TestApplyPatch_AppliesRoles(t *testing.T) {
 	err := config.applyPatch(diff)
 	assert.NoError(t, err)
 	assert.Contains(t, config.Roles.Definitions, "new-role")
+	assert.Equal(t, uint64(1), config.configGeneration)
+}
+
+func TestApplyPatch_IdenticalRolesDoNotAdvanceGeneration(t *testing.T) {
+	config := newSyncTestConfig(t,
+		map[string]models.Role{
+			"existing": makeNormalizedRole("existing", "same"),
+		},
+		nil, nil, "",
+	)
+
+	diff := ConfigPatchRequest{
+		RoleConfig: &RoleConfig{
+			Definitions: map[string]models.Role{
+				"existing": makeNormalizedRole("existing", "same"),
+			},
+		},
+	}
+
+	err := config.applyPatch(diff)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(0), config.configGeneration, "no-op apply should not advance generation")
 }
 
 func TestApplyPatch_SkipsNilWorkflows(t *testing.T) {
@@ -637,6 +709,208 @@ func TestApplyPatch_SkipsNilWorkflows(t *testing.T) {
 
 	err := config.applyPatch(diff)
 	assert.NoError(t, err)
+}
+
+func TestApplyMergedConfigWithSnapshot_RejectsStaleGeneration(t *testing.T) {
+	config := newSyncTestConfig(t,
+		map[string]models.Role{
+			"existing": makeNormalizedRole("existing", "before"),
+		},
+		nil, nil, "",
+	)
+
+	snapshot, err := config.snapshotConfigPatch()
+	require.NoError(t, err)
+
+	config.mu.Lock()
+	config.configGeneration++
+	config.mu.Unlock()
+
+	applied, err := config.applyMergedConfigWithSnapshot(snapshot, ConfigPatchRequest{
+		RoleConfig: &RoleConfig{
+			Definitions: map[string]models.Role{
+				"existing": makeNormalizedRole("existing", "after"),
+			},
+		},
+	})
+	require.NoError(t, err)
+	assert.False(t, applied, "expected generation mismatch to reject the stale merged apply")
+	assert.Equal(t, "before", config.Roles.Definitions["existing"].Description)
+}
+
+func TestApplyMergedConfigWithRetries_RetriesAndSucceeds(t *testing.T) {
+	config := newSyncTestConfig(t,
+		map[string]models.Role{
+			"existing": makeNormalizedRole("existing", "before"),
+		},
+		nil, nil, "",
+	)
+
+	attempts := 0
+	outgoingPatch, err := config.applyMergedConfigWithRetries(func(snapshot *configPatchSnapshot) (*buildMergedConfigResult, error) {
+		attempts++
+
+		if attempts == 1 {
+			config.mu.Lock()
+			config.configGeneration++
+			config.mu.Unlock()
+		}
+
+		return &buildMergedConfigResult{
+			config: ConfigPatchRequest{
+				RoleConfig: &RoleConfig{
+					Definitions: map[string]models.Role{
+						"existing": makeNormalizedRole("existing", "after"),
+					},
+				},
+			},
+			outgoingPatch: []byte(`{"roles":{}}`),
+		}, nil
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 2, attempts, "expected one retry before success")
+	assert.JSONEq(t, `{"roles":{}}`, string(outgoingPatch))
+	assert.Equal(t, "after", config.Roles.Definitions["existing"].Description)
+	assert.Equal(t, uint64(2), config.configGeneration)
+}
+
+func TestSnapshotConfigPatch_DetachesRoleSlices(t *testing.T) {
+	config := newSyncTestConfig(t,
+		map[string]models.Role{
+			"editor": {
+				Name:      "editor",
+				Providers: []string{"aws-prod"},
+				Permissions: models.RolePermissions{
+					Allow: models.RoleStatements{{
+						Operations: []string{"s3:GetObject"},
+					}},
+				},
+				Enabled: true,
+			},
+		},
+		nil, nil, "",
+	)
+
+	snapshot, err := config.snapshotConfigPatch()
+	require.NoError(t, err)
+
+	role := config.Roles.Definitions["editor"]
+	role.Providers[0] = "gcp-prod"
+	role.Permissions.Allow[0].Operations[0] = "storage.objects.get"
+
+	snapRole, exists := snapshot.request.RoleConfig.Definitions["editor"]
+	require.True(t, exists)
+	assert.Equal(t, "aws-prod", snapRole.Providers[0])
+	assert.Equal(t, "s3:GetObject", snapRole.Permissions.Allow[0].Operations[0])
+}
+
+func TestSnapshotConfigPatch_DetachesWorkflowDefinitions(t *testing.T) {
+	config := newSyncTestConfig(t,
+		nil,
+		map[string]models.Workflow{
+			"approval": makeTestWorkflow("approval", "original"),
+		},
+		nil, "",
+	)
+
+	snapshot, err := config.snapshotConfigPatch()
+	require.NoError(t, err)
+
+	workflow := config.Workflows.Definitions["approval"]
+	workflow.Workflow.Do = nil
+
+	snapWorkflow, exists := snapshot.request.WorkflowConfig.Definitions["approval"]
+	require.True(t, exists)
+	require.NotNil(t, snapWorkflow.Workflow)
+	assert.NotNil(t, snapWorkflow.Workflow.Do)
+}
+
+func TestSnapshotConfigPatch_DetachesProviderConfig(t *testing.T) {
+	config := &Config{
+		Providers: ProviderDefinitionsConfig{
+			Definitions: map[string]models.ProviderConfig{
+				"mock-primary": makeTestProviderWithConfig("mock-primary", "primary", map[string]any{
+					"region": "us-east-1",
+				}),
+			},
+		},
+	}
+
+	snapshot, err := config.snapshotConfigPatch()
+	require.NoError(t, err)
+
+	provider := config.Providers.Definitions["mock-primary"]
+	require.NotNil(t, provider.Config)
+	provider.Config.SetKeyWithValue("region", "eu-west-1")
+
+	snapProvider, exists := snapshot.request.ProviderConfig.Definitions["mock-primary"]
+	require.True(t, exists)
+	require.NotNil(t, snapProvider.Config)
+	region, ok := snapProvider.Config.GetString("region")
+	require.True(t, ok)
+	assert.Equal(t, "us-east-1", region)
+}
+
+func TestKnownGap_NestedProviderMutationsShouldAdvanceConfigGeneration(t *testing.T) {
+	t.Skip("expected failure until #306: nested provider config mutations bypass configGeneration")
+
+	config := &Config{
+		Providers: ProviderDefinitionsConfig{
+			Definitions: map[string]models.ProviderConfig{
+				"mock-primary": makeTestProviderWithConfig("mock-primary", "primary", map[string]any{
+					"region": "us-east-1",
+				}),
+			},
+		},
+	}
+
+	provider := config.Providers.Definitions["mock-primary"]
+	require.NotNil(t, provider.Config)
+	provider.Config.SetKeyWithValue("region", "eu-west-1")
+
+	assert.Equal(t, uint64(1), config.configGeneration, "nested provider mutations should participate in generation tracking")
+}
+
+func TestKnownGap_NestedRoleMutationsShouldAdvanceConfigGeneration(t *testing.T) {
+	t.Skip("expected failure until #306: nested role mutations bypass configGeneration")
+
+	config := newSyncTestConfig(t,
+		map[string]models.Role{
+			"editor": {
+				Name:      "editor",
+				Providers: []string{"aws-prod"},
+				Permissions: models.RolePermissions{
+					Allow: models.RoleStatements{{
+						Operations: []string{"s3:GetObject"},
+					}},
+				},
+				Enabled: true,
+			},
+		},
+		nil, nil, "",
+	)
+
+	role := config.Roles.Definitions["editor"]
+	role.Permissions.Allow[0].Operations[0] = "storage.objects.get"
+
+	assert.Equal(t, uint64(1), config.configGeneration, "nested role mutations should participate in generation tracking")
+}
+
+func TestKnownGap_NestedWorkflowMutationsShouldAdvanceConfigGeneration(t *testing.T) {
+	t.Skip("expected failure until #306: nested workflow mutations bypass configGeneration")
+
+	config := newSyncTestConfig(t,
+		nil,
+		map[string]models.Workflow{
+			"approval": makeTestWorkflow("approval", "original"),
+		},
+		nil, "",
+	)
+
+	workflow := config.Workflows.Definitions["approval"]
+	workflow.Workflow.Do = nil
+
+	assert.Equal(t, uint64(1), config.configGeneration, "nested workflow mutations should participate in generation tracking")
 }
 
 // ---------------------------------------------------------------------------
