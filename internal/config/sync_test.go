@@ -10,6 +10,7 @@ import (
 	"time"
 
 	jsonpatch "github.com/evanphx/json-patch"
+	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/thand-io/agent/internal/models"
@@ -116,6 +117,26 @@ func makeRegistrationResponse(
 	return resp
 }
 
+func makeTestWorkflow(name, description string) models.Workflow {
+	return models.Workflow{
+		Name:        name,
+		Description: description,
+		Enabled:     true,
+		Workflow: &model.Workflow{
+			Do: &model.TaskList{},
+		},
+	}
+}
+
+func makeTestProvider(name, description string) models.ProviderConfig {
+	return models.ProviderConfig{
+		Name:        name,
+		Description: description,
+		Provider:    "mock",
+		Enabled:     true,
+	}
+}
+
 // waitForPatch waits for a single PATCH call on the channel, or times out.
 func waitForPatch(ch <-chan syncPatchCall, timeout time.Duration) (syncPatchCall, bool) {
 	select {
@@ -147,6 +168,11 @@ func TestMergeConfiguration_ServerSendsNewRoles(t *testing.T) {
 	err := config.MergeConfiguration(reg)
 	require.NoError(t, err)
 
+	role, exists := config.Roles.Definitions["admin"]
+	require.True(t, exists, "expected synced role to be stored locally")
+	assert.Equal(t, "admin", role.Name)
+	assert.True(t, role.Enabled)
+
 	_, ok := waitForPatch(patchCh, 5*time.Second)
 	require.True(t, ok, "expected outgoing PATCH call")
 }
@@ -157,7 +183,8 @@ func TestMergeConfiguration_ServerSendsUpdatedRole(t *testing.T) {
 	// Local config has an existing role
 	config := newSyncTestConfig(t,
 		map[string]models.Role{
-			"editor": {Name: "editor", Description: "Can edit", Enabled: true},
+			"editor":    {Name: "editor", Description: "Can edit", Enabled: true},
+			"untouched": {Name: "untouched", Description: "Keep me", Enabled: true},
 		},
 		nil, nil, server.URL,
 	)
@@ -172,6 +199,128 @@ func TestMergeConfiguration_ServerSendsUpdatedRole(t *testing.T) {
 
 	err := config.MergeConfiguration(reg)
 	require.NoError(t, err)
+
+	role, exists := config.Roles.Definitions["editor"]
+	require.True(t, exists, "expected synced role to be stored locally")
+	assert.Equal(t, "Can edit and publish", role.Description)
+	assert.True(t, role.Enabled)
+	assert.Contains(t, config.Roles.Definitions, "untouched")
+
+	_, ok := waitForPatch(patchCh, 5*time.Second)
+	require.True(t, ok, "expected outgoing PATCH call")
+}
+
+func TestMergeConfiguration_ServerSendsNewWorkflows(t *testing.T) {
+	server, patchCh := newSyncTestServer(t)
+
+	config := newSyncTestConfig(t, nil, nil, nil, server.URL)
+
+	reg := makeRegistrationResponse(
+		nil,
+		map[string]models.Workflow{
+			"approval": makeTestWorkflow("approval", "Handles approvals"),
+		},
+		nil,
+	)
+
+	err := config.MergeConfiguration(reg)
+	require.NoError(t, err)
+
+	workflow, exists := config.Workflows.Definitions["approval"]
+	require.True(t, exists, "expected synced workflow to be stored locally")
+	assert.Equal(t, "Handles approvals", workflow.Description)
+	require.NotNil(t, workflow.Workflow)
+
+	_, ok := waitForPatch(patchCh, 5*time.Second)
+	require.True(t, ok, "expected outgoing PATCH call")
+}
+
+func TestMergeConfiguration_ServerSendsUpdatedWorkflow(t *testing.T) {
+	server, patchCh := newSyncTestServer(t)
+
+	config := newSyncTestConfig(t,
+		nil,
+		map[string]models.Workflow{
+			"existing":  makeTestWorkflow("existing", "Existing workflow"),
+			"unchanged": makeTestWorkflow("unchanged", "Keep me"),
+		},
+		nil,
+		server.URL,
+	)
+
+	reg := makeRegistrationResponse(
+		nil,
+		map[string]models.Workflow{
+			"existing": makeTestWorkflow("existing", "Updated workflow"),
+		},
+		nil,
+	)
+
+	err := config.MergeConfiguration(reg)
+	require.NoError(t, err)
+
+	workflow, exists := config.Workflows.Definitions["existing"]
+	require.True(t, exists, "expected synced workflow to be stored locally")
+	assert.Equal(t, "Updated workflow", workflow.Description)
+	assert.Contains(t, config.Workflows.Definitions, "unchanged")
+
+	_, ok := waitForPatch(patchCh, 5*time.Second)
+	require.True(t, ok, "expected outgoing PATCH call")
+}
+
+func TestMergeConfiguration_ServerSendsNewProviders(t *testing.T) {
+	server, patchCh := newSyncTestServer(t)
+
+	config := newSyncTestConfig(t, nil, nil, nil, server.URL)
+
+	reg := makeRegistrationResponse(
+		nil,
+		nil,
+		map[string]models.ProviderConfig{
+			"mock-primary": makeTestProvider("mock-primary", "Primary mock provider"),
+		},
+	)
+
+	err := config.MergeConfiguration(reg)
+	require.NoError(t, err)
+
+	provider, exists := config.Providers.Definitions["mock-primary"]
+	require.True(t, exists, "expected synced provider to be stored locally")
+	assert.Equal(t, "Primary mock provider", provider.Description)
+	assert.Equal(t, "mock", provider.Provider)
+
+	_, ok := waitForPatch(patchCh, 5*time.Second)
+	require.True(t, ok, "expected outgoing PATCH call")
+}
+
+func TestMergeConfiguration_ServerSendsUpdatedProvider(t *testing.T) {
+	server, patchCh := newSyncTestServer(t)
+
+	config := newSyncTestConfig(t,
+		nil,
+		nil,
+		map[string]models.ProviderConfig{
+			"mock-primary": makeTestProvider("mock-primary", "Old provider description"),
+			"mock-extra":   makeTestProvider("mock-extra", "Keep me"),
+		},
+		server.URL,
+	)
+
+	reg := makeRegistrationResponse(
+		nil,
+		nil,
+		map[string]models.ProviderConfig{
+			"mock-primary": makeTestProvider("mock-primary", "Updated provider description"),
+		},
+	)
+
+	err := config.MergeConfiguration(reg)
+	require.NoError(t, err)
+
+	provider, exists := config.Providers.Definitions["mock-primary"]
+	require.True(t, exists, "expected synced provider to be stored locally")
+	assert.Equal(t, "Updated provider description", provider.Description)
+	assert.Contains(t, config.Providers.Definitions, "mock-extra")
 
 	_, ok := waitForPatch(patchCh, 5*time.Second)
 	require.True(t, ok, "expected outgoing PATCH call")
@@ -217,6 +366,11 @@ func TestMergeConfiguration_PartialConfig_OnlyRoles(t *testing.T) {
 
 	err := config.MergeConfiguration(reg)
 	require.NoError(t, err)
+
+	role, exists := config.Roles.Definitions["new-role"]
+	require.True(t, exists, "expected synced role to be stored locally")
+	assert.Equal(t, "new-role", role.Name)
+	assert.Contains(t, config.Roles.Definitions, "existing")
 
 	_, ok := waitForPatch(patchCh, 5*time.Second)
 	require.True(t, ok, "expected outgoing PATCH call")
@@ -461,6 +615,7 @@ func TestApplyPatch_AppliesRoles(t *testing.T) {
 
 	err := config.applyPatch(diff)
 	assert.NoError(t, err)
+	assert.Contains(t, config.Roles.Definitions, "new-role")
 }
 
 func TestApplyPatch_SkipsNilWorkflows(t *testing.T) {
