@@ -230,7 +230,9 @@ func (s *Server) writeProviderCookie(c *gin.Context, provider string, localSessi
 		return fmt.Errorf("signed provider session exceeds bounded cookie/header budget")
 	}
 
-	s.clearCookieSetFromRequest(c, cookieName)
+	writtenCookieNames := map[string]struct{}{
+		cookieName: {},
+	}
 
 	if chunkCount <= 1 {
 		s.setCookieValue(c, cookieName, signedValue)
@@ -249,9 +251,11 @@ func (s *Server) writeProviderCookie(c *gin.Context, provider string, localSessi
 				fmt.Sprintf("%sC%d", cookieName, shard+1),
 				signedValue[start:end],
 			)
+			writtenCookieNames[fmt.Sprintf("%sC%d", cookieName, shard+1)] = struct{}{}
 		}
 	}
 
+	s.clearStaleCookieSetFromRequest(c, cookieName, writtenCookieNames)
 	s.clearCookieByName(c, CreateLegacyCookieName(provider))
 	return nil
 }
@@ -304,18 +308,16 @@ func (s *Server) readCurrentProviderCookieValue(
 		return "", false, nil
 	}
 
+	if len(cookie.Value) > providerCookieChunkSize {
+		return "", true, fmt.Errorf("provider cookie base value exceeds shard limit")
+	}
+
 	if !strings.HasPrefix(cookie.Value, providerCookieChunkPrefix) {
-		if len(cookie.Value) > providerCookieChunkSize {
-			return "", true, fmt.Errorf("provider cookie base value exceeds shard limit")
-		}
 		return cookie.Value, true, nil
 	}
 
 	shardCount, err := strconv.Atoi(strings.TrimPrefix(cookie.Value, providerCookieChunkPrefix))
 	if err != nil {
-		if len(cookie.Value) > providerCookieChunkSize {
-			return "", true, fmt.Errorf("provider cookie base value exceeds shard limit")
-		}
 		return cookie.Value, true, nil
 	}
 	if shardCount <= 0 || shardCount > providerCookieMaxShards {
@@ -410,6 +412,33 @@ func getLocalSessionFromCookieData(sessionData any) (*models.LocalSession, error
 func (s *Server) clearProviderCookies(c *gin.Context, provider string) {
 	s.clearCookieSetFromRequest(c, CreateCookieName(provider))
 	s.clearCookieByName(c, CreateLegacyCookieName(provider))
+}
+
+// clearStaleCookieSetFromRequest expires request cookies in the provider cookie
+// set that are not being rewritten in the current response. This avoids sending
+// redundant expire+rewrite headers for the same cookie name.
+func (s *Server) clearStaleCookieSetFromRequest(c *gin.Context, baseCookieName string, keepNames map[string]struct{}) {
+	names := map[string]struct{}{}
+
+	for _, cookie := range c.Request.Cookies() {
+		if cookie == nil {
+			continue
+		}
+
+		if cookie.Name != baseCookieName && !strings.HasPrefix(cookie.Name, baseCookieName+"C") {
+			continue
+		}
+
+		if _, keep := keepNames[cookie.Name]; keep {
+			continue
+		}
+
+		names[cookie.Name] = struct{}{}
+	}
+
+	for name := range names {
+		s.clearCookieByName(c, name)
+	}
 }
 
 // clearCookieSetFromRequest expires the named base cookie plus any shard cookies
