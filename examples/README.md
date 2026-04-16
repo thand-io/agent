@@ -35,6 +35,7 @@ examples/
 
 ### Authentication & Identity
 
+- **[OAuth2](providers/oauth.example.yaml)** - Generic OAuth2 or OpenID Connect authentication
 - **[Google OAuth2](providers/oauth2.google.example.yaml)** - Google authentication
 - **[SAML](providers/saml.example.yaml)** - SAML 2.0 SSO
 - **[Google Workspace](providers/gsuite.example.yaml)** - G Suite user management
@@ -214,5 +215,4 @@ For issues or questions:
 - Check the [documentation](../docs/)
 - Review provider-specific troubleshooting guides
 - Open an issue on GitHub
-
 
