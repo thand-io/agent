@@ -1,13 +1,11 @@
 package daemon
 
 import (
-	"bytes"
 	"fmt"
 	"net/http"
 	"slices"
 	"strings"
 
-	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
@@ -302,20 +300,22 @@ func (s *Server) processProviderCookies(
 	}
 
 	for providerName := range providersToCheck {
-
-		cookie := sessions.DefaultMany(c, CreateCookieName(providerName))
-
-		if cookie == nil {
+		localSession, cookieVersion, found, err := s.readProviderLocalSession(c, providerName)
+		if !found {
 			continue
 		}
 
-		providerSessionData := cookie.Get(ThandCookieAttributeSessionName)
-
-		if providerSessionData == nil {
+		if err != nil {
+			logrus.WithError(err).
+				WithFields(logrus.Fields{
+					"provider": providerName,
+					"version":  cookieVersion,
+				}).
+				Warnln("Failed to read provider cookie")
 			continue
 		}
 
-		decodedSession, err := getDecodedSession(encryptionServer, providerSessionData)
+		decodedSession, err := localSession.GetDecodedSession(encryptionServer)
 		if err != nil {
 			logrus.WithError(err).
 				WithField("provider", providerName).
@@ -455,34 +455,28 @@ func (s *Server) handleAgentMode(c *gin.Context) {
 	cookiesSet := false
 
 	for providerName, remoteSession := range agentSessions {
+		existingSession, cookieVersion, found, err := s.readProviderLocalSession(c, providerName)
+		if err != nil {
+			logrus.WithError(err).
+				WithFields(logrus.Fields{
+					"provider": providerName,
+					"version":  cookieVersion,
+				}).
+				Warnln("Failed to read existing provider cookie during agent sync")
+		}
 
-		cookie := sessions.DefaultMany(c, CreateCookieName(providerName))
-
-		if cookie == nil {
+		newSession := remoteSession.CopyWithoutEndpoint().GetEncodedLocalSession()
+		if found && err == nil &&
+			cookieVersion == providerCookieVersionCurrent &&
+			existingSession.GetEncodedLocalSession() == newSession {
+			// Session already stored in the current format, no need to redirect.
 			continue
 		}
 
-		// Check if the cookie already has the same session data to avoid redirect loops
-		existingSession := cookie.Get(ThandCookieAttributeSessionName)
-		newSession := remoteSession.GetEncodedLocalSessionBytes()
-
-		if existingBytes, ok := existingSession.([]byte); ok {
-			if bytes.Equal(existingBytes, newSession) {
-				// Session already set, no need to redirect
-				continue
-			}
-		}
-
-		// Also check valid string session for backward compatibility (though we interpret equality strictly now)
-		// If existingSession is a string, it means it's the old format. We want to update it to bytes.
-		// So we don't "continue" here.
-
-		cookie.Set(ThandCookieAttributeSessionName, newSession)
-
-		err = cookie.Save()
-
-		if err != nil {
-			logrus.WithError(err).Warnln("Failed to save session cookie")
+		if err := s.writeProviderCookie(c, providerName, &remoteSession); err != nil {
+			logrus.WithError(err).
+				WithField("provider", providerName).
+				Warnln("Failed to save session cookie")
 			c.Next()
 			return
 		}
@@ -502,19 +496,7 @@ func (s *Server) handleAgentMode(c *gin.Context) {
 }
 
 func getDecodedSession(encryptor models.EncryptionImpl, sessionData any) (*models.ExportableSession, error) {
-
-	var localSession *models.LocalSession
-	var err error
-
-	switch v := sessionData.(type) {
-	case string:
-		localSession, err = models.DecodedLocalSession(v)
-	case []byte:
-		localSession, err = models.DecodedLocalSessionBytes(v)
-	default:
-		return nil, fmt.Errorf("invalid session data type: %T", sessionData)
-	}
-
+	localSession, err := getLocalSessionFromCookieData(sessionData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode local session: %w", err)
 	}
@@ -631,16 +613,10 @@ func (s *Server) resolveSession(c *gin.Context, authProviders ...string) (string
 	}
 
 	// Otherwise return the primary session if it exists
-	primaryCookie := sessions.DefaultMany(c, ThandCookieName)
-
-	if primaryCookie != nil {
-
-		activeProvider, ok := primaryCookie.Get(ThandCookieAttributeActiveName).(string)
-
-		if ok && len(activeProvider) > 0 {
-			if session, exists := remoteSessions[activeProvider]; exists {
-				return activeProvider, session, nil
-			}
+	activeProvider := s.getDefaultProviderCookieValue(c)
+	if len(activeProvider) > 0 {
+		if session, exists := remoteSessions[activeProvider]; exists {
+			return activeProvider, session, nil
 		}
 	}
 

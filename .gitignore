@@ -22,6 +22,7 @@ __debug_bin*
 
 # Go workspace file
 go.work
+go.work.sum
 
 # Build output
 /bin/

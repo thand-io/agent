@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
@@ -155,13 +154,7 @@ func (s *Server) postSession(c *gin.Context) {
 func (s *Server) getSessions(c *gin.Context) {
 
 	// Get the default provider from cookie
-	defaultProvider := ""
-	defaultCookie := sessions.DefaultMany(c, ThandCookieName)
-	if provider := defaultCookie.Get(ThandCookieAttributeActiveName); provider != nil {
-		if providerStr, ok := provider.(string); ok {
-			defaultProvider = providerStr
-		}
-	}
+	defaultProvider := s.getDefaultProviderCookieValue(c)
 
 	if s.Config.IsServer() {
 
@@ -364,11 +357,7 @@ func (s *Server) putSession(c *gin.Context) {
 	}
 
 	// Update the default provider cookie
-	defaultCookie := sessions.DefaultMany(c, ThandCookieName)
-	defaultCookie.Set(ThandCookieAttributeActiveName, provider)
-	err = defaultCookie.Save()
-
-	if err != nil {
+	if err := s.setDefaultProviderCookie(c, provider); err != nil {
 		s.getErrorPage(c, http.StatusInternalServerError, "Failed to save default provider", err)
 		return
 	}
@@ -407,26 +396,11 @@ func (s *Server) deleteSession(c *gin.Context) {
 		// Server mode: Clear all cookies for this provider
 
 		// Clear the provider-specific cookie
-		providerCookie := sessions.DefaultMany(c, CreateCookieName(provider))
-		providerCookie.Clear()
-		err := providerCookie.Save()
-
-		if err != nil {
-			s.getErrorPage(c, http.StatusInternalServerError, "Failed to clear provider cookie", err)
-			return
-		}
+		s.clearProviderCookies(c, provider)
 
 		// If this was the default provider, clear the default setting
-		defaultCookie := sessions.DefaultMany(c, ThandCookieName)
-		if activeProvider := defaultCookie.Get(ThandCookieAttributeActiveName); activeProvider != nil {
-			if activeProviderStr, ok := activeProvider.(string); ok && activeProviderStr == provider {
-				defaultCookie.Delete(ThandCookieAttributeActiveName)
-				err = defaultCookie.Save()
-				if err != nil {
-					s.getErrorPage(c, http.StatusInternalServerError, "Failed to clear default provider", err)
-					return
-				}
-			}
+		if s.getDefaultProviderCookieValue(c) == provider {
+			s.clearDefaultProviderCookies(c)
 		}
 
 		c.JSON(http.StatusOK, gin.H{
@@ -481,25 +455,11 @@ func (s *Server) deleteSessions(c *gin.Context) {
 
 		// Clear provider-specific cookies for each session
 		for providerName := range remoteSessions {
-			providerCookie := sessions.DefaultMany(c, CreateCookieName(providerName))
-			providerCookie.Clear()
-			err := providerCookie.Save()
-			if err != nil {
-				logrus.WithFields(logrus.Fields{
-					"provider": providerName,
-					"error":    err,
-				}).Warnln("Failed to clear provider cookie")
-			}
+			s.clearProviderCookies(c, providerName)
 		}
 
 		// Clear the default provider setting
-		defaultCookie := sessions.DefaultMany(c, ThandCookieName)
-		defaultCookie.Clear()
-		err = defaultCookie.Save()
-		if err != nil {
-			s.getErrorPage(c, http.StatusInternalServerError, "Failed to clear default cookie", err)
-			return
-		}
+		s.clearDefaultProviderCookies(c)
 
 		c.JSON(http.StatusOK, gin.H{
 			"message": "All sessions deleted successfully",
