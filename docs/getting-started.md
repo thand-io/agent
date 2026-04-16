@@ -82,7 +82,7 @@ The binary will be available at `bin/agent`.
 
 ### Basic Configuration
 
-Create a configuration file at `~/.thand/config.yaml`:
+Create a configuration file at `~/.config/thand/config.yaml`:
 
 ```yaml
 server:

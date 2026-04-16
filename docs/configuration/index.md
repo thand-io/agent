@@ -19,9 +19,11 @@ Thand Agent uses YAML configuration files to define behavior, providers, roles, 
 Configuration is loaded in this order (later sources override earlier ones):
 
 1. Default values
-2. Configuration file (`~/.thand/config.yaml`)
+2. Configuration file (`~/.config/thand/config.yaml` by default, or the path set by `THAND_CONFIG_PATH`)
 3. Environment variables (prefixed with `THAND_`)
 4. Command line flags
+
+`--config` overrides `THAND_CONFIG_PATH`. `THAND_CONFIG_PATH` selects which config file to read, while other `THAND_*` variables override values after the file is loaded.
 
 {: .warning }
 > **Important:** If you are using Temporal (recommended for production), you must configure specific Search Attributes in your Temporal Namespace. See **[Temporal Configuration](temporal.md)** for critical setup instructions.
