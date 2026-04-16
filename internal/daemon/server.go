@@ -227,15 +227,7 @@ func (s *Server) Start() error {
 
 	router.Use(CORSMiddleware(corsConfig))
 
-	cookieNames := []string{ThandCookieName}
-
-	foundProviders := s.Config.GetProvidersByCapability(
-		models.ProviderCapabilityAuthorizer,
-	)
-
-	for providerName := range foundProviders {
-		cookieNames = append(cookieNames, CreateCookieName(providerName))
-	}
+	cookieNames := []string{ThandCookieName, ThandLegacyCookieName}
 
 	sessionStore := s.getSessionStore(s.GetConfig().GetSecret())
 	router.Use(sessions.SessionsMany(

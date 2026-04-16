@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
@@ -542,11 +541,6 @@ func (s *Server) getAuthCallbackPage(c *gin.Context, auth models.AuthWrapper) {
 //	@Router			/auth/logout [get]
 //	@Router			/auth/logout/{provider} [get]
 func (s *Server) getLogoutPage(c *gin.Context) {
-
-	cookie := sessions.DefaultMany(c, ThandCookieName)
-	cookie.Clear()
-
-	// Need to loop over all cookies and clear them
 	provider := c.Param("provider")
 
 	if len(provider) > 0 {
@@ -558,46 +552,19 @@ func (s *Server) getLogoutPage(c *gin.Context) {
 			return
 		}
 
-		providerCookie := sessions.DefaultMany(c, CreateCookieName(provider))
-		providerCookie.Clear()
-
-		err = providerCookie.Save()
-
-		if err != nil {
-			s.getErrorPage(c, http.StatusInternalServerError, "Failed to clear provider session", err)
-			return
-		}
+		s.clearProviderCookies(c, provider)
 
 	} else {
 
 		allProviders := s.Config.GetProvidersByCapability(models.ProviderCapabilityAuthorizer)
 
 		for providerName := range allProviders {
-
-			cookie := sessions.DefaultMany(c, CreateCookieName(providerName))
-
-			if cookie == nil {
-				continue
-			}
-
-			cookie.Clear()
-			err := cookie.Save()
-
-			if err != nil {
-				s.getErrorPage(c, http.StatusInternalServerError, "Failed to clear provider session", err)
-				return
-			}
-
+			s.clearProviderCookies(c, providerName)
 		}
 
 	}
 
-	err := cookie.Save()
-
-	if err != nil {
-		s.getErrorPage(c, http.StatusInternalServerError, "Failed to clear session", err)
-		return
-	}
+	s.clearDefaultProviderCookies(c)
 
 	if s.canAcceptHtml(c) {
 		c.Redirect(http.StatusTemporaryRedirect, "/")
