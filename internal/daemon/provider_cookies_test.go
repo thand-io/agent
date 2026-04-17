@@ -1017,7 +1017,7 @@ func mergeCookies(base []*http.Cookie, updates []*http.Cookie) []*http.Cookie {
 	}
 
 	for _, cookie := range updates {
-		if cookie.MaxAge < 0 || (!cookie.Expires.IsZero() && cookie.Expires.Before(time.Now().Add(1*time.Minute))) {
+		if isExpiredCookie(cookie) {
 			delete(merged, cookie.Name)
 			continue
 		}
