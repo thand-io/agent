@@ -892,7 +892,7 @@ roles:
 	require.Contains(t, config.Roles.Definitions, "my-custom-role",
 		"inline role should exist before ReloadConfig")
 
-	// Save original inline definitions for comparison
+	// Save original inline definitions for comparison after reload
 	originalProviderDefs := make(map[string]models.ProviderConfig)
 	for k, v := range config.Providers.Definitions {
 		originalProviderDefs[k] = v
@@ -911,7 +911,8 @@ roles:
 
 	assert.Contains(t, config.Providers.Definitions, "my-custom-aws",
 		"inline provider should survive ReloadConfig")
-	assert.Equal(t, "Custom AWS", config.Providers.Definitions["my-custom-aws"].Name)
+	assert.Equal(t, originalProviderDefs["my-custom-aws"].Name, config.Providers.Definitions["my-custom-aws"].Name,
+		"inline provider name should be unchanged after ReloadConfig")
 
 	assert.Contains(t, config.Roles.Definitions, "my-custom-role",
 		"inline role should survive ReloadConfig")
