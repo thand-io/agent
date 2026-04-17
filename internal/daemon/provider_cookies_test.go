@@ -86,12 +86,11 @@ func TestAuthCookieCleansStaleV2ShardsWhenSessionShrinks(t *testing.T) {
 	provider := "oauth2-shrink"
 	server := newTestCookieServer(t, config.ModeServer, provider)
 
-	largeSession := newLocalSessionForSignedCookieRange(
+	largeSession := newLocalSessionForExactShardCount(
 		t,
 		provider,
 		server.Config.GetSecret(),
-		providerCookieChunkSize+1,
-		providerCookieChunkSize*providerCookieMaxShards,
+		providerCookieMaxShards,
 	)
 	smallSession := newTestLocalSession(provider, 32)
 
@@ -133,8 +132,79 @@ func TestAuthCookieCleansStaleV2ShardsWhenSessionShrinks(t *testing.T) {
 
 	require.Equal(t, http.StatusNoContent, secondResp.Code, secondResp.Body.String())
 
-	responseCookies := cookiesByName(secondResp.Result().Cookies())
-	assertExpiredCookie(t, responseCookies, CreateCookieName(provider)+"C1")
+	responseCookies := secondResp.Result().Cookies()
+	assertNoExpiredCookieHeaders(t, responseCookies, CreateCookieName(provider))
+	for shard := 1; shard <= providerCookieMaxShards; shard++ {
+		assertExpiredCookieCount(t, responseCookies, fmt.Sprintf("%sC%d", CreateCookieName(provider), shard), 1)
+	}
+}
+
+func TestAuthCookieRewritingSameWidthShardSetDoesNotExpireRewrittenNames(t *testing.T) {
+	provider := "oauth2-rewrite"
+	server := newTestCookieServer(t, config.ModeServer, provider)
+
+	firstSession := newLocalSessionForExactShardCount(
+		t,
+		provider,
+		server.Config.GetSecret(),
+		2,
+	)
+	secondSession := newLocalSessionForExactShardCount(
+		t,
+		provider,
+		server.Config.GetSecret(),
+		2,
+	)
+
+	firstResp := performCookieHandlerRequest(
+		t,
+		server,
+		http.MethodGet,
+		"/auth-cookie",
+		"/auth-cookie",
+		[]string{provider},
+		nil,
+		func(c *gin.Context) {
+			if err := server.setAuthCookie(c, provider, firstSession); err != nil {
+				c.String(http.StatusInternalServerError, err.Error())
+				return
+			}
+			c.Status(http.StatusNoContent)
+		},
+	)
+
+	require.Equal(t, http.StatusNoContent, firstResp.Code, firstResp.Body.String())
+
+	secondResp := performCookieHandlerRequest(
+		t,
+		server,
+		http.MethodGet,
+		"/auth-cookie",
+		"/auth-cookie",
+		[]string{provider},
+		mergeCookies(nil, firstResp.Result().Cookies()),
+		func(c *gin.Context) {
+			if err := server.setAuthCookie(c, provider, secondSession); err != nil {
+				c.String(http.StatusInternalServerError, err.Error())
+				return
+			}
+			c.Status(http.StatusNoContent)
+		},
+	)
+
+	require.Equal(t, http.StatusNoContent, secondResp.Code, secondResp.Body.String())
+
+	responseCookies := secondResp.Result().Cookies()
+	assertNoExpiredCookieHeaders(
+		t,
+		responseCookies,
+		CreateCookieName(provider),
+		CreateCookieName(provider)+"C1",
+		CreateCookieName(provider)+"C2",
+	)
+	assertCookieCount(t, responseCookies, CreateCookieName(provider), 1)
+	assertCookieCount(t, responseCookies, CreateCookieName(provider)+"C1", 1)
+	assertCookieCount(t, responseCookies, CreateCookieName(provider)+"C2", 1)
 }
 
 func TestProviderCookieReassemblesV2ShardedSession(t *testing.T) {
@@ -390,6 +460,24 @@ func TestReadCurrentProviderCookieValueRejectsOversizedUnshardedBase(t *testing.
 	req.AddCookie(&http.Cookie{
 		Name:  v2CookieName,
 		Value: repeatedToken("oversized-base", providerCookieChunkSize+1),
+	})
+
+	value, found, err := server.readCurrentProviderCookieValue(req, v2CookieName)
+	require.True(t, found)
+	require.Error(t, err)
+	assert.Empty(t, value)
+	assert.Contains(t, err.Error(), "provider cookie base value exceeds shard limit")
+}
+
+func TestReadCurrentProviderCookieValueRejectsOversizedChunksPrefixedBase(t *testing.T) {
+	provider := "oauth2-read-oversized-chunks-prefix"
+	server := newTestCookieServer(t, config.ModeServer, provider)
+	v2CookieName := createVersionedCookieName(testThandCookieV2, provider)
+
+	req := httptest.NewRequest(http.MethodGet, "/provider-cookie", nil)
+	req.AddCookie(&http.Cookie{
+		Name:  v2CookieName,
+		Value: providerCookieChunkPrefix + repeatedToken("1", providerCookieChunkSize),
 	})
 
 	value, found, err := server.readCurrentProviderCookieValue(req, v2CookieName)
@@ -728,6 +816,28 @@ func newLocalSessionForSignedCookieRange(
 	return nil
 }
 
+func newLocalSessionForExactShardCount(
+	t *testing.T,
+	provider string,
+	secret string,
+	shardCount int,
+) *models.LocalSession {
+	t.Helper()
+
+	cookieName := createVersionedCookieName(testThandCookieV2, provider)
+	for tokenLen := 256; tokenLen <= 4096; tokenLen += 128 {
+		localSession := newTestLocalSession(provider, tokenLen)
+		signedValue := encodeProviderCookieValue(t, secret, cookieName, localSession)
+		actualShardCount := max(1, (len(signedValue)+providerCookieChunkSize-1)/providerCookieChunkSize)
+		if actualShardCount == shardCount {
+			return localSession
+		}
+	}
+
+	t.Fatalf("failed to create local session for exact shard count %d", shardCount)
+	return nil
+}
+
 func repeatedToken(prefix string, targetLen int) string {
 	token := prefix
 	for len(token) < targetLen {
@@ -837,12 +947,26 @@ func cookiesByName(cookies []*http.Cookie) map[string]*http.Cookie {
 	return result
 }
 
+func findCookiesByName(cookies []*http.Cookie, name string) []*http.Cookie {
+	result := []*http.Cookie{}
+	for _, cookie := range cookies {
+		if cookie.Name == name {
+			result = append(result, cookie)
+		}
+	}
+	return result
+}
+
 func assertCookiePresent(t *testing.T, cookies []*http.Cookie, name string) {
 	t.Helper()
 	byName := cookiesByName(cookies)
 	if _, ok := byName[name]; !ok {
 		t.Fatalf("expected cookie %s to be present", name)
 	}
+}
+
+func isExpiredCookie(cookie *http.Cookie) bool {
+	return cookie.MaxAge < 0 || (!cookie.Expires.IsZero() && cookie.Expires.Before(time.Now().Add(1*time.Minute)))
 }
 
 func assertExpiredCookie(t *testing.T, cookies map[string]*http.Cookie, name string) {
@@ -852,12 +976,38 @@ func assertExpiredCookie(t *testing.T, cookies map[string]*http.Cookie, name str
 	require.True(t, ok, "expected expired cookie %s to be set", name)
 	assert.True(
 		t,
-		cookie.MaxAge < 0 || (!cookie.Expires.IsZero() && cookie.Expires.Before(time.Now().Add(1*time.Minute))),
+		isExpiredCookie(cookie),
 		"expected cookie %s to be expired, got MaxAge=%d Expires=%s",
 		name,
 		cookie.MaxAge,
 		cookie.Expires,
 	)
+}
+
+func assertCookieCount(t *testing.T, cookies []*http.Cookie, name string, count int) {
+	t.Helper()
+	assert.Len(t, findCookiesByName(cookies, name), count, "expected %d Set-Cookie headers for %s", count, name)
+}
+
+func assertExpiredCookieCount(t *testing.T, cookies []*http.Cookie, name string, count int) {
+	t.Helper()
+
+	expiredCount := 0
+	for _, cookie := range findCookiesByName(cookies, name) {
+		if isExpiredCookie(cookie) {
+			expiredCount++
+		}
+	}
+
+	assert.Equal(t, count, expiredCount, "expected %d expired Set-Cookie headers for %s", count, name)
+}
+
+func assertNoExpiredCookieHeaders(t *testing.T, cookies []*http.Cookie, names ...string) {
+	t.Helper()
+
+	for _, name := range names {
+		assertExpiredCookieCount(t, cookies, name, 0)
+	}
 }
 
 func mergeCookies(base []*http.Cookie, updates []*http.Cookie) []*http.Cookie {
@@ -867,7 +1017,7 @@ func mergeCookies(base []*http.Cookie, updates []*http.Cookie) []*http.Cookie {
 	}
 
 	for _, cookie := range updates {
-		if cookie.MaxAge < 0 || (!cookie.Expires.IsZero() && cookie.Expires.Before(time.Now().Add(1*time.Minute))) {
+		if isExpiredCookie(cookie) {
 			delete(merged, cookie.Name)
 			continue
 		}
