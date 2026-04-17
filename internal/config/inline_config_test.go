@@ -14,8 +14,8 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
-// viperFromYAML creates a *viper.Viper instance from a YAML string,
-// unmarshals it into a Config, and returns it.
+// viperFromYAML loads YAML into Viper, unmarshals it into a Config,
+// and returns the resulting *Config.
 func viperFromYAML(t *testing.T, yamlContent string) *Config {
 	t.Helper()
 
