@@ -6,6 +6,7 @@ package testinfra
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -29,6 +30,7 @@ import (
 
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/operatorservice/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 )
@@ -584,12 +586,17 @@ func retryAddSearchAttributesUntilNamespaceVisible(ctx context.Context, op func(
 }
 
 func isNamespaceNotVisibleError(err error) bool {
-	if status.Code(err) == codes.NotFound {
+	if err == nil {
+		return false
+	}
+
+	var namespaceNotFound *serviceerror.NamespaceNotFound
+	if errors.As(err, &namespaceNotFound) {
 		return true
 	}
 
-	message := strings.ToLower(err.Error())
-	return strings.Contains(message, "namespace") && strings.Contains(message, "not found")
+	convertedErr := serviceerror.FromStatus(serviceerror.ToStatus(err))
+	return errors.As(convertedErr, &namespaceNotFound) || status.Code(err) == codes.NotFound
 }
 
 // Testing returns the *testing.T associated with this infrastructure.
