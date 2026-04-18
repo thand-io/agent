@@ -40,8 +40,8 @@ The OAuth2 provider enables browser-based sign-in against a generic OAuth2 or Op
 | `client_id` | string | Yes | - | OAuth2 client ID |
 | `client_secret` | string | Yes | - | OAuth2 client secret |
 | `authority` | string | Yes* | - | OIDC issuer URL or full `/.well-known/openid-configuration` URL |
-| `auth_url` | string | No | Derived from discovery | Explicit authorization endpoint override |
-| `token_url` | string | No | Derived from discovery | Explicit token endpoint override |
+| `auth_url` | string | Yes* | Derived from discovery | Explicit authorization endpoint override |
+| `token_url` | string | Yes* | Derived from discovery | Explicit token endpoint override |
 | `userinfo_url` | string | No | Derived from discovery | Explicit userinfo endpoint override |
 | `username_claim` | string | No | `preferred_username`, then `username` | Claim copied into `user.username` |
 | `redirect_url` | string | No | - | Default redirect URI if one is not supplied at login time |
