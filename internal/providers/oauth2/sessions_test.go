@@ -809,6 +809,51 @@ func TestCreateSessionUsesPreferredUsernameByDefault(t *testing.T) {
 	}
 }
 
+func TestCreateSessionUsesEmailShapedPreferredUsernameByDefault(t *testing.T) {
+	idToken := createTestIDToken(t, map[string]any{
+		"sub":                "user-123",
+		"email":              "testuser@thand.io",
+		"name":               "Test User",
+		"preferred_username": "testuser@thand.io",
+		"email_verified":     true,
+	})
+
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/token" {
+			http.Error(w, "unexpected token request path", http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "access-token",
+			"id_token":     idToken,
+			"token_type":   "Bearer",
+			"expires_in":   3600,
+		})
+	}))
+	defer tokenServer.Close()
+
+	provider := newTestOAuth2Provider(t, models.BasicConfig{
+		"client_id":     "test-client-id",
+		"client_secret": "test-client-secret",
+		"auth_url":      tokenServer.URL + "/auth",
+		"token_url":     tokenServer.URL + "/token",
+	})
+
+	session, err := provider.CreateSession(context.Background(), &models.AuthorizeUser{
+		Code:        "test-auth-code",
+		RedirectUri: "http://localhost/callback",
+	})
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	if session.User.Username != "testuser@thand.io" {
+		t.Fatalf("expected email-shaped preferred_username to populate username unchanged, got %q", session.User.Username)
+	}
+}
+
 func TestCreateSessionUsesUsernameFallbackByDefault(t *testing.T) {
 	idToken := createTestIDToken(t, map[string]any{
 		"sub":            "user-123",

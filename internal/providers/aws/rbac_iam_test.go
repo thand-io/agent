@@ -35,6 +35,16 @@ func TestGetIAMPrincipalUsernames(t *testing.T) {
 		)
 		assert.Equal(t, "engineer", provider.getPreferredIAMUsername(user))
 	})
+
+	t.Run("email shaped oauth2 username still normalizes to iam local part", func(t *testing.T) {
+		user := &models.User{
+			Username: "testuser@thand.io",
+			Email:    "testuser@thand.io",
+			Source:   "oauth2",
+		}
+
+		assert.Equal(t, "testuser", provider.getPreferredIAMUsername(user))
+	})
 }
 
 func TestBuildUnboundAssumeRolePolicy(t *testing.T) {
