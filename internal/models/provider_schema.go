@@ -91,8 +91,10 @@ type OAuth2Config struct {
 	ClientSecret string   `json:"client_secret" mapstructure:"client_secret" validate:"required" sensitive:"true"`
 	Scopes       []string `json:"scopes" mapstructure:"scopes"`
 	RedirectURL  string   `json:"redirect_url" mapstructure:"redirect_url" validate:"omitempty,url"`
+	Authority    string   `json:"authority" mapstructure:"authority" validate:"omitempty,url"`
 	AuthURL      string   `json:"auth_url" mapstructure:"auth_url" validate:"omitempty,url"`
 	TokenURL     string   `json:"token_url" mapstructure:"token_url" validate:"omitempty,url"`
+	UserInfoURL  string   `json:"userinfo_url" mapstructure:"userinfo_url" validate:"omitempty,url"`
 }
 
 // SMTPConfig represents SMTP email configuration
