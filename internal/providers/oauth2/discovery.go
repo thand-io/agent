@@ -64,7 +64,7 @@ func (p *oauth2Provider) getResolvedConfig(ctx context.Context) (*resolvedOAuth2
 
 	if strings.TrimSpace(schema.Authority) != "" && needsDiscovery {
 		discoveryURL := normalizeDiscoveryURL(schema.Authority)
-		document, err := fetchOIDCDiscoveryDocument(ctx, discoveryURL)
+		document, err := fetchOIDCDiscoveryDocument(ctx, p.getHTTPClient(), discoveryURL)
 		if err != nil {
 			return nil, err
 		}
@@ -114,13 +114,13 @@ func normalizeDiscoveryURL(authority string) string {
 	return parsedURL.String()
 }
 
-func fetchOIDCDiscoveryDocument(ctx context.Context, discoveryURL string) (*oidcDiscoveryDocument, error) {
+func fetchOIDCDiscoveryDocument(ctx context.Context, httpClient *http.Client, discoveryURL string) (*oidcDiscoveryDocument, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, discoveryURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OIDC discovery request: %w", err)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("OIDC discovery request failed: %w", err)
 	}

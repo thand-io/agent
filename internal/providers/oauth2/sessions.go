@@ -64,7 +64,9 @@ func (p *oauth2Provider) CreateSession(ctx context.Context, authRequest *models.
 		},
 	}
 
-	token, err := conf.Exchange(ctx, authRequest.Code)
+	exchangeContext := context.WithValue(ctx, oauth2.HTTPClient, p.getHTTPClient())
+
+	token, err := conf.Exchange(exchangeContext, authRequest.Code)
 	if err != nil {
 		return nil, fmt.Errorf("failed to exchange code for token: %w", err)
 	}
@@ -81,7 +83,7 @@ func (p *oauth2Provider) CreateSession(ctx context.Context, authRequest *models.
 			return nil, fmt.Errorf("failed to get user info: no userinfo endpoint configured")
 		}
 
-		userFromEndpoint, endpointErr := getUserInfoFromEndpoint(ctx, userInfoURL, token.AccessToken, resolved.UsernameClaim)
+		userFromEndpoint, endpointErr := getUserInfoFromEndpoint(ctx, p.getHTTPClient(), userInfoURL, token.AccessToken, resolved.UsernameClaim)
 		if endpointErr != nil {
 			return nil, fmt.Errorf("failed to get user info: %w", endpointErr)
 		}
@@ -94,7 +96,7 @@ func (p *oauth2Provider) CreateSession(ctx context.Context, authRequest *models.
 		}
 
 		if userInfoURL != "" {
-			userFromEndpoint, endpointErr := getUserInfoFromEndpoint(ctx, userInfoURL, token.AccessToken, resolved.UsernameClaim)
+			userFromEndpoint, endpointErr := getUserInfoFromEndpoint(ctx, p.getHTTPClient(), userInfoURL, token.AccessToken, resolved.UsernameClaim)
 			if endpointErr == nil && userFromEndpoint != nil && user.Username == "" && userFromEndpoint.Username != "" {
 				// Preserve the ID token as authoritative for the core identity fields and
 				// only enrich the missing username from userinfo when available.
@@ -175,14 +177,14 @@ func getUserInfoFromIDToken(token *oauth2.Token, usernameClaim string) (*models.
 }
 
 // getUserInfoFromEndpoint calls the OIDC userinfo endpoint to get user details.
-func getUserInfoFromEndpoint(ctx context.Context, userInfoURL string, accessToken string, usernameClaim string) (*models.User, error) {
+func getUserInfoFromEndpoint(ctx context.Context, httpClient *http.Client, userInfoURL string, accessToken string, usernameClaim string) (*models.User, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", userInfoURL, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -212,14 +214,14 @@ func userFromClaims(claims map[string]interface{}, usernameClaim string, subject
 		name = email
 	}
 
-	verified := claimBool(claims, "email_verified")
+	verified := claimOptionalBool(claims, "email_verified")
 
 	return &models.User{
 		ID:       sub,
 		Email:    email,
 		Username: claimUsername(claims, usernameClaim),
 		Name:     name,
-		Verified: &verified,
+		Verified: verified,
 		Source:   "oauth2",
 	}, nil
 }
@@ -247,9 +249,14 @@ func claimString(claims map[string]interface{}, key string) string {
 	return strings.TrimSpace(value)
 }
 
-func claimBool(claims map[string]interface{}, key string) bool {
-	value, _ := claims[key].(bool)
-	return value
+func claimOptionalBool(claims map[string]interface{}, key string) *bool {
+	value, ok := claims[key].(bool)
+	if !ok {
+		return nil
+	}
+
+	result := value
+	return &result
 }
 
 func needsUsernameFallback(user *models.User) bool {

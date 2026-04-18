@@ -4,17 +4,24 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/thand-io/agent/internal/models"
 	"golang.org/x/oauth2"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 func TestConfigSchemaValidate(t *testing.T) {
 	t.Parallel()
@@ -263,6 +270,8 @@ func TestResolvedConfigSerializesConcurrentDiscovery(t *testing.T) {
 	const callers = 16
 	errs := make(chan error, callers)
 	start := make(chan struct{})
+	ready := make(chan struct{}, callers)
+	proceed := make(chan struct{})
 	var wg sync.WaitGroup
 
 	for range callers {
@@ -270,14 +279,19 @@ func TestResolvedConfigSerializesConcurrentDiscovery(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
+			ready <- struct{}{}
+			<-proceed
 			_, err := provider.getResolvedConfig(context.Background())
 			errs <- err
 		}()
 	}
 
 	close(start)
+	for range callers {
+		<-ready
+	}
+	close(proceed)
 	<-firstRequest
-	time.Sleep(100 * time.Millisecond)
 	close(releaseDiscovery)
 
 	wg.Wait()
@@ -297,7 +311,7 @@ func TestResolvedConfigSerializesConcurrentDiscovery(t *testing.T) {
 	}
 }
 
-func TestCreateSessionUsesIDTokenClaimsAndOmitsOAuthTokens(t *testing.T) {
+func TestCreateSessionUsesIDTokenClaims(t *testing.T) {
 	idToken := createTestIDToken(t, map[string]any{
 		"sub":            "user-123",
 		"email":          "user@example.com",
@@ -371,6 +385,9 @@ func TestCreateSessionUsesIDTokenClaimsAndOmitsOAuthTokens(t *testing.T) {
 	if session.User.Username != "" {
 		t.Fatalf("expected username to be empty when no username claims are present, got %q", session.User.Username)
 	}
+	if session.User.Verified == nil || !*session.User.Verified {
+		t.Fatalf("expected verified=true from id token claim, got %#v", session.User.Verified)
+	}
 
 	if session.Expiry.IsZero() {
 		t.Fatal("expected expiry to be set")
@@ -386,6 +403,117 @@ func TestCreateSessionUsesIDTokenClaimsAndOmitsOAuthTokens(t *testing.T) {
 
 	if session.RefreshToken == "" {
 		t.Fatal("expected refresh token to be preserved")
+	}
+}
+
+func TestCreateSessionUsesHardenedClientForTokenExchange(t *testing.T) {
+	idToken := createTestIDToken(t, map[string]any{
+		"sub":            "user-123",
+		"email":          "user@example.com",
+		"name":           "Example User",
+		"email_verified": true,
+	})
+
+	requests := make(chan *http.Request, 1)
+	testHTTPClient := &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			select {
+			case requests <- req:
+			default:
+			}
+
+			body := io.NopCloser(strings.NewReader(`{
+				"access_token":"access-token",
+				"refresh_token":"refresh-token",
+				"id_token":` + strconv.Quote(idToken) + `,
+				"token_type":"Bearer",
+				"expires_in":3600
+			}`))
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       body,
+			}, nil
+		}),
+	}
+
+	provider := newTestOAuth2Provider(t, models.BasicConfig{
+		"client_id":     "test-client-id",
+		"client_secret": "test-client-secret",
+		"auth_url":      "https://issuer.example.com/auth",
+		"token_url":     "https://issuer.example.com/token",
+	})
+	provider.httpClient = testHTTPClient
+
+	session, err := provider.CreateSession(context.Background(), &models.AuthorizeUser{
+		Code:        "test-auth-code",
+		RedirectUri: "http://localhost/callback",
+	})
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	if session == nil || session.User == nil {
+		t.Fatal("expected session user")
+	}
+
+	select {
+	case req := <-requests:
+		if req.URL.String() != "https://issuer.example.com/token" {
+			t.Fatalf("expected token exchange request to use configured token URL, got %q", req.URL.String())
+		}
+	default:
+		t.Fatal("expected token exchange to use provider http client")
+	}
+}
+
+func TestResolvedConfigUsesProviderScopedHTTPClient(t *testing.T) {
+	requests := make(chan *http.Request, 1)
+	testHTTPClient := &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			select {
+			case requests <- req:
+			default:
+			}
+
+			body := io.NopCloser(strings.NewReader(`{
+				"authorization_endpoint":"https://issuer.example.com/auth",
+				"token_endpoint":"https://issuer.example.com/token",
+				"userinfo_endpoint":"https://issuer.example.com/userinfo"
+			}`))
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       body,
+			}, nil
+		}),
+	}
+
+	provider := newTestOAuth2Provider(t, models.BasicConfig{
+		"client_id":     "test-client-id",
+		"client_secret": "test-client-secret",
+		"authority":     "https://issuer.example.com",
+	})
+	provider.httpClient = testHTTPClient
+
+	resolved, err := provider.getResolvedConfig(context.Background())
+	if err != nil {
+		t.Fatalf("resolve config: %v", err)
+	}
+
+	if resolved.AuthURL != "https://issuer.example.com/auth" {
+		t.Fatalf("expected discovered auth_url, got %q", resolved.AuthURL)
+	}
+
+	select {
+	case req := <-requests:
+		if req.URL.String() != "https://issuer.example.com/.well-known/openid-configuration" {
+			t.Fatalf("expected discovery request to use normalized authority URL, got %q", req.URL.String())
+		}
+	default:
+		t.Fatal("expected discovery to use provider http client")
 	}
 }
 
@@ -502,6 +630,9 @@ func TestCreateSessionUsesDiscoveredTokenAndUserInfo(t *testing.T) {
 	if session.User.Email != "oidc@example.com" {
 		t.Fatalf("expected userinfo email, got %q", session.User.Email)
 	}
+	if session.User.Verified != nil {
+		t.Fatalf("expected verified to remain nil when userinfo omits email_verified, got %#v", session.User.Verified)
+	}
 	if session.AccessToken == "" {
 		t.Fatal("expected access token to be preserved in stored session")
 	}
@@ -519,6 +650,49 @@ func TestCreateSessionUsesDiscoveredTokenAndUserInfo(t *testing.T) {
 	}
 	if gotPaths[0] != oidcDiscoveryPath || gotPaths[1] != "/token" || gotPaths[2] != "/userinfo" {
 		t.Fatalf("unexpected request order: %v", gotPaths)
+	}
+}
+
+func TestCreateSessionLeavesVerifiedNilWhenIDTokenOmitsEmailVerified(t *testing.T) {
+	idToken := createTestIDToken(t, map[string]any{
+		"sub":   "user-123",
+		"email": "user@example.com",
+		"name":  "Example User",
+	})
+
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/token" {
+			http.Error(w, "unexpected token request path", http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "access-token",
+			"id_token":     idToken,
+			"token_type":   "Bearer",
+			"expires_in":   3600,
+		})
+	}))
+	defer tokenServer.Close()
+
+	provider := newTestOAuth2Provider(t, models.BasicConfig{
+		"client_id":     "test-client-id",
+		"client_secret": "test-client-secret",
+		"auth_url":      tokenServer.URL + "/auth",
+		"token_url":     tokenServer.URL + "/token",
+	})
+
+	session, err := provider.CreateSession(context.Background(), &models.AuthorizeUser{
+		Code:        "test-auth-code",
+		RedirectUri: "http://localhost/callback",
+	})
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	if session.User.Verified != nil {
+		t.Fatalf("expected verified to remain nil when id token omits email_verified, got %#v", session.User.Verified)
 	}
 }
 
