@@ -9,6 +9,7 @@ providers:
       client_id: example_client_id
       client_secret: example_client_secret
       authority: https://auth.example.com
+      username_claim: preferred_username
       # Optional manual overrides. Explicit values win over discovery.
       # auth_url: https://auth.example.com/oauth2/authorize
       # token_url: https://auth.example.com/oauth2/token

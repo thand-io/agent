@@ -26,6 +26,9 @@ type ConfigSchema struct {
 	// Optional explicit userinfo endpoint override
 	UserInfoURL string `json:"userinfo_url" mapstructure:"userinfo_url" validate:"omitempty,url"`
 
+	// Optional claim to copy into models.User.Username
+	UsernameClaim string `json:"username_claim" mapstructure:"username_claim"`
+
 	// Requested scopes
 	Scopes []string `json:"scopes" mapstructure:"scopes"`
 

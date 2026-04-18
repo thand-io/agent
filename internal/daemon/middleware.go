@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
+	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 	gcpiap "github.com/thand-io/agent/internal/providers/gcp.iap"
 	sessionManager "github.com/thand-io/agent/internal/sessions"
@@ -562,7 +563,7 @@ func (s *Server) getSession(c *gin.Context, authProviders ...string) (string, *m
 					WithField("user_id", foundUser.ID).
 					Warnln("Failed to resolve identity for user in session")
 			} else if compositeIdentity.User != nil {
-				foundSession.User = compositeIdentity.User
+				foundSession.User = mergeSessionUserWithIdentity(foundUser, compositeIdentity)
 			} else {
 				logrus.WithField("user_id", foundUser.ID).
 					Warnln("No user information found in resolved identity for session user")
@@ -658,4 +659,26 @@ func (s *Server) getUserSessions(c *gin.Context) (map[string]*models.Session, er
 	}
 
 	return remoteSession, nil
+}
+
+func mergeSessionUserWithIdentity(sessionUser *models.User, compositeIdentity *models.Identity) *models.User {
+	if sessionUser == nil {
+		if compositeIdentity != nil {
+			return compositeIdentity.User
+		}
+		return nil
+	}
+
+	if compositeIdentity == nil || compositeIdentity.User == nil {
+		return sessionUser
+	}
+
+	sessionIdentity := config.DeepCopyIdentity(&models.Identity{
+		ID:    sessionUser.GetMappableIdentifier(),
+		Label: sessionUser.GetName(),
+		User:  sessionUser,
+	})
+	config.MergeIdentities(sessionIdentity, compositeIdentity)
+
+	return sessionIdentity.User
 }

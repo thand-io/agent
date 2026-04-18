@@ -10,6 +10,94 @@ import (
 	"github.com/thand-io/agent/internal/models"
 )
 
+func boolPtr(v bool) *bool {
+	return &v
+}
+
+func TestMergeSessionUserWithIdentity_PreservesFreshSessionFields(t *testing.T) {
+	sessionUser := &models.User{
+		ID:       "user-123",
+		Email:    "user@example.com",
+		Username: "fresh-user",
+		Name:     "Fresh User",
+		Verified: boolPtr(true),
+		Source:   "oauth2",
+		Groups:   []string{"session-admins"},
+	}
+
+	compositeIdentity := &models.Identity{
+		ID:    "user@example.com",
+		Label: "Stale User",
+		User: &models.User{
+			ID:       "stale-id",
+			Email:    "user@example.com",
+			Username: "",
+			Name:     "Stale Name",
+			Verified: boolPtr(false),
+			Source:   "cached-provider",
+			Groups:   []string{"session-admins", "identity-auditors"},
+		},
+	}
+
+	merged := mergeSessionUserWithIdentity(sessionUser, compositeIdentity)
+
+	assert.Equal(t, "user-123", merged.ID)
+	assert.Equal(t, "user@example.com", merged.Email)
+	assert.Equal(t, "fresh-user", merged.Username)
+	assert.Equal(t, "Fresh User", merged.Name)
+	assert.Equal(t, "oauth2", merged.Source)
+	if assert.NotNil(t, merged.Verified) {
+		assert.True(t, *merged.Verified)
+	}
+	assert.ElementsMatch(t, []string{"session-admins", "identity-auditors"}, merged.Groups)
+}
+
+func TestMergeSessionUserWithIdentity_FillsMissingSessionFields(t *testing.T) {
+	sessionUser := &models.User{
+		ID:     "user-123",
+		Email:  "user@example.com",
+		Name:   "Fresh User",
+		Source: "oauth2",
+	}
+
+	compositeIdentity := &models.Identity{
+		ID:    "user@example.com",
+		Label: "Cached User",
+		User: &models.User{
+			ID:       "user-123",
+			Email:    "user@example.com",
+			Username: "cached-user",
+			Name:     "Cached User",
+			Verified: boolPtr(true),
+			Source:   "cached-provider",
+			Groups:   []string{"identity-auditors"},
+		},
+	}
+
+	merged := mergeSessionUserWithIdentity(sessionUser, compositeIdentity)
+
+	assert.Equal(t, "cached-user", merged.Username)
+	if assert.NotNil(t, merged.Verified) {
+		assert.True(t, *merged.Verified)
+	}
+	assert.Equal(t, "oauth2", merged.Source)
+	assert.ElementsMatch(t, []string{"identity-auditors"}, merged.Groups)
+}
+
+func TestMergeSessionUserWithIdentity_LeavesSessionUnchangedWithoutCompositeUser(t *testing.T) {
+	sessionUser := &models.User{
+		ID:       "user-123",
+		Email:    "user@example.com",
+		Username: "fresh-user",
+		Name:     "Fresh User",
+		Source:   "oauth2",
+	}
+
+	merged := mergeSessionUserWithIdentity(sessionUser, &models.Identity{ID: "user@example.com"})
+
+	assert.Equal(t, sessionUser, merged)
+}
+
 func TestMatchOrigin(t *testing.T) {
 	tests := []struct {
 		name           string

@@ -43,6 +43,7 @@ The OAuth2 provider enables browser-based sign-in against a generic OAuth2 or Op
 | `auth_url` | string | No | Derived from discovery | Explicit authorization endpoint override |
 | `token_url` | string | No | Derived from discovery | Explicit token endpoint override |
 | `userinfo_url` | string | No | Derived from discovery | Explicit userinfo endpoint override |
+| `username_claim` | string | No | `preferred_username`, then `username` | Claim copied into `user.username` |
 | `redirect_url` | string | No | - | Default redirect URI if one is not supplied at login time |
 | `scopes` | array | No | `["openid"]` | Scopes requested during authorization |
 
@@ -56,6 +57,8 @@ The OAuth2 provider enables browser-based sign-in against a generic OAuth2 or Op
 - Explicit `auth_url`, `token_url`, and `userinfo_url` values override the discovered defaults when they are set.
 - The provider always includes the `openid` scope during authorization if it is missing from the requested scope list.
 - User details are read from the returned `id_token` when present. If no ID token is returned, the provider tries the resolved `userinfo` endpoint and finally falls back to deriving one from `token_url` by replacing `/token` with `/userinfo`.
+- `user.username` is populated from `username_claim` when configured. If omitted, the provider tries `preferred_username` and then `username`.
+- Username is never inferred from the email local-part.
 
 ## Example Configurations
 
@@ -73,6 +76,7 @@ providers:
       client_id: YOUR_CLIENT_ID
       client_secret: YOUR_CLIENT_SECRET
       authority: https://auth.example.com
+      username_claim: preferred_username
       redirect_url: https://agent.example.com/auth/callback
       scopes:
         - openid

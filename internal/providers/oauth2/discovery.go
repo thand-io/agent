@@ -18,14 +18,15 @@ type oidcDiscoveryDocument struct {
 }
 
 type resolvedOAuth2Config struct {
-	ClientID     string
-	ClientSecret string
-	RedirectURL  string
-	Scopes       []string
-	Authority    string
-	AuthURL      string
-	TokenURL     string
-	UserInfoURL  string
+	ClientID      string
+	ClientSecret  string
+	RedirectURL   string
+	Scopes        []string
+	UsernameClaim string
+	Authority     string
+	AuthURL       string
+	TokenURL      string
+	UserInfoURL   string
 }
 
 func (p *oauth2Provider) getResolvedConfig(ctx context.Context) (*resolvedOAuth2Config, error) {
@@ -47,14 +48,15 @@ func (p *oauth2Provider) getResolvedConfig(ctx context.Context) (*resolvedOAuth2
 	}
 
 	resolved := &resolvedOAuth2Config{
-		ClientID:     schema.ClientID,
-		ClientSecret: schema.ClientSecret,
-		RedirectURL:  schema.RedirectURL,
-		Scopes:       append([]string(nil), schema.Scopes...),
-		Authority:    schema.Authority,
-		AuthURL:      schema.AuthURL,
-		TokenURL:     schema.TokenURL,
-		UserInfoURL:  schema.UserInfoURL,
+		ClientID:      schema.ClientID,
+		ClientSecret:  schema.ClientSecret,
+		RedirectURL:   schema.RedirectURL,
+		Scopes:        append([]string(nil), schema.Scopes...),
+		UsernameClaim: schema.UsernameClaim,
+		Authority:     schema.Authority,
+		AuthURL:       schema.AuthURL,
+		TokenURL:      schema.TokenURL,
+		UserInfoURL:   schema.UserInfoURL,
 	}
 	needsDiscovery := strings.TrimSpace(resolved.AuthURL) == "" ||
 		strings.TrimSpace(resolved.TokenURL) == "" ||

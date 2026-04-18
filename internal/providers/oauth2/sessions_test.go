@@ -303,27 +303,29 @@ func TestCreateSessionUsesIDTokenClaimsAndOmitsOAuthTokens(t *testing.T) {
 		"name":           "Example User",
 		"email_verified": true,
 	})
-	var mu sync.Mutex
-	var unexpectedTokenPath string
 
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/token" {
-			mu.Lock()
-			unexpectedTokenPath = r.URL.Path
-			mu.Unlock()
+		switch r.URL.Path {
+		case "/token":
+			w.Header().Set("Content-Type", "application/json")
+
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"access_token":  "very-large-access-token",
+				"refresh_token": "very-large-refresh-token",
+				"id_token":      idToken,
+				"token_type":    "Bearer",
+				"expires_in":    3600,
+			})
+		case "/userinfo":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"sub":   "user-123",
+				"email": "userinfo@example.com",
+				"name":  "Userinfo User",
+			})
+		default:
 			http.Error(w, "unexpected token request path", http.StatusBadRequest)
-			return
 		}
-
-		w.Header().Set("Content-Type", "application/json")
-
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"access_token":  "very-large-access-token",
-			"refresh_token": "very-large-refresh-token",
-			"id_token":      idToken,
-			"token_type":    "Bearer",
-			"expires_in":    3600,
-		})
 	}))
 	defer tokenServer.Close()
 
@@ -354,13 +356,6 @@ func TestCreateSessionUsesIDTokenClaimsAndOmitsOAuthTokens(t *testing.T) {
 		t.Fatalf("create session: %v", err)
 	}
 
-	mu.Lock()
-	gotUnexpectedTokenPath := unexpectedTokenPath
-	mu.Unlock()
-	if gotUnexpectedTokenPath != "" {
-		t.Fatalf("unexpected token request path: %s", gotUnexpectedTokenPath)
-	}
-
 	if session == nil {
 		t.Fatal("expected session")
 	}
@@ -372,21 +367,24 @@ func TestCreateSessionUsesIDTokenClaimsAndOmitsOAuthTokens(t *testing.T) {
 	if session.User.Email != "user@example.com" {
 		t.Fatalf("expected user email to be preserved, got %q", session.User.Email)
 	}
+	if session.User.Username != "" {
+		t.Fatalf("expected username to be empty when no username claims are present, got %q", session.User.Username)
+	}
 
 	if session.Expiry.IsZero() {
 		t.Fatal("expected expiry to be set")
 	}
 
-	if session.Token != "" {
-		t.Fatalf("expected id token to be omitted, got %q", session.Token)
+	if session.Token == "" {
+		t.Fatal("expected id token to be preserved")
 	}
 
-	if session.AccessToken != "" {
-		t.Fatalf("expected access token to be omitted, got %q", session.AccessToken)
+	if session.AccessToken == "" {
+		t.Fatal("expected access token to be preserved")
 	}
 
-	if session.RefreshToken != "" {
-		t.Fatalf("expected refresh token to be omitted, got %q", session.RefreshToken)
+	if session.RefreshToken == "" {
+		t.Fatal("expected refresh token to be preserved")
 	}
 }
 
@@ -503,8 +501,14 @@ func TestCreateSessionUsesDiscoveredTokenAndUserInfo(t *testing.T) {
 	if session.User.Email != "oidc@example.com" {
 		t.Fatalf("expected userinfo email, got %q", session.User.Email)
 	}
-	if session.Token != "" || session.AccessToken != "" || session.RefreshToken != "" {
-		t.Fatal("expected OAuth tokens to be omitted from stored session")
+	if session.AccessToken == "" {
+		t.Fatal("expected access token to be preserved in stored session")
+	}
+	if session.Token != "" {
+		t.Fatalf("expected id token to be empty when token response does not include one, got %q", session.Token)
+	}
+	if session.RefreshToken != "" {
+		t.Fatalf("expected refresh token to be empty when token response does not include one, got %q", session.RefreshToken)
 	}
 	mu.Lock()
 	gotPaths := append([]string(nil), requestPaths...)
@@ -582,6 +586,459 @@ func TestCreateSessionFallsBackToDerivedUserInfoURL(t *testing.T) {
 	}
 	if gotPaths[2] != "/protocol/openid-connect/userinfo" {
 		t.Fatalf("expected derived userinfo path, got %q", gotPaths[2])
+	}
+}
+
+func TestCreateSessionUsesPreferredUsernameByDefault(t *testing.T) {
+	idToken := createTestIDToken(t, map[string]any{
+		"sub":                "user-123",
+		"email":              "user@example.com",
+		"name":               "Example User",
+		"preferred_username": "example-user",
+		"email_verified":     true,
+	})
+
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/token" {
+			http.Error(w, "unexpected token request path", http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "access-token",
+			"id_token":     idToken,
+			"token_type":   "Bearer",
+			"expires_in":   3600,
+		})
+	}))
+	defer tokenServer.Close()
+
+	provider := newTestOAuth2Provider(t, models.BasicConfig{
+		"client_id":     "test-client-id",
+		"client_secret": "test-client-secret",
+		"auth_url":      tokenServer.URL + "/auth",
+		"token_url":     tokenServer.URL + "/token",
+	})
+
+	session, err := provider.CreateSession(context.Background(), &models.AuthorizeUser{
+		Code:        "test-auth-code",
+		RedirectUri: "http://localhost/callback",
+	})
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	if session.User.Username != "example-user" {
+		t.Fatalf("expected preferred_username to populate username, got %q", session.User.Username)
+	}
+}
+
+func TestCreateSessionUsesUsernameFallbackByDefault(t *testing.T) {
+	idToken := createTestIDToken(t, map[string]any{
+		"sub":            "user-123",
+		"email":          "user@example.com",
+		"name":           "Example User",
+		"username":       "fallback-user",
+		"email_verified": true,
+	})
+
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/token" {
+			http.Error(w, "unexpected token request path", http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "access-token",
+			"id_token":     idToken,
+			"token_type":   "Bearer",
+			"expires_in":   3600,
+		})
+	}))
+	defer tokenServer.Close()
+
+	provider := newTestOAuth2Provider(t, models.BasicConfig{
+		"client_id":     "test-client-id",
+		"client_secret": "test-client-secret",
+		"auth_url":      tokenServer.URL + "/auth",
+		"token_url":     tokenServer.URL + "/token",
+	})
+
+	session, err := provider.CreateSession(context.Background(), &models.AuthorizeUser{
+		Code:        "test-auth-code",
+		RedirectUri: "http://localhost/callback",
+	})
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	if session.User.Username != "fallback-user" {
+		t.Fatalf("expected username fallback claim to populate username, got %q", session.User.Username)
+	}
+}
+
+func TestCreateSessionUsesConfiguredUsernameClaim(t *testing.T) {
+	idToken := createTestIDToken(t, map[string]any{
+		"sub":                "user-123",
+		"email":              "user@example.com",
+		"name":               "Example User",
+		"preferred_username": "preferred-user",
+		"custom_username":    "custom-user",
+		"email_verified":     true,
+	})
+
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/token" {
+			http.Error(w, "unexpected token request path", http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "access-token",
+			"id_token":     idToken,
+			"token_type":   "Bearer",
+			"expires_in":   3600,
+		})
+	}))
+	defer tokenServer.Close()
+
+	provider := newTestOAuth2Provider(t, models.BasicConfig{
+		"client_id":      "test-client-id",
+		"client_secret":  "test-client-secret",
+		"auth_url":       tokenServer.URL + "/auth",
+		"token_url":      tokenServer.URL + "/token",
+		"username_claim": "custom_username",
+	})
+
+	session, err := provider.CreateSession(context.Background(), &models.AuthorizeUser{
+		Code:        "test-auth-code",
+		RedirectUri: "http://localhost/callback",
+	})
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	if session.User.Username != "custom-user" {
+		t.Fatalf("expected configured username claim to populate username, got %q", session.User.Username)
+	}
+}
+
+func TestCreateSessionFallsBackToUserInfoWhenIDTokenLacksUsername(t *testing.T) {
+	idToken := createTestIDToken(t, map[string]any{
+		"sub":            "user-123",
+		"email":          "user@example.com",
+		"name":           "Example User",
+		"email_verified": true,
+	})
+
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case oidcDiscoveryPath:
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"authorization_endpoint": server.URL + "/authorize",
+				"token_endpoint":         server.URL + "/token",
+				"userinfo_endpoint":      server.URL + "/userinfo",
+			})
+		case "/token":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"access_token": "access-token",
+				"id_token":     idToken,
+				"token_type":   "Bearer",
+				"expires_in":   3600,
+			})
+		case "/userinfo":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"sub":                "user-123",
+				"email":              "userinfo@example.com",
+				"name":               "Userinfo User",
+				"preferred_username": "userinfo-username",
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	provider := newTestOAuth2Provider(t, models.BasicConfig{
+		"client_id":     "test-client-id",
+		"client_secret": "test-client-secret",
+		"authority":     server.URL,
+		"redirect_url":  "http://localhost/callback",
+	})
+
+	session, err := provider.CreateSession(context.Background(), &models.AuthorizeUser{Code: "auth-code"})
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	if session.User.Username != "userinfo-username" {
+		t.Fatalf("expected userinfo username fallback, got %q", session.User.Username)
+	}
+	if session.User.Email != "user@example.com" {
+		t.Fatalf("expected ID token email to remain authoritative, got %q", session.User.Email)
+	}
+	if session.User.Name != "Example User" {
+		t.Fatalf("expected ID token name to remain authoritative, got %q", session.User.Name)
+	}
+}
+
+func TestCreateSessionFallsBackToConfiguredUsernameClaimFromUserInfoWhenIDTokenLacksUsername(t *testing.T) {
+	idToken := createTestIDToken(t, map[string]any{
+		"sub":            "user-123",
+		"email":          "user@example.com",
+		"name":           "Example User",
+		"email_verified": true,
+	})
+
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case oidcDiscoveryPath:
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"authorization_endpoint": server.URL + "/authorize",
+				"token_endpoint":         server.URL + "/token",
+				"userinfo_endpoint":      server.URL + "/userinfo",
+			})
+		case "/token":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"access_token": "access-token",
+				"id_token":     idToken,
+				"token_type":   "Bearer",
+				"expires_in":   3600,
+			})
+		case "/userinfo":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"sub":             "user-123",
+				"email":           "userinfo@example.com",
+				"name":            "Userinfo User",
+				"custom_username": "custom-userinfo",
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	provider := newTestOAuth2Provider(t, models.BasicConfig{
+		"client_id":      "test-client-id",
+		"client_secret":  "test-client-secret",
+		"authority":      server.URL,
+		"redirect_url":   "http://localhost/callback",
+		"username_claim": "custom_username",
+	})
+
+	session, err := provider.CreateSession(context.Background(), &models.AuthorizeUser{Code: "auth-code"})
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	if session.User.Username != "custom-userinfo" {
+		t.Fatalf("expected configured userinfo username fallback, got %q", session.User.Username)
+	}
+}
+
+func TestCreateSessionUsesUsernameFromUserInfoFallback(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case oidcDiscoveryPath:
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"authorization_endpoint": server.URL + "/authorize",
+				"token_endpoint":         server.URL + "/token",
+				"userinfo_endpoint":      server.URL + "/userinfo",
+			})
+		case "/token":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"access_token": "access-token",
+				"token_type":   "Bearer",
+				"expires_in":   3600,
+			})
+		case "/userinfo":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"sub":                "user-456",
+				"email":              "oidc@example.com",
+				"name":               "OIDC User",
+				"preferred_username": "oidc-user",
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	provider := newTestOAuth2Provider(t, models.BasicConfig{
+		"client_id":     "test-client-id",
+		"client_secret": "test-client-secret",
+		"authority":     server.URL,
+		"redirect_url":  "http://localhost/callback",
+	})
+
+	session, err := provider.CreateSession(context.Background(), &models.AuthorizeUser{
+		Code: "auth-code",
+	})
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	if session.User.Username != "oidc-user" {
+		t.Fatalf("expected userinfo username claim to populate username, got %q", session.User.Username)
+	}
+}
+
+func TestCreateSessionUsesConfiguredUsernameClaimFromUserInfoFallback(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case oidcDiscoveryPath:
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"authorization_endpoint": server.URL + "/authorize",
+				"token_endpoint":         server.URL + "/token",
+				"userinfo_endpoint":      server.URL + "/userinfo",
+			})
+		case "/token":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"access_token": "access-token",
+				"token_type":   "Bearer",
+				"expires_in":   3600,
+			})
+		case "/userinfo":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"sub":             "user-456",
+				"email":           "oidc@example.com",
+				"name":            "OIDC User",
+				"custom_username": "custom-oidc-user",
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	provider := newTestOAuth2Provider(t, models.BasicConfig{
+		"client_id":      "test-client-id",
+		"client_secret":  "test-client-secret",
+		"authority":      server.URL,
+		"redirect_url":   "http://localhost/callback",
+		"username_claim": "custom_username",
+	})
+
+	session, err := provider.CreateSession(context.Background(), &models.AuthorizeUser{
+		Code: "auth-code",
+	})
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	if session.User.Username != "custom-oidc-user" {
+		t.Fatalf("expected configured userinfo username claim to populate username, got %q", session.User.Username)
+	}
+}
+
+func TestCreateSessionIgnoresBlankConfiguredUsernameClaim(t *testing.T) {
+	idToken := createTestIDToken(t, map[string]any{
+		"sub":            "user-123",
+		"email":          "user@example.com",
+		"name":           "Example User",
+		"custom_claim":   "   ",
+		"email_verified": true,
+	})
+
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/token" {
+			http.Error(w, "unexpected token request path", http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "access-token",
+			"id_token":     idToken,
+			"token_type":   "Bearer",
+			"expires_in":   3600,
+		})
+	}))
+	defer tokenServer.Close()
+
+	provider := newTestOAuth2Provider(t, models.BasicConfig{
+		"client_id":      "test-client-id",
+		"client_secret":  "test-client-secret",
+		"auth_url":       tokenServer.URL + "/auth",
+		"token_url":      tokenServer.URL + "/token",
+		"username_claim": "custom_claim",
+	})
+
+	session, err := provider.CreateSession(context.Background(), &models.AuthorizeUser{
+		Code:        "test-auth-code",
+		RedirectUri: "http://localhost/callback",
+	})
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	if session.User.Username != "" {
+		t.Fatalf("expected blank configured username claim to be ignored, got %q", session.User.Username)
+	}
+}
+
+func TestCreateSessionIgnoresNonStringConfiguredUsernameClaim(t *testing.T) {
+	idToken := createTestIDToken(t, map[string]any{
+		"sub":            "user-123",
+		"email":          "user@example.com",
+		"name":           "Example User",
+		"custom_claim":   42,
+		"email_verified": true,
+	})
+
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/token" {
+			http.Error(w, "unexpected token request path", http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "access-token",
+			"id_token":     idToken,
+			"token_type":   "Bearer",
+			"expires_in":   3600,
+		})
+	}))
+	defer tokenServer.Close()
+
+	provider := newTestOAuth2Provider(t, models.BasicConfig{
+		"client_id":      "test-client-id",
+		"client_secret":  "test-client-secret",
+		"auth_url":       tokenServer.URL + "/auth",
+		"token_url":      tokenServer.URL + "/token",
+		"username_claim": "custom_claim",
+	})
+
+	session, err := provider.CreateSession(context.Background(), &models.AuthorizeUser{
+		Code:        "test-auth-code",
+		RedirectUri: "http://localhost/callback",
+	})
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	if session.User.Username != "" {
+		t.Fatalf("expected non-string configured username claim to be ignored, got %q", session.User.Username)
 	}
 }
 
