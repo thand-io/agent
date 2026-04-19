@@ -64,6 +64,12 @@ type Config struct {
 	logger thandLogger
 	mu     sync.RWMutex
 
+	// Incremented whenever synced config definitions actually change.
+	// Definition maps should be treated as immutable snapshots: callers should
+	// replace whole entries or whole maps rather than mutating nested state
+	// in place. Legacy mutation-prone paths are being tracked in issue #306.
+	configGeneration uint64
+
 	// Cached services client
 	initializeServiceClientOnce sync.Once
 	servicesClient              models.ServicesClientImpl
