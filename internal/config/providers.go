@@ -386,6 +386,17 @@ func (c *Config) initializeSingleProvider(providerKey string, p *models.Provider
 		return nil, fmt.Errorf("failed to resolve environment variables for provider %s: %w", providerKey, err)
 	}
 
+	// Client mode proxies provider operations to the login server and should not
+	// require the full provider config locally. Synced provider metadata from
+	// /providers intentionally omits sensitive config such as client secrets, but
+	// any non-sensitive config that is present should still be resolved first.
+	if c.IsClient() {
+		if err := impl.Initialize(providerKey, *p); err != nil {
+			return nil, err
+		}
+		return impl, nil
+	}
+
 	err = providerSdk.ValidateConfig(p.Provider, p.Config)
 
 	if err != nil {
