@@ -130,7 +130,6 @@ func (infra *UITestInfrastructure) createConfigDir(t *testing.T, testCase *TestC
 	// Compute endpoint values and store them for injection into the server container.
 	// ResolveConfig reads os.Environ() and resolves ${ .VARNAME } jq expressions in YAML files.
 	// host.docker.internal URLs are server-side (inside container).
-	// localhost URLs are browser-facing (navigated by the test's chromedp browser).
 	temporalEndpointInternal := strings.ReplaceAll(infra.TestInfrastructure.TemporalEndpoint, "localhost", "host.docker.internal")
 
 	infra.providerEnvVars = map[string]string{
@@ -141,12 +140,11 @@ func (infra *UITestInfrastructure) createConfigDir(t *testing.T, testCase *TestC
 	}
 
 	if infra.TestInfrastructure.KeycloakEndpoint != "" {
-		oidcIssuerBrowser := infra.TestInfrastructure.KeycloakOIDCIssuerURL() // already localhost
-		oidcIssuerInternal := strings.ReplaceAll(oidcIssuerBrowser, "localhost", "host.docker.internal")
+		oidcIssuer := infra.TestInfrastructure.KeycloakOIDCIssuerURL()
 		samlMetaBrowser := infra.TestInfrastructure.KeycloakSAMLMetadataURL()
 		samlMetaInternal := strings.ReplaceAll(samlMetaBrowser, "localhost", "host.docker.internal")
-		infra.providerEnvVars["OIDC_ISSUER_URL"] = oidcIssuerBrowser
-		infra.providerEnvVars["OIDC_ISSUER_URL_INTERNAL"] = oidcIssuerInternal
+		infra.providerEnvVars["OIDC_ISSUER_URL"] = oidcIssuer
+		infra.providerEnvVars["OIDC_ISSUER_URL_INTERNAL"] = oidcIssuer
 		infra.providerEnvVars["SAML_IDP_METADATA_URL"] = samlMetaBrowser
 		infra.providerEnvVars["SAML_IDP_METADATA_URL_INTERNAL"] = samlMetaInternal
 	}
@@ -312,7 +310,10 @@ workflows:
 				},
 			}
 			// Ensure host.docker.internal resolves on Linux Docker (not only Docker Desktop).
-			hc.ExtraHosts = []string{"host.docker.internal:host-gateway"}
+			hc.ExtraHosts = []string{
+				"host.docker.internal:host-gateway",
+				testinfra.KeycloakSharedHostname + ":host-gateway",
+			}
 		},
 		WaitingFor: wait.ForListeningPort(ThandServerPort + "/tcp").
 			WithStartupTimeout(120 * time.Second),

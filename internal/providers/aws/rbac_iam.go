@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -105,7 +106,6 @@ func (p *awsProvider) authorizeRoleTraditionalIAM(
 // revokeRoleTraditionalIAM handles role revocation for traditional IAM users.
 // Uses GetIAMRole (read-only) to prevent silently re-creating a deleted role.
 func (p *awsProvider) revokeRoleTraditionalIAM(task models.ProviderContext, user *models.User, role *models.CompositeRole) (*models.RevokeRoleResponse, error) {
-
 	// Step 1 — resolve the existing role; fail fast if not found, never create
 	roleResp, err := p.execGetIAMRole(task, &GetIAMRoleRequest{Role: &role.Role, RoleName: role.GetName()})
 	if err != nil {
@@ -258,7 +258,7 @@ func (p *awsProvider) attachPoliciesToRole(ctx context.Context, roleName string,
 
 // bindUserToRole creates or updates the assume role policy to allow the user to assume the role
 func (p *awsProvider) bindUserToRole(ctx context.Context, user *models.User, roleName string, targetAccountID string) error {
-	username := p.getUsernameForIAM(user)
+	username := p.getPreferredIAMUsername(user)
 	if len(username) == 0 {
 		return fmt.Errorf("failed to determine username for user")
 	}
@@ -311,48 +311,19 @@ func (p *awsProvider) unbindUserFromRole(ctx context.Context, user *models.User,
 		}
 	}
 
-	// Extract username from email
-	username := p.getUsernameForIAM(user)
-	if len(username) == 0 {
+	usernameCandidates := p.getIAMPrincipalUsernames(user)
+	if len(usernameCandidates) == 0 {
 		// If no username can be determined, nothing to unbind specifically
 		// The role will still have the account root principal
 		return fmt.Errorf("failed to determine username for user")
 	}
-	userArn := fmt.Sprintf("arn:aws:iam::%s:user/%s", accountID, username)
+	userArns := make(map[string]struct{}, len(usernameCandidates))
+	for _, username := range usernameCandidates {
+		userArns[fmt.Sprintf("arn:aws:iam::%s:user/%s", accountID, username)] = struct{}{}
+	}
 
 	// Remove statements that reference this user
-	var newStatements []Statement
-	for _, stmt := range currentPolicy.Statement {
-		// Check if this statement references our user
-		if principal, ok := stmt.Principal.(map[string]any); ok {
-			if awsPrincipal, exists := principal["AWS"]; exists {
-				if awsStr, ok := awsPrincipal.(string); ok && awsStr == userArn {
-					// Skip this statement - we're removing the user
-					continue
-				}
-			}
-		}
-		newStatements = append(newStatements, stmt)
-	}
-
-	// If no statements remain, create a minimal deny-all policy to prevent open access
-	if len(newStatements) == 0 {
-		newStatements = []Statement{
-			{
-				Effect: "Deny",
-				Principal: map[string]string{
-					"AWS": "*",
-				},
-				Action: "sts:AssumeRole",
-			},
-		}
-	}
-
-	// Create new policy document
-	newPolicy := PolicyDocument{
-		Version:   "2012-10-17",
-		Statement: newStatements,
-	}
+	newPolicy := buildUnboundAssumeRolePolicy(currentPolicy, userArns)
 
 	// Update the assume role policy
 	newPolicyJSON, err := json.Marshal(newPolicy)
@@ -371,16 +342,131 @@ func (p *awsProvider) unbindUserFromRole(ctx context.Context, user *models.User,
 	return nil
 }
 
-// getUsernameForIAM determines the appropriate username for AWS IAM user ARN
-// Priority: Username field > email prefix > empty string (fallback to account root)
-func (p *awsProvider) getUsernameForIAM(user *models.User) string {
-	if len(user.Username) > 0 {
-		return user.Username
+// getPreferredIAMUsername determines the canonical username to use when writing
+// IAM principals. It prefers an explicitly non-email username, otherwise falls
+// back to an email-derived local-part form.
+func (p *awsProvider) getPreferredIAMUsername(user *models.User) string {
+	candidates := p.getIAMPrincipalUsernames(user)
+	if len(candidates) == 0 {
+		return ""
 	}
-	if len(user.Email) > 0 {
-		return common.ExtractUsernameFromEmail(user.Email)
+	return candidates[0]
+}
+
+// getIAMPrincipalUsernames returns the set of plausible IAM username forms for
+// a user. This keeps bind and revoke tolerant of users hydrated with either a
+// raw IAM username or an email-style username.
+func (p *awsProvider) getIAMPrincipalUsernames(user *models.User) []string {
+	if user == nil {
+		return nil
 	}
-	return ""
+
+	var candidates []string
+	addCandidate := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+		for _, existing := range candidates {
+			if existing == value {
+				return
+			}
+		}
+		candidates = append(candidates, value)
+	}
+
+	if username := strings.TrimSpace(user.Username); username != "" && !strings.Contains(username, "@") {
+		addCandidate(username)
+	}
+	if username := strings.TrimSpace(user.Username); strings.Contains(username, "@") {
+		addCandidate(common.ExtractUsernameFromEmail(username))
+	}
+	if email := strings.TrimSpace(user.Email); email != "" {
+		addCandidate(common.ExtractUsernameFromEmail(email))
+	}
+	if username := strings.TrimSpace(user.Username); username != "" {
+		addCandidate(username)
+	}
+	if email := strings.TrimSpace(user.Email); email != "" {
+		addCandidate(email)
+	}
+
+	return candidates
+}
+
+func removeIAMUserStatements(statements []Statement, userArns map[string]struct{}) []Statement {
+	var newStatements []Statement
+	for _, stmt := range statements {
+		if statementReferencesAnyIAMUserArn(stmt, userArns) {
+			continue
+		}
+		newStatements = append(newStatements, stmt)
+	}
+	return newStatements
+}
+
+func buildUnboundAssumeRolePolicy(currentPolicy PolicyDocument, userArns map[string]struct{}) PolicyDocument {
+	newStatements := removeIAMUserStatements(currentPolicy.Statement, userArns)
+	if len(newStatements) == 0 {
+		newStatements = []Statement{
+			{
+				Effect: "Deny",
+				Principal: map[string]string{
+					"AWS": "*",
+				},
+				Action: "sts:AssumeRole",
+			},
+		}
+	}
+
+	return PolicyDocument{
+		Version:   "2012-10-17",
+		Statement: newStatements,
+	}
+}
+
+func statementReferencesAnyIAMUserArn(stmt Statement, userArns map[string]struct{}) bool {
+	if len(userArns) == 0 {
+		return false
+	}
+
+	principal, ok := stmt.Principal.(map[string]any)
+	if !ok {
+		if principalStringMap, ok := stmt.Principal.(map[string]string); ok {
+			if awsPrincipal, exists := principalStringMap["AWS"]; exists {
+				_, found := userArns[awsPrincipal]
+				return found
+			}
+		}
+		return false
+	}
+
+	awsPrincipal, exists := principal["AWS"]
+	if !exists {
+		return false
+	}
+
+	switch value := awsPrincipal.(type) {
+	case string:
+		_, found := userArns[value]
+		return found
+	case []string:
+		for _, principalArn := range value {
+			if _, found := userArns[principalArn]; found {
+				return true
+			}
+		}
+	case []any:
+		for _, principalValue := range value {
+			if principalArn, ok := principalValue.(string); ok {
+				if _, found := userArns[principalArn]; found {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

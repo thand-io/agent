@@ -12,6 +12,7 @@ import (
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
+	"github.com/thand-io/agent/test/integration/testinfra"
 )
 
 // Browser represents a chromedp browser automation instance
@@ -38,6 +39,7 @@ func NewBrowser(t *testing.T, baseURL string) *Browser {
 		chromedp.Flag("disable-gpu", false),
 		chromedp.Flag("no-sandbox", true),
 		chromedp.Flag("disable-dev-shm-usage", true),
+		chromedp.Flag("host-resolver-rules", fmt.Sprintf("MAP %s 127.0.0.1", testinfra.KeycloakSharedHostname)),
 	)
 
 	// If CHROME_BIN is set (e.g., in CI environments), use it
@@ -495,7 +497,6 @@ func (b *Browser) WaitForWorkflowCompletion(ctx context.Context, workflowID stri
 }
 
 // ClickApproveButton navigates to the execution page and clicks the Approve button.
-// The button triggers a native confirm() dialog which is auto-accepted via a CDP listener.
 func (b *Browser) ClickApproveButton(ctx context.Context, workflowID string) error {
 	b.t.Log("Clicking approve button in execution UI...")
 
@@ -509,18 +510,10 @@ func (b *Browser) ClickApproveButton(ctx context.Context, workflowID string) err
 		return fmt.Errorf("failed to navigate to execution page: %w", err)
 	}
 
-	// Register a listener that auto-accepts the native confirm() dialog that
-	// signalApproval() shows before calling the approvals API.
-	chromedp.ListenTarget(chromedpCtx, func(ev interface{}) {
-		if _, ok := ev.(*page.EventJavascriptDialogOpening); ok {
-			b.t.Log("Auto-accepting confirm() dialog for approval")
-			go func() {
-				if err := chromedp.Run(chromedpCtx, page.HandleJavaScriptDialog(true)); err != nil {
-					b.t.Logf("Warning: failed to handle dialog: %v", err)
-				}
-			}()
-		}
-	})
+	// Avoid dialog timing races by making the execution page auto-accept confirm().
+	if err := chromedp.Run(chromedpCtx, chromedp.Evaluate(`window.confirm = () => true`, nil)); err != nil {
+		return fmt.Errorf("failed to stub approval confirm dialog: %w", err)
+	}
 
 	// Wait for the Alpine.js-rendered Approve button to appear, then click it.
 	// The button is inside an x-if block and only shows when the current task is 'approvals'.
@@ -702,28 +695,37 @@ func extractWorkflowIDFromURL(rawURL string) string {
 	return ""
 }
 
-// ApproveAsManager creates a separate browser session, logs in as the manager,
+// ApproveAsUser creates a separate browser session, logs in as the given user,
 // navigates to the workflow execution, and clicks approve.
-func (b *Browser) ApproveAsManager(
+func (b *Browser) ApproveAsUser(
 	ctx context.Context,
-
-	managerUsername, managerPassword, workflowID string,
+	username, password, workflowID string,
 ) error {
-	b.t.Log("Manager approving workflow...")
+	approver := NewBrowser(b.t, b.baseURL)
+	defer approver.Close()
 
-	// Create a new browser session for the manager
-	manager := NewBrowser(b.t, b.baseURL)
-	defer manager.Close()
-
-	// Login as manager
-	if err := manager.Login(ctx, managerUsername, managerPassword); err != nil {
-		return fmt.Errorf("manager login failed: %w", err)
+	if err := approver.Login(ctx, username, password); err != nil {
+		return fmt.Errorf("approver login failed: %w", err)
 	}
 
 	time.Sleep(2 * time.Second)
 
-	// Click approve
-	if err := manager.ClickApproveButton(ctx, workflowID); err != nil {
+	if err := approver.ClickApproveButton(ctx, workflowID); err != nil {
+		return fmt.Errorf("approval failed: %w", err)
+	}
+
+	return nil
+}
+
+// ApproveAsManager creates a separate browser session, logs in as the manager,
+// navigates to the workflow execution, and clicks approve.
+func (b *Browser) ApproveAsManager(
+	ctx context.Context,
+	managerUsername, managerPassword, workflowID string,
+) error {
+	b.t.Log("Manager approving workflow...")
+
+	if err := b.ApproveAsUser(ctx, managerUsername, managerPassword, workflowID); err != nil {
 		return fmt.Errorf("manager approval failed: %w", err)
 	}
 
@@ -732,7 +734,6 @@ func (b *Browser) ApproveAsManager(
 }
 
 // ClickDenyButton navigates to the execution page and clicks the Reject button.
-// The button triggers a native confirm() dialog which is auto-accepted via a CDP listener.
 func (b *Browser) ClickDenyButton(ctx context.Context, workflowID string) error {
 	b.t.Log("Clicking reject button in execution UI...")
 
@@ -746,17 +747,10 @@ func (b *Browser) ClickDenyButton(ctx context.Context, workflowID string) error 
 		return fmt.Errorf("failed to navigate to execution page: %w", err)
 	}
 
-	// Register a listener that auto-accepts the confirm() dialog.
-	chromedp.ListenTarget(chromedpCtx, func(ev interface{}) {
-		if _, ok := ev.(*page.EventJavascriptDialogOpening); ok {
-			b.t.Log("Auto-accepting confirm() dialog for rejection")
-			go func() {
-				if err := chromedp.Run(chromedpCtx, page.HandleJavaScriptDialog(true)); err != nil {
-					b.t.Logf("Warning: failed to handle dialog: %v", err)
-				}
-			}()
-		}
-	})
+	// Avoid dialog timing races by making the execution page auto-accept confirm().
+	if err := chromedp.Run(chromedpCtx, chromedp.Evaluate(`window.confirm = () => true`, nil)); err != nil {
+		return fmt.Errorf("failed to stub rejection confirm dialog: %w", err)
+	}
 
 	// Poll for the Alpine.js-rendered Reject button (button-destructive, text "Reject").
 	clickRejectJS := `(function() {

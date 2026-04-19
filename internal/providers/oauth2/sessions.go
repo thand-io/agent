@@ -16,33 +16,16 @@ import (
 )
 
 func (p *oauth2Provider) AuthorizeSession(ctx context.Context, authRequest *models.AuthorizeUser) (*models.AuthorizeSessionResponse, error) {
-	schema := &ConfigSchema{}
-	if err := schema.Unmarshal(p.GetConfig()); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal OAuth2 config: %w", err)
+	resolved, err := p.getResolvedConfig(ctx)
+	if err != nil {
+		return nil, err
 	}
 
-	scopes := schema.Scopes
-	if len(authRequest.Scopes) > 0 {
-		scopes = authRequest.Scopes
-	}
-	if len(scopes) == 0 {
-		scopes = []string{"openid"}
-	}
-	// Ensure openid scope is always included for OIDC compliance
-	hasOpenID := false
-	for _, s := range scopes {
-		if s == "openid" {
-			hasOpenID = true
-			break
-		}
-	}
-	if !hasOpenID {
-		scopes = append([]string{"openid"}, scopes...)
-	}
+	scopes := resolveScopes(resolved.Scopes, authRequest.Scopes)
 
 	redirectURI := authRequest.RedirectUri
 	if redirectURI == "" {
-		redirectURI = schema.RedirectURL
+		redirectURI = resolved.RedirectURL
 	}
 
 	queryParams := url.Values{
@@ -50,52 +33,75 @@ func (p *oauth2Provider) AuthorizeSession(ctx context.Context, authRequest *mode
 		"response_type": {"code"},
 		"state":         {authRequest.State},
 		"redirect_uri":  {redirectURI},
-		"client_id":     {schema.ClientID},
+		"client_id":     {resolved.ClientID},
 	}
 
-	authURL := fmt.Sprintf("%s?%s", schema.AuthURL, queryParams.Encode())
+	authURL := fmt.Sprintf("%s?%s", resolved.AuthURL, queryParams.Encode())
 	return &models.AuthorizeSessionResponse{Url: authURL}, nil
 }
 
 func (p *oauth2Provider) CreateSession(ctx context.Context, authRequest *models.AuthorizeUser) (*models.Session, error) {
-	schema := &ConfigSchema{}
-	if err := schema.Unmarshal(p.GetConfig()); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal OAuth2 config: %w", err)
+	resolved, err := p.getResolvedConfig(ctx)
+	if err != nil {
+		return nil, err
 	}
 
-	scopes := schema.Scopes
-	if len(authRequest.Scopes) > 0 {
-		scopes = authRequest.Scopes
-	}
+	scopes := resolveScopes(resolved.Scopes, authRequest.Scopes)
 
 	redirectURI := authRequest.RedirectUri
 	if redirectURI == "" {
-		redirectURI = schema.RedirectURL
+		redirectURI = resolved.RedirectURL
 	}
 
 	conf := &oauth2.Config{
-		ClientID:     schema.ClientID,
-		ClientSecret: schema.ClientSecret,
+		ClientID:     resolved.ClientID,
+		ClientSecret: resolved.ClientSecret,
 		RedirectURL:  redirectURI,
 		Scopes:       scopes,
 		Endpoint: oauth2.Endpoint{
-			AuthURL:  schema.AuthURL,
-			TokenURL: schema.TokenURL,
+			AuthURL:  resolved.AuthURL,
+			TokenURL: resolved.TokenURL,
 		},
 	}
 
-	token, err := conf.Exchange(ctx, authRequest.Code)
+	exchangeContext := context.WithValue(ctx, oauth2.HTTPClient, p.getHTTPClient())
+
+	token, err := conf.Exchange(exchangeContext, authRequest.Code)
 	if err != nil {
 		return nil, fmt.Errorf("failed to exchange code for token: %w", err)
 	}
 
 	// Try to get user info from the ID token first
-	user, err := getUserInfoFromIDToken(token)
+	user, err := getUserInfoFromIDToken(token, resolved.UsernameClaim)
 	if err != nil || user == nil {
-		// Fallback: call userinfo endpoint
-		user, err = getUserInfoFromEndpoint(ctx, schema.TokenURL, token.AccessToken)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get user info: %w", err)
+		userInfoURL := resolved.UserInfoURL
+		if userInfoURL == "" {
+			userInfoURL = deriveUserInfoURL(resolved.TokenURL)
+		}
+
+		if userInfoURL == "" {
+			return nil, fmt.Errorf("failed to get user info: no userinfo endpoint configured")
+		}
+
+		userFromEndpoint, endpointErr := getUserInfoFromEndpoint(ctx, p.getHTTPClient(), userInfoURL, token.AccessToken, resolved.UsernameClaim)
+		if endpointErr != nil {
+			return nil, fmt.Errorf("failed to get user info: %w", endpointErr)
+		}
+
+		user = userFromEndpoint
+	} else if needsUsernameFallback(user) {
+		userInfoURL := resolved.UserInfoURL
+		if userInfoURL == "" {
+			userInfoURL = deriveUserInfoURL(resolved.TokenURL)
+		}
+
+		if userInfoURL != "" {
+			userFromEndpoint, endpointErr := getUserInfoFromEndpoint(ctx, p.getHTTPClient(), userInfoURL, token.AccessToken, resolved.UsernameClaim)
+			if endpointErr == nil && userFromEndpoint != nil && user.Username == "" && userFromEndpoint.Username != "" {
+				// Preserve the ID token as authoritative for the core identity fields and
+				// only enrich the missing username from userinfo when available.
+				user.Username = userFromEndpoint.Username
+			}
 		}
 	}
 
@@ -127,8 +133,26 @@ func (p *oauth2Provider) CreateSession(ctx context.Context, authRequest *models.
 	return &session, nil
 }
 
+func resolveScopes(defaultScopes, requestedScopes []string) []string {
+	scopes := append([]string(nil), defaultScopes...)
+	if len(requestedScopes) > 0 {
+		scopes = append([]string(nil), requestedScopes...)
+	}
+	if len(scopes) == 0 {
+		scopes = []string{"openid"}
+	}
+
+	for _, scope := range scopes {
+		if scope == "openid" {
+			return scopes
+		}
+	}
+
+	return append([]string{"openid"}, scopes...)
+}
+
 // getUserInfoFromIDToken tries to extract user info from the ID token JWT claims.
-func getUserInfoFromIDToken(token *oauth2.Token) (*models.User, error) {
+func getUserInfoFromIDToken(token *oauth2.Token, usernameClaim string) (*models.User, error) {
 	idToken, ok := token.Extra("id_token").(string)
 	if !ok || idToken == "" {
 		return nil, fmt.Errorf("no id_token in response")
@@ -149,42 +173,18 @@ func getUserInfoFromIDToken(token *oauth2.Token) (*models.User, error) {
 		return nil, fmt.Errorf("failed to parse JWT claims: %w", err)
 	}
 
-	sub, _ := claims["sub"].(string)
-	if sub == "" {
-		return nil, fmt.Errorf("no sub claim in JWT")
-	}
-
-	email, _ := claims["email"].(string)
-	name, _ := claims["name"].(string)
-	if name == "" {
-		name = email
-	}
-
-	verifiedRaw, _ := claims["email_verified"].(bool)
-	verified := verifiedRaw
-
-	return &models.User{
-		ID:       sub,
-		Email:    email,
-		Name:     name,
-		Verified: &verified,
-		Source:   "oauth2",
-	}, nil
+	return userFromClaims(claims, usernameClaim, "id_token")
 }
 
 // getUserInfoFromEndpoint calls the OIDC userinfo endpoint to get user details.
-func getUserInfoFromEndpoint(ctx context.Context, tokenURL string, accessToken string) (*models.User, error) {
-	// Derive userinfo URL from token URL (OIDC standard convention)
-	// e.g., .../protocol/openid-connect/token -> .../protocol/openid-connect/userinfo
-	userInfoURL := strings.Replace(tokenURL, "/token", "/userinfo", 1)
-
+func getUserInfoFromEndpoint(ctx context.Context, httpClient *http.Client, userInfoURL string, accessToken string, usernameClaim string) (*models.User, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", userInfoURL, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -199,22 +199,111 @@ func getUserInfoFromEndpoint(ctx context.Context, tokenURL string, accessToken s
 		return nil, err
 	}
 
-	sub, _ := info["sub"].(string)
-	email, _ := info["email"].(string)
-	name, _ := info["name"].(string)
+	return userFromClaims(info, usernameClaim, "userinfo response")
+}
+
+func userFromClaims(claims map[string]interface{}, usernameClaim string, subjectSource string) (*models.User, error) {
+	sub, _ := claims["sub"].(string)
+	if sub == "" {
+		return nil, fmt.Errorf("%s missing sub", subjectSource)
+	}
+
+	email, _ := claims["email"].(string)
+	name, _ := claims["name"].(string)
 	if name == "" {
 		name = email
 	}
 
-	verified := true
+	verified := claimOptionalBool(claims, "email_verified")
 
 	return &models.User{
 		ID:       sub,
 		Email:    email,
+		Username: claimUsername(claims, usernameClaim),
 		Name:     name,
-		Verified: &verified,
+		Verified: verified,
 		Source:   "oauth2",
 	}, nil
+}
+
+func claimUsername(claims map[string]interface{}, configuredClaim string) string {
+	for _, claim := range usernameClaimKeys(configuredClaim) {
+		if username := claimString(claims, claim); username != "" {
+			return username
+		}
+	}
+
+	return ""
+}
+
+func usernameClaimKeys(configuredClaim string) []string {
+	if claim := strings.TrimSpace(configuredClaim); claim != "" {
+		return []string{claim}
+	}
+
+	return []string{"preferred_username", "username"}
+}
+
+func claimString(claims map[string]interface{}, key string) string {
+	value, _ := claims[key].(string)
+	return strings.TrimSpace(value)
+}
+
+func claimOptionalBool(claims map[string]interface{}, key string) *bool {
+	value, ok := claims[key].(bool)
+	if !ok {
+		return nil
+	}
+
+	result := value
+	return &result
+}
+
+func needsUsernameFallback(user *models.User) bool {
+	if user == nil {
+		return true
+	}
+
+	return strings.TrimSpace(user.Username) == ""
+}
+
+func deriveUserInfoURL(tokenURL string) string {
+	if tokenURL == "" {
+		return ""
+	}
+
+	parsedURL, err := url.Parse(tokenURL)
+	if err != nil {
+		return ""
+	}
+
+	path := parsedURL.Path
+	if path == "" {
+		return ""
+	}
+
+	hasTrailingSlash := strings.HasSuffix(path, "/")
+	trimmedPath := strings.TrimSuffix(path, "/")
+	lastSlash := strings.LastIndex(trimmedPath, "/")
+
+	lastSegment := trimmedPath
+	if lastSlash >= 0 {
+		lastSegment = trimmedPath[lastSlash+1:]
+	}
+	if lastSegment != "token" {
+		return ""
+	}
+
+	if lastSlash >= 0 {
+		parsedURL.Path = trimmedPath[:lastSlash+1] + "userinfo"
+	} else {
+		parsedURL.Path = "userinfo"
+	}
+	if hasTrailingSlash {
+		parsedURL.Path += "/"
+	}
+
+	return parsedURL.String()
 }
 
 func (p *oauth2Provider) ValidateSession(ctx context.Context, session *models.Session) error {

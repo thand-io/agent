@@ -44,7 +44,9 @@ func TestElevationE2E(t *testing.T) {
 	for _, tcName := range testCases {
 		tcName := tcName // capture range variable
 		t.Run(tcName, func(t *testing.T) {
-			t.Parallel()
+			// These UI cases authenticate back to localhost-based Thand instances.
+			// Running them in parallel causes browser cookie collisions because
+			// cookies are scoped by host, not port.
 			runElevationE2E(t, tcName)
 		})
 	}
@@ -227,7 +229,8 @@ func runElevationE2E(t *testing.T, testCaseName string) {
 			require.NoError(t, err, "Manager should be able to approve")
 		} else {
 			t.Log("Self-approving the request...")
-			err = browser.ClickApproveButton(ctx, workflowID)
+			err = browser.ApproveAsUser(ctx,
+				requestUser.Username, requestUser.Password, workflowID)
 			require.NoError(t, err, "Should be able to self-approve")
 		}
 

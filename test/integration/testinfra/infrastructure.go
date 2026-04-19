@@ -65,8 +65,10 @@ type TestInfrastructure struct {
 	TemporalClient    client.Client
 
 	// Keycloak (Identity Provider - optional)
-	keycloakContainer testcontainers.Container
-	KeycloakEndpoint  string
+	keycloakContainer     testcontainers.Container
+	KeycloakEndpoint      string
+	KeycloakAdvertisedURL string
+	allocatedKeycloakPort int
 
 	// Cleanup callbacks - called before container teardown to gracefully shutdown workers
 	cleanupCallbacks []func()
