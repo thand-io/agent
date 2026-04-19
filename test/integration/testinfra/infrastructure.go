@@ -6,6 +6,7 @@ package testinfra
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -22,11 +23,14 @@ import (
 	"github.com/thand-io/agent/internal/common"
 	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/operatorservice/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 )
@@ -370,6 +374,7 @@ system.forceSearchAttributesCacheRefreshOnRead:
 		Env: map[string]string{
 			"DB":                       "postgres12",
 			"DB_PORT":                  "5432",
+			"BIND_ON_IP":               "0.0.0.0",
 			"POSTGRES_USER":            "temporal",
 			"POSTGRES_PWD":             "temporal",
 			"POSTGRES_SEEDS":           postgresIP,
@@ -491,7 +496,7 @@ func (infra *TestInfrastructure) registerNamespaceWithSearchAttributes(ctx conte
 	workflowClient := workflowservice.NewWorkflowServiceClient(conn)
 	operatorClient := operatorservice.NewOperatorServiceClient(conn)
 
-	// Register the namespace
+	// Register the namespace directly. Unexpected bootstrap failures should fail fast.
 	_, err = workflowClient.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        TemporalTestNamespace,
 		Description:                      "Integration test namespace for thand agent",
@@ -522,10 +527,14 @@ func (infra *TestInfrastructure) registerNamespaceWithSearchAttributes(ctx conte
 		searchAttributes[attr.GetName()] = attr.GetValueType()
 	}
 
-	// Add all search attributes in a single call
-	_, err = operatorClient.AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
-		Namespace:        TemporalTestNamespace,
-		SearchAttributes: searchAttributes,
+	// Temporal can briefly lag namespace visibility after registration, so allow a
+	// short retry window for this follow-up call only.
+	err = retryAddSearchAttributesUntilNamespaceVisible(ctx, func(callCtx context.Context) error {
+		_, err := operatorClient.AddSearchAttributes(callCtx, &operatorservice.AddSearchAttributesRequest{
+			Namespace:        TemporalTestNamespace,
+			SearchAttributes: searchAttributes,
+		})
+		return err
 	})
 	require.NoError(infra.t, err, "Failed to add search attributes to namespace")
 
@@ -544,6 +553,50 @@ func (infra *TestInfrastructure) TemporalHostPort() (string, int) {
 	port := 7233
 	fmt.Sscanf(portStr, "%d", &port)
 	return host, port
+}
+
+func retryAddSearchAttributesUntilNamespaceVisible(ctx context.Context, op func(context.Context) error) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	const (
+		pollInterval = 250 * time.Millisecond
+		rpcTimeout   = 3 * time.Second
+	)
+
+	var lastErr error
+	for {
+		callCtx, callCancel := context.WithTimeout(ctx, rpcTimeout)
+		lastErr = op(callCtx)
+		callCancel()
+		if lastErr == nil {
+			return nil
+		}
+
+		if !isNamespaceNotVisibleError(lastErr) {
+			return lastErr
+		}
+
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timed out waiting for Temporal namespace visibility: %w", lastErr)
+		case <-time.After(pollInterval):
+		}
+	}
+}
+
+func isNamespaceNotVisibleError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	var namespaceNotFound *serviceerror.NamespaceNotFound
+	if errors.As(err, &namespaceNotFound) {
+		return true
+	}
+
+	convertedErr := serviceerror.FromStatus(serviceerror.ToStatus(err))
+	return errors.As(convertedErr, &namespaceNotFound) || status.Code(err) == codes.NotFound
 }
 
 // Testing returns the *testing.T associated with this infrastructure.
