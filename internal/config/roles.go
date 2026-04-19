@@ -115,19 +115,22 @@ func (c *Config) LoadRoles() (map[string]models.Role, error) {
 
 func (c *Config) ApplyRoles(foundRoles []*models.RoleDefinitions) (map[string]models.Role, error) {
 
-	// Add roles defined directly in config
+	// Prepend roles defined directly in config so they take
+	// priority over externally loaded or default roles.
 	c.mu.RLock()
 	rolesLen := len(c.Roles.Definitions)
 	if rolesLen > 0 {
 		logrus.Debugln("Adding roles defined directly in config: ", rolesLen)
 		defaultVersion := version.Must(version.NewVersion("1.0"))
 
+		inlineRoles := make([]*models.RoleDefinitions, 0, rolesLen)
 		for roleKey, role := range c.Roles.Definitions {
-			foundRoles = append(foundRoles, &models.RoleDefinitions{
+			inlineRoles = append(inlineRoles, &models.RoleDefinitions{
 				Version: defaultVersion,
 				Roles:   map[string]models.Role{roleKey: role},
 			})
 		}
+		foundRoles = append(inlineRoles, foundRoles...)
 	}
 	c.mu.RUnlock()
 

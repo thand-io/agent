@@ -76,19 +76,22 @@ func (c *Config) ApplyProviders(foundProviders []*models.ProviderDefinitions) (m
 
 	providersLen := len(c.Providers.Definitions)
 	if providersLen > 0 {
-		// Add providers defined directly in config
+		// Prepend providers defined directly in config so they take
+		// priority over externally loaded or default providers.
 		logrus.Debugln("Adding providers defined directly in config: ", providersLen)
 
 		defaultVersion := version.Must(version.NewVersion("1.0.0"))
 
+		inlineProviders := make([]*models.ProviderDefinitions, 0, providersLen)
 		for providerKey, provider := range c.Providers.Definitions {
-			foundProviders = append(foundProviders, &models.ProviderDefinitions{
+			inlineProviders = append(inlineProviders, &models.ProviderDefinitions{
 				Version: defaultVersion,
 				Providers: map[string]models.ProviderConfig{
 					providerKey: provider,
 				},
 			})
 		}
+		foundProviders = append(inlineProviders, foundProviders...)
 	}
 
 	return c.processProviderDefinitions(foundProviders), nil
