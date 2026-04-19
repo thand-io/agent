@@ -413,6 +413,8 @@ github.com/hashicorp/vault/api v1.23.0 h1:gXgluBsSECfRWTSW9niY2jwg2e9mMJc4WoHNv4
 github.com/hashicorp/vault/api v1.23.0/go.mod h1:zransKiB9ftp+kgY8ydjnvCU7Wk8i9L0DYWpXeMj9ko=
 github.com/hughneale/serverless-sdk-go/v3 v3.0.0-20260105154148-a507840f0238 h1:M+qq3zO76q6VBNnMzE5XwlXzEVSn5Ryn61pKrxv8x0I=
 github.com/hughneale/serverless-sdk-go/v3 v3.0.0-20260105154148-a507840f0238/go.mod h1:N/TVPogY5OsZ+NG7NeD9oZ30VO6oHahxAsoeBPnh/Nw=
+github.com/hughneale/serverless-sdk-go/v3 v3.0.0-20260419080432-757a53137239 h1:eJmhFw6pYkw7KE/F/sfXadqa7UBXamU2x6uaA5wcY5M=
+github.com/hughneale/serverless-sdk-go/v3 v3.0.0-20260419080432-757a53137239/go.mod h1:N/TVPogY5OsZ+NG7NeD9oZ30VO6oHahxAsoeBPnh/Nw=
 github.com/inconshreveable/go-update v0.0.0-20160112193335-8152e7eb6ccf h1:WfD7VjIE6z8dIvMsI4/s+1qr5EL+zoIGev1BQj1eoJ8=
 github.com/inconshreveable/go-update v0.0.0-20160112193335-8152e7eb6ccf/go.mod h1:hyb9oH7vZsitZCiBt0ZvifOrB+qc8PS5IiilCIb87rg=
 github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
