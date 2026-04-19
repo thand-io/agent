@@ -30,6 +30,9 @@ type RoleStatement = internal.Statement
 // RoleDefinitions is a map of role identifiers to their corresponding Role definitions.
 type RoleDefinitions = internal.RoleDefinitions
 
+// CompositeRole is a role with additional composite metadata (UUID, provider roles, etc.).
+type CompositeRole = internal.CompositeRole
+
 // RolesResponse is the response object for API endpoints that return role information.
 type RolesResponse = internal.RolesResponse
 

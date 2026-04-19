@@ -109,3 +109,6 @@ type RevokeRoleRequest = internal.RevokeRoleRequest
 
 // RevokeRoleResponse is returned by ProviderRoleBasedAccessControl.RevokeRole.
 type RevokeRoleResponse = internal.RevokeRoleResponse
+
+// ProviderContext is the execution context passed to provider RBAC operations.
+type ProviderContext = internal.ProviderContext

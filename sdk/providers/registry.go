@@ -98,3 +98,13 @@ func GetAllProviderInfo() map[string]*ProviderInfo {
 func GetSchema(providerName string) (any, error) {
 	return providers.GetSchema(providerName)
 }
+
+// CreateInstance creates a new zeroed instance of the named provider.
+// The returned provider must be initialised via Initialize before use.
+func CreateInstance(providerName string) (models.Provider, error) {
+	instance, err := providers.CreateInstance(providerName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create provider instance %q: %w", providerName, err)
+	}
+	return instance, nil
+}
