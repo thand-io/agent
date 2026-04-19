@@ -8,8 +8,12 @@ providers:
     config:
       client_id: example_client_id
       client_secret: example_client_secret
-      auth_url: https://auth.example.com/oauth2/authorize
-      token_url: https://auth.example.com/oauth2/token
+      authority: https://auth.example.com
+      username_claim: preferred_username
+      # Optional manual overrides. Explicit values win over discovery.
+      # auth_url: https://auth.example.com/oauth2/authorize
+      # token_url: https://auth.example.com/oauth2/token
+      # userinfo_url: https://auth.internal.example.com/oauth2/userinfo
       scopes:
         - openid
         - profile

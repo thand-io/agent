@@ -8,14 +8,15 @@ grand_parent: Configuration
 
 # OAuth2 Provider
 
-The OAuth2 provider enables browser-based sign-in against a generic OAuth2 or OpenID Connect provider. Use it when you need to supply custom authorization and token endpoint URLs instead of relying on a built-in provider such as `oauth2.google`.
+The OAuth2 provider enables browser-based sign-in against a generic OAuth2 or OpenID Connect provider. Use it when you need a flexible OIDC-capable provider without relying on a built-in integration such as `oauth2.google`.
 
 ## Capabilities
 
 - **Authentication**: Interactive OAuth2 authorization code flow
-- **Generic Integration**: Works with providers that expose standard authorization and token endpoints
+- **Generic Integration**: Works with providers that expose standard OIDC discovery or standard authorization/token endpoints
 - **Identity Discovery**: Builds user identities from an ID token or a compatible `userinfo` endpoint
-- **Customizable Endpoints**: Lets you provide full authorization and token URLs directly
+- **OIDC Discovery**: Can derive OAuth2 endpoints from an OIDC discovery document
+- **Customizable Endpoints**: Lets you override discovered endpoints explicitly when needed
 
 ## Prerequisites
 
@@ -28,8 +29,7 @@ The OAuth2 provider enables browser-based sign-in against a generic OAuth2 or Op
 
 ### Required OAuth2 Configuration
 
-- **Authorization Endpoint**: Full authorization URL
-- **Token Endpoint**: Full token exchange URL
+- **Authority or Endpoints**: Either an OIDC authority URL or explicit authorization and token endpoint URLs
 - **Client ID**: OAuth2 application client identifier
 - **Client Secret**: OAuth2 application client secret
 
@@ -39,19 +39,26 @@ The OAuth2 provider enables browser-based sign-in against a generic OAuth2 or Op
 |--------|------|----------|---------|-------------|
 | `client_id` | string | Yes | - | OAuth2 client ID |
 | `client_secret` | string | Yes | - | OAuth2 client secret |
-| `auth_url` | string | Yes* | - | Full authorization endpoint URL |
-| `token_url` | string | Yes* | - | Full token endpoint URL |
+| `authority` | string | Yes* | - | OIDC issuer URL or full `/.well-known/openid-configuration` URL |
+| `auth_url` | string | Yes* | Derived from discovery | Explicit authorization endpoint override |
+| `token_url` | string | Yes* | Derived from discovery | Explicit token endpoint override |
+| `userinfo_url` | string | No | Derived from discovery | Explicit userinfo endpoint override |
+| `username_claim` | string | No | `preferred_username`, then `username` | Claim copied into `user.username` |
 | `redirect_url` | string | No | - | Default redirect URI if one is not supplied at login time |
 | `scopes` | array | No | `["openid"]` | Scopes requested during authorization |
 
-\* The schema accepts omitted values, but the generic provider does not supply defaults. In practice you should set both `auth_url` and `token_url`.
+\* Set either `authority`, or both `auth_url` and `token_url`.
 
 ## Behavior Notes
 
 - This provider is built around the OAuth2 authorization code flow used for browser login.
+- If `authority` is set, the provider fetches the OIDC discovery document lazily at login time and reads `authorization_endpoint`, `token_endpoint`, and `userinfo_endpoint` from it.
+- `authority` accepts either an issuer base URL such as `https://auth.example.com/realms/demo` or a full discovery URL ending in `/.well-known/openid-configuration`.
+- Explicit `auth_url`, `token_url`, and `userinfo_url` values override the discovered defaults when they are set.
 - The provider always includes the `openid` scope during authorization if it is missing from the requested scope list.
-- User details are read from the returned `id_token` when present. If no ID token is returned, the provider tries a `userinfo` endpoint derived from `token_url` by replacing `/token` with `/userinfo`.
-- This provider does not perform OIDC discovery. You must configure the endpoint URLs explicitly.
+- User details are read from the returned `id_token` when present. If no ID token is returned, the provider tries the resolved `userinfo` endpoint and finally falls back to deriving one from `token_url` by replacing `/token` with `/userinfo`.
+- `user.username` is populated from `username_claim` when configured. If omitted, the provider tries `preferred_username` and then `username`.
+- Username is never inferred from the email local-part.
 
 ## Example Configurations
 
@@ -68,8 +75,8 @@ providers:
     config:
       client_id: YOUR_CLIENT_ID
       client_secret: YOUR_CLIENT_SECRET
-      auth_url: https://auth.example.com/oauth2/authorize
-      token_url: https://auth.example.com/oauth2/token
+      authority: https://auth.example.com
+      username_claim: preferred_username
       redirect_url: https://agent.example.com/auth/callback
       scopes:
         - openid
@@ -77,21 +84,22 @@ providers:
         - email
 ```
 
-### Google via Generic OAuth2
+### OIDC Discovery With Explicit Overrides
 
 ```yaml
 version: "1.0"
 providers:
-  google-oauth2:
-    name: Google OAuth2
-    description: Google OAuth2 authentication
+  internal-oidc:
+    name: Internal OIDC
+    description: OIDC authentication with an internal token and userinfo path override
     provider: oauth2
     enabled: true
     config:
-      client_id: YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com
-      client_secret: YOUR_GOOGLE_CLIENT_SECRET
-      auth_url: https://accounts.google.com/o/oauth2/v2/auth
-      token_url: https://oauth2.googleapis.com/token
+      client_id: YOUR_CLIENT_ID
+      client_secret: YOUR_CLIENT_SECRET
+      authority: https://auth.example.com/realms/team-a
+      token_url: https://auth.internal.example.com/realms/team-a/protocol/openid-connect/token
+      userinfo_url: https://auth.internal.example.com/realms/team-a/protocol/openid-connect/userinfo
       scopes:
         - openid
         - profile
