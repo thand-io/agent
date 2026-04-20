@@ -87,6 +87,7 @@ func newSyncTestConfig(
 		Thand: models.ThandConfig{
 			Endpoint: endpoint,
 			ApiKey:   "test-api-key",
+			Sync:     true,
 		},
 	}
 
@@ -165,6 +166,16 @@ func waitForPatch(ch <-chan syncPatchCall, timeout time.Duration) (syncPatchCall
 		return call, true
 	case <-time.After(timeout):
 		return syncPatchCall{}, false
+	}
+}
+
+func assertNoPatch(t *testing.T, ch <-chan syncPatchCall, timeout time.Duration) {
+	t.Helper()
+
+	select {
+	case call := <-ch:
+		t.Fatalf("expected no outgoing PATCH call, got %s %s", call.Method, call.URL)
+	case <-time.After(timeout):
 	}
 }
 
@@ -638,6 +649,34 @@ func TestMergeConfiguration_OutgoingPatch_URLContainsSync(t *testing.T) {
 	call, ok := waitForPatch(patchCh, 5*time.Second)
 	require.True(t, ok, "expected outgoing PATCH call")
 	assert.Contains(t, call.URL, "/sync")
+}
+
+func TestMergeConfiguration_NoOutgoingPatchWithoutThandService(t *testing.T) {
+	server, patchCh := newSyncTestServer(t)
+
+	config := newSyncTestConfig(t, nil, nil, nil, server.URL)
+	config.Thand.ApiKey = ""
+
+	reg := makeRegistrationResponse(nil, nil, nil)
+
+	err := config.MergeConfiguration(reg)
+	require.NoError(t, err)
+
+	assertNoPatch(t, patchCh, 300*time.Millisecond)
+}
+
+func TestMergeConfiguration_NoOutgoingPatchWhenThandSyncDisabled(t *testing.T) {
+	server, patchCh := newSyncTestServer(t)
+
+	config := newSyncTestConfig(t, nil, nil, nil, server.URL)
+	config.Thand.Sync = false
+
+	reg := makeRegistrationResponse(nil, nil, nil)
+
+	err := config.MergeConfiguration(reg)
+	require.NoError(t, err)
+
+	assertNoPatch(t, patchCh, 300*time.Millisecond)
 }
 
 // ---------------------------------------------------------------------------

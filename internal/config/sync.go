@@ -98,6 +98,16 @@ func (c *Config) MergeConfiguration(config *RegistrationResponse) error {
 		return err
 	}
 
+	if !c.HasThandService() {
+		logrus.Debugln("Skipping configuration push-back sync because no Thand service is configured")
+		return nil
+	}
+
+	if !c.Thand.Sync {
+		logrus.Debugln("Skipping configuration push-back sync because thand.sync is disabled")
+		return nil
+	}
+
 	go func() {
 
 		logrus.Debugln("Sending configuration updates back to server")

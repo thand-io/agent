@@ -286,7 +286,7 @@ func (c *Config) GetThandServerUrl() string {
 }
 
 func (c *Config) DiscoverThandServerApiUrl() string {
-	return c.discoverServerApiUrl(c.Thand.Endpoint, &model.ReferenceableAuthenticationPolicy{
+	return c.discoverServerApiUrl("Thand server", c.Thand.Endpoint, &model.ReferenceableAuthenticationPolicy{
 		AuthenticationPolicy: &model.AuthenticationPolicy{
 			Bearer: &model.BearerAuthenticationPolicy{
 				Token: c.Thand.ApiKey,
@@ -296,11 +296,12 @@ func (c *Config) DiscoverThandServerApiUrl() string {
 }
 
 func (c *Config) DiscoverLoginServerApiUrl(loginServer string) string {
-	return c.discoverServerApiUrl(loginServer, nil)
+	return c.discoverServerApiUrl("login server", loginServer, nil)
 }
 
 func (c *Config) discoverServerApiUrl(
-	loginServer string,
+	serviceName string,
+	serverURL string,
 	auth *model.ReferenceableAuthenticationPolicy,
 ) string {
 
@@ -308,8 +309,8 @@ func (c *Config) discoverServerApiUrl(
 	// /.well-known/api-configuration endpoint
 	// to get the base param which is our api endpoint using resty
 
-	discoveryCheckUrl := fmt.Sprintf("%s/.well-known/api-configuration", loginServer)
-	defaultUrl := fmt.Sprintf("%s/api/v1", loginServer)
+	discoveryCheckUrl := fmt.Sprintf("%s/.well-known/api-configuration", serverURL)
+	defaultUrl := fmt.Sprintf("%s/api/v1", serverURL)
 
 	resp, err := common.InvokeHttpRequest(&model.HTTPArguments{
 		Endpoint: &model.Endpoint{
@@ -340,12 +341,12 @@ func (c *Config) discoverServerApiUrl(
 	}
 
 	if len(discoveryCheckResponse.BaseUrl) > 0 {
-		logrus.Debugf("Discovered login server base URL: %s", discoveryCheckResponse.BaseUrl)
-		loginServer = strings.TrimSuffix(discoveryCheckResponse.BaseUrl, "/")
+		logrus.Debugf("Discovered %s base URL: %s", serviceName, discoveryCheckResponse.BaseUrl)
+		serverURL = strings.TrimSuffix(discoveryCheckResponse.BaseUrl, "/")
 	}
 
 	trimPath := strings.TrimSuffix(strings.TrimPrefix(discoveryCheckResponse.ApiBasePath, "/"), "/")
-	return fmt.Sprintf("%s/%s", loginServer, trimPath)
+	return fmt.Sprintf("%s/%s", serverURL, trimPath)
 }
 
 func (c *Config) GetLoginServerHostname() string {
