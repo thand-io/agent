@@ -620,7 +620,7 @@ func (s *Server) apiConfigurationHandler(c *gin.Context) {
 	workflows := []string{}  // TODO: populate workflows list
 	activities := []string{} // TODO: populate activities list
 
-	// For agent / client we show the local server for discvoery.
+	// For agent / client we show the local server for discovery.
 	baseUrl := s.Config.GetLocalServerUrl()
 
 	if s.Config.IsServer() {
@@ -633,9 +633,14 @@ func (s *Server) apiConfigurationHandler(c *gin.Context) {
 		capabilities["llm"] = services.HasLargeLanguageModel()
 		capabilities["storage"] = services.HasStorage()
 
-		// However, for server we show the login server as the main
-		// entry point for clients to connect to
-		baseUrl = s.Config.GetLoginServerUrl()
+		// Prefer the origin the caller actually used so discovery stays
+		// reachable across local test hostnames and reverse proxies.
+		if requestBaseURL := getRequestBaseURL(c.Request); len(requestBaseURL) > 0 {
+			baseUrl = requestBaseURL
+		} else {
+			// Fall back to the configured login server entry point.
+			baseUrl = s.Config.GetLoginServerUrl()
+		}
 	}
 
 	response := gin.H{
@@ -672,6 +677,30 @@ func (s *Server) apiConfigurationHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+func getRequestBaseURL(req *http.Request) string {
+	if req == nil {
+		return ""
+	}
+
+	host := strings.TrimSpace(req.Host)
+	if len(host) == 0 && req.URL != nil {
+		host = strings.TrimSpace(req.URL.Host)
+	}
+	if len(host) == 0 {
+		return ""
+	}
+
+	scheme := "http"
+	if req.TLS != nil {
+		scheme = "https"
+	}
+	if forwardedProto := strings.TrimSpace(req.Header.Get("X-Forwarded-Proto")); len(forwardedProto) > 0 {
+		scheme = strings.TrimSpace(strings.Split(forwardedProto, ",")[0])
+	}
+
+	return fmt.Sprintf("%s://%s", scheme, host)
 }
 
 // readyHandler handles the readiness check endpoint

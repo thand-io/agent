@@ -1,0 +1,17 @@
+version: "1.0"
+providers:
+  oidc-test:
+    name: Test OIDC Provider
+    description: OAuth2 provider backed by Keycloak for agent login e2e testing
+    provider: oauth2
+    enabled: true
+    config:
+      client_id: thand-oidc
+      client_secret: thand-oidc-secret
+      auth_url: '${ .OIDC_ISSUER_URL + "/protocol/openid-connect/auth" }'
+      token_url: '${ .OIDC_ISSUER_URL_INTERNAL + "/protocol/openid-connect/token" }'
+      scopes:
+        - openid
+        - profile
+        - email
+      redirect_url: '${ .THAND_SERVER_URL + "/api/v1/auth/callback/oidc-test" }'

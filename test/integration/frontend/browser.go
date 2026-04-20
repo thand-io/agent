@@ -39,7 +39,11 @@ func NewBrowser(t *testing.T, baseURL string) *Browser {
 		chromedp.Flag("disable-gpu", false),
 		chromedp.Flag("no-sandbox", true),
 		chromedp.Flag("disable-dev-shm-usage", true),
-		chromedp.Flag("host-resolver-rules", fmt.Sprintf("MAP %s 127.0.0.1", testinfra.KeycloakSharedHostname)),
+		chromedp.Flag("host-resolver-rules", fmt.Sprintf(
+			"MAP %s 127.0.0.1, MAP %s 127.0.0.1",
+			testinfra.KeycloakSharedHostname,
+			ThandSharedHostname,
+		)),
 	)
 
 	// If CHROME_BIN is set (e.g., in CI environments), use it
@@ -176,6 +180,39 @@ func truncateString(s string, max int) string {
 // Login performs login via OIDC.
 func (b *Browser) Login(ctx context.Context, username, password string) error {
 	return b.LoginWithOIDC(ctx, username, password)
+}
+
+// WaitForAuthCallbackSuccess waits for the auth callback page to report that
+// session registration completed successfully.
+func (b *Browser) WaitForAuthCallbackSuccess(ctx context.Context, timeout time.Duration) error {
+	b.t.Log("Waiting for auth callback success...")
+
+	chromedpCtx, cancel := b.withCallerCtx(ctx)
+	defer cancel()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		var currentURL string
+		var bodyText string
+
+		err := chromedp.Run(chromedpCtx,
+			chromedp.Location(&currentURL),
+			chromedp.Text(`body`, &bodyText, chromedp.ByQuery),
+		)
+		if err == nil {
+			if strings.Contains(bodyText, "Session registered successfully!") {
+				b.t.Logf("Auth callback succeeded at URL: %s", currentURL)
+				return nil
+			}
+			if strings.Contains(bodyText, "Unable to register session automatically") {
+				return fmt.Errorf("auth callback failed to register session at URL %s", currentURL)
+			}
+		}
+
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	return fmt.Errorf("timeout waiting for auth callback success")
 }
 
 // NavigateToElevatePage navigates to the elevate page

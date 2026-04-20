@@ -24,18 +24,48 @@ import (
 const (
 	// ThandServerPort is the default HTTP port for Thand server.
 	ThandServerPort = "5225"
+	// ThandSharedHostname is a synthetic hostname that both the browser and the
+	// agent container can resolve to the host-bound server port.
+	ThandSharedHostname = "thand.test"
 )
+
+type UISetupOption func(*uiSetupConfig)
+
+type uiSetupConfig struct {
+	startAgent                bool
+	agentUsesLocalDefinitions bool
+}
+
+func WithAgentContainer() UISetupOption {
+	return func(cfg *uiSetupConfig) {
+		cfg.startAgent = true
+	}
+}
+
+func WithAgentLocalDefinitions() UISetupOption {
+	return func(cfg *uiSetupConfig) {
+		cfg.agentUsesLocalDefinitions = true
+	}
+}
 
 // UITestInfrastructure extends testinfra with UI-specific containers (Thand server).
 type UITestInfrastructure struct {
 	*testinfra.TestInfrastructure
 
 	// Thand Server
-	thandContainer    testcontainers.Container
-	ThandEndpoint     string
-	ThandAPIEndpoint  string
-	allocatedHostPort int          // pre-allocated host port for deterministic URLs
-	portListener      net.Listener // held open until startThandServer closes it just before Docker binds
+	thandContainer      testcontainers.Container
+	ThandEndpoint       string
+	ThandAPIEndpoint    string
+	ThandSharedEndpoint string
+	allocatedHostPort   int          // pre-allocated host port for deterministic URLs
+	portListener        net.Listener // held open until startThandServer closes it just before Docker binds
+
+	// Optional Thand Agent
+	agentContainer         testcontainers.Container
+	AgentEndpoint          string
+	AgentAPIEndpoint       string
+	allocatedAgentHostPort int
+	agentPortListener      net.Listener
 
 	// providerEnvVars are injected into the server container so that ResolveConfig
 	// can substitute ${ .VARNAME } jq expressions in provider definition YAML files.
@@ -54,11 +84,24 @@ func (l *thandServerLogConsumer) Accept(log testcontainers.Log) {
 	l.t.Logf("[thand-server] %s", string(log.Content))
 }
 
+type thandAgentLogConsumer struct {
+	t *testing.T
+}
+
+func (l *thandAgentLogConsumer) Accept(log testcontainers.Log) {
+	l.t.Logf("[thand-agent] %s", string(log.Content))
+}
+
 // SetupUITestInfrastructure creates and starts all containers needed for UI E2E tests.
 // It starts the base infrastructure (LocalStack, MailHog, Temporal) plus Keycloak and
 // optionally the Thand server container.
-func SetupUITestInfrastructure(t *testing.T, ctx context.Context, testCase *TestCase) *UITestInfrastructure {
+func SetupUITestInfrastructure(t *testing.T, ctx context.Context, testCase *TestCase, opts ...UISetupOption) *UITestInfrastructure {
 	t.Helper()
+
+	setupCfg := &uiSetupConfig{}
+	for _, opt := range opts {
+		opt(setupCfg)
+	}
 
 	// Resolve Keycloak realm file path
 	realmPath, err := filepath.Abs(filepath.Join("keycloak", "thand-test-realm.json"))
@@ -82,10 +125,23 @@ func SetupUITestInfrastructure(t *testing.T, ctx context.Context, testCase *Test
 	infra.allocatedHostPort = listener.Addr().(*net.TCPAddr).Port
 	infra.portListener = listener // keep open; closed in startThandServer just before container bind
 
-	// Set endpoint URLs early so createConfigDir can interpolate ${THAND_SERVER_URL}
+	// Set endpoint URLs early so createConfigDir can interpolate provider callback
+	// URLs correctly. Browser-facing flows use localhost, while thand.test exists
+	// only so containers can reach the host-bound server port.
 	infra.ThandEndpoint = fmt.Sprintf("http://localhost:%d", infra.allocatedHostPort)
 	infra.ThandAPIEndpoint = infra.ThandEndpoint + "/api/v1"
+	infra.ThandSharedEndpoint = fmt.Sprintf("http://%s:%d", ThandSharedHostname, infra.allocatedHostPort)
 	t.Logf("Pre-allocated Thand server port: %d → %s", infra.allocatedHostPort, infra.ThandEndpoint)
+
+	if setupCfg.startAgent {
+		agentListener, agentErr := net.Listen("tcp", ":0")
+		require.NoError(t, agentErr, "Failed to allocate a free port for Thand agent")
+		infra.allocatedAgentHostPort = agentListener.Addr().(*net.TCPAddr).Port
+		infra.agentPortListener = agentListener
+		infra.AgentEndpoint = fmt.Sprintf("http://localhost:%d", infra.allocatedAgentHostPort)
+		infra.AgentAPIEndpoint = infra.AgentEndpoint + "/api/v1"
+		t.Logf("Pre-allocated Thand agent port: %d → %s", infra.allocatedAgentHostPort, infra.AgentEndpoint)
+	}
 
 	// Create temporary config directory with interpolated values.
 	// Must be done after infrastructure is started so we have endpoints.
@@ -96,6 +152,10 @@ func SetupUITestInfrastructure(t *testing.T, ctx context.Context, testCase *Test
 		infra.startThandServer(t, ctx)
 	} else {
 		t.Log("Skipping Thand server start (empty test case)")
+	}
+
+	if setupCfg.startAgent {
+		infra.startThandAgent(t, ctx, setupCfg.agentUsesLocalDefinitions)
 	}
 
 	return infra
@@ -149,9 +209,10 @@ func (infra *UITestInfrastructure) createConfigDir(t *testing.T, testCase *TestC
 		infra.providerEnvVars["SAML_IDP_METADATA_URL_INTERNAL"] = samlMetaInternal
 	}
 
-	// THAND_SERVER_URL uses localhost — the browser navigates here after Keycloak redirect.
+	// THAND_SERVER_URL must stay browser-facing so auth callbacks and session
+	// cookies remain on the same localhost origin as the rest of the UI flow.
 	if infra.allocatedHostPort > 0 {
-		infra.providerEnvVars["THAND_SERVER_URL"] = fmt.Sprintf("http://localhost:%d", infra.allocatedHostPort)
+		infra.providerEnvVars["THAND_SERVER_URL"] = infra.ThandEndpoint
 	}
 
 	// Copy definition files verbatim — no string substitution needed.
@@ -182,26 +243,7 @@ func (infra *UITestInfrastructure) startThandServer(t *testing.T, ctx context.Co
 	t.Helper()
 	t.Log("Starting Thand server container...")
 
-	// Detect host architecture to select the correct Linux binary.
-	// Docker Desktop on macOS M-series runs arm64 containers by default.
-	goarch := "amd64"
-	if arch := os.Getenv("GOARCH"); arch != "" {
-		goarch = arch
-	} else {
-		// runtime.GOARCH gives the architecture of the test process
-		goarch = runtime.GOARCH
-	}
-
-	// Build path to Linux agent binary (needed for Alpine container)
-	agentBinaryPath := filepath.Join("..", "..", "..", "bin", fmt.Sprintf("thand-linux-%s", goarch))
-	if _, err := os.Stat(agentBinaryPath); os.IsNotExist(err) {
-		// Fall back to amd64 if native arch binary doesn't exist
-		agentBinaryPath = filepath.Join("..", "..", "..", "bin", "thand-linux-amd64")
-	}
-	if _, err := os.Stat(agentBinaryPath); os.IsNotExist(err) {
-		t.Fatalf("Linux agent binary not found at %s. Run 'make build-linux-amd64' first.", agentBinaryPath)
-	}
-	t.Logf("Using agent binary: %s (arch: %s)", agentBinaryPath, goarch)
+	agentBinaryPath := resolveLinuxAgentBinaryPath(t)
 
 	// Create config.yaml for the server in a separate temp dir
 	serverConfigDir := filepath.Join(os.TempDir(), fmt.Sprintf("thand-server-config-%d", time.Now().UnixNano()))
@@ -312,6 +354,7 @@ workflows:
 			// Ensure host.docker.internal resolves on Linux Docker (not only Docker Desktop).
 			hc.ExtraHosts = []string{
 				"host.docker.internal:host-gateway",
+				ThandSharedHostname + ":host-gateway",
 				testinfra.KeycloakSharedHostname + ":host-gateway",
 			}
 		},
@@ -364,6 +407,157 @@ workflows:
 	}
 }
 
+func (infra *UITestInfrastructure) startThandAgent(t *testing.T, ctx context.Context, withLocalDefinitions bool) {
+	t.Helper()
+	t.Log("Starting Thand agent container...")
+
+	agentBinaryPath := resolveLinuxAgentBinaryPath(t)
+
+	agentConfigDir := filepath.Join(os.TempDir(), fmt.Sprintf("thand-agent-config-%d", time.Now().UnixNano()))
+	err := os.MkdirAll(agentConfigDir, 0755)
+	require.NoError(t, err, "Failed to create agent config directory")
+	infra.RegisterCleanup(func() {
+		os.RemoveAll(agentConfigDir)
+	})
+
+	agentPort := strconv.Itoa(infra.allocatedAgentHostPort)
+
+	configYAML := fmt.Sprintf(`
+mode: agent
+secret: thand-e2e-test-configured
+login:
+  endpoint: %s
+  base: /
+server:
+  host: 0.0.0.0
+  port: %s
+  security:
+    cors:
+      allowed_origins:
+        - %s
+        - %s
+logging:
+  level: "debug"
+`, infra.ThandSharedEndpoint, agentPort, infra.ThandEndpoint, infra.ThandSharedEndpoint)
+
+	if withLocalDefinitions {
+		configYAML += `
+providers:
+  path: /app/definitions
+roles:
+  path: /app/definitions
+workflows:
+  path: /app/definitions
+`
+	}
+
+	err = os.WriteFile(filepath.Join(agentConfigDir, "config.yaml"), []byte(configYAML), 0644)
+	require.NoError(t, err, "Failed to write agent config.yaml")
+
+	agentPortBinding := nat.Port(agentPort + "/tcp")
+	containerFiles := []testcontainers.ContainerFile{
+		{
+			HostFilePath:      agentBinaryPath,
+			ContainerFilePath: "/app/agent",
+			FileMode:          0755,
+		},
+		{
+			HostFilePath:      filepath.Join(agentConfigDir, "config.yaml"),
+			ContainerFilePath: "/app/config.yaml",
+			FileMode:          0644,
+		},
+	}
+	if withLocalDefinitions {
+		for _, defFile := range []struct{ hostSrc, containerDst string }{
+			{"providers.yaml", "/app/definitions/providers.yaml"},
+			{"roles.yaml", "/app/definitions/roles.yaml"},
+			{"workflows.yaml", "/app/definitions/workflows.yaml"},
+		} {
+			hostPath := filepath.Join(infra.configDir, defFile.hostSrc)
+			if _, err := os.Stat(hostPath); err == nil {
+				containerFiles = append(containerFiles, testcontainers.ContainerFile{
+					HostFilePath:      hostPath,
+					ContainerFilePath: defFile.containerDst,
+					FileMode:          0644,
+				})
+			}
+		}
+	}
+
+	req := testcontainers.ContainerRequest{
+		Image: "alpine:3.18",
+		Cmd: []string{
+			"/app/agent", "agent", "--config", "/app/config.yaml",
+		},
+		ExposedPorts: []string{agentPort + "/tcp"},
+		Env: map[string]string{
+			"THAND_MODE":      "agent",
+			"THAND_LOG_LEVEL": "debug",
+		},
+		Files: containerFiles,
+		LogConsumerCfg: &testcontainers.LogConsumerConfig{
+			Consumers: []testcontainers.LogConsumer{
+				&thandAgentLogConsumer{t: t},
+			},
+		},
+		HostConfigModifier: func(hc *dockercontainer.HostConfig) {
+			hc.PortBindings = nat.PortMap{
+				agentPortBinding: []nat.PortBinding{
+					{HostIP: "0.0.0.0", HostPort: agentPort},
+				},
+			}
+			hc.ExtraHosts = []string{
+				"host.docker.internal:host-gateway",
+				ThandSharedHostname + ":host-gateway",
+				testinfra.KeycloakSharedHostname + ":host-gateway",
+			}
+		},
+		WaitingFor: wait.ForListeningPort(agentPortBinding).
+			WithStartupTimeout(120 * time.Second),
+	}
+
+	if infra.agentPortListener != nil {
+		infra.agentPortListener.Close()
+		infra.agentPortListener = nil
+	}
+
+	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          true,
+	})
+	require.NoError(t, err, "Failed to start Thand agent container")
+	infra.agentContainer = container
+
+	host, err := container.Host(ctx)
+	require.NoError(t, err, "Failed to get Thand agent host")
+	mappedPort, err := container.MappedPort(ctx, agentPortBinding)
+	require.NoError(t, err, "Failed to get Thand agent port")
+
+	actualEndpoint := fmt.Sprintf("http://%s:%s", host, mappedPort.Port())
+	t.Logf("Thand agent started at %s (expected %s)", actualEndpoint, infra.AgentEndpoint)
+}
+
+func resolveLinuxAgentBinaryPath(t *testing.T) string {
+	t.Helper()
+
+	goarch := "amd64"
+	if arch := os.Getenv("GOARCH"); arch != "" {
+		goarch = arch
+	} else {
+		goarch = runtime.GOARCH
+	}
+
+	agentBinaryPath := filepath.Join("..", "..", "..", "bin", fmt.Sprintf("thand-linux-%s", goarch))
+	if _, err := os.Stat(agentBinaryPath); os.IsNotExist(err) {
+		agentBinaryPath = filepath.Join("..", "..", "..", "bin", "thand-linux-amd64")
+	}
+	if _, err := os.Stat(agentBinaryPath); os.IsNotExist(err) {
+		t.Fatalf("Linux agent binary not found at %s. Run 'make build-linux-amd64' first.", agentBinaryPath)
+	}
+	t.Logf("Using agent binary: %s (arch: %s)", agentBinaryPath, goarch)
+	return agentBinaryPath
+}
+
 // Teardown stops and removes all UI-specific containers, then delegates to base teardown.
 func (infra *UITestInfrastructure) Teardown() {
 	terminateCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -374,8 +568,17 @@ func (infra *UITestInfrastructure) Teardown() {
 		infra.portListener.Close()
 		infra.portListener = nil
 	}
+	if infra.agentPortListener != nil {
+		infra.agentPortListener.Close()
+		infra.agentPortListener = nil
+	}
 
 	// Terminate UI-specific containers first
+	if infra.agentContainer != nil {
+		if err := infra.agentContainer.Terminate(terminateCtx); err != nil {
+			_ = err
+		}
+	}
 	if infra.thandContainer != nil {
 		if err := infra.thandContainer.Terminate(terminateCtx); err != nil {
 			// Log warning but don't fail
