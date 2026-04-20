@@ -360,6 +360,7 @@ func (c *Config) ReloadConfig() error {
 			logrus.Infoln("Loaded workflows from external source:", len(workflows))
 			c.mu.Lock()
 			c.Workflows.Definitions = workflows
+			c.configGeneration++
 			c.mu.Unlock()
 		} else {
 			logrus.Warningln("No workflows loaded from external source")
@@ -378,6 +379,7 @@ func (c *Config) ReloadConfig() error {
 			logrus.Infoln("Loaded providers from external source:", len(providers))
 			c.mu.Lock()
 			c.Providers.Definitions = providers
+			c.configGeneration++
 			c.mu.Unlock()
 		} else {
 			logrus.Warningln("No providers loaded from external source")
@@ -394,6 +396,7 @@ func (c *Config) ReloadConfig() error {
 			logrus.Infoln("Loaded roles from external source:", len(roles))
 			c.mu.Lock()
 			c.Roles.Definitions = roles
+			c.configGeneration++
 			c.mu.Unlock()
 		} else {
 			logrus.Warningln("No roles loaded from external source")
