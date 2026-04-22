@@ -46,11 +46,10 @@ func CreateTemporalWorkflowIdentifier(workflowName string) string {
 	return strings.ToLower(fmt.Sprintf("%s-%s", common.GetClientIdentifier(), workflowName))
 }
 
-// CreateChildWorkflowID generates a unique child workflow ID by hashing a composite
-// identifier built from provider, role, identity, tenant, and parent workflow ID.
-// This ensures uniqueness across different identities/tenants requesting the same role.
-// Format: parentWorkflowID_operation_hash
-func CreateChildWorkflowID(parentWorkflowID, operation, provider string, req *WorkflowRoleRequest) string {
+// CreateExecutionPlanEntryID generates a stable identifier for a single provider
+// execution plan entry. It is derived from the same composite request shape used
+// for child workflow IDs so retries map back to the same logical authorization.
+func CreateExecutionPlanEntryID(parentWorkflowID, provider string, req *WorkflowRoleRequest) string {
 	// Build composite identifier similar to CompositeRoleWorkflowIdentifier
 	// but using the data available in WorkflowRoleRequest
 	parts := []string{
@@ -66,6 +65,10 @@ func CreateChildWorkflowID(parentWorkflowID, operation, provider string, req *Wo
 
 	parts = append(parts, req.Identity)
 
+	if len(req.DeviceID) > 0 {
+		parts = append(parts, req.DeviceID)
+	}
+
 	if len(req.Tenant) > 0 {
 		parts = append(parts, req.Tenant)
 	}
@@ -77,7 +80,19 @@ func CreateChildWorkflowID(parentWorkflowID, operation, provider string, req *Wo
 	hash := sha256.Sum256([]byte(composite))
 	hashStr := hex.EncodeToString(hash[:])[:12] // Use first 12 chars (48 bits)
 
-	return fmt.Sprintf("%s_%s_%s", parentWorkflowID, operation, hashStr)
+	return hashStr
+}
+
+// CreateChildWorkflowID generates a unique child workflow ID by hashing a composite
+// identifier built from provider, role, identity, tenant, and parent workflow ID.
+// This ensures uniqueness across different identities/tenants requesting the same role.
+// Format: parentWorkflowID_operation_hash
+func CreateChildWorkflowID(parentWorkflowID, operation, provider string, req *WorkflowRoleRequest) string {
+	return CreateChildWorkflowIDForEntry(parentWorkflowID, operation, CreateExecutionPlanEntryID(parentWorkflowID, provider, req))
+}
+
+func CreateChildWorkflowIDForEntry(parentWorkflowID, operation, entryID string) string {
+	return fmt.Sprintf("%s_%s_%s", parentWorkflowID, operation, entryID)
 }
 
 // runSyncLoop runs a single synchronization capability inside a Temporal workflow
@@ -285,11 +300,14 @@ func CreateProviderSynchronizeWorkflow(provider Provider) func(workflow.Context,
 }
 
 type WorkflowRoleRequest struct {
-	WorkflowID string         `json:"workflow_id"`      // ID of the workflow for which the role is being authorized
-	Tenant     string         `json:"tenant,omitempty"` // Optional tenant ID for multi-account providers
-	Identity   string         `json:"identity"`         // User or group identifier
-	Role       *Role          `json:"role"`
-	Duration   *time.Duration `json:"duration,omitempty"` // Optional duration for temporary access
+	WorkflowID       string         `json:"workflow_id"` // ID of the workflow for which the role is being authorized
+	DeviceID         string         `json:"device_id,omitempty"`
+	Tenant           string         `json:"tenant,omitempty"` // Optional tenant ID for multi-account providers
+	Identity         string         `json:"identity"`         // User or group identifier
+	ResolvedIdentity *Identity      `json:"resolved_identity,omitempty"`
+	Role             *Role          `json:"role"`
+	Duration         *time.Duration `json:"duration,omitempty"` // Optional duration for temporary access
+	Metadata         map[string]any `json:"metadata,omitempty"`
 }
 
 // IsValid checks if any of the fields are nil
@@ -314,114 +332,44 @@ func (r *WorkflowRoleRequest) GetDuration() *time.Duration {
 	return r.Duration
 }
 
-// authorizeRoleRequestSideEffect is used to carry the result of
-// CreateAuthorizeRoleRequest across a workflow.SideEffect boundary so that
-// non-deterministic operations (config lookups, UUID generation) are isolated
-// from workflow replay.
-type authorizeRoleRequestSideEffect struct {
-	Request *AuthorizeRoleRequest `json:"request"`
-	Err     string                `json:"error"`
-}
-
 // CreateProviderAuthorizeRoleWorkflow returns a workflow function that captures the
-// live provider instance via closure. The child workflow receives the Temporal
-// workflow.Context, constructs a WorkflowTaskSupport with it, and delegates to
-// provider.AuthorizeRole — allowing the provider to dispatch activities, use
-// workflow.Go, and manage state just as it does in the primary workflow.
-// Careful: The workflow function returned by this method will be executed as a Temporal workflow, so it must be deterministic and should not perform any non-deterministic operations (like generating random numbers or accessing the current time) directly in the workflow code. Any such operations should be performed within activities or isolated using workflow.SideEffect to ensure correct behavior during workflow replay.
-func CreateProviderAuthorizeRoleWorkflow(cfg ConfigImpl, provider Provider) func(workflow.Context, WorkflowRoleRequest) (*AuthorizeRoleResponse, error) {
-	return func(ctx workflow.Context, req WorkflowRoleRequest) (*AuthorizeRoleResponse, error) {
+// live provider instance via closure. The child workflow receives a fully
+// materialized provider request so it can delegate directly to provider
+// activities without any workflow-side config lookups.
+func CreateProviderAuthorizeRoleWorkflow(provider Provider) func(workflow.Context, AuthorizeRoleRequest) (*AuthorizeRoleResponse, error) {
+	return func(ctx workflow.Context, req AuthorizeRoleRequest) (*AuthorizeRoleResponse, error) {
 
 		log := workflow.GetLogger(ctx)
 		log.Info("Starting authorize role workflow", "provider", provider.GetIdentifier())
 
-		// Wrap in a SideEffect so that the non-deterministic operations inside
-		// CreateAuthorizeRoleRequest (config/identity/tenant lookups, UUID generation
-		// for the composite role identifier) are executed only on the first run and
-		// their result is recorded in the workflow event history. On replay, Temporal
-		// replays the recorded value instead of re-executing the function, keeping
-		// workflow execution deterministic.
-		//
-		// Note: CompositeRole has a custom UnmarshalJSON to ensure UUID, Composite,
-		// and Providers fields survive JSON serialization through Temporal's data converter.
-		encodedReq := workflow.SideEffect(ctx, func(ctx workflow.Context) any {
-			result, err := CreateAuthorizeRoleRequest(cfg, provider, &req)
-			if err != nil {
-				return authorizeRoleRequestSideEffect{Err: err.Error()}
-			}
-			return authorizeRoleRequestSideEffect{Request: result}
-		})
-
-		var se authorizeRoleRequestSideEffect
-		if err := encodedReq.Get(&se); err != nil {
-			log.Error("Failed to decode authorize role request side effect", "error", err)
-			return nil, err
-		}
-		if se.Err != "" {
-			log.Error("Failed to create authorize role request", "error", se.Err)
-			return nil, fmt.Errorf("%s", se.Err)
-		}
-
 		log.Debug("Constructed authorize role request, invoking provider",
 			"provider", provider.GetIdentifier(),
-			"authorizeReq", se.Request,
+			"authorizeReq", req,
 		)
 
-		return provider.AuthorizeRole(ctx, se.Request)
+		return provider.AuthorizeRole(ctx, &req)
 	}
 }
 
 type WorkflowRevokeRoleRequest struct {
-	RevokeRoleRequest     *WorkflowRoleRequest
+	RevokeRoleRequest     *RevokeRoleRequest
 	AuthorizeRoleResponse *AuthorizeRoleResponse
 }
 
 // CreateProviderRevokeRoleWorkflow returns a workflow function that captures the
 // live provider instance via closure for revocation operations.
-// Careful: The revoke workflow may need to reconstruct the original AuthorizeRoleRequest
-// and must handle it deterministically within a workflow.SideEffect.
-func CreateProviderRevokeRoleWorkflow(cfg ConfigImpl, provider Provider) func(workflow.Context, WorkflowRevokeRoleRequest) (*RevokeRoleResponse, error) {
+func CreateProviderRevokeRoleWorkflow(provider Provider) func(workflow.Context, WorkflowRevokeRoleRequest) (*RevokeRoleResponse, error) {
 	return func(ctx workflow.Context, req WorkflowRevokeRoleRequest) (*RevokeRoleResponse, error) {
 
 		log := workflow.GetLogger(ctx)
 		log.Info("Starting revoke role workflow", "provider", provider.GetIdentifier())
 
-		var authReq *AuthorizeRoleRequest
-		if req.RevokeRoleRequest != nil {
-			// Same reasoning as in CreateProviderAuthorizeRoleWorkflow: wrap in a
-			// SideEffect to isolate non-deterministic config lookups and UUID
-			// generation from replay.
-			encodedReq := workflow.SideEffect(ctx, func(ctx workflow.Context) any {
-				result, err := CreateAuthorizeRoleRequest(cfg, provider, req.RevokeRoleRequest)
-				if err != nil {
-					return authorizeRoleRequestSideEffect{Err: err.Error()}
-				}
-				return authorizeRoleRequestSideEffect{Request: result}
-			})
-
-			var se authorizeRoleRequestSideEffect
-			if err := encodedReq.Get(&se); err != nil {
-				log.Error("Failed to decode revoke role request side effect", "error", err)
-				return nil, err
-			}
-			if se.Err != "" {
-				log.Error("Failed to create revoke role request", "error", se.Err)
-				return nil, fmt.Errorf("%s", se.Err)
-			}
-			authReq = se.Request
-		}
-
-		revokeReq := &RevokeRoleRequest{
-			AuthorizeRoleRequest:  authReq,
-			AuthorizeRoleResponse: req.AuthorizeRoleResponse,
-		}
-
 		log.Debug("Constructed revoke role request, invoking provider",
 			"provider", provider.GetIdentifier(),
-			"revokeReq", revokeReq,
+			"revokeReq", req.RevokeRoleRequest,
 		)
 
-		return provider.RevokeRole(ctx, revokeReq)
+		return provider.RevokeRole(ctx, req.RevokeRoleRequest)
 	}
 }
 
@@ -434,13 +382,17 @@ func CreateAuthorizeRoleRequest(
 ) (*AuthorizeRoleRequest, error) {
 
 	// Get the user identity from the request
-	identity, err := cfg.GetIdentity(req.Identity)
-	if err != nil {
-		identity = &Identity{
-			ID: req.Identity,
-			User: &User{
-				Email: req.Identity,
-			},
+	identity := req.ResolvedIdentity
+	var err error
+	if identity == nil {
+		identity, err = cfg.GetIdentity(req.Identity)
+		if err != nil {
+			identity = &Identity{
+				ID: req.Identity,
+				User: &User{
+					Email: req.Identity,
+				},
+			}
 		}
 	}
 
@@ -481,11 +433,13 @@ func CreateAuthorizeRoleRequest(
 		Tenant:   tenant,
 		Role:     compositeRole,
 		Duration: req.Duration,
+		Metadata: maps.Clone(req.Metadata),
 	}, nil
 }
 
-// validateRoleAndBuildOutput validates the role and builds the initial model output
-// Careful: This function is called within a workflow.SideEffect, so it must be deterministic and cannot perform any Temporal operations (activities, child workflows, timers) or access non-deterministic data (current time, random numbers). It can only use the data passed in the parameters and perform pure computations.
+// validateRoleAndBuildOutput validates the role and builds the initial model
+// output. It is used during request materialization, so it must stay as a pure
+// computation over the provided inputs.
 func validateRoleAndBuildOutput(
 	provider Provider,
 	elevateRequest ElevateRequestInternal,

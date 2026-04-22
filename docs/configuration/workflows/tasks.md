@@ -226,6 +226,59 @@ The approvals task implements the following logic:
       denied: denied
 ```
 
+## Execution Planning
+
+`authorize` runs an internal execution-plan activity that compiles the current workflow request into the execution plan later used by `authorize` and `revoke`.
+
+Treat `authorize` as the last request-shaping step before access is granted. It should run only after approvals, form collection, and other workflow logic that might change the final request shape.
+
+### Execution-Plan Process
+
+The execution-plan activity:
+
+1. **Reads** the normalized elevate request from workflow context
+2. **Resolves** the provider, identity, device, and local policy data needed for execution
+3. **Compiles** one or more provider authorization requests into an internal execution plan
+4. **Stores** that execution plan in workflow context/history for later `authorize` and `revoke` steps
+
+### Requirements and Constraints
+
+- execution planning is required before provider authorization work starts
+- `authorize` should appear immediately after approvals or any other request-shaping step
+- `authorize` and `revoke` depend on the recorded execution plan and do not rebuild it later
+- `revoke` fails if the execution plan is missing
+
+### Failure Behavior
+
+- if execution planning cannot compile the request, the workflow fails before authorization starts
+- if `revoke` runs without a recorded execution plan, it fails instead of trying to recover implicitly
+
+### Examples
+
+**Validation, Approval, and Authorization**
+```yaml
+- validate:
+    thand: validate
+    then: approvals
+
+- approvals:
+    thand: approvals
+    on:
+      approved: authorize
+      denied: denied
+    then: denied
+
+- authorize:
+    thand: authorize
+```
+
+**Validation and Authorization Without Approval**
+```yaml
+- validate:
+    thand: validate
+    then: authorize
+```
+
 ## authorize
 
 The `authorize` task grants temporary access to the requested role and resources.
@@ -250,14 +303,17 @@ The `authorize` task grants temporary access to the requested role and resources
 
 The authorize task:
 
-1. **Validates** the request is approved (checks workflow context)
-2. **Creates** temporary credentials/access across all specified providers
-3. **Registers** the session information
-4. **Returns** authorization details with timestamps
+1. **Builds or reuses** the recorded execution plan from workflow context/history
+2. **Validates** the request is approved (checks workflow context)
+3. **Creates** temporary credentials/access across all specified providers
+4. **Registers** the session information
+5. **Returns** authorization details with timestamps
 
 ### Authorization Context
 
-The authorize task checks if the request has been approved by looking at the workflow context. If already approved, it returns basic model output with timestamps.
+The authorize task checks if the request has been approved by looking at the workflow context. It also snapshots the final request into the execution plan it and `revoke` later consume.
+
+For any workflow that grants access, treat `authorize` as the first step that may perform provider-side effects.
 
 ### Examples
 
@@ -352,8 +408,8 @@ The `revoke` task removes granted access and cleans up temporary credentials.
 
 The revoke task:
 
-1. **Validates** the elevate request from workflow context
-2. **Iterates** through all providers and identities
+1. **Reads** the recorded execution plan from workflow context/history
+2. **Uses** the stored authorization request shape to build revocation work
 3. **Calls** provider-specific revocation methods
 4. **Logs** revocation events
 5. **Returns** revocation status with timestamp
@@ -576,7 +632,13 @@ Error: authorization failed for user 'alice' role 'admin'
 ```
 **Solution**: Verify the request has been properly approved and the user has permission to request the role.
 
-#### 4. Monitoring Limitations
+#### 4. Missing Execution Plan
+```
+Error: failed to get execution plan from workflow context
+```
+**Solution**: Ensure `thand: revoke` only runs on paths where `thand: authorize` has already executed and recorded the execution plan.
+
+#### 5. Monitoring Limitations
 ```
 Error: Monitoring is only supported with temporal
 ```

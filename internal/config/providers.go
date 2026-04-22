@@ -319,7 +319,7 @@ func (c *Config) registerProviderTemporalBindings(providerResult models.Provider
 			models.TemporalAuthorizeRoleWorkflowName,
 		)
 		worker.RegisterWorkflowWithOptions(
-			models.CreateProviderAuthorizeRoleWorkflow(c, providerResult),
+			models.CreateProviderAuthorizeRoleWorkflow(providerResult),
 			workflow.RegisterOptions{
 				Name:               authWorkflowName,
 				VersioningBehavior: workflow.VersioningBehaviorPinned,
@@ -331,7 +331,7 @@ func (c *Config) registerProviderTemporalBindings(providerResult models.Provider
 			models.TemporalRevokeRoleWorkflowName,
 		)
 		worker.RegisterWorkflowWithOptions(
-			models.CreateProviderRevokeRoleWorkflow(c, providerResult),
+			models.CreateProviderRevokeRoleWorkflow(providerResult),
 			workflow.RegisterOptions{
 				Name:               revokeWorkflowName,
 				VersioningBehavior: workflow.VersioningBehaviorPinned,

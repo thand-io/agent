@@ -32,6 +32,7 @@ In the current model, a device has:
 
 - a stable device ID
 - human-readable metadata such as `name` and `description`
+- optional per-device local-elevation policy
 
 Runtime connection state is tracked separately from static device policy. That runtime state currently includes:
 
@@ -62,8 +63,11 @@ The intended architecture is:
 2. An agent represents one device, running as a system-level service rather than a per-user helper.
 3. `/register` bootstraps config only; running agents publish live route state directly to Temporal.
 4. Device-targeted workflows route through that live route only.
+5. Device-local capabilities such as local sudo are layered on top of the device substrate.
 
 Today the canonical `device_id` is machine-derived. Longer term, device registration should use a stronger enrolled identity, but keep the same `device_id` abstraction boundary.
+
+Device-targeted workflows also rely on a separate execution-planning phase before authorization. That workflow-level contract is documented in [Execution Planning](/internal/execution-planning.html).
 
 ## Phase 1: What Is Implemented Now
 
@@ -127,6 +131,7 @@ Other gaps:
 - no secure enrollment story yet
 - shared device registries are still internal Temporal workflows rather than a broader device control-plane service
 - no independent privileged helper transport yet on Linux or Windows
+- macOS now has an initial native privilege-services split, with an app-managed login item, broker daemon, and brokerctl bridge for timed sudoers grants
 - no explicit multi-agent-per-device design, because the current assumption is one system agent per device
 
 ## Future Phases
@@ -147,6 +152,7 @@ Future work should cover at least:
 
 ### Privileged local helper
 
+- macOS LaunchDaemon broker plus per-user notification helper
 - OS-native trust checks between the unprivileged agent, broker, and notifier
 - narrow local lease/enforcer contract with persisted expiry and restart reconciliation
 - future Linux and Windows helpers that match the same broker client abstraction

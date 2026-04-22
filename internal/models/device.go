@@ -6,6 +6,7 @@ import (
 
 const (
 	TemporalResolveFreshDeviceRouteActivityName = "resolve-fresh-device-route"
+	TemporalBuildExecutionPlanActivityName      = "build-execution-plan"
 
 	TemporalDeviceRegistryTaskQueue = "thand_device_registry"
 

@@ -79,6 +79,14 @@ func (t *thandTask) resolveIdentity(identity string) *models.Identity {
 	}
 }
 
+func (t *thandTask) resolveIdentitySnapshot(identity string) *models.Identity {
+	identityResult, err := t.config.GetIdentity(identity)
+	if err != nil || identityResult == nil || identityResult.User == nil {
+		return nil
+	}
+	return identityResult
+}
+
 func (f *thandTask) GetVersion() string {
 	return "1.0.0"
 }

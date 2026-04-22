@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"path"
 	"slices"
 	"sort"
@@ -19,6 +20,7 @@ type AuthorizeRoleRequest struct {
 	Identity *Identity       `json:"identity,omitempty"` // User or group identifier
 	Role     *CompositeRole  `json:"role,omitempty"`
 	Duration *time.Duration  `json:"duration,omitempty"` // Optional duration for temporary access
+	Metadata map[string]any  `json:"metadata,omitempty"` // Provider-specific workflow metadata
 }
 
 func (r *AuthorizeRoleRequest) IsValid() bool {
@@ -46,6 +48,67 @@ func (r *AuthorizeRoleRequest) GetDuration() *time.Duration {
 
 func (r *AuthorizeRoleRequest) HasTenant() bool {
 	return r.Tenant != nil && len(r.Tenant.ID) > 0
+}
+
+func CloneAuthorizeRoleRequest(req *AuthorizeRoleRequest) *AuthorizeRoleRequest {
+	if req == nil {
+		return nil
+	}
+
+	clone := *req
+	if req.Tenant != nil {
+		tenant := *req.Tenant
+		clone.Tenant = &tenant
+	}
+	if req.Identity != nil {
+		identity := *req.Identity
+		clone.Identity = &identity
+	}
+	if req.Role != nil {
+		role := *req.Role
+		clone.Role = &role
+	}
+	if req.Duration != nil {
+		duration := *req.Duration
+		clone.Duration = &duration
+	}
+	if req.Metadata != nil {
+		clone.Metadata = maps.Clone(req.Metadata)
+	}
+
+	return &clone
+}
+
+func CloneRevokeRoleRequest(req *RevokeRoleRequest) *RevokeRoleRequest {
+	if req == nil {
+		return nil
+	}
+
+	clone := &RevokeRoleRequest{
+		AuthorizeRoleRequest:  CloneAuthorizeRoleRequest(req.AuthorizeRoleRequest),
+		AuthorizeRoleResponse: req.AuthorizeRoleResponse,
+	}
+	if req.AuthorizeRoleResponse != nil {
+		response := *req.AuthorizeRoleResponse
+		if req.AuthorizeRoleResponse.Roles != nil {
+			response.Roles = append([]string(nil), req.AuthorizeRoleResponse.Roles...)
+		}
+		if req.AuthorizeRoleResponse.Permissions != nil {
+			response.Permissions = append([]string(nil), req.AuthorizeRoleResponse.Permissions...)
+		}
+		if req.AuthorizeRoleResponse.Groups != nil {
+			response.Groups = append([]string(nil), req.AuthorizeRoleResponse.Groups...)
+		}
+		if req.AuthorizeRoleResponse.Resources != nil {
+			response.Resources = append([]string(nil), req.AuthorizeRoleResponse.Resources...)
+		}
+		if req.AuthorizeRoleResponse.Metadata != nil {
+			response.Metadata = maps.Clone(req.AuthorizeRoleResponse.Metadata)
+		}
+		clone.AuthorizeRoleResponse = &response
+	}
+
+	return clone
 }
 
 type AuthorizeRoleResponse struct {

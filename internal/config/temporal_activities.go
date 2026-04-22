@@ -16,7 +16,8 @@ import (
 )
 
 type thandActivities struct {
-	config *Config
+	config                 *Config
+	lookupDeviceDefinition func(ctx context.Context, deviceID string) (*models.Device, error)
 }
 
 // PatchProviderUpstreamDummy is a no-op activity for thand server/agents that are not
@@ -105,6 +106,37 @@ func (t *thandActivities) ResolveFreshDeviceRoute(
 		)
 	}
 	return nil, err
+}
+
+func (t *thandActivities) BuildExecutionPlan(
+	ctx context.Context,
+	req models.ExecutionPlanRequest,
+) (*models.ExecutionPlan, error) {
+	if req.ElevateRequest == nil {
+		return nil, temporal.NewNonRetryableApplicationError(
+			"elevate request is required for execution planning",
+			"ExecutionPlanInvalid",
+			nil,
+		)
+	}
+
+	plan, err := BuildExecutionPlanWithOptions(t.config, req.WorkflowID, req.ElevateRequest, executionPlanBuildOptions{
+		LookupDeviceDefinition: func(deviceID string) (*models.Device, error) {
+			if t.lookupDeviceDefinition != nil {
+				return t.lookupDeviceDefinition(ctx, deviceID)
+			}
+			return t.config.querySharedDeviceDefinition(ctx, deviceID)
+		},
+	})
+	if err == nil {
+		return plan, nil
+	}
+
+	return nil, temporal.NewNonRetryableApplicationError(
+		err.Error(),
+		"ExecutionPlanInvalid",
+		err,
+	)
 }
 
 func (t *thandActivities) queryFreshDeviceRoute(

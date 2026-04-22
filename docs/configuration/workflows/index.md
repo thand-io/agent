@@ -17,9 +17,10 @@ Thand workflows orchestrate the complete lifecycle of access requests:
 
 1. **Validation** - Verify request validity and user permissions
 2. **Approval** - Route requests through approval chains with notifications
-3. **Authorization** - Grant temporary access to requested resources
-4. **Monitoring** - Track usage and detect policy violations
-5. **Revocation** - Remove access when complete or violated
+3. **Execution Planning** - Compile the final request into an execution plan
+4. **Authorization** - Grant temporary access to requested resources
+5. **Monitoring** - Track usage and detect policy violations
+6. **Revocation** - Remove access when complete or violated
 
 Workflows leverage the [Serverless Workflow DSL](https://serverlessworkflow.io/specification/) for standardized process definition while providing custom Thand-specific tasks for access control operations.
 
@@ -56,6 +57,19 @@ workflows:
         - approve: { thand: approvals }
         - grant: { thand: authorize }
 ```
+
+## Execution Planning
+
+Access-granting workflows should treat execution planning as part of the standard `authorize` lifecycle.
+
+`authorize` runs an internal execution-plan activity after validation, approvals, and any other step that can still change the final request. That activity compiles the request into an internal execution plan that `authorize` and `revoke` later consume.
+
+In practice, the safe patterns are:
+
+- `validate -> authorize`
+- `validate -> approvals -> authorize`
+
+If a workflow grants access, do not put any request-shaping step after `authorize`, because the execution plan is snapped there.
 
 ## Workflow Structure
 
@@ -132,7 +146,7 @@ workflows:
               approved: authorize
               denied: deny-notification
             then: deny-notification
-        
+
         # Step 3: Grant access if approved
         - authorize:
             thand: authorize
@@ -287,6 +301,7 @@ workflows:
       do:
         - validate: { thand: validate }
         - approve: { thand: approvals }
+        - authorize: { thand: authorize }
 ```
 
 ## Workflow Patterns
@@ -399,12 +414,11 @@ workflows:
               - when: '${ .duration > "PT4H" }'
                 then: manager-approval
               - when: '${ .user.department == "security" }'
-                then: auto-approve
+                then: authorize
             default: standard-approval
         
         - security-approval: { thand: approvals, then: authorize }
         - manager-approval: { thand: approvals, then: authorize }
-        - auto-approve: { thand: authorize, then: end }
         - standard-approval: { thand: approvals, then: authorize }
         - authorize: { thand: authorize, then: end }
 ```

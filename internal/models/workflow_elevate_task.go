@@ -131,6 +131,28 @@ func (r *ElevateWorkflowTask) GetContextAsElevationRequest() (*ElevateRequestInt
 	return &req, nil
 }
 
+func (r *ElevateWorkflowTask) SetExecutionPlan(plan *ExecutionPlan) {
+	r.SetContextKeyValue(sdkConstants.VarsContextExecutionPlan, plan)
+}
+
+func (r *ElevateWorkflowTask) GetContextAsExecutionPlan() (*ExecutionPlan, error) {
+	contextMap := r.GetContextAsMap()
+	rawPlan, ok := contextMap[sdkConstants.VarsContextExecutionPlan]
+	if !ok || rawPlan == nil {
+		return nil, fmt.Errorf("execution plan is missing from workflow context")
+	}
+
+	var plan ExecutionPlan
+	if err := common.ConvertInterfaceToInterface(rawPlan, &plan); err != nil {
+		return nil, fmt.Errorf("failed to decode context as ExecutionPlan: %w", err)
+	}
+	if !plan.IsValid() {
+		return nil, fmt.Errorf("execution plan is missing entries")
+	}
+
+	return &plan, nil
+}
+
 func (r *ElevateWorkflowTask) GetUser() *User {
 
 	req, err := r.GetContextAsElevationRequest()

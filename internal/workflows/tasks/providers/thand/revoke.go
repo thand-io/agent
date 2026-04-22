@@ -3,6 +3,7 @@ package thand
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -65,10 +66,47 @@ type revokeResult struct {
 
 // revokeTask represents a revocation task with all necessary context
 type revokeTask struct {
-	ProviderName      string
-	Identity          string
-	RevokeReq         *models.WorkflowRevokeRoleRequest
-	AuthorizeResponse *models.AuthorizeRoleResponse
+	EntryID      string
+	ProviderName string
+	Identity     string
+	DeviceID     string
+	RevokeReq    *models.WorkflowRevokeRoleRequest
+}
+
+func hydrateAuthorizeResponse(
+	workflowTask *models.ElevateWorkflowTask,
+	identityID string,
+	log *sdkWorkflowsModel.LogBuilder,
+) *models.AuthorizeRoleResponse {
+	req := workflowTask.GetContextAsMap()
+	if req == nil {
+		return nil
+	}
+
+	authorizationsMap, ok := req["authorizations"]
+	if !ok {
+		log.WithField("identity", identityID).Debug("No authorizations found in context for revocation")
+		return nil
+	}
+
+	if objectMap, ok := authorizationsMap.(map[string]any); ok {
+		if identityMap, ok := objectMap[identityID].(map[string]any); ok {
+			localResponse := models.AuthorizeRoleResponse{}
+			if err := common.ConvertMapToInterface(identityMap, &localResponse); err != nil {
+				log.WithError(err).WithField("identity", identityID).Warn("Failed to convert authorize response")
+				return nil
+			}
+			return &localResponse
+		}
+	}
+
+	if authzMap, ok := authorizationsMap.(map[string]*models.AuthorizeRoleResponse); ok {
+		if authResp, ok := authzMap[identityID]; ok {
+			return authResp
+		}
+	}
+
+	return nil
 }
 
 func (t *thandTask) executeRevocationTask(
@@ -85,11 +123,6 @@ func (t *thandTask) executeRevocationTask(
 
 	log := workflowTask.GetLogger()
 
-	duration, err := elevateRequest.AsDuration()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get duration: %w", err)
-	}
-
 	revokedAt := time.Now().UTC()
 
 	modelOutput := map[string]any{
@@ -97,78 +130,49 @@ func (t *thandTask) executeRevocationTask(
 		"revoked_at": revokedAt.Format(time.RFC3339),
 	}
 
-	// Collect all revocation tasks
+	plan, err := t.requireExecutionPlan(workflowTask)
+	if err != nil {
+		return nil, err
+	}
+
 	var revokeTasks []revokeTask
-
-	for _, providerName := range elevateRequest.Providers {
-
-		for _, identityId := range elevateRequest.Identities {
-
-			var authorizeResponse *models.AuthorizeRoleResponse
-
-			// Try to hydrate the authorization response for this identity
-			req := workflowTask.GetContextAsMap()
-			if req != nil {
-
-				authorizationsMap, ok := req["authorizations"]
-
-				if !ok {
-					log.WithField("identity", identityId).Debug("No authorizations found in context for revocation")
-					continue
-				}
-
-				if objectMap, ok := authorizationsMap.(map[string]any); ok {
-					if identityMap, ok := objectMap[identityId].(map[string]any); ok {
-						localResponse := models.AuthorizeRoleResponse{}
-						if err := common.ConvertMapToInterface(identityMap, &localResponse); err != nil {
-							log.WithError(err).WithField("identity", identityId).Warn("Failed to convert authorize response")
-						}
-						authorizeResponse = &localResponse
-					}
-				} else if authzMap, ok := authorizationsMap.(map[string]*models.AuthorizeRoleResponse); ok {
-					if authResp, ok := authzMap[identityId]; ok {
-						authorizeResponse = authResp
-					}
-				}
-			}
-
-			// Check if we have tenants specified in our request. If so, we need
-			// to create a revocation task for each identity and tenant combination
-			// If there are no tenants, we just create one task per identity
-			tenantsToProcess := elevateRequest.Tenants
-			if len(tenantsToProcess) == 0 {
-				tenantsToProcess = []string{""} // Use empty string to indicate no tenant
-			}
-
-			for _, tenantID := range tenantsToProcess {
-
-				revokeReq := models.WorkflowRevokeRoleRequest{
-					RevokeRoleRequest: &models.WorkflowRoleRequest{
-						WorkflowID: workflowTask.GetWorkflowID(),
-						Identity:   identityId,
-						Role:       elevateRequest.Role,
-						Duration:   &duration,
-						Tenant:     tenantID,
-					},
-					AuthorizeRoleResponse: authorizeResponse,
-				}
-
-				revokeTasks = append(revokeTasks, revokeTask{
-					ProviderName:      providerName,
-					Identity:          identityId,
-					RevokeReq:         &revokeReq,
-					AuthorizeResponse: authorizeResponse,
-				})
-
-				log.WithFields(logrus.Fields{
-					"user":     identityId,
-					"role":     elevateRequest.Role.GetName(),
-					"provider": providerName,
-					"duration": duration,
-					"tenant":   tenantID,
-				}).Info("Preparing revocation logic")
-			}
+	for _, entry := range plan.Entries {
+		if strings.TrimSpace(entry.ProviderName) == "" {
+			return nil, fmt.Errorf("execution plan entry is missing provider name")
 		}
+		if entry.AuthorizeRequest == nil {
+			return nil, fmt.Errorf("execution plan entry for provider %q is missing authorize request", entry.ProviderName)
+		}
+
+		identityID := identityKeyFromAuthorizeRequest(entry.AuthorizeRequest)
+		if identityID == "" {
+			return nil, fmt.Errorf("execution plan entry for provider %q is missing identity information", entry.ProviderName)
+		}
+		authorizeResponse := hydrateAuthorizeResponse(workflowTask, identityID, log)
+
+		revokeReq := models.WorkflowRevokeRoleRequest{
+			RevokeRoleRequest: &models.RevokeRoleRequest{
+				AuthorizeRoleRequest:  models.CloneAuthorizeRoleRequest(entry.AuthorizeRequest),
+				AuthorizeRoleResponse: authorizeResponse,
+			},
+			AuthorizeRoleResponse: authorizeResponse,
+		}
+
+		revokeTasks = append(revokeTasks, revokeTask{
+			EntryID:      entry.EntryID,
+			ProviderName: entry.ProviderName,
+			Identity:     identityID,
+			DeviceID:     entry.DeviceID,
+			RevokeReq:    &revokeReq,
+		})
+
+		log.WithFields(logrus.Fields{
+			"user":     identityID,
+			"role":     entry.AuthorizeRequest.Role.GetName(),
+			"provider": entry.ProviderName,
+			"duration": entry.AuthorizeRequest.Duration,
+			"tenant":   authorizeRequestTenantID(entry.AuthorizeRequest),
+		}).Info("Preparing revocation logic")
 	}
 
 	var revokeResults []revokeResult
@@ -227,9 +231,11 @@ func (t *thandTask) executeRevocationTask(
 }
 
 // runRevokeTask executes a single revocation task and returns its result.
-// When a Temporal context is available, it dispatches a child workflow to the
-// agent that has the provider registered (routed via TaskQueue = ProviderName).
-// Otherwise it falls back to local provider execution.
+// When a Temporal context is available, it dispatches a child workflow using
+// the parent workflow's task queue by default. If the request carries a
+// DeviceID, it waits for a fresh live route for that device and retries until
+// it can reconcile revocation on the device's task queue instead. Otherwise it
+// falls back to local provider execution.
 func (t *thandTask) runRevokeTask(
 	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	task revokeTask,
@@ -242,34 +248,83 @@ func (t *thandTask) runRevokeTask(
 		wfName := models.CreateTemporalProviderWorkflowName(
 			task.ProviderName, models.TemporalRevokeRoleWorkflowName)
 
-		// Create unique child workflow ID using hash of composite identifier
-		// (provider + role + identity + tenant) to ensure uniqueness across
-		// different identities/tenants requesting the same role
-		childOpts := workflow.ChildWorkflowOptions{
-			WorkflowID: models.CreateChildWorkflowID(
-				workflowTask.GetWorkflowID(),
-				"revokeRole",
-				task.ProviderName,
-				task.RevokeReq.RevokeRoleRequest,
-			),
-			TaskQueue: workflowTask.GetTaskQueue(),
-		}
-		ctx = workflow.WithChildOptions(ctx, childOpts)
+		taskQueue := workflowTask.GetTaskQueue()
+		deviceID := ""
+		deviceID = strings.TrimSpace(task.DeviceID)
 
-		req := task.RevokeReq
+		baseWorkflowID := models.CreateChildWorkflowIDForEntry(
+			workflowTask.GetWorkflowID(),
+			"revokeRole",
+			task.EntryID,
+		)
 
-		var resp models.RevokeRoleResponse
-		err := workflow.ExecuteChildWorkflow(ctx, wfName, req).Get(ctx, &resp)
-		if err != nil {
-			return revokeResult{
-				Identity: task.Identity,
-				Error:    err,
+		retryDelay := deviceRouteRevokeInitialRetry
+		attempt := 0
+		for {
+			if deviceID != "" {
+				route, _, err := t.waitForFreshDeviceRoute(
+					ctx,
+					deviceID,
+					deviceRouteRevokeAttemptLimit,
+				)
+				if err != nil {
+					if isDeviceRouteUnavailableError(err) || errors.Is(err, errDeviceRouteWaitExpired) {
+						if sleepErr := workflow.Sleep(ctx, retryDelay); sleepErr != nil {
+							return revokeResult{
+								Identity: task.Identity,
+								Error:    sleepErr,
+							}
+						}
+						retryDelay = nextDeviceRouteRetryDelay(retryDelay)
+						attempt++
+						continue
+					}
+					return revokeResult{
+						Identity: task.Identity,
+						Error:    err,
+					}
+				}
+				taskQueue = route.TaskQueue
 			}
-		}
-		return revokeResult{
-			Identity: task.Identity,
-			Output:   &resp,
-			Error:    nil,
+
+			childOpts := workflow.ChildWorkflowOptions{
+				WorkflowID:               childWorkflowIDForAttempt(baseWorkflowID, attempt),
+				TaskQueue:                taskQueue,
+				WorkflowExecutionTimeout: deviceRouteRevokeAttemptLimit,
+				WorkflowRunTimeout:       deviceRouteRevokeAttemptLimit,
+			}
+			childOpts = childWorkflowOptionsForTaskQueue(workflowTask.GetTaskQueue(), taskQueue, childOpts)
+			childCtx := workflow.WithChildOptions(ctx, childOpts)
+
+			req := models.WorkflowRevokeRoleRequest{
+				RevokeRoleRequest:     models.CloneRevokeRoleRequest(task.RevokeReq.RevokeRoleRequest),
+				AuthorizeRoleResponse: task.RevokeReq.AuthorizeRoleResponse,
+			}
+
+			var resp models.RevokeRoleResponse
+			err := workflow.ExecuteChildWorkflow(childCtx, wfName, req).Get(childCtx, &resp)
+			if err == nil {
+				return revokeResult{
+					Identity: task.Identity,
+					Output:   &resp,
+					Error:    nil,
+				}
+			}
+			if !isTemporalTimeoutError(err) && !isTransientBrokerRevokeError(err) {
+				return revokeResult{
+					Identity: task.Identity,
+					Error:    err,
+				}
+			}
+
+			if sleepErr := workflow.Sleep(ctx, retryDelay); sleepErr != nil {
+				return revokeResult{
+					Identity: task.Identity,
+					Error:    sleepErr,
+				}
+			}
+			retryDelay = nextDeviceRouteRetryDelay(retryDelay)
+			attempt++
 		}
 	}
 
@@ -281,21 +336,7 @@ func (t *thandTask) runRevokeTask(
 			Error:    fmt.Errorf("failed to get provider: %w", err),
 		}
 	}
-	authRoleReq, err := models.CreateAuthorizeRoleRequest(
-		t.config,
-		providerCall,
-		task.RevokeReq.RevokeRoleRequest,
-	)
-	if err != nil {
-		return revokeResult{
-			Identity: task.Identity,
-			Error:    fmt.Errorf("failed to create authorize role request: %w", err),
-		}
-	}
-	revokeOut, err := providerCall.RevokeRole(workflowTask.GetContext(), &models.RevokeRoleRequest{
-		AuthorizeRoleRequest:  authRoleReq,
-		AuthorizeRoleResponse: task.AuthorizeResponse,
-	})
+	revokeOut, err := providerCall.RevokeRole(workflowTask.GetContext(), models.CloneRevokeRoleRequest(task.RevokeReq.RevokeRoleRequest))
 	return revokeResult{
 		Identity: task.Identity,
 		Output:   revokeOut,

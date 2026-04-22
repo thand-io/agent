@@ -91,6 +91,12 @@ func (c *Config) registerTemporalActivities() error {
 			Name: models.TemporalResolveFreshDeviceRouteActivityName,
 		},
 	)
+	temporalWorker.RegisterActivityWithOptions(
+		thandActivities.BuildExecutionPlan,
+		activity.RegisterOptions{
+			Name: models.TemporalBuildExecutionPlanActivityName,
+		},
+	)
 
 	return nil
 
