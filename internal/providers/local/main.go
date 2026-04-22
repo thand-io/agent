@@ -1,6 +1,7 @@
 package local
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -17,8 +18,11 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/thand-io/agent/internal/localbroker"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/providers"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 )
 
 const LocalProviderName = "local"
@@ -83,7 +87,8 @@ type localProvider struct {
 	now            func() time.Time
 	afterFunc      func(time.Duration, func()) *time.Timer
 
-	enforcer localElevationEnforcer
+	enforcer     localElevationEnforcer
+	brokerClient localbroker.Client
 }
 
 type sudoersEnforcer struct {
@@ -110,10 +115,24 @@ func (p *localProvider) Initialize(identifier string, provider models.ProviderCo
 	p.now = func() time.Time { return time.Now().UTC() }
 	p.afterFunc = time.AfterFunc
 	p.enforcer = newSudoersEnforcer(p)
+	if p.goos() == "darwin" {
+		p.brokerClient = localbroker.NewCommandClient(p.GetConfig())
+	}
 	p.SetPermissions([]models.ProviderPermission{localSudoPermission})
 
-	if err := p.enforcer.Reconcile(); err != nil {
-		logrus.WithError(err).Warn("failed to reconcile existing local elevation leases")
+	logrus.WithFields(logrus.Fields{
+		"provider_identifier": identifier,
+		"provider_name":       provider.Name,
+		"provider_type":       provider.Provider,
+		"goos":                p.goos(),
+		"has_inline_config":   provider.Config != nil,
+		"provider_config":     p.GetConfig().AsMap(),
+	}).Info("initialized local provider")
+
+	if p.goos() != "darwin" {
+		if err := p.enforcer.Reconcile(); err != nil {
+			logrus.WithError(err).Warn("failed to reconcile existing local elevation leases")
+		}
 	}
 
 	return nil
@@ -130,7 +149,35 @@ func (p *localProvider) AuthorizeRole(
 	ctx models.ProviderContext,
 	req *models.AuthorizeRoleRequest,
 ) (*models.AuthorizeRoleResponse, error) {
-	if !req.IsValid() {
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		return p.authorizeRoleTemporal(workflowCtx, req)
+	}
+
+	requestContext, cancel := contextFromProviderContext(ctx)
+	defer cancel()
+
+	return p.authorizeRoleDirect(requestContext, req)
+}
+
+func (p *localProvider) RevokeRole(
+	ctx models.ProviderContext,
+	req *models.RevokeRoleRequest,
+) (*models.RevokeRoleResponse, error) {
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		return p.revokeRoleTemporal(workflowCtx, req)
+	}
+
+	requestContext, cancel := contextFromProviderContext(ctx)
+	defer cancel()
+
+	return p.revokeRoleDirect(requestContext, req)
+}
+
+func (p *localProvider) authorizeRoleDirect(
+	ctx context.Context,
+	req *models.AuthorizeRoleRequest,
+) (*models.AuthorizeRoleResponse, error) {
+	if req == nil || !req.IsValid() {
 		return nil, fmt.Errorf("user and role must be provided to authorize local sudo access")
 	}
 
@@ -141,7 +188,7 @@ func (p *localProvider) AuthorizeRole(
 
 	switch p.goos() {
 	case "linux", "darwin":
-		return p.authorizeUnix(req, meta)
+		return p.authorizeUnix(ctx, req, meta)
 	case "windows":
 		return p.authorizeWindows(req, meta)
 	default:
@@ -149,8 +196,8 @@ func (p *localProvider) AuthorizeRole(
 	}
 }
 
-func (p *localProvider) RevokeRole(
-	ctx models.ProviderContext,
+func (p *localProvider) revokeRoleDirect(
+	ctx context.Context,
 	req *models.RevokeRoleRequest,
 ) (*models.RevokeRoleResponse, error) {
 	if req == nil || req.AuthorizeRoleResponse == nil || len(req.AuthorizeRoleResponse.Metadata) == 0 {
@@ -162,6 +209,32 @@ func (p *localProvider) RevokeRole(
 		return nil, err
 	}
 
+	if meta.BrokerHandle != "" && (meta.Platform == "darwin" || p.goos() == "darwin") {
+		if p.brokerClient == nil {
+			return nil, fmt.Errorf("macOS privilege broker is not configured")
+		}
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		revokeResponse, err := p.brokerClient.RevokeTimedGrant(ctx, meta.BrokerHandle)
+		if err != nil {
+			return nil, wrapLocalBrokerError(err)
+		}
+		logFields := logrus.Fields{
+			"provider_identifier": p.GetIdentifier(),
+			"provider_name":       p.GetName(),
+			"broker_handle":       meta.BrokerHandle,
+			"broker_status":       revokeResponse.Status,
+		}
+		switch revokeResponse.Status {
+		case localbroker.RevokeTimedGrantStatusRevoked:
+			logrus.WithFields(logFields).Debug("revoked brokered macOS local sudo grant")
+		case localbroker.RevokeTimedGrantStatusNotFound:
+			logrus.WithFields(logFields).Debug("brokered macOS local sudo revoke converged because the lease was already absent")
+		}
+		return &models.RevokeRoleResponse{}, nil
+	}
+
 	if err := p.enforcer.Revoke(meta); err != nil {
 		return nil, err
 	}
@@ -170,6 +243,7 @@ func (p *localProvider) RevokeRole(
 }
 
 func (p *localProvider) authorizeUnix(
+	ctx context.Context,
 	req *models.AuthorizeRoleRequest,
 	meta models.LocalSudoRequestMetadata,
 ) (*models.AuthorizeRoleResponse, error) {
@@ -178,14 +252,16 @@ func (p *localProvider) authorizeUnix(
 		return nil, err
 	}
 
-	if _, err := p.validateTargetUsername(username, meta); err != nil {
-		return nil, err
-	}
-
 	switch meta.Mode {
 	case models.LocalSudoModeTimed:
 		if req.Duration == nil || *req.Duration <= 0 {
 			return nil, fmt.Errorf("timed local sudo requires a positive duration")
+		}
+		if p.goos() == "darwin" {
+			return p.authorizeDarwinTimed(ctx, req, meta, username)
+		}
+		if _, err := p.validateTargetUsername(username, meta); err != nil {
+			return nil, err
 		}
 
 		lease, err := p.enforcer.GrantTimed(username, meta, req.Role.GetName(), *req.Duration)
@@ -205,6 +281,12 @@ func (p *localProvider) authorizeUnix(
 	case models.LocalSudoModeCommand:
 		if len(meta.Command) == 0 {
 			return nil, fmt.Errorf("privileged command mode requires a command")
+		}
+		if p.goos() == "darwin" {
+			return nil, fmt.Errorf("privileged command mode is not supported on macOS in broker v1; request timed sudo access instead")
+		}
+		if _, err := p.validateTargetUsername(username, meta); err != nil {
+			return nil, err
 		}
 
 		execution, err := p.enforcer.RunCommand(username, meta, req.Role.GetName())
@@ -297,6 +379,9 @@ func localAuthorizeResponse(
 	if len(meta.Username) > 0 {
 		response.Metadata["username"] = meta.Username
 	}
+	if len(meta.BrokerHandle) > 0 {
+		response.Metadata["broker_handle"] = meta.BrokerHandle
+	}
 	if len(meta.SudoersPath) > 0 {
 		response.Metadata["sudoers_path"] = meta.SudoersPath
 	}
@@ -336,6 +421,105 @@ func (p *localProvider) targetUsername(meta models.LocalSudoRequestMetadata) (st
 		return "", fmt.Errorf("local sudo request is missing a resolved local username")
 	}
 	return username, nil
+}
+
+func (p *localProvider) authorizeDarwinTimed(
+	ctx context.Context,
+	req *models.AuthorizeRoleRequest,
+	meta models.LocalSudoRequestMetadata,
+	username string,
+) (*models.AuthorizeRoleResponse, error) {
+	if p.brokerClient == nil {
+		return nil, fmt.Errorf("macOS privilege broker is not configured")
+	}
+
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	brokerRequest := localbroker.TimedSudoersGrantRequest{
+		GrantID:          meta.GrantID,
+		DeviceID:         meta.DeviceID,
+		TargetUsername:   username,
+		RoleName:         req.Role.GetName(),
+		Duration:         *req.Duration,
+		DeniedUsernames:  append([]string(nil), meta.DeniedUsernames...),
+		AllowedUIDRanges: append([]string(nil), meta.AllowedUIDRanges...),
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"provider_identifier": p.GetIdentifier(),
+		"provider_name":       p.GetName(),
+		"role":                req.Role.GetName(),
+		"device_id":           meta.DeviceID,
+		"grant_id":            meta.GrantID,
+		"target_username":     username,
+		"duration":            req.Duration.String(),
+		"provider_config":     p.GetConfig().AsMap(),
+		"denied_usernames":    brokerRequest.DeniedUsernames,
+		"allowed_uid_ranges":  brokerRequest.AllowedUIDRanges,
+	}).Info("authorizing brokered macOS timed sudo request")
+
+	grant, err := p.brokerClient.GrantTimedSudoers(ctx, brokerRequest)
+	if err != nil {
+		logrus.WithError(err).WithFields(logrus.Fields{
+			"provider_identifier": p.GetIdentifier(),
+			"device_id":           meta.DeviceID,
+			"grant_id":            meta.GrantID,
+			"target_username":     username,
+			"provider_config":     p.GetConfig().AsMap(),
+		}).Warn("brokered macOS timed sudo authorization failed")
+		return nil, wrapLocalBrokerError(err)
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"provider_identifier": p.GetIdentifier(),
+		"device_id":           meta.DeviceID,
+		"grant_id":            meta.GrantID,
+		"target_username":     grant.TargetUsername,
+		"broker_handle":       grant.BrokerHandle,
+	}).Info("brokered macOS timed sudo authorization succeeded")
+
+	return localAuthorizeResponse(req, models.LocalSudoAuthorizationMetadata{
+		Platform:     p.goos(),
+		Mode:         string(meta.Mode),
+		GrantID:      meta.GrantID,
+		DeviceID:     meta.DeviceID,
+		Username:     grant.TargetUsername,
+		BrokerHandle: grant.BrokerHandle,
+	}), nil
+}
+
+func wrapLocalBrokerError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	if localbroker.IsNonRetryableError(err) {
+		return temporal.NewNonRetryableApplicationError(
+			err.Error(),
+			"LocalBrokerError",
+			err,
+		)
+	}
+
+	return err
+}
+
+func contextFromProviderContext(ctx models.ProviderContext) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		return context.Background(), func() {}
+	}
+
+	if contextCtx, ok := ctx.(context.Context); ok {
+		return contextCtx, func() {}
+	}
+
+	if deadline, ok := ctx.Deadline(); ok {
+		return context.WithDeadline(context.Background(), deadline)
+	}
+
+	return context.Background(), func() {}
 }
 
 func (p *localProvider) validateTargetUsername(username string, meta models.LocalSudoRequestMetadata) (string, error) {
