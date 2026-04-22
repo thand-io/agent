@@ -37,11 +37,11 @@ func (s *Server) postRegister(c *gin.Context) {
 	cfg := s.GetConfig()
 
 	c.JSON(http.StatusOK, config.RegistrationResponse{
-		Success:  true,
-		Services: &cfg.Services,
-		//Roles:     &cfg.Roles,
-		//Providers: &cfg.Providers,
-		//Workflows: &cfg.Workflows,
+		Success:   true,
+		Services:  &cfg.Services,
+		Roles:     &cfg.Roles,
+		Providers: &cfg.Providers,
+		Workflows: &cfg.Workflows,
 	})
 
 }

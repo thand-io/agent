@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/sirupsen/logrus"
@@ -37,8 +38,8 @@ func (c *Config) SetupTemporal() error {
 
 		logrus.Infoln("Setting up temporal services...")
 
-		if !c.IsServer() {
-			return fmt.Errorf("temporal services can only be set up in server mode")
+		if !c.IsServer() && !c.IsAgent() {
+			return fmt.Errorf("temporal services can only be set up in server or agent mode")
 		}
 
 		// Register workflows
@@ -51,6 +52,19 @@ func (c *Config) SetupTemporal() error {
 		err = c.registerTemporalActivities()
 		if err != nil {
 			return fmt.Errorf("registering temporal activities: %w", err)
+		}
+
+		if err := c.EnsureProviderTemporalBindings(); err != nil {
+			return fmt.Errorf("registering provider temporal bindings: %w", err)
+		}
+
+		if c.IsServer() {
+			if err := c.EnsureDeviceRegistryWorkflows(context.Background()); err != nil {
+				return fmt.Errorf("ensuring device registries: %w", err)
+			}
+			if err := c.PublishConfiguredDeviceDefinitions(context.Background()); err != nil {
+				return fmt.Errorf("publishing device definitions: %w", err)
+			}
 		}
 
 		return nil

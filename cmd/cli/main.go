@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -120,12 +121,28 @@ func preRunConfigE(cmd *cobra.Command, mode config.Mode) error {
 
 	case config.ModeAgent:
 
+		// Materialize provider, role, and workflow definitions from the current
+		// configured sources (path/url/vault/defaults) before provider
+		// initialization. The agent bootstrap path currently only returns
+		// services/device state from the login server, so InitializeProviders
+		// still depends on this local definition load.
+		err = cfg.ReloadConfig()
+		if err != nil {
+			logrus.WithError(err).Errorln("Failed to load local agent configuration")
+			return fmt.Errorf("failed to load local agent configuration: %w", err)
+		}
+
 		// Initialize providers
 		err = cfg.InitializeProviders()
 
 		if err != nil {
 			logrus.WithError(err).Errorln("Failed to initialize providers")
 			return err
+		}
+
+		isDefaultLoginEndpoint := cfg.GetLoginServerUrl() == common.DefaultLoginServerEndpoint
+		if cfg.HasLoginServer() && !isDefaultLoginEndpoint {
+			go cfg.RunDeviceBootstrap(context.Background())
 		}
 
 	case config.ModeServer:

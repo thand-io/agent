@@ -410,6 +410,11 @@ func (e *localClient) ReloadTemporal() error {
 		logrus.WithField("identities", identities).Info("Configuring Temporal workers for agent mode")
 	}
 
+	if e.config.IsServer() {
+		identities = append(identities, models.TemporalDeviceRegistryTaskQueue)
+		logrus.WithField("identities", identities).Info("Configuring Temporal workers for server mode")
+	}
+
 	// Get Temporal config from services
 	servicesConfig := e.config.GetServicesConfig()
 

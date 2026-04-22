@@ -54,6 +54,7 @@ type Config struct {
 	Roles     RoleConfig                `mapstructure:"roles"`
 	Workflows WorkflowConfig            `mapstructure:"workflows"` // These are workflows to run for role associated workflows
 	Providers ProviderDefinitionsConfig `mapstructure:"providers"` // These are integration providers like AWS, GCP, etc.
+	Devices   DeviceDefinitionsConfig   `mapstructure:"devices"`   // Device definitions and per-device policy managed by the server
 
 	// This is ONLY if the agent is running in server mode
 	// and you want to use https://www.thand.io hosted services
@@ -76,6 +77,11 @@ type Config struct {
 
 	// Provider instances
 	providerInstances map[string]models.Provider
+	providerBindings  map[string]struct{}
+
+	// Device runtime state.
+	deviceConnections   map[string]*models.DeviceConnectionState
+	deviceConnectionsMu sync.RWMutex
 }
 
 func (c *Config) GetSecret() string {
@@ -121,6 +127,10 @@ func (c *Config) GetWorkflowsConfig() *WorkflowConfig {
 
 func (c *Config) GetProvidersConfig() *ProviderDefinitionsConfig {
 	return &c.Providers
+}
+
+func (c *Config) GetDevicesConfig() *DeviceDefinitionsConfig {
+	return &c.Devices
 }
 
 func (c *Config) GetThandConfig() *models.ThandConfig {
@@ -236,6 +246,16 @@ type ProviderDefinitionsConfig struct {
 
 func (p *ProviderDefinitionsConfig) GetDefinitions() map[string]models.ProviderConfig {
 	return p.Definitions
+}
+
+type DeviceDefinitionsConfig struct {
+	Path string `mapstructure:"path" json:"path"`
+
+	Definitions map[string]models.Device `mapstructure:",remain" json:"definitions"`
+}
+
+func (d *DeviceDefinitionsConfig) GetDefinitions() map[string]models.Device {
+	return d.Definitions
 }
 
 type ProviderPluginConfig struct {
