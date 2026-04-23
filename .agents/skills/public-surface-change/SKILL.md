@@ -1,4 +1,6 @@
-> Generated from `.agent-shared/skills/public-surface-change.md`. Edit the shared source and run `scripts/sync-agent-skills.sh`.
+> Generated from:
+> `.agent-shared/skills/public-surface-change.md`
+> Edit the shared source and run `scripts/sync-agent-skills.sh`.
 
 # Public Surface Change
 

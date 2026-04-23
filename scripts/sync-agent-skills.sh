@@ -21,13 +21,17 @@ for src in "$shared_dir"/*.md; do
   mkdir -p "$codex_skill_dir"
 
   {
-    printf '> Generated from `%s`. Edit the shared source and run `scripts/sync-agent-skills.sh`.\n\n' "$source_ref"
+    printf '> Generated from:\n'
+    printf '> `%s`\n' "$source_ref"
+    printf '> Edit the shared source and run `scripts/sync-agent-skills.sh`.\n\n'
     cat "$src"
     printf '\n'
   } > "$codex_out"
 
   {
-    printf '> Generated from `%s`. Edit the shared source and run `scripts/sync-agent-skills.sh`.\n\n' "$source_ref"
+    printf '> Generated from:\n'
+    printf '> `%s`\n' "$source_ref"
+    printf '> Edit the shared source and run `scripts/sync-agent-skills.sh`.\n\n'
     cat "$src"
     printf '\n'
   } > "$claude_out"
