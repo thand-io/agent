@@ -18,3 +18,9 @@ providers:
     description: Local macOS device-owner approval prompts
     provider: local-presence
     enabled: true
+
+  local-notification:
+    name: Local Notification
+    description: Local macOS user notifications
+    provider: local-notification
+    enabled: true

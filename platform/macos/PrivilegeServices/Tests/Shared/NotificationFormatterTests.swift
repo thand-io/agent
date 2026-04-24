@@ -18,4 +18,26 @@ final class NotificationFormatterTests: XCTestCase {
             "Timed sudo access expired for tester."
         )
     }
+
+    func testUsesLocalNotificationPayload() {
+        let notification = LocalNotificationPostRequest(
+            notificationID: "notification-1",
+            title: "Access approved",
+            subtitle: "Local Sudo",
+            body: "Your sudo access is ready",
+            threadID: "workflow-1"
+        )
+        let event = BrokerEvent(
+            kind: .localNotification,
+            brokerHandle: "notification-1",
+            grantID: "",
+            deviceID: "",
+            username: "tester",
+            localNotification: notification,
+            occurredAt: Date(timeIntervalSince1970: 1)
+        )
+
+        XCTAssertEqual(NotificationFormatter.request(for: event), notification)
+        XCTAssertEqual(NotificationFormatter.body(for: event), "Your sudo access is ready")
+    }
 }

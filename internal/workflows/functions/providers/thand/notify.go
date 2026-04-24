@@ -101,6 +101,7 @@ type NotifierRequest struct {
 	Provider string   `json:"provider"`
 	To       []string `json:"-"`       // Email, channel Id, username etc. - handled by custom marshal/unmarshal
 	Message  string   `json:"message"` // Message body
+	Device   string   `json:"device,omitempty"`
 }
 
 // UnmarshalJSON implements custom JSON unmarshaling to handle both string and []string for To field
@@ -110,6 +111,7 @@ func (r *NotifierRequest) UnmarshalJSON(data []byte) error {
 		Provider string `json:"provider"`
 		To       any    `json:"to"`
 		Message  string `json:"message"`
+		Device   string `json:"device"`
 	}
 
 	var temp Alias
@@ -119,6 +121,7 @@ func (r *NotifierRequest) UnmarshalJSON(data []byte) error {
 
 	r.Provider = temp.Provider
 	r.Message = temp.Message
+	r.Device = temp.Device
 
 	// Handle To field - can be string or []string
 	switch v := temp.To.(type) {
@@ -161,6 +164,7 @@ func (r *NotifierRequest) AsMap() map[string]any {
 		"provider": r.Provider,
 		"to":       r.To,
 		"message":  r.Message,
+		"device":   r.Device,
 	}
 }
 

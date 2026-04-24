@@ -199,6 +199,85 @@ final class BrokerServiceTests: XCTestCase {
         XCTAssertEqual(testerSecondSnapshot.first?.kind, .grantCreated)
     }
 
+    func testServicePublishesLocalNotificationToMatchingNotifierSubscriber() throws {
+        let temporaryRoot = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("thand-broker-local-notification-tests-\(UUID().uuidString)")
+        let config = BrokerConfig(
+            stateDirectoryURL: temporaryRoot.appendingPathComponent("state"),
+            sudoersDirectoryURL: temporaryRoot.appendingPathComponent("sudoers")
+        )
+
+        let service = try PrivilegeBrokerService(
+            config: config,
+            validator: LocalAccountValidator { username in
+                ValidatedLocalUser(username: username, uid: 501)
+            },
+            grantManager: SudoersGrantManager(
+                sudoersDirectoryURL: config.sudoersDirectoryURL,
+                visudoPath: config.visudoPath,
+                runCommand: { _ in }
+            ),
+            now: { Date(timeIntervalSince1970: 100) }
+        )
+
+        let testerEvents = EventRecorder()
+        let otherEvents = EventRecorder()
+        let testerToken = service.subscribe(username: "tester") { testerEvents.append($0) }
+        let otherToken = service.subscribe(username: "other") { otherEvents.append($0) }
+        defer {
+            service.unsubscribe(testerToken)
+            service.unsubscribe(otherToken)
+        }
+
+        let notification = LocalNotificationPostRequest(
+            notificationID: "notification-1",
+            title: "Access approved",
+            body: "Your sudo access is ready",
+            threadID: "workflow-1"
+        )
+        try service.postLocalNotification(BrokerLocalNotificationRequest(
+            username: "tester",
+            notification: notification
+        ))
+
+        let testerSnapshot = testerEvents.snapshot()
+        XCTAssertEqual(testerSnapshot.count, 1)
+        XCTAssertEqual(testerSnapshot.first?.kind, .localNotification)
+        XCTAssertEqual(testerSnapshot.first?.localNotification, notification)
+        XCTAssertTrue(otherEvents.snapshot().isEmpty)
+    }
+
+    func testServiceRejectsLocalNotificationWithoutNotifierSubscriber() throws {
+        let temporaryRoot = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("thand-broker-local-notification-missing-tests-\(UUID().uuidString)")
+        let config = BrokerConfig(
+            stateDirectoryURL: temporaryRoot.appendingPathComponent("state"),
+            sudoersDirectoryURL: temporaryRoot.appendingPathComponent("sudoers")
+        )
+        let service = try PrivilegeBrokerService(
+            config: config,
+            grantManager: SudoersGrantManager(
+                sudoersDirectoryURL: config.sudoersDirectoryURL,
+                visudoPath: config.visudoPath,
+                runCommand: { _ in }
+            )
+        )
+
+        XCTAssertThrowsError(try service.postLocalNotification(BrokerLocalNotificationRequest(
+            username: "tester",
+            notification: LocalNotificationPostRequest(
+                notificationID: "notification-1",
+                title: "Access approved",
+                body: "Your sudo access is ready"
+            )
+        ))) { error in
+            guard case BrokerServiceError.unavailable = error else {
+                XCTFail("unexpected error \(error)")
+                return
+            }
+        }
+    }
+
     func testServiceRevokesActiveGrantAndPublishesRevokedEvent() throws {
         let temporaryRoot = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("thand-broker-revoke-tests-\(UUID().uuidString)")

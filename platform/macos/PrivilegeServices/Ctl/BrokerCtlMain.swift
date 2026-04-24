@@ -155,6 +155,37 @@ private final class LocalBrokerControlService: Thand_Localbroker_V1_LocalBrokerC
         return proto
     }
 
+    func postLocalNotification(
+        request: Thand_Localbroker_V1_PostLocalNotificationRequest,
+        context _: ServerContext
+    ) async throws -> Thand_Localbroker_V1_PostLocalNotificationResponse {
+        defer {
+            Task {
+                await serverController.finishRequest()
+            }
+        }
+
+        _ = try callBroker { client in
+            try client.send(BrokerControlRequest(
+                operation: .postLocalNotification,
+                localNotification: BrokerLocalNotificationRequest(
+                    username: NSUserName(),
+                    notification: LocalNotificationPostRequest(
+                        notificationID: request.notificationID,
+                        title: request.title,
+                        subtitle: request.subtitle,
+                        body: request.body,
+                        threadID: request.threadID
+                    )
+                )
+            ))
+        }
+
+        var proto = Thand_Localbroker_V1_PostLocalNotificationResponse()
+        proto.posted = true
+        return proto
+    }
+
     private func callBroker(_ body: (XPCBrokerClient) throws -> BrokerControlResponse) throws -> BrokerControlResponse {
         do {
             return try body(XPCBrokerClient(config: config))
@@ -194,6 +225,7 @@ private final class LocalBrokerControlService: Thand_Localbroker_V1_LocalBrokerC
             return .internalError
         }
     }
+
 }
 
 private func effectiveConfig(arguments: BrokerHelperArguments) -> BrokerConfig {

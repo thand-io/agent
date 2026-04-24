@@ -22,6 +22,7 @@ public enum BrokerServiceError: Error, CustomStringConvertible {
     case visudoFailed(String)
     case grantIDConflict(String)
     case grantAlreadyCompleted(String, GrantLedgerState)
+    case unavailable(String)
 
     public var description: String {
         switch self {
@@ -45,6 +46,8 @@ public enum BrokerServiceError: Error, CustomStringConvertible {
             return "grant id \(grantID) was already used for a different timed sudoers grant request"
         case .grantAlreadyCompleted(let grantID, let state):
             return "grant id \(grantID) already completed with state \(state.rawValue)"
+        case .unavailable(let message):
+            return message
         }
     }
 }

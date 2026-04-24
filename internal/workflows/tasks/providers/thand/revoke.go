@@ -438,6 +438,7 @@ func (t *thandTask) makeRevocationNotifications(
 				CallFunc:  revokeNotifier.GetCallFunction(recipientIdentity),
 				Payload:   recipientPayload,
 				Provider:  revokeNotifier.GetProviderName(),
+				DeviceID:  notificationPayloadDeviceID(recipientPayload),
 			})
 
 			log.WithFields(logrus.Fields{

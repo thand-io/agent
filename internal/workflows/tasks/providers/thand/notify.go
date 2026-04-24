@@ -20,6 +20,7 @@ import (
 const ThandNotifyTask = "notify"
 const ThandApprovalEventType = "com.thand.approval"
 const ThandFormEventType = "com.thand.form"
+const localNotificationRouteWait = 2 * time.Minute
 
 // notifyResult holds the result of a notification operation
 type notifyResult struct {
@@ -33,6 +34,7 @@ type notifyTask struct {
 	CallFunc  model.CallFunction
 	Payload   models.NotificationRequest
 	Provider  string
+	DeviceID  string
 }
 
 // temporalNotifyResult represents the result of a notification operation for temporal communication
@@ -82,7 +84,7 @@ func (t *thandTask) executeNotifyTask(
 		return nil, errors.New("elevation request is not valid")
 	}
 
-	notifyImpl := NewDefaultNotifierImpl(notifyReq)
+	notifyImpl := NewDefaultNotifierImpl(notifyReq, elevationReq)
 
 	return t.executeNotify(workflowTask, taskName, notifyImpl)
 
@@ -128,6 +130,7 @@ func (t *thandTask) executeNotify(
 			CallFunc:  notify.GetCallFunction(recipientIdentity),
 			Payload:   recipientPayload,
 			Provider:  notify.GetProviderName(),
+			DeviceID:  notificationPayloadDeviceID(recipientPayload),
 		})
 
 		log.WithFields(logrus.Fields{
@@ -212,13 +215,6 @@ func (t *thandTask) executeNotifyTemporalParallel(
 
 	temporalContext := workflowTask.GetTemporalContext()
 
-	ao := workflow.ActivityOptions{
-		TaskQueue:           workflowTask.GetTaskQueue(),
-		StartToCloseTimeout: 10 * time.Minute,
-		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
-	}
-	aoctx := workflow.WithActivityOptions(temporalContext, ao)
-
 	// Create channel and results slice
 	results := make([]notifyResult, len(notifyTasks))
 	resultCh := workflow.NewChannel(temporalContext)
@@ -228,26 +224,73 @@ func (t *thandTask) executeNotifyTemporalParallel(
 		taskIndex := i
 		notifyTask := task
 
+		isLocalNotification := t.isLocalNotificationProvider(notifyTask.Provider)
 		logrus.WithFields(logrus.Fields{
 			"taskIndex": taskIndex,
 			"recipient": notifyTask.Recipient,
 			"provider":  notifyTask.Provider,
+			"device_id": notifyTask.DeviceID,
 		}).Info("Scheduling notify activity via workflow.Go")
 
 		workflow.Go(temporalContext, func(ctx workflow.Context) {
 			log := workflow.GetLogger(ctx)
-			log.Info("Inside workflow.Go - about to execute activity",
-				"recipient", notifyTask.Recipient,
-				"activityName", thandFunction.ThandNotifyFunction,
-			)
-
-			err := workflow.ExecuteActivity(
-				aoctx,
-				thandFunction.ThandNotifyFunction,
+			taskQueue := workflowTask.GetTaskQueue()
+			activityName := thandFunction.ThandNotifyFunction
+			activityArgs := []any{
 				workflowTask,
 				taskName,
 				notifyTask.CallFunc,
 				notifyTask.Payload,
+			}
+
+			if isLocalNotification {
+				if strings.TrimSpace(notifyTask.DeviceID) == "" {
+					resultCh.Send(ctx, temporalNotifyResult{
+						Index:     taskIndex,
+						Recipient: notifyTask.Recipient,
+						Err:       fmt.Errorf("local-notification notifier requires a target device"),
+					})
+					return
+				}
+				route, _, err := t.waitForFreshDeviceRoute(ctx, notifyTask.DeviceID, localNotificationRouteWait)
+				if err != nil {
+					resultCh.Send(ctx, temporalNotifyResult{
+						Index:     taskIndex,
+						Recipient: notifyTask.Recipient,
+						Err:       err,
+					})
+					return
+				}
+				log.Info("Resolved local notification device route",
+					"recipient", notifyTask.Recipient,
+					"provider", notifyTask.Provider,
+					"device_id", notifyTask.DeviceID,
+					"taskQueue", route.TaskQueue,
+				)
+				taskQueue = route.TaskQueue
+				activityName = t.localNotificationActivityName(notifyTask.Provider)
+				activityArgs = []any{notifyTask.Payload}
+			}
+
+			ao := workflow.ActivityOptions{
+				TaskQueue:           taskQueue,
+				StartToCloseTimeout: 10 * time.Minute,
+				RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+			}
+			aoctx := workflow.WithActivityOptions(ctx, ao)
+
+			log.Info("Inside workflow.Go - about to execute activity",
+				"recipient", notifyTask.Recipient,
+				"provider", notifyTask.Provider,
+				"device_id", notifyTask.DeviceID,
+				"activityName", activityName,
+				"taskQueue", taskQueue,
+			)
+
+			err := workflow.ExecuteActivity(
+				aoctx,
+				activityName,
+				activityArgs...,
 			).Get(ctx, nil)
 
 			log.Info("Activity completed",

@@ -199,3 +199,7 @@ func (f *fakeBrokerClient) CheckLocalPresence(_ context.Context, req localbroker
 	}
 	return f.presenceResponse, nil
 }
+
+func (f *fakeBrokerClient) PostLocalNotification(context.Context, localbroker.PostLocalNotificationRequest) (*localbroker.PostLocalNotificationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "not implemented")
+}

@@ -612,6 +612,7 @@ func (t *thandTask) makeAuthorizationNotifications(
 				CallFunc:  authorizeNotifier.GetCallFunction(recipientIdentity),
 				Payload:   recipientPayload,
 				Provider:  authorizeNotifier.GetProviderName(),
+				DeviceID:  notificationPayloadDeviceID(recipientPayload),
 			})
 
 			log.WithFields(logrus.Fields{

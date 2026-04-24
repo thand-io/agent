@@ -25,6 +25,7 @@ const (
 	OperationExecCommand        Operation = "exec_command"
 	OperationPTYSession         Operation = "pty_session"
 	OperationCheckLocalPresence Operation = "check_local_presence"
+	OperationPostNotification   Operation = "post_local_notification"
 
 	DefaultControlExecutable = "/Library/Application Support/Thand/PrivilegeBroker/bin/thand-macos-privilege-brokerctl"
 	DefaultMachServiceLabel  = "io.thand.agent.privilege-broker"
@@ -38,6 +39,7 @@ type Client interface {
 	GrantTimedSudoers(ctx context.Context, req TimedSudoersGrantRequest) (*TimedSudoersGrantResponse, error)
 	RevokeTimedGrant(ctx context.Context, handle string) (*RevokeTimedGrantResponse, error)
 	CheckLocalPresence(ctx context.Context, req CheckLocalPresenceRequest) (*CheckLocalPresenceResponse, error)
+	PostLocalNotification(ctx context.Context, req PostLocalNotificationRequest) (*PostLocalNotificationResponse, error)
 }
 
 type TimedSudoersGrantRequest struct {
@@ -153,6 +155,18 @@ type CheckLocalPresenceResponse struct {
 	FailureReason   string    `json:"failure_reason,omitempty"`
 }
 
+type PostLocalNotificationRequest struct {
+	NotificationID string `json:"notification_id,omitempty"`
+	Title          string `json:"title"`
+	Subtitle       string `json:"subtitle,omitempty"`
+	Body           string `json:"body"`
+	ThreadID       string `json:"thread_id,omitempty"`
+}
+
+type PostLocalNotificationResponse struct {
+	Posted bool `json:"posted"`
+}
+
 type helperSession struct {
 	dial        func(context.Context, string) (net.Conn, error)
 	wait        func() error
@@ -256,6 +270,19 @@ func (c *CommandClient) CheckLocalPresence(ctx context.Context, req CheckLocalPr
 			Approved:        response.GetApproved(),
 			AuthenticatedAt: authenticatedAt,
 			FailureReason:   response.GetFailureReason(),
+		}, nil
+	})
+}
+
+func (c *CommandClient) PostLocalNotification(ctx context.Context, req PostLocalNotificationRequest) (*PostLocalNotificationResponse, error) {
+	return invokeHelperRPC(ctx, c, OperationPostNotification, func(ctx context.Context, client localbrokerv1.LocalBrokerControlClient) (*PostLocalNotificationResponse, error) {
+		response, err := client.PostLocalNotification(ctx, localNotificationProtoRequest(req))
+		if err != nil {
+			return nil, err
+		}
+
+		return &PostLocalNotificationResponse{
+			Posted: response.GetPosted(),
 		}, nil
 	})
 }
@@ -371,6 +398,16 @@ func localPresenceProtoRequest(req CheckLocalPresenceRequest) *localbrokerv1.Che
 		RequestedBy:   req.RequestedBy,
 		RoleName:      req.RoleName,
 		Reason:        req.Reason,
+	}
+}
+
+func localNotificationProtoRequest(req PostLocalNotificationRequest) *localbrokerv1.PostLocalNotificationRequest {
+	return &localbrokerv1.PostLocalNotificationRequest{
+		NotificationId: req.NotificationID,
+		Title:          req.Title,
+		Subtitle:       req.Subtitle,
+		Body:           req.Body,
+		ThreadId:       req.ThreadID,
 	}
 }
 

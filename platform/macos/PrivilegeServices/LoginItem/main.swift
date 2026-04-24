@@ -7,13 +7,23 @@ private func requestNotificationAuthorization() async throws {
 }
 
 private func postNotification(for event: BrokerEvent) async {
+    let notification = NotificationFormatter.request(for: event)
+
     let content = UNMutableNotificationContent()
-    content.title = NotificationFormatter.title
-    content.body = NotificationFormatter.body(for: event)
+    content.title = notification.title
+    content.body = notification.body
     content.sound = .default
+    if !notification.subtitle.isEmpty {
+        content.subtitle = notification.subtitle
+    }
+    if !notification.threadID.isEmpty {
+        content.threadIdentifier = notification.threadID
+    }
 
     let request = UNNotificationRequest(
-        identifier: "thand-privilege-broker-\(event.kind.rawValue)-\(event.brokerHandle)",
+        identifier: notification.notificationID.isEmpty
+            ? "thand-local-notification-\(UUID().uuidString)"
+            : notification.notificationID,
         content: content,
         trigger: nil
     )

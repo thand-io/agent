@@ -10,6 +10,7 @@ import (
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 	emailProvider "github.com/thand-io/agent/internal/providers/email"
+	localnotification "github.com/thand-io/agent/internal/providers/localnotification"
 	slackProvider "github.com/thand-io/agent/internal/providers/slack"
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 )
@@ -102,6 +103,14 @@ func (a *approvalsNotifier) GetPayload(toIdentity *models.Identity) models.Notif
 			logrus.WithError(err).Error("Failed to convert email request")
 			return models.NotificationRequest{}
 		}
+	} else if strings.Compare(a.GetProviderName(), localnotification.ProviderName) == 0 {
+		return localNotificationPayload(
+			a.req.Notifier,
+			elevationReq,
+			localNotificationTitleForRole("Access approval required", elevationReq),
+			fmt.Sprintf("Approval is required for %s", localPresenceRoleName(elevationReq)),
+			a.workflowTask.GetWorkflowID(),
+		)
 	} else {
 		logrus.WithField("provider", a.GetProviderName()).Error("Unsupported provider type")
 		return models.NotificationRequest{}

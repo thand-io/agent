@@ -1022,6 +1022,10 @@ func (f *fakeBrokerClient) CheckLocalPresence(ctx context.Context, req localbrok
 	return f.presenceResponse, nil
 }
 
+func (f *fakeBrokerClient) PostLocalNotification(context.Context, localbroker.PostLocalNotificationRequest) (*localbroker.PostLocalNotificationResponse, error) {
+	return &localbroker.PostLocalNotificationResponse{Posted: true}, nil
+}
+
 type fakeEnforcer struct {
 	revokeFn func(meta models.LocalSudoAuthorizationMetadata) error
 }

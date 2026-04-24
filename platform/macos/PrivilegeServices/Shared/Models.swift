@@ -3,6 +3,7 @@ import Foundation
 public enum BrokerOperation: String, Codable, Sendable {
     case timedSudoersGrant = "timed_sudoers_grant"
     case timedSudoersRevoke = "timed_sudoers_revoke"
+    case postLocalNotification = "post_local_notification"
     case execCommand = "exec_command"
     case ptySession = "pty_session"
 }
@@ -92,25 +93,44 @@ public struct RevokeTimedGrantResponse: Codable, Sendable, Equatable {
     }
 }
 
+public struct BrokerLocalNotificationRequest: Codable, Sendable, Equatable {
+    public let username: String
+    public let notification: LocalNotificationPostRequest
+
+    public init(username: String, notification: LocalNotificationPostRequest) {
+        self.username = username
+        self.notification = notification
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case username
+        case notification
+    }
+}
+
 public struct BrokerControlRequest: Codable, Sendable, Equatable {
     public let operation: BrokerOperation
     public let timedSudoersGrant: TimedSudoersGrantRequest?
     public let revokeTimedGrant: RevokeTimedGrantRequest?
+    public let localNotification: BrokerLocalNotificationRequest?
 
     public init(
         operation: BrokerOperation,
         timedSudoersGrant: TimedSudoersGrantRequest? = nil,
-        revokeTimedGrant: RevokeTimedGrantRequest? = nil
+        revokeTimedGrant: RevokeTimedGrantRequest? = nil,
+        localNotification: BrokerLocalNotificationRequest? = nil
     ) {
         self.operation = operation
         self.timedSudoersGrant = timedSudoersGrant
         self.revokeTimedGrant = revokeTimedGrant
+        self.localNotification = localNotification
     }
 
     enum CodingKeys: String, CodingKey {
         case operation
         case timedSudoersGrant = "timed_sudoers_grant"
         case revokeTimedGrant = "revoke_timed_grant"
+        case localNotification = "local_notification"
     }
 }
 
@@ -189,6 +209,7 @@ public enum BrokerEventKind: String, Codable, Sendable {
     case grantRevoked = "grant_revoked"
     case grantExpired = "grant_expired"
     case grantRevokeFailed = "grant_revoke_failed"
+    case localNotification = "local_notification"
 }
 
 public struct BrokerEvent: Codable, Sendable, Equatable {
@@ -198,6 +219,7 @@ public struct BrokerEvent: Codable, Sendable, Equatable {
     public let deviceID: String
     public let username: String
     public let message: String?
+    public let localNotification: LocalNotificationPostRequest?
     public let occurredAt: Date
 
     public init(
@@ -207,6 +229,7 @@ public struct BrokerEvent: Codable, Sendable, Equatable {
         deviceID: String,
         username: String,
         message: String? = nil,
+        localNotification: LocalNotificationPostRequest? = nil,
         occurredAt: Date
     ) {
         self.kind = kind
@@ -215,6 +238,7 @@ public struct BrokerEvent: Codable, Sendable, Equatable {
         self.deviceID = deviceID
         self.username = username
         self.message = message
+        self.localNotification = localNotification
         self.occurredAt = occurredAt
     }
 
@@ -225,6 +249,7 @@ public struct BrokerEvent: Codable, Sendable, Equatable {
         case deviceID = "device_id"
         case username
         case message
+        case localNotification = "local_notification"
         case occurredAt = "occurred_at"
     }
 }

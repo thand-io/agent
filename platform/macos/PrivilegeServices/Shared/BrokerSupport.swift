@@ -65,6 +65,8 @@ extension BrokerServiceError {
             return .grantIDConflict
         case .grantAlreadyCompleted:
             return .grantAlreadyCompleted
+        case .unavailable:
+            return .unavailable
         }
     }
 

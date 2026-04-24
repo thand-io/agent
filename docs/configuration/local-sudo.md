@@ -53,6 +53,9 @@ providers:
   local-presence:
     provider: local-presence
     enabled: true
+  local-notification:
+    provider: local-notification
+    enabled: true
 ```
 
 For full local macOS integration testing, install the Apple Development-signed privilege-services bundle with:
@@ -80,6 +83,8 @@ That unsigned mode is limited to bundle layout verification and is not a support
 On macOS v1, timed sudo is brokered through the native privilege-services app bundle and daemon. The broker owns sudoers fragments, lease persistence, expiry, and revocation.
 
 If a workflow uses an approval notifier with `provider: local-presence`, the same signed helper can trigger a macOS device-owner authentication prompt on the routed device before `authorize` runs. The result is recorded through the normal approvals path, alongside Slack and email approval callbacks. This requires the target agent to be online in an interactive login session; CI and unit tests mock the LocalAuthentication result rather than invoking biometrics.
+
+Workflows can also opt into Thand-managed macOS notifications with `provider: local-notification` in `thand: notify`, approval notifiers, `authorize.with.notifiers`, or `revoke.with.notifiers`. These notifications are routed to the target `device_id` and posted by the signed helper through `UNUserNotificationCenter`. Broker-triggered lease notifications remain enabled separately for now.
 
 ## Account Mapping
 

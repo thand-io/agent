@@ -191,6 +191,7 @@ notifiers:
 | `slack` | Slack notifications | Channel ID: `C0123456789` or User ID |
 | `email` | Email notifications | Email address |
 | `local-presence` | macOS device-owner approval prompt | `device_id` |
+| `local-notification` | macOS local user notification | `device_id` |
 
 ### Flow Control
 
@@ -491,12 +492,10 @@ The `notify` task sends notifications to users, administrators, or external syst
 - notify:
     thand: notify
     with:
-      approvals: number          # Number of approvals needed
-      notifiers:                  # Notification configuration
-        key:
-          provider: string
-          to: string
-          message: string
+      provider: string
+      to: string
+      message: string
+      device: string             # Optional; used by local-notification
     then: next-step
 ```
 
@@ -504,8 +503,10 @@ The `notify` task sends notifications to users, administrators, or external syst
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `approvals` | number | Yes | Number of approvals required (for approval notifications) |
-| `notifier` | object | Yes | Notification configuration |
+| `provider` | string | Yes | Notification provider |
+| `to` | string or array | Yes | Recipient identity, channel, or email address |
+| `message` | string | No | Notification body |
+| `device` | string | No | Target device for `local-notification` |
 
 ### Notification Process
 
@@ -519,6 +520,9 @@ The notify task:
 
 - **Slack**: Sends rich notifications with approval buttons
 - **Email**: Sends email notifications
+- **Local Notification**: Sends a macOS user notification on a routed agent device with `provider: local-notification`
+
+`local-notification` requires a live macOS agent and a target device. Device resolution follows the explicit notifier `device` field first, then the request `device`, then request metadata `device_id`. The same routing applies when `local-notification` is used in `thand: notify`, `authorize.with.notifiers`, `revoke.with.notifiers`, or `approvals.with.notifiers` approval prompts. It uses the signed helper and `UNUserNotificationCenter`; it does not replace broker-triggered sudo lease notifications, which remain in place for now.
 
 ### Examples
 
@@ -527,12 +531,20 @@ The notify task:
 - slack-notify:
     thand: notify
     with:
-      approvals: 1
-      notifiers:
-        slack:
-          provider: slack
-          to: "C0123456789"
-          message: "Access granted to user"
+      provider: slack
+      to: "C0123456789"
+      message: "Access granted to user"
+```
+
+**macOS Local Notification**
+```yaml
+- local-notify:
+    thand: notify
+    with:
+      provider: local-notification
+      to: ${ $context.user.email }
+      device: "${ .device }"
+      message: "Your local sudo request was approved"
 ```
 
 **Note**: The notify task is primarily used internally by the approvals task. For standalone notifications, consider using standard Serverless Workflow `call` tasks to external APIs.

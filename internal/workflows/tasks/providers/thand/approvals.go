@@ -110,6 +110,7 @@ func (r ApprovalNotifierRequest) ToNotifierRequest() (thandFunction.NotifierRequ
 		Provider: r.Provider,
 		To:       append([]string(nil), r.To...),
 		Message:  r.Message,
+		Device:   r.Device,
 	}, nil
 }
 
@@ -861,12 +862,13 @@ func (t *thandTask) makeApprovalNotifications(
 			recipientIdentity.ID = recipientID
 			recipientPayload := approvalNotifier.GetPayload(recipientIdentity)
 
-				notifyTasks = append(notifyTasks, notifyTask{
-					Recipient: recipientID,
-					CallFunc:  approvalNotifier.GetCallFunction(recipientIdentity),
-					Payload:   recipientPayload,
-					Provider:  approvalNotifier.GetProviderName(),
-				})
+			notifyTasks = append(notifyTasks, notifyTask{
+				Recipient: recipientID,
+				CallFunc:  approvalNotifier.GetCallFunction(recipientIdentity),
+				Payload:   recipientPayload,
+				Provider:  approvalNotifier.GetProviderName(),
+				DeviceID:  notificationPayloadDeviceID(recipientPayload),
+			})
 
 			logrus.WithFields(logrus.Fields{
 				"recipient":   recipientID,

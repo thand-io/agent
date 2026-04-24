@@ -31,6 +31,10 @@ type fakeLocalBrokerControlServer struct {
 	presenceResponse *localbrokerv1.CheckLocalPresenceResponse
 	presenceError    error
 	presenceRequest  *localbrokerv1.CheckLocalPresenceRequest
+
+	notificationResponse *localbrokerv1.PostLocalNotificationResponse
+	notificationError    error
+	notificationRequest  *localbrokerv1.PostLocalNotificationRequest
 }
 
 func (f *fakeLocalBrokerControlServer) GrantTimedSudoers(
@@ -81,6 +85,22 @@ func (f *fakeLocalBrokerControlServer) CheckLocalPresence(
 	return &localbrokerv1.CheckLocalPresenceResponse{
 		Approved:                  true,
 		AuthenticatedAtUnixMillis: time.Date(2026, time.April, 20, 15, 4, 5, 0, time.UTC).UnixMilli(),
+	}, nil
+}
+
+func (f *fakeLocalBrokerControlServer) PostLocalNotification(
+	_ context.Context,
+	req *localbrokerv1.PostLocalNotificationRequest,
+) (*localbrokerv1.PostLocalNotificationResponse, error) {
+	f.notificationRequest = req
+	if f.notificationError != nil {
+		return nil, f.notificationError
+	}
+	if f.notificationResponse != nil {
+		return f.notificationResponse, nil
+	}
+	return &localbrokerv1.PostLocalNotificationResponse{
+		Posted: true,
 	}, nil
 }
 
@@ -424,6 +444,39 @@ func TestCheckLocalPresencePassesPromptContext(t *testing.T) {
 	}
 	if response.AuthenticatedAt.IsZero() {
 		t.Fatal("expected authenticated_at to be populated")
+	}
+}
+
+func TestPostLocalNotificationPassesNotificationPayload(t *testing.T) {
+	server := &fakeLocalBrokerControlServer{}
+	client := &CommandClient{
+		executable:   "/test/brokerctl",
+		serviceLabel: "io.thand.agent.privilege-broker",
+		start:        grpcTestStarter(t, server, "", nil),
+	}
+
+	response, err := client.PostLocalNotification(context.Background(), PostLocalNotificationRequest{
+		NotificationID: "notification-1",
+		Title:          "Access approved",
+		Subtitle:       "Local Sudo",
+		Body:           "Your sudo access is ready",
+		ThreadID:       "workflow-1",
+	})
+	if err != nil {
+		t.Fatalf("PostLocalNotification returned error: %v", err)
+	}
+
+	if got, want := server.notificationRequest.GetNotificationId(), "notification-1"; got != want {
+		t.Fatalf("notification_id = %q, want %q", got, want)
+	}
+	if got, want := server.notificationRequest.GetTitle(), "Access approved"; got != want {
+		t.Fatalf("title = %q, want %q", got, want)
+	}
+	if got, want := server.notificationRequest.GetBody(), "Your sudo access is ready"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+	if !response.Posted {
+		t.Fatal("expected posted response")
 	}
 }
 

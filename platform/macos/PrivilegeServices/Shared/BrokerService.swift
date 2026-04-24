@@ -85,6 +85,12 @@ public final class PrivilegeBrokerService {
                 throw BrokerServiceError.invalidRequest("revoke payload is required")
             }
             return BrokerControlResponse(revokeTimedGrant: try revokeTimedGrant(handle: revokeRequest.brokerHandle))
+        case .postLocalNotification:
+            guard let notificationRequest = request.localNotification else {
+                throw BrokerServiceError.invalidRequest("local notification payload is required")
+            }
+            try postLocalNotification(notificationRequest)
+            return BrokerControlResponse()
         default:
             throw BrokerServiceError.invalidRequest("unsupported broker operation \(request.operation.rawValue)")
         }
@@ -197,6 +203,32 @@ public final class PrivilegeBrokerService {
             "broker_handle": handle
         ])
         return try revokeTimedGrant(handle: handle, eventKind: .grantRevoked)
+    }
+
+    public func postLocalNotification(_ request: BrokerLocalNotificationRequest) throws {
+        let username = request.username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !username.isEmpty else {
+            throw BrokerServiceError.invalidRequest("local notification username is required")
+        }
+        guard !request.notification.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw BrokerServiceError.invalidRequest("local notification title is required")
+        }
+        guard !request.notification.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw BrokerServiceError.invalidRequest("local notification body is required")
+        }
+
+        let delivered = publish(BrokerEvent(
+            kind: .localNotification,
+            brokerHandle: request.notification.notificationID,
+            grantID: "",
+            deviceID: "",
+            username: username,
+            localNotification: request.notification,
+            occurredAt: now()
+        ))
+        guard delivered > 0 else {
+            throw BrokerServiceError.unavailable("no active privilege notifier subscription for \(username)")
+        }
     }
 
     public func subscribe(username: String, sink: @escaping EventSink) -> UUID {
@@ -454,7 +486,8 @@ public final class PrivilegeBrokerService {
         }
     }
 
-    private func publish(_ event: BrokerEvent) {
+    @discardableResult
+    private func publish(_ event: BrokerEvent) -> Int {
         brokerLog("publishing broker event", fields: [
             "event_kind": event.kind.rawValue,
             "broker_handle": event.brokerHandle,
@@ -469,6 +502,7 @@ public final class PrivilegeBrokerService {
         for sink in sinks {
             sink(event)
         }
+        return sinks.count
     }
 
     private func syncOnQueue<T>(_ work: () throws -> T) rethrows -> T {

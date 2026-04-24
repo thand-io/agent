@@ -9,6 +9,7 @@ import (
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 	emailProvider "github.com/thand-io/agent/internal/providers/email"
+	localnotification "github.com/thand-io/agent/internal/providers/localnotification"
 	slackProvider "github.com/thand-io/agent/internal/providers/slack"
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 )
@@ -21,13 +22,18 @@ type NotifierImpl interface {
 }
 
 type defaultNotifierImpl struct {
-	req thandFunction.NotifierRequest
+	req          thandFunction.NotifierRequest
+	elevationReq *models.ElevateRequestInternal
 }
 
-func NewDefaultNotifierImpl(req thandFunction.NotifierRequest) NotifierImpl {
-	return &defaultNotifierImpl{
+func NewDefaultNotifierImpl(req thandFunction.NotifierRequest, elevationReq ...*models.ElevateRequestInternal) NotifierImpl {
+	notifier := &defaultNotifierImpl{
 		req: req,
 	}
+	if len(elevationReq) > 0 {
+		notifier.elevationReq = elevationReq[0]
+	}
+	return notifier
 }
 
 func (d *defaultNotifierImpl) GetRecipients() []string {
@@ -57,10 +63,22 @@ func (d *defaultNotifierImpl) GetPayload(toIdentity *models.Identity) models.Not
 		return d.GetSlackPayload(toIdentity)
 	} else if strings.HasPrefix(d.GetProviderName(), emailProvider.EmailProviderName) {
 		return d.GetEmailPayload(toIdentity)
+	} else if strings.Compare(d.GetProviderName(), localnotification.ProviderName) == 0 {
+		return d.GetLocalNotificationPayload()
 	} else {
 		return models.NotificationRequest{}
 	}
 
+}
+
+func (d *defaultNotifierImpl) GetLocalNotificationPayload() models.NotificationRequest {
+	return localNotificationPayload(
+		d.req,
+		d.elevationReq,
+		"Thand notification",
+		d.req.Message,
+		"",
+	)
 }
 
 func (d *defaultNotifierImpl) GetEmailPayload(toIdentity *models.Identity) models.NotificationRequest {
