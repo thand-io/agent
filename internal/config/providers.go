@@ -227,18 +227,8 @@ func (c *Config) InitializeProviders() error {
 
 		providerResult := result.provider
 
-		// Check for capabilities for RBAC and Identities
-		if providerResult.HasAnyCapability(
-			models.ProviderCapabilityIdentities,
-			models.ProviderCapabilityUsers,
-			models.ProviderCapabilityGroups,
-			models.ProviderCapabilityResources,
-			models.ProviderCapabilityRoles,
-			models.ProviderCapabilityPermissions,
-			models.ProviderCapabilityTenants,
-		) {
-
-			logrus.Infoln("Provider", result.key, "supports synchronization or provisioning capabilities")
+		if providerNeedsTemporalBindings(providerResult) {
+			logrus.Infoln("Provider", result.key, "supports Temporal provider bindings")
 
 			if err := c.registerProviderTemporalBindings(providerResult); err != nil {
 				logrus.WithError(err).Errorln("Failed to register Temporal bindings for provider:", result.key)
@@ -357,6 +347,20 @@ func (c *Config) registerProviderTemporalBindings(providerResult models.Provider
 	return nil
 }
 
+func providerNeedsTemporalBindings(provider models.Provider) bool {
+	return provider.HasAnyCapability(
+		models.ProviderCapabilityIdentities,
+		models.ProviderCapabilityUsers,
+		models.ProviderCapabilityGroups,
+		models.ProviderCapabilityResources,
+		models.ProviderCapabilityRoles,
+		models.ProviderCapabilityPermissions,
+		models.ProviderCapabilityTenants,
+		models.ProviderCapabilityNotifier,
+		models.ProviderCapabilityWebhook,
+	)
+}
+
 func (c *Config) EnsureProviderTemporalBindings() error {
 	c.mu.RLock()
 	providers := make([]models.Provider, 0, len(c.providerInstances))
@@ -366,15 +370,7 @@ func (c *Config) EnsureProviderTemporalBindings() error {
 	c.mu.RUnlock()
 
 	for _, provider := range providers {
-		if !provider.HasAnyCapability(
-			models.ProviderCapabilityIdentities,
-			models.ProviderCapabilityUsers,
-			models.ProviderCapabilityGroups,
-			models.ProviderCapabilityResources,
-			models.ProviderCapabilityRoles,
-			models.ProviderCapabilityPermissions,
-			models.ProviderCapabilityTenants,
-		) {
+		if !providerNeedsTemporalBindings(provider) {
 			continue
 		}
 		if err := c.registerProviderTemporalBindings(provider); err != nil {

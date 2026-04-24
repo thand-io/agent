@@ -24,7 +24,7 @@ const (
 	OperationTimedSudoersRevoke Operation = "timed_sudoers_revoke"
 	OperationExecCommand        Operation = "exec_command"
 	OperationPTYSession         Operation = "pty_session"
-	OperationLocalProof         Operation = "local_presence_proof"
+	OperationCheckLocalPresence Operation = "check_local_presence"
 
 	DefaultControlExecutable = "/Library/Application Support/Thand/PrivilegeBroker/bin/thand-macos-privilege-brokerctl"
 	DefaultMachServiceLabel  = "io.thand.agent.privilege-broker"
@@ -37,6 +37,7 @@ const (
 type Client interface {
 	GrantTimedSudoers(ctx context.Context, req TimedSudoersGrantRequest) (*TimedSudoersGrantResponse, error)
 	RevokeTimedGrant(ctx context.Context, handle string) (*RevokeTimedGrantResponse, error)
+	CheckLocalPresence(ctx context.Context, req CheckLocalPresenceRequest) (*CheckLocalPresenceResponse, error)
 }
 
 type TimedSudoersGrantRequest struct {
@@ -134,6 +135,24 @@ type RevokeTimedGrantResponse struct {
 	Status RevokeTimedGrantStatus `json:"status"`
 }
 
+type CheckLocalPresenceRequest struct {
+	ChallengeID string        `json:"challenge_id"`
+	DeviceID    string        `json:"device_id"`
+	WorkflowID  string        `json:"workflow_id"`
+	TaskName    string        `json:"task_name"`
+	Prompt      string        `json:"prompt"`
+	Timeout     time.Duration `json:"timeout"`
+	RequestedBy string        `json:"requested_by,omitempty"`
+	RoleName    string        `json:"role_name,omitempty"`
+	Reason      string        `json:"reason,omitempty"`
+}
+
+type CheckLocalPresenceResponse struct {
+	Approved        bool      `json:"approved"`
+	AuthenticatedAt time.Time `json:"authenticated_at,omitempty"`
+	FailureReason   string    `json:"failure_reason,omitempty"`
+}
+
 type helperSession struct {
 	dial        func(context.Context, string) (net.Conn, error)
 	wait        func() error
@@ -219,6 +238,25 @@ func (c *CommandClient) RevokeTimedGrant(ctx context.Context, handle string) (*R
 		default:
 			return nil, status.Errorf(codes.Internal, "broker returned an unsupported timed sudoers revoke status %q", response.GetStatus().String())
 		}
+	})
+}
+
+func (c *CommandClient) CheckLocalPresence(ctx context.Context, req CheckLocalPresenceRequest) (*CheckLocalPresenceResponse, error) {
+	return invokeHelperRPC(ctx, c, OperationCheckLocalPresence, func(ctx context.Context, client localbrokerv1.LocalBrokerControlClient) (*CheckLocalPresenceResponse, error) {
+		response, err := client.CheckLocalPresence(ctx, localPresenceProtoRequest(req))
+		if err != nil {
+			return nil, err
+		}
+
+		var authenticatedAt time.Time
+		if response.GetAuthenticatedAtUnixMillis() > 0 {
+			authenticatedAt = time.UnixMilli(response.GetAuthenticatedAtUnixMillis()).UTC()
+		}
+		return &CheckLocalPresenceResponse{
+			Approved:        response.GetApproved(),
+			AuthenticatedAt: authenticatedAt,
+			FailureReason:   response.GetFailureReason(),
+		}, nil
 	})
 }
 
@@ -320,6 +358,20 @@ func timedSudoersGrantProtoRequest(req TimedSudoersGrantRequest) *localbrokerv1.
 		protoRequest.RequestExpiresAtUnixMillis = &requestExpiresAtUnixMillis
 	}
 	return protoRequest
+}
+
+func localPresenceProtoRequest(req CheckLocalPresenceRequest) *localbrokerv1.CheckLocalPresenceRequest {
+	return &localbrokerv1.CheckLocalPresenceRequest{
+		ChallengeId:   req.ChallengeID,
+		DeviceId:      req.DeviceID,
+		WorkflowId:    req.WorkflowID,
+		TaskName:      req.TaskName,
+		Prompt:        req.Prompt,
+		TimeoutMillis: req.Timeout.Milliseconds(),
+		RequestedBy:   req.RequestedBy,
+		RoleName:      req.RoleName,
+		Reason:        req.Reason,
+	}
 }
 
 func (c *CommandClient) helperArguments() []string {

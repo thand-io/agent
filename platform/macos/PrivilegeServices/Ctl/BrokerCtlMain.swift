@@ -42,10 +42,16 @@ private actor OneShotServerController {
 private final class LocalBrokerControlService: Thand_Localbroker_V1_LocalBrokerControl.SimpleServiceProtocol {
     private let config: BrokerConfig
     private let serverController: OneShotServerController
+    private let presenceAuthenticator: any LocalPresenceAuthenticating
 
-    init(config: BrokerConfig, serverController: OneShotServerController) {
+    init(
+        config: BrokerConfig,
+        serverController: OneShotServerController,
+        presenceAuthenticator: any LocalPresenceAuthenticating = LocalPresenceAuthenticator()
+    ) {
         self.config = config
         self.serverController = serverController
+        self.presenceAuthenticator = presenceAuthenticator
     }
 
     func grantTimedSudoers(
@@ -115,6 +121,37 @@ private final class LocalBrokerControlService: Thand_Localbroker_V1_LocalBrokerC
         case .notFound:
             proto.status = .notFound
         }
+        return proto
+    }
+
+    func checkLocalPresence(
+        request: Thand_Localbroker_V1_CheckLocalPresenceRequest,
+        context _: ServerContext
+    ) async throws -> Thand_Localbroker_V1_CheckLocalPresenceResponse {
+        defer {
+            Task {
+                await serverController.finishRequest()
+            }
+        }
+
+        let result = await presenceAuthenticator.checkPresence(LocalPresenceCheckRequest(
+            challengeID: request.challengeID,
+            deviceID: request.deviceID,
+            workflowID: request.workflowID,
+            taskName: request.taskName,
+            prompt: request.prompt,
+            timeout: Double(request.timeoutMillis) / 1_000,
+            requestedBy: request.requestedBy,
+            roleName: request.roleName,
+            reason: request.reason
+        ))
+
+        var proto = Thand_Localbroker_V1_CheckLocalPresenceResponse()
+        proto.approved = result.approved
+        if let authenticatedAt = result.authenticatedAt {
+            proto.authenticatedAtUnixMillis = Int64((authenticatedAt.timeIntervalSince1970 * 1_000).rounded())
+        }
+        proto.failureReason = result.failureReason ?? ""
         return proto
     }
 

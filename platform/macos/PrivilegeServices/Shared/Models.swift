@@ -5,7 +5,6 @@ public enum BrokerOperation: String, Codable, Sendable {
     case timedSudoersRevoke = "timed_sudoers_revoke"
     case execCommand = "exec_command"
     case ptySession = "pty_session"
-    case localPresenceProof = "local_presence_proof"
 }
 
 public struct TimedSudoersGrantRequest: Codable, Sendable, Equatable {

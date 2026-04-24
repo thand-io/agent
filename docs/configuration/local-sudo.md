@@ -50,6 +50,9 @@ providers:
   local-elevation:
     provider: local
     enabled: true
+  local-presence:
+    provider: local-presence
+    enabled: true
 ```
 
 For full local macOS integration testing, install the Apple Development-signed privilege-services bundle with:
@@ -75,6 +78,8 @@ THAND_MACOS_SKIP_SIGNING=1 make package-macos-privilege-services-dev
 That unsigned mode is limited to bundle layout verification and is not a supported broker runtime path. Full local `SMAppService` and broker testing is expected to use the Apple Development-signed install flow above.
 
 On macOS v1, timed sudo is brokered through the native privilege-services app bundle and daemon. The broker owns sudoers fragments, lease persistence, expiry, and revocation.
+
+If a workflow uses an approval notifier with `provider: local-presence`, the same signed helper can trigger a macOS device-owner authentication prompt on the routed device before `authorize` runs. The result is recorded through the normal approvals path, alongside Slack and email approval callbacks. This requires the target agent to be online in an interactive login session; CI and unit tests mock the LocalAuthentication result rather than invoking biometrics.
 
 ## Account Mapping
 

@@ -27,6 +27,10 @@ type fakeLocalBrokerControlServer struct {
 	revokeResponse *localbrokerv1.RevokeTimedGrantResponse
 	revokeError    error
 	revokeRequest  *localbrokerv1.RevokeTimedGrantRequest
+
+	presenceResponse *localbrokerv1.CheckLocalPresenceResponse
+	presenceError    error
+	presenceRequest  *localbrokerv1.CheckLocalPresenceRequest
 }
 
 func (f *fakeLocalBrokerControlServer) GrantTimedSudoers(
@@ -60,6 +64,23 @@ func (f *fakeLocalBrokerControlServer) RevokeTimedGrant(
 	}
 	return &localbrokerv1.RevokeTimedGrantResponse{
 		Status: localbrokerv1.RevokeTimedGrantResponse_STATUS_REVOKED,
+	}, nil
+}
+
+func (f *fakeLocalBrokerControlServer) CheckLocalPresence(
+	_ context.Context,
+	req *localbrokerv1.CheckLocalPresenceRequest,
+) (*localbrokerv1.CheckLocalPresenceResponse, error) {
+	f.presenceRequest = req
+	if f.presenceError != nil {
+		return nil, f.presenceError
+	}
+	if f.presenceResponse != nil {
+		return f.presenceResponse, nil
+	}
+	return &localbrokerv1.CheckLocalPresenceResponse{
+		Approved:                  true,
+		AuthenticatedAtUnixMillis: time.Date(2026, time.April, 20, 15, 4, 5, 0, time.UTC).UnixMilli(),
 	}, nil
 }
 
@@ -363,6 +384,46 @@ func TestRevokeTimedGrantReturnsNotFoundStatus(t *testing.T) {
 	}
 	if got, want := response.Status, RevokeTimedGrantStatusNotFound; got != want {
 		t.Fatalf("status = %q, want %q", got, want)
+	}
+}
+
+func TestCheckLocalPresencePassesPromptContext(t *testing.T) {
+	server := &fakeLocalBrokerControlServer{}
+	client := &CommandClient{
+		executable:   "/test/brokerctl",
+		serviceLabel: "io.thand.agent.privilege-broker",
+		start:        grpcTestStarter(t, server, "", nil),
+	}
+
+	response, err := client.CheckLocalPresence(context.Background(), CheckLocalPresenceRequest{
+		ChallengeID: "challenge-1",
+		DeviceID:    "device-alpha",
+		WorkflowID:  "workflow-1",
+		TaskName:    "presence",
+		Prompt:      "Approve this request",
+		Timeout:     2 * time.Minute,
+		RequestedBy: "requester@example.com",
+		RoleName:    "Local Sudo",
+		Reason:      "debug prod",
+	})
+	if err != nil {
+		t.Fatalf("CheckLocalPresence returned error: %v", err)
+	}
+
+	if got, want := server.presenceRequest.GetChallengeId(), "challenge-1"; got != want {
+		t.Fatalf("challenge_id = %q, want %q", got, want)
+	}
+	if got, want := server.presenceRequest.GetTimeoutMillis(), int64((2 * time.Minute).Milliseconds()); got != want {
+		t.Fatalf("timeout_millis = %d, want %d", got, want)
+	}
+	if got, want := server.presenceRequest.GetRequestedBy(), "requester@example.com"; got != want {
+		t.Fatalf("requested_by = %q, want %q", got, want)
+	}
+	if !response.Approved {
+		t.Fatal("expected approved presence response")
+	}
+	if response.AuthenticatedAt.IsZero() {
+		t.Fatal("expected authenticated_at to be populated")
 	}
 }
 

@@ -81,6 +81,9 @@ func (t *ThandTask) validateApprovalsTask() error {
 	}
 	hasTimeout := false
 	if t.With != nil {
+		if _, hasLegacyLocalPresence := (*t.With)["local_presence"]; hasLegacyLocalPresence {
+			return fmt.Errorf("approvals task 'with.local_presence' is no longer supported; use 'with.notifiers.<name>.provider: local-presence'")
+		}
 		hasTimeout = t.With.HasString("timeout")
 	}
 	hasTimeoutBranch := t.On != nil && t.On.HasString("timeout")

@@ -127,6 +127,7 @@ The `approvals` task handles approval workflows by sending notifications to appr
     thand: approvals
     with:
       approvals: number          # Required approvals
+      timeout: duration          # Optional overall deadline; requires on.timeout
       notifiers:                  # Notification configuration
         key:
           provider: string
@@ -135,6 +136,7 @@ The `approvals` task handles approval workflows by sending notifications to appr
     on:
       approved: target-step
       denied: target-step
+      timeout: target-step        # Required when with.timeout is set
     then: default-step
 ```
 
@@ -143,8 +145,32 @@ The `approvals` task handles approval workflows by sending notifications to appr
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `approvals` | number | Yes | Number of approvals required |
-| `notifiers` | object | Yes | Notification configuration |
 | `timeout` | duration | No | Overall approval deadline. Requires `on.timeout` when set |
+| `notifiers` | object | No | Notification configuration |
+
+### Local Presence Configuration
+
+Use a normal notifier entry with `provider: local-presence` to add a device-routed macOS owner-authentication prompt. The routed agent reports the prompt result back into the same approval result path used by Slack and email callbacks, so an approved local presence check can satisfy the configured `approvals` count.
+
+```yaml
+notifiers:
+  touch_id:
+    provider: local-presence
+    device: "${ .device }"
+    prompt: "Approve this access request on your Mac"
+```
+
+Device resolution uses this order:
+
+1. the notifier entry `device`
+2. the elevation request `device`
+3. request metadata `device_id`
+
+Local presence uses the approvals task's remaining `with.timeout` deadline for device routing and the native macOS prompt. If the target device is offline or the prompt times out, the task routes to `on.timeout` instead of treating the result as a denial. User cancel or authentication failure is a denial and routes to `on.denied`.
+
+Local presence is not ordered ahead of other notifiers inside one approvals task. If you want "try Touch ID first, then fall back to humans," model that as two approvals tasks: a short local-presence task whose `on.timeout` branch points to a second Slack/email approvals task.
+
+The check requires a live macOS agent in an interactive login session. It proves that macOS device-owner authentication succeeded on the routed device; it is not a cryptographic enrolled-device attestation.
 
 ### Notifiers Configuration
 
@@ -164,6 +190,7 @@ notifiers:
 |----------|---------|---------------|
 | `slack` | Slack notifications | Channel ID: `C0123456789` or User ID |
 | `email` | Email notifications | Email address |
+| `local-presence` | macOS device-owner approval prompt | `device_id` |
 
 ### Flow Control
 
@@ -228,6 +255,24 @@ The approvals task implements the following logic:
     on:
       approved: authorize
       denied: denied
+```
+
+**macOS Local Presence-Gated Sudo**
+```yaml
+- presence:
+    thand: approvals
+    with:
+      approvals: 1
+      timeout: 2m
+      notifiers:
+        touch_id:
+          provider: local-presence
+          device: "${ .device }"
+          prompt: "Approve this sudo request on your Mac"
+    on:
+      approved: authorize
+      denied: denied
+      timeout: human_approval
 ```
 
 ## Execution Planning

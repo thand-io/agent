@@ -973,12 +973,15 @@ func newTestLocalProvider(t *testing.T, goos, tempDir string) *localProvider {
 }
 
 type fakeBrokerClient struct {
-	grantRequests  []localbroker.TimedSudoersGrantRequest
-	revokeHandles  []string
-	grantResponse  *localbroker.TimedSudoersGrantResponse
-	revokeResponse *localbroker.RevokeTimedGrantResponse
-	grantErr       error
-	revokeErr      error
+	grantRequests    []localbroker.TimedSudoersGrantRequest
+	revokeHandles    []string
+	presenceRequests []localbroker.CheckLocalPresenceRequest
+	grantResponse    *localbroker.TimedSudoersGrantResponse
+	revokeResponse   *localbroker.RevokeTimedGrantResponse
+	presenceResponse *localbroker.CheckLocalPresenceResponse
+	grantErr         error
+	revokeErr        error
+	presenceErr      error
 }
 
 func (f *fakeBrokerClient) GrantTimedSudoers(ctx context.Context, req localbroker.TimedSudoersGrantRequest) (*localbroker.TimedSudoersGrantResponse, error) {
@@ -1006,6 +1009,17 @@ func (f *fakeBrokerClient) RevokeTimedGrant(ctx context.Context, handle string) 
 		}, nil
 	}
 	return f.revokeResponse, nil
+}
+
+func (f *fakeBrokerClient) CheckLocalPresence(ctx context.Context, req localbroker.CheckLocalPresenceRequest) (*localbroker.CheckLocalPresenceResponse, error) {
+	f.presenceRequests = append(f.presenceRequests, req)
+	if f.presenceErr != nil {
+		return nil, f.presenceErr
+	}
+	if f.presenceResponse == nil {
+		return &localbroker.CheckLocalPresenceResponse{Approved: true, AuthenticatedAt: time.Now().UTC()}, nil
+	}
+	return f.presenceResponse, nil
 }
 
 type fakeEnforcer struct {

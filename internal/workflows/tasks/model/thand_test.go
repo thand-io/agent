@@ -100,6 +100,22 @@ func TestThandTask_Validate(t *testing.T) {
 			errMsg:  "approvals task requires both 'with.timeout' and 'on.timeout' when either is configured",
 		},
 		{
+			name: "invalid approvals task with legacy local presence",
+			task: ThandTask{
+				Thand: ThandTypeApprovals,
+				On: &models.BasicConfig{
+					"approved": "authorize",
+					"denied":   "notify_denied",
+				},
+				With: &models.BasicConfig{
+					"approvals":      1,
+					"local_presence": map[string]any{"provider": "local-presence"},
+				},
+			},
+			wantErr: true,
+			errMsg:  "with.local_presence",
+		},
+		{
 			name: "valid notify task",
 			task: ThandTask{
 				Thand: ThandTypeNotify,

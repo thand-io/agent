@@ -7,6 +7,7 @@ option go_package = "github.com/thand-io/agent/internal/localbroker/proto/localb
 service LocalBrokerControl {
   rpc GrantTimedSudoers(GrantTimedSudoersRequest) returns (GrantTimedSudoersResponse);
   rpc RevokeTimedGrant(RevokeTimedGrantRequest) returns (RevokeTimedGrantResponse);
+  rpc CheckLocalPresence(CheckLocalPresenceRequest) returns (CheckLocalPresenceResponse);
 }
 
 message GrantTimedSudoersRequest {
@@ -38,4 +39,22 @@ message RevokeTimedGrantResponse {
   }
 
   Status status = 1;
+}
+
+message CheckLocalPresenceRequest {
+  string challenge_id = 1;
+  string device_id = 2;
+  string workflow_id = 3;
+  string task_name = 4;
+  string prompt = 5;
+  int64 timeout_millis = 6;
+  string requested_by = 7;
+  string role_name = 8;
+  string reason = 9;
+}
+
+message CheckLocalPresenceResponse {
+  bool approved = 1;
+  int64 authenticated_at_unix_millis = 2;
+  string failure_reason = 3;
 }

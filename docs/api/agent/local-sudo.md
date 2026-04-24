@@ -67,6 +67,8 @@ Local sudo resolves device-local execution details such as the target device and
 
 That planning step reads shared device policy from the Temporal-backed device-definition registry rather than depending on the handling server having the target device configured locally.
 
+Workflows can require macOS local presence before authorization by adding a `thand: approvals` notifier with `provider: local-presence`. The server routes the challenge to the selected `device_id`; the macOS agent then asks the signed helper to run `deviceOwnerAuthentication`, which can be satisfied by Touch ID, Apple Watch, or passcode depending on local policy. The returned result is applied through the same approval evaluation path as Slack and email callbacks.
+
 If you are authoring or reviewing workflows, see [Workflow Tasks](/configuration/workflows/tasks.html) for the `authorize` lifecycle and execution-planning behavior.
 
 ## Revoke Behavior

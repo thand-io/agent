@@ -14,7 +14,6 @@ import (
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/providers/aws"
 	"github.com/thand-io/agent/internal/testing/temporaltest"
-	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
 	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
@@ -759,7 +758,7 @@ func TestApprovalsTask_Helpers(t *testing.T) {
 	})
 
 	t.Run("HasNotifiers", func(t *testing.T) {
-		task := &ApprovalsTask{Notifiers: map[string]thandFunction.NotifierRequest{"email": {}}}
+		task := &ApprovalsTask{Notifiers: map[string]ApprovalNotifierRequest{"email": {}}}
 		assert.True(t, task.HasNotifiers())
 
 		taskEmpty := &ApprovalsTask{}

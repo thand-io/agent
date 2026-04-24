@@ -12,3 +12,9 @@ providers:
     description: Local privilege elevation (like sudo or UAC)
     provider: local
     enabled: true
+
+  local-presence:
+    name: Local Presence
+    description: Local macOS device-owner approval prompts
+    provider: local-presence
+    enabled: true
