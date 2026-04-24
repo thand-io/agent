@@ -30,11 +30,14 @@ type Device struct {
 	// Device is a first-class execution target managed by the server.
 	// It is intentionally separate from provider tenants because device routing,
 	// local policy, and local lease enforcement have different lifecycle needs.
-	ID             string                      `json:"device_id,omitempty" yaml:"device_id,omitempty" mapstructure:"device_id"`
-	Name           string                      `json:"name" yaml:"name" mapstructure:"name"`
-	Description    string                      `json:"description,omitempty" yaml:"description,omitempty" mapstructure:"description"`
-	Platform       string                      `json:"platform,omitempty" yaml:"platform,omitempty" mapstructure:"platform"`
-	Enabled        bool                        `json:"enabled" yaml:"enabled" mapstructure:"enabled"`
+	ID          string `json:"device_id,omitempty" yaml:"device_id,omitempty" mapstructure:"device_id"`
+	Name        string `json:"name" yaml:"name" mapstructure:"name"`
+	Description string `json:"description,omitempty" yaml:"description,omitempty" mapstructure:"description"`
+	Platform    string `json:"platform,omitempty" yaml:"platform,omitempty" mapstructure:"platform"`
+	Enabled     bool   `json:"enabled" yaml:"enabled" mapstructure:"enabled"`
+
+	// LocalElevation is device-local policy layered on top of the generic
+	// device substrate. The policy itself lives in device_local_elevation.go.
 	LocalElevation *DeviceLocalElevationPolicy `json:"local_elevation,omitempty" yaml:"local_elevation,omitempty" mapstructure:"local_elevation"`
 }
 

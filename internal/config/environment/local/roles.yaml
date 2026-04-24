@@ -19,6 +19,7 @@ roles:
         - path:/root # Only allow access to /root directory
     providers:
       - local
+      - local-elevation
     enabled: true
 
   # Power Users Group
@@ -41,6 +42,7 @@ roles:
         - path:/opt
     providers:
       - local
+      - local-elevation
     enabled: true
 
   # Users Group
@@ -62,6 +64,20 @@ roles:
         - path:/var/tmp
     providers:
       - local
+      - local-elevation
+    enabled: true
+
+  local_sudo:
+    name: Local Sudo
+    description: Time-bound local sudo access
+    workflows:
+      - local_sudo_timed_elevation
+    permissions:
+      allow:
+        - local:sudo:*
+    providers:
+      - local
+      - local-elevation
     enabled: true
 
   # Operators Group
@@ -84,5 +100,5 @@ roles:
         - path:/etc/systemd
     providers:
       - local
+      - local-elevation
     enabled: true
-

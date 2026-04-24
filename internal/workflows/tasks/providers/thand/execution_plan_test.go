@@ -147,25 +147,38 @@ func TestBuildExecutionPlanMaterializesAuthorizeRequests(t *testing.T) {
 	assert.Equal(t, "admin", entry.AuthorizeRequest.Role.GetIdentifier())
 }
 
-func TestBuildExecutionPlanCarriesCanonicalDeviceID(t *testing.T) {
+func TestBuildExecutionPlanLocalSudoUsesPerEntryGrantIDsAndDeviceMetadata(t *testing.T) {
 	cfg := newExecutionPlanTestConfig(t)
 	cfg.Devices.Definitions = map[string]models.Device{
 		"device-alpha": {
 			ID:      "device-alpha",
 			Name:    "Device Alpha",
 			Enabled: true,
+			LocalElevation: &models.DeviceLocalElevationPolicy{
+				Enabled:      true,
+				AllowedModes: []string{string(models.LocalSudoModeTimed)},
+				Accounts: []models.DeviceLocalElevationAccount{
+					{Email: "user@example.com", LocalUsername: "workstation-user"},
+					{Email: "second@example.com", LocalUsername: "second-workstation-user"},
+				},
+				DeniedUsernames:  []string{"root"},
+				AllowedUIDRanges: []string{"1000-60000"},
+			},
 		},
 	}
 
 	req := models.ElevateRequestInternal{
 		ElevateRequest: models.ElevateRequest{
-			Role:       newExecutionPlanRole("admin", "Admin"),
-			Providers:  []string{"test-provider"},
-			Workflow:   "aws_simple_elevation",
+			Role:       newExecutionPlanRole(models.LocalSudoRoleIdentifier, "Local Sudo"),
+			Providers:  []string{"local-elevation"},
+			Workflow:   models.LocalSudoTimedWorkflowName,
 			Device:     "device-alpha",
 			Reason:     "maintenance",
 			Duration:   "30m",
 			Identities: []string{"user@example.com", "second@example.com"},
+			Metadata: models.LocalSudoRequestMetadata{
+				Mode: models.LocalSudoModeTimed,
+			}.AsMap(),
 		},
 	}
 
@@ -173,11 +186,20 @@ func TestBuildExecutionPlanCarriesCanonicalDeviceID(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, plan.Entries, 2)
 
+	metaA, err := models.DecodeLocalSudoRequestMetadata(plan.Entries[0].AuthorizeRequest.Metadata)
+	require.NoError(t, err)
+	metaB, err := models.DecodeLocalSudoRequestMetadata(plan.Entries[1].AuthorizeRequest.Metadata)
+	require.NoError(t, err)
+
 	assert.Equal(t, "device-alpha", plan.Entries[0].DeviceID)
 	assert.Equal(t, "device-alpha", plan.Entries[1].DeviceID)
+	assert.Equal(t, plan.Entries[0].EntryID, metaA.GrantID)
+	assert.Equal(t, plan.Entries[1].EntryID, metaB.GrantID)
 	assert.NotEqual(t, plan.Entries[0].EntryID, plan.Entries[1].EntryID)
-	assert.NotNil(t, plan.Entries[0].AuthorizeRequest)
-	assert.NotNil(t, plan.Entries[1].AuthorizeRequest)
+	assert.Equal(t, "workstation-user", metaA.LocalUsername)
+	assert.Equal(t, "second-workstation-user", metaB.LocalUsername)
+	assert.Equal(t, []string{"root"}, metaA.DeniedUsernames)
+	assert.Equal(t, []string{"1000-60000"}, metaA.AllowedUIDRanges)
 }
 
 func TestEnsureExecutionPlanTemporalBuildsOnceAndCachesPlan(t *testing.T) {

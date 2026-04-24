@@ -20,7 +20,7 @@ import (
 	"github.com/thand-io/agent/internal/workflows/manager"
 )
 
-// getElevate handles GET /api/v1/elevate?role=admin&target=server&reason=maintenance
+// getElevate handles GET /api/v1/elevate?role=admin&device=<device_id>&reason=maintenance
 //
 //	@Summary		Request role elevation
 //	@Description	Request elevation to a specific role with static parameters
@@ -29,6 +29,7 @@ import (
 //	@Produce		json
 //	@Param			role		query		string	true	"Role name"
 //	@Param			provider	query		string	true	"Provider name"
+//	@Param			device		query		string	false	"Canonical device_id for device-local workflows"
 //	@Param			reason		query		string	true	"Reason for elevation"
 //	@Param			duration	query		string	false	"Duration of elevation"
 //	@Param			workflow	query		string	false	"Workflow name"
@@ -72,6 +73,7 @@ func (s *Server) getElevate(c *gin.Context) {
 		Providers:  []string{request.Provider},
 		Identities: request.Identities,
 		Workflow:   primaryWorkflow,
+		Device:     request.Device,
 		Reason:     request.Reason,
 		Duration:   request.Duration,
 		Session:    request.Session,
@@ -671,6 +673,7 @@ type ElevateStaticPageData struct {
 	Identities []models.Identity `json:"identities"`
 	Providers  []string          `json:"providers"`
 	Roles      []string          `json:"roles"`
+	Device     string            `json:"device"`
 	Duration   string            `json:"duration"`
 	Reason     string            `json:"reason"`
 	Tenants    []string          `json:"tenants"`
@@ -682,6 +685,9 @@ func (s *Server) getElevationPagePrefill(c *gin.Context) ElevateStaticPageData {
 	}
 
 	preFilledTenants := c.QueryArray("tenants")
+	if len(preFilledTenants) == 0 {
+		preFilledTenants = c.QueryArray("tenant")
+	}
 	validTenants := []string{}
 	for _, tenantID := range preFilledTenants {
 		tenant, err := s.Config.GetTenant(tenantID)
@@ -728,6 +734,8 @@ func (s *Server) getElevationPagePrefill(c *gin.Context) ElevateStaticPageData {
 		// If roles are specified, use them
 		data.Roles = roles
 	}
+
+	data.Device = strings.TrimSpace(c.Query("device"))
 
 	// Get duration from query parameters
 	duration := c.Query("duration")

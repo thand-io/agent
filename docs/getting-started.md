@@ -165,6 +165,11 @@ Request temporary sudo access on your local machine:
 thand-agent request sudo --duration 30m --reason "System maintenance"
 ```
 
+For device-targeted usage and configuration details, see:
+
+- [Local Sudo Usage](api/agent/local-sudo.md)
+- [Local Sudo Configuration](configuration/local-sudo.md)
+
 ## Next Steps
 
 - **[Environment Setup](../environments/)** - Configure Thand for specific environments
