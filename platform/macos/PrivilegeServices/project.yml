@@ -1,0 +1,159 @@
+name: ThandPrivilegeServices
+options:
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+  deploymentTarget:
+    macOS: "15.0"
+packages:
+  grpc-swift-2:
+    url: https://github.com/grpc/grpc-swift-2.git
+    from: 2.4.0
+  grpc-swift-protobuf:
+    url: https://github.com/grpc/grpc-swift-protobuf.git
+    from: 2.3.0
+  grpc-swift-nio-transport:
+    url: https://github.com/grpc/grpc-swift-nio-transport.git
+    from: 2.7.0
+  swift-nio:
+    url: https://github.com/apple/swift-nio.git
+    from: 2.96.0
+  swift-protobuf:
+    url: https://github.com/apple/swift-protobuf.git
+    from: 1.37.0
+settings:
+  base:
+    SWIFT_VERSION: 6.0
+    MACOSX_DEPLOYMENT_TARGET: 15.0
+    CODE_SIGNING_ALLOWED: NO
+    CODE_SIGNING_REQUIRED: NO
+    ENABLE_HARDENED_RUNTIME: NO
+targets:
+  PrivilegeServicesLocalBrokerProto:
+    type: library.static
+    platform: macOS
+    sources:
+      - path: Generated/LocalBroker
+    dependencies:
+      - package: grpc-swift-2
+        product: GRPCCore
+      - package: grpc-swift-protobuf
+        product: GRPCProtobuf
+      - package: swift-protobuf
+        product: SwiftProtobuf
+    settings:
+      base:
+        PRODUCT_MODULE_NAME: PrivilegeServicesLocalBrokerProto
+  PrivilegeServicesShared:
+    type: library.static
+    platform: macOS
+    sources:
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_MODULE_NAME: PrivilegeServicesShared
+  PrivilegeServicesAppSupport:
+    type: library.static
+    platform: macOS
+    sources:
+      - path: App
+        excludes:
+          - main.swift
+    settings:
+      base:
+        PRODUCT_MODULE_NAME: PrivilegeServicesAppSupport
+  ThandPrivilegeServices:
+    type: application
+    platform: macOS
+    sources:
+      - path: App/main.swift
+    dependencies:
+      - target: PrivilegeServicesAppSupport
+    settings:
+      base:
+        PRODUCT_NAME: ThandPrivilegeServices
+        PRODUCT_BUNDLE_IDENTIFIER: io.thand.agent.privilege-services
+        PRODUCT_MODULE_NAME: ThandPrivilegeServices
+        INFOPLIST_FILE: Resources/App/Info.plist
+  ThandPrivilegeNotifier:
+    type: application
+    platform: macOS
+    sources:
+      - path: LoginItem
+    dependencies:
+      - target: PrivilegeServicesShared
+    settings:
+      base:
+        PRODUCT_NAME: ThandPrivilegeNotifier
+        PRODUCT_BUNDLE_IDENTIFIER: io.thand.agent.privilege-notifier
+        PRODUCT_MODULE_NAME: ThandPrivilegeNotifier
+        INFOPLIST_FILE: Resources/LoginItem/Info.plist
+  ThandPrivilegeBrokerDaemon:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Daemon
+    dependencies:
+      - target: PrivilegeServicesShared
+    settings:
+      base:
+        PRODUCT_NAME: ThandPrivilegeBrokerDaemon
+        PRODUCT_BUNDLE_IDENTIFIER: io.thand.agent.privilege-broker
+        PRODUCT_MODULE_NAME: ThandPrivilegeBrokerDaemon
+        GENERATE_INFOPLIST_FILE: YES
+  ThandPrivilegeBrokerCtl:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Ctl
+    dependencies:
+      - target: PrivilegeServicesShared
+      - target: PrivilegeServicesLocalBrokerProto
+      - package: grpc-swift-2
+        product: GRPCCore
+      - package: grpc-swift-protobuf
+        product: GRPCProtobuf
+      - package: grpc-swift-nio-transport
+        product: GRPCNIOTransportHTTP2TransportServices
+      - package: swift-protobuf
+        product: SwiftProtobuf
+    settings:
+      base:
+        PRODUCT_NAME: thand-macos-privilege-brokerctl
+        PRODUCT_BUNDLE_IDENTIFIER: io.thand.agent
+        PRODUCT_MODULE_NAME: ThandPrivilegeBrokerCtl
+        GENERATE_INFOPLIST_FILE: YES
+  PrivilegeServicesTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: PrivilegeServicesShared
+      - target: PrivilegeServicesAppSupport
+      - target: PrivilegeServicesLocalBrokerProto
+      - package: grpc-swift-protobuf
+        product: GRPCProtobuf
+      - package: swift-protobuf
+        product: SwiftProtobuf
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.thand.agent.privilege-services-tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  ThandPrivilegeServices:
+    build:
+      targets:
+        PrivilegeServicesLocalBrokerProto: all
+        PrivilegeServicesShared: all
+        PrivilegeServicesAppSupport: all
+        ThandPrivilegeServices: all
+        ThandPrivilegeNotifier: all
+        ThandPrivilegeBrokerDaemon: all
+        ThandPrivilegeBrokerCtl: all
+    test:
+      config: Debug
+      gatherCoverageData: false
+      targets:
+        - name: PrivilegeServicesTests
+    archive:
+      config: Release
