@@ -144,6 +144,7 @@ The `approvals` task handles approval workflows by sending notifications to appr
 |-----------|------|----------|-------------|
 | `approvals` | number | Yes | Number of approvals required |
 | `notifiers` | object | Yes | Notification configuration |
+| `timeout` | duration | No | Overall approval deadline. Requires `on.timeout` when set |
 
 ### Notifiers Configuration
 
@@ -173,11 +174,12 @@ The approvals task uses the `on` directive for conditional flow:
     thand: approvals
     with:
       approvals: 2
+      timeout: 15m
       notifiers: ...
     on:
       approved: grant-access     # If approved
       denied: send-denial        # If denied
-    then: timeout-handler        # If insufficient approvals (loops back)
+      timeout: timeout-handler   # If no final answer before timeout
 ```
 
 ### Approval Logic
@@ -188,7 +190,8 @@ The approvals task implements the following logic:
 3. Collects approvals in the workflow context
 4. If any approval is `false` (denied), routes to the `denied` state
 5. If the number of `true` approvals meets the required count, routes to the `approved` state
-6. Otherwise, loops back to wait for more approvals
+6. If `with.timeout` expires before approval or denial, routes to the `timeout` state
+7. Otherwise, loops back to wait for more approvals
 
 ### Examples
 
@@ -198,6 +201,7 @@ The approvals task implements the following logic:
     thand: approvals
     with:
       approvals: 1
+      timeout: 30m
       notifiers:
         slack:
           provider: slack
@@ -207,7 +211,7 @@ The approvals task implements the following logic:
     on:
       approved: grant-access
       denied: deny-request
-    then: deny-request
+      timeout: deny-request
 ```
 
 **Email Approval**

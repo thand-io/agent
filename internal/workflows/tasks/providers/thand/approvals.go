@@ -3,6 +3,7 @@ package thand
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
@@ -13,14 +14,19 @@ import (
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
 	sdkConstants "github.com/thand-io/agent/sdk/constants"
+	sdkWorkflowModels "github.com/thand-io/agent/sdk/workflows/models"
 	runner "github.com/thand-io/agent/sdk/workflows/runner"
+	"go.temporal.io/sdk/workflow"
 )
 
 var ThandApprovalsTask = "approvals"
 
+const approvalDeadlinesContextKey = "approval_deadlines"
+
 type ApprovalsTask struct {
 	Approvals   int                                      `json:"approvals" default:"1"`
 	SelfApprove bool                                     `json:"selfApprove" default:"false"`
+	Timeout     string                                   `json:"timeout,omitempty"`
 	Notifiers   map[string]thandFunction.NotifierRequest `json:"notifiers"`
 }
 
@@ -30,6 +36,21 @@ func (n *ApprovalsTask) IsValid() bool {
 
 func (t *ApprovalsTask) HasNotifiers() bool {
 	return len(t.Notifiers) > 0
+}
+
+func (t *ApprovalsTask) TimeoutDuration() (time.Duration, error) {
+	timeout := strings.TrimSpace(t.Timeout)
+	if timeout == "" {
+		return 0, nil
+	}
+	duration, err := time.ParseDuration(timeout)
+	if err != nil {
+		return 0, fmt.Errorf("invalid approval timeout %q: %w", t.Timeout, err)
+	}
+	if duration <= 0 {
+		return 0, fmt.Errorf("approval timeout must be positive")
+	}
+	return duration, nil
 }
 
 func (n *ApprovalsTask) AsMap() map[string]any {
@@ -80,6 +101,18 @@ func (t *thandTask) executeApprovalsTask(
 		return nil, errors.New("invalid notification request")
 	}
 
+	approvedState, foundApprovedState := call.On.GetString("approved")
+	deniedState, foundDeniedState := call.On.GetString("denied")
+	timeoutState, foundTimeoutState := call.On.GetString("timeout")
+
+	if !foundApprovedState || !foundDeniedState {
+		return nil, errors.New("both approved and denied states must be specified in the on block")
+	}
+
+	if err := validateApprovalTimeoutPair(&approvalsTask, foundTimeoutState); err != nil {
+		return nil, err
+	}
+
 	availableIdentities := elevationRequest.ResolveIdentities(
 		workflowTask.GetContext(),
 		t.config.GetProvidersByCapability(
@@ -95,6 +128,10 @@ func (t *thandTask) executeApprovalsTask(
 		newConfig.Update(approvalsTask.AsMap())
 
 		call.With = newConfig
+
+		if _, _, err := t.ensureApprovalDeadline(workflowTask, taskName, &approvalsTask); err != nil {
+			return nil, err
+		}
 
 		if approvalsTask.HasNotifiers() {
 
@@ -120,20 +157,7 @@ func (t *thandTask) executeApprovalsTask(
 
 	logrus.Infof("Executing Thand monitor task: %s", taskName)
 
-	approval, err := runner.ListenTaskHandler(
-		workflowTask, fmt.Sprintf("%s.listen", taskName), &model.ListenTask{
-			Listen: model.ListenTaskConfiguration{
-				To: &model.EventConsumptionStrategy{
-					Any: []*model.EventFilter{
-						{
-							With: &model.EventProperties{
-								Type: ThandApprovalEventType,
-							},
-						},
-					},
-				},
-			},
-		}, input)
+	approval, timedOut, err := t.listenForApprovalEvent(workflowTask, taskName, &approvalsTask, input)
 
 	if err != nil {
 
@@ -142,6 +166,13 @@ func (t *thandTask) executeApprovalsTask(
 		}).Error("Failed to listen for approval event")
 
 		return nil, err
+	}
+
+	if timedOut {
+		logrus.WithFields(logrus.Fields{
+			"taskName": taskName,
+		}).Info("Approval task timed out")
+		return &model.FlowDirective{Value: timeoutState}, nil
 	}
 
 	defaultFlowState := model.FlowDirective{
@@ -344,13 +375,6 @@ func (t *thandTask) executeApprovalsTask(
 			then: loop back to task to await more approvals
 	*/
 
-	approvedState, foundApprovedState := call.On.GetString("approved")
-	deniedState, foundDeniedState := call.On.GetString("denied")
-
-	if !foundApprovedState || !foundDeniedState {
-		return nil, errors.New("both approved and denied states must be specified in the on block")
-	}
-
 	// Create the switch task to handle approval or rejection
 	flowDirective, err := t.evaluateApprovalSwitch(
 		workflowTask,
@@ -375,6 +399,191 @@ func (t *thandTask) executeApprovalsTask(
 	}).Info("Completed Thand approvals task")
 
 	return flowDirective, nil
+}
+
+func validateApprovalTimeoutPair(approvalsTask *ApprovalsTask, hasTimeoutBranch bool) error {
+	hasTimeout := strings.TrimSpace(approvalsTask.Timeout) != ""
+	if hasTimeout != hasTimeoutBranch {
+		return errors.New("approvals with.timeout and on.timeout must be configured together")
+	}
+	if hasTimeout {
+		if _, err := approvalsTask.TimeoutDuration(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func approvalListenTask() *model.ListenTask {
+	return &model.ListenTask{
+		Listen: model.ListenTaskConfiguration{
+			To: &model.EventConsumptionStrategy{
+				Any: []*model.EventFilter{{
+					With: &model.EventProperties{
+						Type: ThandApprovalEventType,
+					},
+				}},
+			},
+		},
+	}
+}
+
+func (t *thandTask) listenForApprovalEvent(
+	workflowTask *models.ElevateWorkflowTask,
+	taskName string,
+	approvalsTask *ApprovalsTask,
+	input any,
+) (any, bool, error) {
+	deadline, hasDeadline, err := t.ensureApprovalDeadline(workflowTask, taskName, approvalsTask)
+	if err != nil {
+		return nil, false, err
+	}
+
+	listenTask := approvalListenTask()
+	listenTaskName := fmt.Sprintf("%s.listen", taskName)
+
+	if !hasDeadline || !workflowTask.HasTemporalContext() || !common.IsNilOrZero(input) {
+		approval, err := runner.ListenTaskHandler(workflowTask, listenTaskName, listenTask, input)
+		return approval, false, err
+	}
+
+	remaining := deadline.Sub(approvalNow(workflowTask))
+	if remaining <= 0 {
+		return nil, true, nil
+	}
+
+	return listenForApprovalEventWithTimeout(workflowTask, listenTaskName, remaining)
+}
+
+func listenForApprovalEventWithTimeout(
+	workflowTask *models.ElevateWorkflowTask,
+	taskName string,
+	remaining time.Duration,
+) (any, bool, error) {
+	ctx := workflowTask.GetTemporalContext()
+	log := workflowTask.GetLogger()
+
+	resumeChan := workflow.GetSignalChannel(ctx, sdkWorkflowModels.TemporalResumeSignalName)
+	signalChan := workflow.GetSignalChannel(ctx, sdkWorkflowModels.TemporalEventSignalName)
+	timer := workflow.NewTimer(ctx, remaining)
+
+	for {
+		var input any
+		timedOut := false
+		selector := workflow.NewSelector(ctx)
+		selector.AddReceive(resumeChan, func(c workflow.ReceiveChannel, more bool) {
+			var resumableWorkflow sdkWorkflowModels.WorkflowTask
+			c.Receive(ctx, &resumableWorkflow)
+			input = resumableWorkflow.GetInput()
+		})
+		selector.AddReceive(signalChan, func(c workflow.ReceiveChannel, more bool) {
+			var signalEvent cloudevents.Event
+			c.Receive(ctx, &signalEvent)
+			input = &signalEvent
+		})
+		selector.AddFuture(timer, func(f workflow.Future) {
+			timedOut = true
+		})
+
+		selector.Select(ctx)
+		if timedOut {
+			return nil, true, nil
+		}
+
+		approvalEvent, ok, err := decodeApprovalEvent(input)
+		if err != nil {
+			return nil, false, err
+		}
+		if !ok {
+			log.WithFields(logrus.Fields{
+				"taskName": taskName,
+			}).Info("Ignoring non-approval signal while waiting for approval")
+			continue
+		}
+		return approvalEvent, false, nil
+	}
+}
+
+func decodeApprovalEvent(input any) (*cloudevents.Event, bool, error) {
+	if common.IsNilOrZero(input) {
+		return nil, false, nil
+	}
+
+	var event cloudevents.Event
+	if err := common.ConvertInterfaceToInterface(input, &event); err != nil {
+		return nil, false, fmt.Errorf("failed to convert signal to cloudevent: %w", err)
+	}
+	if event.Type() != ThandApprovalEventType {
+		return nil, false, nil
+	}
+	return &event, true, nil
+}
+
+func (t *thandTask) ensureApprovalDeadline(
+	workflowTask *models.ElevateWorkflowTask,
+	taskName string,
+	approvalsTask *ApprovalsTask,
+) (time.Time, bool, error) {
+	timeout, err := approvalsTask.TimeoutDuration()
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	if timeout == 0 {
+		return time.Time{}, false, nil
+	}
+
+	deadlines := approvalDeadlines(workflowTask)
+	if rawDeadline, ok := deadlines[taskName]; ok {
+		deadline, err := parseApprovalDeadline(rawDeadline)
+		if err != nil {
+			return time.Time{}, false, err
+		}
+		return deadline, true, nil
+	}
+
+	deadline := approvalNow(workflowTask).Add(timeout).UTC()
+	deadlines[taskName] = deadline.Format(time.RFC3339Nano)
+	workflowTask.SetContextKeyValue(approvalDeadlinesContextKey, deadlines)
+	return deadline, true, nil
+}
+
+func approvalDeadlines(workflowTask *models.ElevateWorkflowTask) map[string]any {
+	workflowContext := workflowTask.GetContextAsMap()
+	if raw, ok := workflowContext[approvalDeadlinesContextKey]; ok {
+		if deadlines, ok := raw.(map[string]any); ok {
+			return deadlines
+		}
+		if deadlines, ok := raw.(map[string]string); ok {
+			converted := make(map[string]any, len(deadlines))
+			for key, value := range deadlines {
+				converted[key] = value
+			}
+			return converted
+		}
+	}
+	return map[string]any{}
+}
+
+func parseApprovalDeadline(raw any) (time.Time, error) {
+	switch value := raw.(type) {
+	case time.Time:
+		return value, nil
+	case string:
+		deadline, err := time.Parse(time.RFC3339Nano, value)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("invalid persisted approval deadline %q: %w", value, err)
+		}
+		return deadline, nil
+	default:
+		return time.Time{}, fmt.Errorf("invalid persisted approval deadline type %T", raw)
+	}
+}
+
+func approvalNow(workflowTask *models.ElevateWorkflowTask) time.Time {
+	if workflowTask.HasTemporalContext() {
+		return workflow.Now(workflowTask.GetTemporalContext()).UTC()
+	}
+	return time.Now().UTC()
 }
 
 // evaluateApprovalSwitch evaluates the approval logic using a switch task
