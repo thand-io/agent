@@ -26,6 +26,7 @@ permissions:
 env:
   GO_VERSION: '1.26'
   GOEXPERIMENT: 'jsonv2'
+  MACOS_XCODE_VERSION: 'latest-stable'
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
@@ -147,6 +148,57 @@ jobs:
         name: thand-linux-amd64
         path: bin/thand-linux-amd64
         retention-days: 1
+
+  macos-validation:
+    runs-on: macos-latest
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+        submodules: recursive
+
+    - name: Select Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: ${{ env.MACOS_XCODE_VERSION }}
+
+    - name: Capture Xcode version
+      id: xcode
+      run: |
+        VERSION=$(xcodebuild -version | tr '\n' ' ' | sed 's/  */ /g')
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        xcodebuild -version
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+
+    - name: Install XcodeGen
+      run: |
+        brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+        xcodegen version
+
+    - name: Cache macOS DerivedData
+      uses: actions/cache@v4
+      with:
+        path: .build/macos/DerivedData
+        key: macos-deriveddata-${{ runner.os }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('proto/localbroker/**/*.proto', 'buf*.yaml', 'platform/macos/PrivilegeServices/project.yml', 'platform/macos/PrivilegeServices/**/*.swift', 'platform/macos/PrivilegeServices/**/*.plist', 'platform/macos/PrivilegeServices/**/*.entitlements', 'platform/macos/PrivilegeServices/**/*.template', 'scripts/*macos-privilege-services*.sh', 'scripts/localbroker-codegen-common.sh', 'Makefile') }}
+        restore-keys: |
+          macos-deriveddata-${{ runner.os }}-${{ steps.xcode.outputs.version }}-
+
+    - name: Build
+      run: make build
+
+    - name: Test
+      run: make test
+
+    - name: Verify unsigned package layout
+      run: THAND_MACOS_SKIP_SIGNING=1 make package-macos-privilege-services-dev
 
   integration-frontend:
     runs-on: ubuntu-latest

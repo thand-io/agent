@@ -19,6 +19,10 @@ Local sudo supports two modes:
 - timed access, which grants sudo for a bounded lease
 - command mode, which runs a specific command and cleans up immediately afterward
 
+On macOS broker v1, only timed access is supported. Command mode remains available on other platforms that still use the legacy local-provider path.
+
+For the supported macOS native developer loop, see `DEVELOPMENT.md`. The repo now uses XcodeGen plus `xcodebuild` through `make build`, `make test`, and `sudo -E make install-macos-privilege-services-dev`.
+
 ## Requesting Timed Local Sudo
 
 CLI example:
@@ -73,6 +77,8 @@ Timed revoke is reconciliation-oriented.
 - if the device is offline, revoke remains pending until the device reconnects and the server can reconcile state
 
 Timed access is still expected to expire locally on the device based on the local lease. The pending revoke exists so the workflow can converge and leave an accurate audit trail.
+
+On macOS broker v1, expiry and revoke are enforced by the native broker even if the agent disconnects after authorization.
 
 ## Copy / Resume URLs
 

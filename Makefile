@@ -9,8 +9,12 @@ BUILD_DIR=bin
 UPX_FLAGS ?= --best --lzma --force-macos
 
 GO_BUILD_FLAGS= -ldflags "-s -w"
+HOST_OS := $(shell uname -s)
+PRIVILEGE_SERVICES_FILES := $(shell find platform/macos/PrivilegeServices -type f ! -path '*/ThandPrivilegeServices.xcodeproj/*' 2>/dev/null)
 LOCALBROKER_PROTO_FILES := $(shell find proto/localbroker -type f 2>/dev/null)
-LOCALBROKER_CODEGEN_FILES := buf.yaml buf.gen.go.yaml buf.gen.swift.yaml scripts/generate-localbroker-grpc.sh scripts/localbroker-codegen-common.sh
+LOCALBROKER_CODEGEN_FILES := buf.yaml buf.gen.go.yaml buf.gen.swift.yaml scripts/generate-localbroker-grpc.sh scripts/localbroker-codegen-common.sh scripts/macos-privilege-services-common.sh
+PRIVILEGE_SERVICES_BUILD_STAMP := .build/macos/PrivilegeServices/.build-stamp
+PRIVILEGE_SERVICES_TEST_STAMP := .build/macos/PrivilegeServices/.test-stamp
 
 # Default target - builds the application
 all: build
@@ -32,6 +36,12 @@ gen-buf: $(LOCALBROKER_PROTO_FILES) $(LOCALBROKER_CODEGEN_FILES)
 # Build the application
 build: submodules gen-buf
 	go build -o $(BUILD_DIR)/$(BINARY_NAME) .
+ifeq ($(HOST_OS),Darwin)
+	./scripts/sign-macos-local-agent.sh $(BUILD_DIR)/$(BINARY_NAME)
+endif
+ifeq ($(HOST_OS),Darwin)
+build: build-macos-privilege-services
+endif
 
 # Build for multiple platforms
 build-all: submodules gen-buf
@@ -43,6 +53,38 @@ build-all: submodules gen-buf
 # Build linux/amd64 binary for frontend E2E tests
 build-linux-amd64: submodules gen-buf
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOEXPERIMENT=jsonv2 go build $(GO_BUILD_FLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 .
+
+# Build the macOS native privilege services app, login item, daemon, and brokerctl.
+build-macos-privilege-services: $(PRIVILEGE_SERVICES_BUILD_STAMP)
+
+$(PRIVILEGE_SERVICES_BUILD_STAMP): $(PRIVILEGE_SERVICES_FILES) $(LOCALBROKER_PROTO_FILES) $(LOCALBROKER_CODEGEN_FILES) scripts/build-macos-privilege-services.sh
+	./scripts/build-macos-privilege-services.sh
+	@mkdir -p $(dir $@)
+	@touch $@
+
+# Run the macOS native privilege services test suite.
+test-macos-privilege-services: $(PRIVILEGE_SERVICES_TEST_STAMP)
+
+$(PRIVILEGE_SERVICES_TEST_STAMP): $(PRIVILEGE_SERVICES_FILES) $(LOCALBROKER_PROTO_FILES) $(LOCALBROKER_CODEGEN_FILES) scripts/test-macos-privilege-services.sh
+	./scripts/test-macos-privilege-services.sh
+	@mkdir -p $(dir $@)
+	@touch $@
+
+# Package a development payload for local Apple Development-signed integration testing.
+package-macos-privilege-services-dev:
+	./scripts/package-macos-privilege-services-dev.sh
+
+# Install the packaged development payload for local end-to-end testing.
+install-macos-privilege-services-dev:
+	./scripts/install-macos-privilege-services-dev.sh
+
+# Remove the installed development payload from a local machine.
+uninstall-macos-privilege-services-dev:
+	./scripts/uninstall-macos-privilege-services-dev.sh
+
+# Produce the signed macOS release installer when Developer ID material is available.
+package-macos-privilege-services-release:
+	./scripts/package-macos-privilege-services-release.sh
 
 # Clean build artifacts
 clean:
@@ -68,6 +110,9 @@ run: submodules gen-buf
 # Run tests
 test: submodules gen-buf
 	go test ./...
+ifeq ($(HOST_OS),Darwin)
+test: test-macos-privilege-services
+endif
 
 # Run functional tests
 test-functional: submodules gen-buf
@@ -104,4 +149,4 @@ swagger:
 		exit 1; \
 	fi
 
-.PHONY: all build build-all build-linux-amd64 clean install run test test-functional test-integration test-e2e submodules update-submodules gen gen-buf compress generate-data swagger
+.PHONY: all build build-all build-linux-amd64 build-macos-privilege-services test-macos-privilege-services package-macos-privilege-services-dev install-macos-privilege-services-dev uninstall-macos-privilege-services-dev package-macos-privilege-services-release clean install run test test-functional test-integration test-e2e submodules update-submodules gen gen-buf compress generate-data swagger

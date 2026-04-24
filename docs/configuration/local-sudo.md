@@ -52,6 +52,30 @@ providers:
     enabled: true
 ```
 
+For full local macOS integration testing, install the Apple Development-signed privilege-services bundle with:
+
+```bash
+export APPLE_TEAM_ID=ABCDE12345
+sudo -E make install-macos-privilege-services-dev
+```
+
+That installs:
+
+- `/Applications/ThandPrivilegeServices.app`
+- `/Library/Application Support/Thand/PrivilegeBroker/bin/thand-macos-privilege-brokerctl`
+
+The installed macOS privilege-services payload is normalized to `root:wheel` ownership and non-user-writable modes during install.
+
+If you only need unsigned layout verification and not real `SMAppService` registration, you can instead use:
+
+```bash
+THAND_MACOS_SKIP_SIGNING=1 make package-macos-privilege-services-dev
+```
+
+That unsigned mode is limited to bundle layout verification and is not a supported broker runtime path. Full local `SMAppService` and broker testing is expected to use the Apple Development-signed install flow above.
+
+On macOS v1, timed sudo is brokered through the native privilege-services app bundle and daemon. The broker owns sudoers fragments, lease persistence, expiry, and revocation.
+
 ## Account Mapping
 
 Per-device account mappings decide which local account receives sudo.
@@ -95,6 +119,8 @@ devices:
 
 If `allowed_modes` is omitted, both timed and command mode are allowed at the device-policy layer, but the embedded `local_sudo` role still exposes only the timed workflow by default.
 
+On macOS v1, command mode is intentionally disabled while the broker only supports timed sudoers grants.
+
 ## Guardrails
 
 You can add guardrails for unsafe local targets.
@@ -128,9 +154,19 @@ devices:
 - static `execution_target` routing is no longer used
 - local-sudo execution planning runs internally at the start of `authorize`
 - authorize waits for the device for a bounded window
+- on macOS, revoke and expiry are enforced locally by the broker even if the agent disconnects
+
+## Security Notes
+
+The current generated `device_id` is enough for routing and local development, but it is not yet a cryptographically enrolled device identity.
+
+The macOS privilege broker improves local trust boundaries, but it does not replace future enrolled device identity.
+
+Future work is expected to add stronger enrolled device identity and a more formal device control plane.
 
 ## Related Docs
 
 - [Local Sudo Usage](/api/agent/local-sudo.html)
 - [Workflow Tasks](/configuration/workflows/tasks.html)
 - [Configuration](/configuration/)
+- repo developer guide: `DEVELOPMENT.md`
