@@ -61,6 +61,40 @@ func NewTemporalClient(
 	}
 }
 
+func (a *TemporalClient) shouldUseVersioning(identity string) bool {
+	if a.config.DisableVersioning {
+		return false
+	}
+	// Keep the shared device-registry queue unversioned. Its singleton
+	// workflows are internal infrastructure and are reconstructed from server
+	// startup publication plus agent route refreshes, so the operational
+	// versioned deployment path is unnecessary here and has proven brittle.
+	return identity != models.TemporalDeviceRegistryTaskQueue
+}
+
+func (a *TemporalClient) workerOptionsForIdentity(identity string, buildID string) worker.Options {
+	workerOptions := worker.Options{
+		Identity:                         a.GetIdentity(),
+		MaxConcurrentActivityTaskPollers: 5,
+	}
+
+	if !a.shouldUseVersioning(identity) {
+		return workerOptions
+	}
+
+	workerOptions.DeploymentOptions = worker.DeploymentOptions{
+		UseVersioning: true,
+		Version: worker.WorkerDeploymentVersion{
+			DeploymentName: sdkConstants.TemporalDeploymentName,
+			BuildID:        buildID,
+		},
+		// Default workflows to Pinned behavior
+		DefaultVersioningBehavior: workflow.VersioningBehaviorPinned,
+	}
+
+	return workerOptions
+}
+
 func (a *TemporalClient) Initialize() error {
 
 	if len(a.identities) == 0 {
@@ -108,27 +142,11 @@ func (a *TemporalClient) Initialize() error {
 
 	// Get agent version for Worker Build ID
 	buildID := common.GetBuildIdentifier()
-
-	workerOptions := worker.Options{
-		Identity:                         a.GetIdentity(),
-		MaxConcurrentActivityTaskPollers: 5,
-	}
-
 	if !a.config.DisableVersioning {
 		logrus.WithFields(logrus.Fields{
 			"BuildID":        buildID,
 			"DeploymentName": sdkConstants.TemporalDeploymentName,
 		}).Info("Configuring Worker with versioning")
-
-		workerOptions.DeploymentOptions = worker.DeploymentOptions{
-			UseVersioning: true,
-			Version: worker.WorkerDeploymentVersion{
-				DeploymentName: sdkConstants.TemporalDeploymentName,
-				BuildID:        buildID,
-			},
-			// Default workflows to Pinned behavior
-			DefaultVersioningBehavior: workflow.VersioningBehaviorPinned,
-		}
 	}
 
 	// Create and start a worker for each identity (task queue)
@@ -140,7 +158,15 @@ func (a *TemporalClient) Initialize() error {
 		return nil
 	}
 
+	hasVersionedWorkers := false
 	for _, identity := range a.identities {
+		workerOptions := a.workerOptionsForIdentity(identity, buildID)
+		if workerOptions.DeploymentOptions.UseVersioning {
+			hasVersionedWorkers = true
+		} else if !a.config.DisableVersioning && identity == models.TemporalDeviceRegistryTaskQueue {
+			logrus.WithField("taskQueue", identity).Info("Starting Temporal worker without versioning for shared device registry queue")
+		}
+
 		newWorker := worker.New(
 			temporalClient,
 			identity,
@@ -169,7 +195,7 @@ func (a *TemporalClient) Initialize() error {
 
 	// If versioning is enabled, confirm our deployment version is registered
 	// on the Temporal server before allowing workflow submissions via GetClient().
-	if a.config.DisableVersioning {
+	if a.config.DisableVersioning || !hasVersionedWorkers {
 		a.markReady()
 	} else {
 		go a.awaitVersionRegistration(buildID)
