@@ -49,7 +49,7 @@ func TestBuildLocalSudoElevationRequestCommandUsesDefaultDuration(t *testing.T) 
 
 	cfg = newTestSudoConfig("local-elevation")
 
-	request, err := buildLocalSudoElevationRequest([]string{"whoami"}, "check user", "", "device-beta")
+	request, err := buildLocalSudoElevationRequestForOS("linux", []string{"whoami"}, "check user", "", "device-beta")
 	if err != nil {
 		t.Fatalf("buildLocalSudoElevationRequest returned error: %v", err)
 	}
@@ -69,6 +69,17 @@ func TestBuildLocalSudoElevationRequestCommandUsesDefaultDuration(t *testing.T) 
 	}
 	if got, want := request.Metadata["device_id"], "device-beta"; got != want {
 		t.Fatalf("device_id = %#v, want %q", got, want)
+	}
+}
+
+func TestBuildLocalSudoElevationRequestDarwinCommandIsUnsupported(t *testing.T) {
+	previousCfg := cfg
+	t.Cleanup(func() { cfg = previousCfg })
+
+	cfg = newTestSudoConfig("local-elevation")
+
+	if _, err := buildLocalSudoElevationRequestForOS("darwin", []string{"whoami"}, "check user", "", "device-beta"); err == nil {
+		t.Fatal("expected Darwin command-mode error")
 	}
 }
 

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"runtime"
 
 	"github.com/spf13/cobra"
 	"github.com/thand-io/agent/internal/common"
@@ -30,6 +31,10 @@ var sudoCmd = &cobra.Command{
 }
 
 func buildLocalSudoElevationRequest(args []string, reason, duration, device string) (*models.ElevateRequest, error) {
+	return buildLocalSudoElevationRequestForOS(runtime.GOOS, args, reason, duration, device)
+}
+
+func buildLocalSudoElevationRequestForOS(goos string, args []string, reason, duration, device string) (*models.ElevateRequest, error) {
 	if len(reason) == 0 {
 		return nil, fmt.Errorf("--reason is required")
 	}
@@ -42,6 +47,9 @@ func buildLocalSudoElevationRequest(args []string, reason, duration, device stri
 	}
 
 	if len(args) > 0 {
+		if goos == "darwin" {
+			return nil, fmt.Errorf("privileged command mode is not supported on macOS in broker v1; request timed sudo access instead")
+		}
 		metadata.Mode = models.LocalSudoModeCommand
 		metadata.Command = append([]string(nil), args...)
 	}

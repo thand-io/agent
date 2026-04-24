@@ -9,6 +9,8 @@ BUILD_DIR=bin
 UPX_FLAGS ?= --best --lzma --force-macos
 
 GO_BUILD_FLAGS= -ldflags "-s -w"
+LOCALBROKER_PROTO_FILES := $(shell find proto/localbroker -type f 2>/dev/null)
+LOCALBROKER_CODEGEN_FILES := buf.yaml buf.gen.go.yaml buf.gen.swift.yaml scripts/generate-localbroker-grpc.sh scripts/localbroker-codegen-common.sh
 
 # Default target - builds the application
 all: build
@@ -21,24 +23,30 @@ submodules:
 update-submodules:
 	git submodule update --remote --recursive
 
+# Generate derived sources required by Go and native macOS builds.
+gen: gen-buf
+
+gen-buf: $(LOCALBROKER_PROTO_FILES) $(LOCALBROKER_CODEGEN_FILES)
+	./scripts/generate-localbroker-grpc.sh
+
 # Build the application
-build: submodules
+build: submodules gen-buf
 	go build -o $(BUILD_DIR)/$(BINARY_NAME) .
 
 # Build for multiple platforms
-build-all: submodules
+build-all: submodules gen-buf
 	GOOS=linux GOARCH=amd64 GOEXPERIMENT=jsonv2 go build $(GO_BUILD_FLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 .
 	GOOS=linux GOARCH=arm64 GOEXPERIMENT=jsonv2 go build $(GO_BUILD_FLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 .
 	GOOS=darwin GOARCH=amd64 GOEXPERIMENT=jsonv2 go build $(GO_BUILD_FLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 .
 	GOOS=windows GOARCH=amd64 GOEXPERIMENT=jsonv2 go build $(GO_BUILD_FLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe .
 
 # Build linux/amd64 binary for frontend E2E tests
-build-linux-amd64: submodules
+build-linux-amd64: submodules gen-buf
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOEXPERIMENT=jsonv2 go build $(GO_BUILD_FLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 .
 
 # Clean build artifacts
 clean:
-	rm -rf $(BUILD_DIR)
+	rm -rf $(BUILD_DIR) .build internal/localbroker/proto/localbroker/v1/*.pb.go platform/macos/PrivilegeServices/Generated/LocalBroker platform/macos/PrivilegeServices/ThandPrivilegeServices.xcodeproj
 
 # Manually compress any binaries in $(BUILD_DIR) using UPX
 compress:
@@ -50,27 +58,27 @@ compress:
 	fi
 
 # Install the binary to GOPATH/bin
-install: submodules
+install: submodules gen-buf
 	go install .
 
 # Run the application
-run: submodules
+run: submodules gen-buf
 	go run .
 
 # Run tests
-test: submodules
+test: submodules gen-buf
 	go test ./...
 
 # Run functional tests
-test-functional: submodules
+test-functional: submodules gen-buf
 	cd test && go test -v ./functional/...
 
 # Run integration tests
-test-integration: submodules
+test-integration: submodules gen-buf
 	cd test && go test -v ./integration/...
 
 # Run UI E2E tests (requires linux/amd64 binary for Thand server container)
-test-e2e: submodules build-linux-amd64
+test-e2e: submodules gen-buf build-linux-amd64
 	cd test && go test -v -timeout 20m ./integration/frontend/...
 
 # Generate FlatBuffers from JSON data
@@ -96,4 +104,4 @@ swagger:
 		exit 1; \
 	fi
 
-.PHONY: all build build-all build-linux-amd64 clean install run test test-functional test-integration test-e2e submodules update-submodules compress generate-data swagger
+.PHONY: all build build-all build-linux-amd64 clean install run test test-functional test-integration test-e2e submodules update-submodules gen gen-buf compress generate-data swagger

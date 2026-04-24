@@ -258,6 +258,14 @@ func (pc *BasicConfig) GetBool(key string) (bool, bool) {
 	if value, ok := (*pc)[key]; ok {
 		if boolValue, ok := value.(bool); ok {
 			return boolValue, true
+		} else if stringValue, ok := value.(string); ok {
+			if parsed, err := strconv.ParseBool(stringValue); err == nil {
+				return parsed, true
+			}
+		} else if intValue, ok := value.(int); ok {
+			return intValue != 0, true
+		} else if floatValue, ok := value.(float64); ok {
+			return floatValue != 0, true
 		}
 	}
 	return false, false

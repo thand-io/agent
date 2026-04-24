@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package thand.localbroker.v1;
+
+option go_package = "github.com/thand-io/agent/internal/localbroker/proto/localbroker/v1;localbrokerv1";
+
+service LocalBrokerControl {
+  rpc GrantTimedSudoers(GrantTimedSudoersRequest) returns (GrantTimedSudoersResponse);
+  rpc RevokeTimedGrant(RevokeTimedGrantRequest) returns (RevokeTimedGrantResponse);
+}
+
+message GrantTimedSudoersRequest {
+  string grant_id = 1;
+  string device_id = 2;
+  string target_username = 3;
+  string role_name = 4;
+  int64 duration_millis = 5;
+  repeated string denied_usernames = 6;
+  repeated string allowed_uid_ranges = 7;
+  optional int64 request_expires_at_unix_millis = 8;
+}
+
+message GrantTimedSudoersResponse {
+  string broker_handle = 1;
+  string target_username = 2;
+  int64 expires_at_unix_millis = 3;
+}
+
+message RevokeTimedGrantRequest {
+  string broker_handle = 1;
+}
+
+message RevokeTimedGrantResponse {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    STATUS_REVOKED = 1;
+    STATUS_NOT_FOUND = 2;
+  }
+
+  Status status = 1;
+}

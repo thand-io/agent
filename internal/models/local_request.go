@@ -74,6 +74,7 @@ type LocalSudoAuthorizationMetadata struct {
 	GrantID        string   `json:"grant_id,omitempty"`
 	DeviceID       string   `json:"device_id,omitempty"`
 	Username       string   `json:"username,omitempty"`
+	BrokerHandle   string   `json:"broker_handle,omitempty"`
 	SudoersPath    string   `json:"sudoers_path,omitempty"`
 	LeasePath      string   `json:"lease_path,omitempty"`
 	Command        []string `json:"command,omitempty"`

@@ -1,0 +1,14 @@
+version: v2
+plugins:
+  - local: protoc-gen-swift
+    out: platform/macos/PrivilegeServices/Generated/LocalBroker
+    opt:
+      - Visibility=Public
+      - FileNaming=DropPath
+  - local: protoc-gen-grpc-swift-2
+    out: platform/macos/PrivilegeServices/Generated/LocalBroker
+    opt:
+      - Visibility=Public
+      - FileNaming=DropPath
+      - Client=true
+      - Server=true

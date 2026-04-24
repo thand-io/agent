@@ -49,6 +49,7 @@ jobs:
 
     - name: Run unit tests
       run: |
+        make gen-buf
         # Run all tests except functional and integration tests  
         go test -v -short $(go list ./... | grep -v '/test/functional' | grep -v '/test/integration')
 
@@ -71,6 +72,7 @@ jobs:
 
     - name: Run functional tests
       run: |
+        make gen-buf
         # Run functional tests (these use testcontainers/Docker)
         # Docker is available by default on ubuntu-latest runners
         cd test && go test -v -timeout 10m ./functional/...
@@ -93,7 +95,9 @@ jobs:
         cache: true
 
     - name: Run services integration tests
-      run: cd test && go test -v -timeout 5m ./integration/services/...
+      run: |
+        make gen-buf
+        cd test && go test -v -timeout 5m ./integration/services/...
 
   integration-workflows:
     runs-on: ubuntu-latest
@@ -113,7 +117,9 @@ jobs:
         cache: true
 
     - name: Run workflows integration tests
-      run: cd test && go test -v -timeout 15m ./integration/workflows/...
+      run: |
+        make gen-buf
+        cd test && go test -v -timeout 15m ./integration/workflows/...
 
   build-linux-amd64:
     runs-on: ubuntu-latest
@@ -175,7 +181,9 @@ jobs:
         sudo apt-get install -y chromium-browser
 
     - name: Run frontend E2E integration tests
-      run: cd test && go test -v -timeout 30m ./integration/frontend/...
+      run: |
+        make gen-buf
+        cd test && go test -v -timeout 30m ./integration/frontend/...
       env:
         DISPLAY: :99
         CHROME_BIN: /usr/bin/chromium-browser
@@ -272,6 +280,7 @@ jobs:
 
     - name: Build for ${{ matrix.goos }}/${{ matrix.goarch }}
       run: |
+        make gen-buf
         VERSION=${{ steps.version.outputs.version }}
         COMMIT=${{ steps.version.outputs.commit }}
         GOOS=${{ matrix.goos }}
