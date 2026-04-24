@@ -10,9 +10,12 @@ do {
     ])
     let service = try PrivilegeBrokerService(config: config)
     let controlServer = XPCBrokerServer(service: service)
+    let notifierServer = NotifierXPCServer(service: service)
     try controlServer.start()
+    try notifierServer.start()
     brokerLog("broker daemon activated", fields: [
-        "service_label": config.serviceLabel
+        "service_label": config.serviceLabel,
+        "notifier_service_label": config.notifierServiceLabel
     ])
     RunLoop.main.run()
 } catch {

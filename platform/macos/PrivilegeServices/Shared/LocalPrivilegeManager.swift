@@ -120,6 +120,14 @@ public final class LocalAccountValidator {
         return ValidatedLocalUser(username: resolvedUsername, uid: Int(record.pointee.pw_uid))
     }
 
+    public static func defaultLookup(uid: uid_t) -> ValidatedLocalUser? {
+        guard let record = getpwuid(uid) else {
+            return nil
+        }
+
+        let resolvedUsername = String(cString: record.pointee.pw_name)
+        return ValidatedLocalUser(username: resolvedUsername, uid: Int(record.pointee.pw_uid))
+    }
 }
 
 public final class SudoersGrantManager {
