@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	swctx "github.com/serverlessworkflow/sdk-go/v3/impl/ctx"
 	utils "github.com/serverlessworkflow/sdk-go/v3/impl/utils"
@@ -117,7 +116,7 @@ func (wr *ResumableWorkflowRunner) Run(input any) (output any, err error) {
 
 	// Run tasks sequentially
 	workflowTask.SetStatus(swctx.RunningStatus)
-	workflowTask.SetStartedAt(time.Now())
+	workflowTask.SetStartedAt(WorkflowTimeNow(workflowTask))
 
 	// Check if we have a valid state to resume from
 	idx := 0
