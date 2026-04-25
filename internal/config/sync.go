@@ -108,46 +108,46 @@ func (c *Config) MergeConfiguration(config *RegistrationResponse) error {
 		return nil
 	}
 
-	go func() {
-
-		logrus.Debugln("Sending configuration updates back to server")
-
-		url := fmt.Sprintf("%s/sync", c.DiscoverThandServerApiUrl())
-
-		authentication := &model.ReferenceableAuthenticationPolicy{
-			AuthenticationPolicy: &model.AuthenticationPolicy{
-				Bearer: &model.BearerAuthenticationPolicy{
-					Token: c.Thand.ApiKey,
-				},
-			},
-		}
-
-		resp, err := common.InvokeHttpRequest(&model.HTTPArguments{
-			Method: http.MethodPatch,
-			Endpoint: &model.Endpoint{
-				EndpointConfig: &model.EndpointConfiguration{
-					URI:            &model.LiteralUri{Value: url},
-					Authentication: authentication,
-				},
-			},
-			Body: outgoingPatch,
-		})
-
-		if err != nil {
-			logrus.WithError(err).Errorln("Failed to send configuration updates to server")
-			return
-		}
-
-		if resp.StatusCode() != http.StatusOK {
-			logrus.WithField("status_code", resp.StatusCode()).Errorln("Failed to send configuration updates to server")
-		} else {
-			logrus.Infoln("Successfully sent configuration updates to server")
-		}
-
-	}()
+	c.sendConfigurationPatch(outgoingPatch)
 
 	return nil
 
+}
+
+func (c *Config) sendConfigurationPatch(outgoingPatch []byte) {
+	logrus.Debugln("Sending configuration updates back to server")
+
+	url := fmt.Sprintf("%s/sync", c.DiscoverThandServerApiUrl())
+
+	authentication := &model.ReferenceableAuthenticationPolicy{
+		AuthenticationPolicy: &model.AuthenticationPolicy{
+			Bearer: &model.BearerAuthenticationPolicy{
+				Token: c.Thand.ApiKey,
+			},
+		},
+	}
+
+	resp, err := common.InvokeHttpRequest(&model.HTTPArguments{
+		Method: http.MethodPatch,
+		Endpoint: &model.Endpoint{
+			EndpointConfig: &model.EndpointConfiguration{
+				URI:            &model.LiteralUri{Value: url},
+				Authentication: authentication,
+			},
+		},
+		Body: outgoingPatch,
+	})
+
+	if err != nil {
+		logrus.WithError(err).Errorln("Failed to send configuration updates to server")
+		return
+	}
+
+	if resp.StatusCode() != http.StatusOK {
+		logrus.WithField("status_code", resp.StatusCode()).Errorln("Failed to send configuration updates to server")
+	} else {
+		logrus.Infoln("Successfully sent configuration updates to server")
+	}
 }
 
 func (c *Config) applyMergedConfigWithRetries(build func(snapshot *configPatchSnapshot) (*buildMergedConfigResult, error)) ([]byte, error) {
