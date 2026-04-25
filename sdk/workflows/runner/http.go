@@ -91,6 +91,7 @@ func (r *ResumableWorkflowRunner) executeHttpFunction(
 	if workflowTask.HasTemporalContext() {
 		activityContext := workflow.WithActivityOptions(workflowTask.GetTemporalContext(),
 			workflow.ActivityOptions{
+				TaskQueue:           workflowTask.GetTaskQueue(),
 				StartToCloseTimeout: 10 * time.Minute,
 				RetryPolicy:         DefaultRetryPolicy,
 			},
