@@ -74,7 +74,7 @@ func (t *thandTask) executeAuthorizeTask(
 	isApproved := workflowTask.IsApproved()
 
 	if isApproved != nil && *isApproved {
-		modelOutput := t.buildBasicModelOutput(elevateRequest)
+		modelOutput := t.buildBasicModelOutput(workflowTask, elevateRequest)
 		return &modelOutput, nil
 	}
 
@@ -82,9 +82,9 @@ func (t *thandTask) executeAuthorizeTask(
 }
 
 // buildBasicModelOutput creates the basic model output with timestamps
-func (t *thandTask) buildBasicModelOutput(elevateRequest *models.ElevateRequestInternal) map[string]any {
+func (t *thandTask) buildBasicModelOutput(workflowTask *models.ElevateWorkflowTask, elevateRequest *models.ElevateRequestInternal) map[string]any {
 	duration, _ := elevateRequest.AsDuration()
-	authorizedAt := time.Now().UTC()
+	authorizedAt := runner.WorkflowTimeNow(workflowTask)
 	revocationDate := authorizedAt.Add(duration)
 
 	return map[string]any{
@@ -138,7 +138,7 @@ func (t *thandTask) executeAuthorization(
 		return nil, fmt.Errorf("failed to get duration: %w", err)
 	}
 
-	authorizedAt := time.Now().UTC()
+	authorizedAt := runner.WorkflowTimeNow(workflowTask)
 	revocationDate := authorizedAt.Add(duration)
 
 	modelOutput := map[string]any{
