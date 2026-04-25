@@ -10,8 +10,7 @@ import (
 
 // Register temporal workflows and activities
 func (c *Config) registerTemporalWorkflows() error {
-
-	if c.GetServices() == nil || c.GetServices().GetTemporal() == nil {
+	if c.servicesClient == nil || c.servicesClient.GetTemporal() == nil {
 		return fmt.Errorf("temporal service is not initialized")
 	}
 
@@ -26,8 +25,7 @@ func (c *Config) registerTemporalWorkflows() error {
 }
 
 func (c *Config) registerTemporalActivities() error {
-
-	if c.GetServices() == nil || c.GetServices().GetTemporal() == nil {
+	if c.servicesClient == nil || c.servicesClient.GetTemporal() == nil {
 		return fmt.Errorf("temporal service is not initialized")
 	}
 

@@ -61,6 +61,7 @@ func initAndRegister(t *testing.T, infra *testinfra.TestInfrastructure, cfg *mod
 	require.NotNil(t, w, "GetWorker must return a worker after Initialize")
 	w.RegisterWorkflow(echoWorkflow)
 	w.RegisterActivity(echoActivity)
+	require.NoError(t, tc.StartWorkers(), "StartWorkers should succeed")
 	return tc
 }
 

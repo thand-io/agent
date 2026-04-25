@@ -18,13 +18,12 @@ func (c *Config) GetServices() models.ServicesClientImpl {
 			return
 		}
 		c.servicesClient = newClient
-		go func() {
-			// Post services setup initialization, we need to do some additional setup for certain services that are dependent on the configuration being fully loaded.
-			err = c.SetupTemporal()
-			if err != nil {
-				logrus.WithError(err).Error("Failed to set up temporal services")
-			}
-		}()
+
+		// Post services setup initialization for services that depend on full config state.
+		err = c.SetupTemporal()
+		if err != nil {
+			logrus.WithError(err).Error("Failed to set up temporal services")
+		}
 	})
 
 	return c.servicesClient
@@ -32,8 +31,7 @@ func (c *Config) GetServices() models.ServicesClientImpl {
 }
 
 func (c *Config) SetupTemporal() error {
-
-	if c.GetServices() != nil && c.GetServices().GetTemporal() != nil {
+	if c.servicesClient != nil && c.servicesClient.GetTemporal() != nil {
 
 		logrus.Infoln("Setting up temporal services...")
 
@@ -59,4 +57,20 @@ func (c *Config) SetupTemporal() error {
 
 	return nil
 
+}
+
+func (c *Config) StartTemporalWorkers() error {
+	if c.servicesClient == nil || c.servicesClient.GetTemporal() == nil {
+		return nil
+	}
+
+	if !c.IsServer() {
+		return nil
+	}
+
+	if err := c.servicesClient.GetTemporal().StartWorkers(); err != nil {
+		return fmt.Errorf("starting temporal workers: %w", err)
+	}
+
+	return nil
 }
