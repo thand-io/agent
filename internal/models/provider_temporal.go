@@ -15,6 +15,7 @@ const TemporalSynchronizeWorkflowName = "synchronize"
 const TemporalAuthorizeRoleWorkflowName = "authorize-role"
 const TemporalRevokeRoleWorkflowName = "revoke-role"
 const TemporalPatchProviderUpstreamActivityName = "patch-provider-upstream"
+const TemporalBuildAuthorizeRoleRequestActivityName = "build-authorize-role-request"
 
 func CreateTemporalProviderWorkflowIdentifier(identifier, base string) string {
 	return CreateTemporalWorkflowIdentifier(fmt.Sprintf("%s-%s", identifier, base))
