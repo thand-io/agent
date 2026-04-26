@@ -115,7 +115,7 @@ func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 	// even when thousands of pages are produced.
 	var patchPayloads []Resp
 
-	err := paginatedSync(log, provider, activityMethod, req,
+	err := paginatedSync(provider, activityMethod, req,
 		// executePage: run the local activity and return the deserialized response.
 		func(r Req) (Resp, error) {
 			var resp Resp

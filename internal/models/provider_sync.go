@@ -15,7 +15,6 @@ import (
 	"github.com/thand-io/agent/internal/common"
 	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/worker"
 )
 
@@ -243,7 +242,6 @@ func Synchronize(
 // and invokes the optional onPage callback. Both the Temporal workflow path
 // (runSyncLoop) and the pure-Go path (executeSync) delegate to this function.
 func paginatedSync[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
-	logger log.Logger,
 	provider Provider,
 	name SynchronizeCapability,
 	req Req,
@@ -251,18 +249,13 @@ func paginatedSync[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 	onPage func(Resp),
 ) error {
 	for {
-		logger.Debug("Making synchronization request", "capability", name)
-
 		resp, err := executePage(req)
 		if err != nil {
 			if errors.Is(err, ErrNotImplemented) {
-				logger.Debug("Synchronization operation not implemented, skipping", "capability", name)
 				return nil
 			}
 			return err
 		}
-
-		logger.Debug("Received synchronization response", "capability", name)
 
 		resp.AddToProvider(provider)
 
@@ -272,7 +265,6 @@ func paginatedSync[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 
 		pagination := resp.GetPagination()
 		if pagination == nil || len(pagination.Token) == 0 {
-			logger.Debug("Synchronization operation completed with no more pages", "capability", name)
 			break
 		}
 
@@ -302,7 +294,7 @@ func executeSync[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 	wg.Go(func() {
 		logrus.Infof("Starting synchronization operation: %s", name)
 
-		err := paginatedSync(logrusLogger{}, provider, name, req,
+		err := paginatedSync(provider, name, req,
 			func(r Req) (Resp, error) { return syncOp(ctx, r) },
 			nil, // no post-page hook in the pure-Go path - TODO add patching support
 		)
@@ -431,36 +423,4 @@ func getSynchronizationRequests(provider Provider) []SynchronizeCapability {
 	}
 
 	return requests
-}
-
-// logrusLogger adapts logrus to the go.temporal.io/sdk/log.Logger interface so
-// paginatedSync can log via logrus when called from the non-Temporal (pure-Go)
-// executeSync path.
-type logrusLogger struct{}
-
-func (logrusLogger) Debug(msg string, keyvals ...interface{}) {
-	logrus.WithFields(keyvals2Fields(keyvals)).Debug(msg)
-}
-
-func (logrusLogger) Info(msg string, keyvals ...interface{}) {
-	logrus.WithFields(keyvals2Fields(keyvals)).Info(msg)
-}
-
-func (logrusLogger) Warn(msg string, keyvals ...interface{}) {
-	logrus.WithFields(keyvals2Fields(keyvals)).Warn(msg)
-}
-
-func (logrusLogger) Error(msg string, keyvals ...interface{}) {
-	logrus.WithFields(keyvals2Fields(keyvals)).Error(msg)
-}
-
-// keyvals2Fields converts alternating key/value pairs into a logrus.Fields map.
-func keyvals2Fields(keyvals []interface{}) logrus.Fields {
-	fields := make(logrus.Fields, len(keyvals)/2)
-	for i := 0; i+1 < len(keyvals); i += 2 {
-		if k, ok := keyvals[i].(string); ok {
-			fields[k] = keyvals[i+1]
-		}
-	}
-	return fields
 }
