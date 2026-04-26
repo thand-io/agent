@@ -58,16 +58,14 @@ func replayElevationWorkflow(
 
 	tmpFile := filepath.Join(t.TempDir(), "history.json")
 	infra.SaveWorkflowHistory(t, ctx, workflowID, "", tmpFile)
+	require.FileExists(t, tmpFile,
+		"SaveWorkflowHistory did not produce a history file for %s — replay check cannot proceed",
+		workflowID)
 
 	if os.Getenv("SAVE_REPLAY_HISTORY") == "1" && testCaseName != "" {
 		committed := filepath.Join("testdata", testCaseName, "history.json")
 		infra.SaveWorkflowHistory(t, ctx, workflowID, "", committed)
 		t.Logf("Persisted history to %s for future regression protection", committed)
-	}
-
-	if _, statErr := os.Stat(tmpFile); os.IsNotExist(statErr) {
-		t.Logf("No history saved for %s — skipping inline replay", workflowID)
-		return
 	}
 
 	replayer := worker.NewWorkflowReplayer()
@@ -113,41 +111,43 @@ func TestReplayElevationWorkflow(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	// TestReplayElevationWorkflow needs a live Temporal service to initialise the
-	// workflow manager.  The replay itself is entirely local: no workflow is
-	// dispatched and no activities execute against the running server.
-	infra := testinfra.SetupTestInfrastructure(t, ctx)
+	// TestReplayElevationWorkflow only needs a live Temporal service to
+	// initialise the workflow manager. The replay itself is entirely local: no
+	// workflow is dispatched and no activities execute against the running
+	// server, so avoid starting the broader integration stack here.
+	infra := testinfra.SetupTemporalInfrastructure(t, ctx)
 	defer infra.Teardown()
 
 	loader := testinfra.NewTestCaseLoader(infra, "testdata")
-	testCase, loadErr := loader.LoadTestCase("aws-elevation")
-	require.NoError(t, loadErr, "failed to load aws-elevation test case for manager construction")
-
-	cfg, cfgErr := loader.CreateConfigFromTestCase(testCase)
-	require.NoError(t, cfgErr)
-
-	infra.RegisterCleanup(func() {
-		if cfg.GetServices().HasTemporal() {
-			cfg.GetServices().GetTemporal().Shutdown()
-		}
-	})
-
-	wm, managerErr := internalManager.NewThandWorkflowManager(cfg)
-	require.NoError(t, managerErr)
-
-	replayer := worker.NewWorkflowReplayer()
-	replayer.RegisterWorkflowWithOptions(
-		wm.ElevationWorkflowHandlerForReplay(),
-		workflow.RegisterOptions{
-			Name: models.TemporalExecuteElevationWorkflowName,
-		},
-	)
 
 	for _, histFile := range historyFiles {
 		histFile := histFile
 		testName := filepath.Base(filepath.Dir(histFile))
 
 		t.Run(testName, func(t *testing.T) {
+			testCase, loadErr := loader.LoadTestCase(testName)
+			require.NoError(t, loadErr, "failed to load %s test case for manager construction", testName)
+
+			cfg, cfgErr := loader.CreateConfigFromTestCase(testCase)
+			require.NoError(t, cfgErr)
+
+			t.Cleanup(func() {
+				if cfg.GetServices().HasTemporal() {
+					cfg.GetServices().GetTemporal().Shutdown()
+				}
+			})
+
+			wm, managerErr := internalManager.NewThandWorkflowManager(cfg)
+			require.NoError(t, managerErr)
+
+			replayer := worker.NewWorkflowReplayer()
+			replayer.RegisterWorkflowWithOptions(
+				wm.ElevationWorkflowHandlerForReplay(),
+				workflow.RegisterOptions{
+					Name: models.TemporalExecuteElevationWorkflowName,
+				},
+			)
+
 			err := replayer.ReplayWorkflowHistoryFromJSONFile(nil, histFile)
 			require.NoError(t, err,
 				"Replay of %s diverged from recorded history — the elevation "+

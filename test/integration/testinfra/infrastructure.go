@@ -442,14 +442,14 @@ system.forceSearchAttributesCacheRefreshOnRead:
 func (infra *TestInfrastructure) SaveWorkflowHistory(t *testing.T, ctx context.Context, workflowID, runID, destPath string) {
 	t.Helper()
 
-	iter := infra.TemporalClient.GetWorkflowHistory(ctx, workflowID, runID, false, 0 /* all events */)
+	iter := infra.TemporalClient.GetWorkflowHistory(ctx, workflowID, runID, false, enums.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 
 	var events []*historypb.HistoryEvent
 	for iter.HasNext() {
 		ev, err := iter.Next()
 		if err != nil {
-			t.Logf("Warning: error reading history event for %s: %v", workflowID, err)
-			break
+			t.Logf("Warning: error reading history event for %s: %v; skipping history save", workflowID, err)
+			return
 		}
 		events = append(events, ev)
 	}

@@ -70,7 +70,7 @@ jobs:
         cache: true
 
     - name: Install workflowcheck
-      run: go install go.temporal.io/sdk/contrib/tools/workflowcheck@latest
+      run: go install go.temporal.io/sdk/contrib/tools/workflowcheck@v0.4.0
 
     - name: Run workflowcheck
       run: workflowcheck ./internal/... ./sdk/...
