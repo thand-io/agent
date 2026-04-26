@@ -27,7 +27,6 @@ type TemporalClient struct {
 	config     *models.TemporalConfig
 	client     client.Client
 	workers    map[string]worker.Worker
-	started    map[string]worker.Worker
 	identities []string
 	vault      models.VaultImpl
 
@@ -59,7 +58,6 @@ func NewTemporalClient(
 		identities: unique,
 		vault:      vault,
 		workers:    make(map[string]worker.Worker, len(unique)),
-		started:    make(map[string]worker.Worker, len(unique)),
 		readyCh:    make(chan struct{}),
 	}
 }
@@ -183,6 +181,7 @@ func (c *TemporalClient) StartWorkers() error {
 	}
 
 	buildID := common.GetBuildIdentifier()
+	startedCount := 0
 
 	for identity, w := range c.workers {
 		logrus.WithFields(logrus.Fields{
@@ -198,10 +197,10 @@ func (c *TemporalClient) StartWorkers() error {
 			continue
 		}
 
-		c.started[identity] = w
+		startedCount++
 	}
 
-	if len(c.started) == 0 {
+	if startedCount == 0 {
 		c.markReady()
 		return fmt.Errorf("failed to start any Temporal workers")
 	}
@@ -375,7 +374,6 @@ func (c *TemporalClient) Shutdown() error {
 	}
 
 	c.workers = nil
-	c.started = nil
 	c.client = nil
 	c.workersStarted = false
 

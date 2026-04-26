@@ -18,12 +18,6 @@ func (c *Config) GetServices() models.ServicesClientImpl {
 			return
 		}
 		c.servicesClient = newClient
-
-		// Post services setup initialization for services that depend on full config state.
-		err = c.SetupTemporal()
-		if err != nil {
-			logrus.WithError(err).Error("Failed to set up temporal services")
-		}
 	})
 
 	return c.servicesClient

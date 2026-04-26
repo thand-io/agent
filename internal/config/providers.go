@@ -189,6 +189,9 @@ type initResult struct {
 func (c *Config) InitializeProviders() error {
 	if c.IsServer() {
 		_ = c.GetServices()
+		if err := c.SetupTemporal(); err != nil {
+			return fmt.Errorf("setting up temporal services: %w", err)
+		}
 	}
 
 	defs := c.GetProviders().Definitions
