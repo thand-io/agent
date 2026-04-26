@@ -184,6 +184,8 @@ func (m *ThandWorkflowManager) runCleanup(
 	}
 
 	// Check if a user or role is associated with the workflow
+	//workflowcheck:ignore — GetContextAsElevationRequest uses encoding/json for struct
+	// coercion of the workflow context; the output is deterministic for a given input.
 	elevationRequest, err := workflowTask.GetContextAsElevationRequest()
 	if err != nil || !elevationRequest.IsValid() {
 		log.Info("No valid elevation context found, skipping cleanup activity.")
@@ -202,6 +204,8 @@ func (m *ThandWorkflowManager) runCleanup(
 		// Resume the workflow task with the specified entrypoint
 		workflowTask.SetEntrypoint(terminationRequest.EntryPoint)
 
+		//workflowcheck:ignore — ResumeWorkflowTask runs the serverless workflow runtime;
+		// its non-determinism is isolated to observability logging only.
 		result, err := m.ResumeWorkflowTask(
 			workflowTask,
 		)

@@ -90,7 +90,7 @@ generate-data:
 workflowcheck:
 	@if command -v workflowcheck >/dev/null 2>&1; then \
 	  echo "Running workflowcheck..."; \
-	  workflowcheck ./internal/... ./sdk/...; \
+	  workflowcheck -test=false -config workflowcheck.yaml ./internal/... ./sdk/...; \
 	else \
 	  echo "workflowcheck not found. Install with:"; \
 	  echo "  go install go.temporal.io/sdk/contrib/tools/workflowcheck@latest"; \

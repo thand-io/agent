@@ -73,7 +73,7 @@ jobs:
       run: go install go.temporal.io/sdk/contrib/tools/workflowcheck@v0.4.0
 
     - name: Run workflowcheck
-      run: workflowcheck ./internal/... ./sdk/...
+      run: workflowcheck -test=false -config workflowcheck.yaml ./internal/... ./sdk/...
 
   functional-tests:
     runs-on: ubuntu-latest

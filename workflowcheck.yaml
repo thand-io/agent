@@ -1,0 +1,5 @@
+# workflowcheck configuration
+# https://pkg.go.dev/go.temporal.io/sdk/contrib/tools/workflowcheck
+#
+# Inline suppressions use //workflowcheck:ignore comments in source code.
+# Test files are excluded via the -test=false flag in CI and the Makefile.

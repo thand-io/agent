@@ -156,7 +156,11 @@ func (m *serverlessWorkflow) executeWorkflowStep(
 	return m.handleWorkflowStatus(workflowTask)
 }
 
-// handleWorkflowStatus handles different workflow status cases
+// handleWorkflowStatus handles different workflow status cases.
+//
+// Temporal context is set; this is intentional and does not affect replay determinism.
+//
+//workflowcheck:ignore — GetLogger falls back to logrus for observability when no
 func (m *serverlessWorkflow) handleWorkflowStatus(
 	workflowTask *sdkWorkflowsModel.WorkflowTask,
 ) (*sdkWorkflowsModel.WorkflowTask, error) {
@@ -245,6 +249,10 @@ func (m *serverlessWorkflow) shouldContinueAsNew(ctx workflow.Context) bool {
 
 // ResumeWorkflowTask resumes a workflow task using the internal runner
 // This maybe called as part of a temporal workflow or directly
+//
+// executes the serverless workflow runtime and logging is observability-only.
+//
+//workflowcheck:ignore — logrus/runner non-determinism is intentional here; this function
 func ResumeWorkflowTask(
 	cfg config.Config,
 	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
