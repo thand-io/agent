@@ -52,6 +52,29 @@ jobs:
         # Run all tests except functional and integration tests  
         go test -v -short $(go list ./... | grep -v '/test/functional' | grep -v '/test/integration')
 
+  workflowcheck:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+        submodules: recursive
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+
+    - name: Install workflowcheck
+      run: go install go.temporal.io/sdk/contrib/tools/workflowcheck@latest
+
+    - name: Run workflowcheck
+      run: workflowcheck ./internal/... ./sdk/...
+
   functional-tests:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')

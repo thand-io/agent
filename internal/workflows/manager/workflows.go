@@ -252,3 +252,13 @@ func (m *ThandWorkflowManager) runCleanup(
 	log.Info("Cleanup completed successfully")
 	return nil
 }
+
+// ElevationWorkflowHandlerForReplay returns the elevation workflow handler
+// registered under models.TemporalExecuteElevationWorkflowName.  It is
+// exported solely so that replay tests can register the exact same function
+// with a worker.WorkflowReplayer to guard against determinism regressions.
+//
+// Use only in test code.  Do not call this from production paths.
+func (m *ThandWorkflowManager) ElevationWorkflowHandlerForReplay() func(workflow.Context, *models.ElevateWorkflowTask) (*models.ElevateWorkflowTask, error) {
+	return m.createElevationWorkflowHandler()
+}

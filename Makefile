@@ -83,6 +83,20 @@ generate-data:
 	go run tools/generate-iam-dataset/main.go
 	@echo "Data generation complete!"
 
+# Run workflowcheck static analysis to detect non-deterministic workflow code.
+# workflowcheck inspects workflow functions for forbidden calls (time.Now,
+# goroutines, select, etc.) that cause Temporal replay failures.
+# Install once with: go install go.temporal.io/sdk/contrib/tools/workflowcheck@latest
+workflowcheck:
+	@if command -v workflowcheck >/dev/null 2>&1; then \
+	  echo "Running workflowcheck..."; \
+	  workflowcheck ./internal/... ./sdk/...; \
+	else \
+	  echo "workflowcheck not found. Install with:"; \
+	  echo "  go install go.temporal.io/sdk/contrib/tools/workflowcheck@latest"; \
+	  exit 1; \
+	fi
+
 # Generate Swagger documentation
 swagger:
 	@echo "Generating Swagger documentation..."
@@ -96,4 +110,4 @@ swagger:
 		exit 1; \
 	fi
 
-.PHONY: all build build-all build-linux-amd64 clean install run test test-functional test-integration test-e2e submodules update-submodules compress generate-data swagger
+.PHONY: all build build-all build-linux-amd64 clean install run test test-functional test-integration test-e2e submodules update-submodules compress generate-data swagger workflowcheck
