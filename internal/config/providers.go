@@ -292,7 +292,7 @@ func (c *Config) InitializeProviders() error {
 						// full workflow.Context, allowing providers to dispatch activities,
 						// use workflow.Go, etc.
 						worker.RegisterWorkflowWithOptions(
-							models.CreateProviderAuthorizeRoleWorkflow(c, providerResult),
+							models.CreateProviderAuthorizeRoleWorkflow(providerResult),
 							workflow.RegisterOptions{
 								Name:               authWorkflowName,
 								VersioningBehavior: workflow.VersioningBehaviorPinned,
@@ -309,14 +309,13 @@ func (c *Config) InitializeProviders() error {
 						}).Infoln("Registering provider revoke role workflow with name", revokeWorkflowName)
 
 						worker.RegisterWorkflowWithOptions(
-							models.CreateProviderRevokeRoleWorkflow(c, providerResult),
+							models.CreateProviderRevokeRoleWorkflow(providerResult),
 							workflow.RegisterOptions{
 								Name:               revokeWorkflowName,
 								VersioningBehavior: workflow.VersioningBehaviorPinned,
 							},
 						)
 					}
-
 					// Register all custom provider workflows
 					workflowsRegistry := providerResult.RegisterWorkflows()
 					if workflowsRegistry != nil {
@@ -325,7 +324,7 @@ func (c *Config) InitializeProviders() error {
 					}
 
 					// Register default provider activities
-					err := models.RegisterProviderActivities(temporalService, providerResult)
+					err := models.RegisterProviderActivities(temporalService, providerResult, c)
 					if err != nil {
 						logrus.WithError(err).Errorln("Failed to register default activities for provider:", result.key)
 						continue

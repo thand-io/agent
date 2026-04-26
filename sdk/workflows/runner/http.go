@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/serverlessworkflow/sdk-go/v3/model"
@@ -88,17 +89,24 @@ func (r *ResumableWorkflowRunner) executeHttpFunction(
 	}
 
 	if workflowTask.HasTemporalContext() {
+		activityContext := workflow.WithActivityOptions(workflowTask.GetTemporalContext(),
+			workflow.ActivityOptions{
+				TaskQueue:           workflowTask.GetTaskQueue(),
+				StartToCloseTimeout: 10 * time.Minute,
+				RetryPolicy:         DefaultRetryPolicy,
+			},
+		)
 
 		// Execute the HTTP request within a Temporal activity
 		fut := workflow.ExecuteActivity(
-			workflowTask.GetTemporalContext(),
+			activityContext,
 			sdkConstants.TemporalHttpActivityName,
 			httpCall,
 			finalURL,
 		)
 
 		var result any
-		err := fut.Get(workflowTask.GetTemporalContext(), &result)
+		err := fut.Get(activityContext, &result)
 
 		return result, err
 

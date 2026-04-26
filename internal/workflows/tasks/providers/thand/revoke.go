@@ -12,6 +12,7 @@ import (
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
+	runner "github.com/thand-io/agent/sdk/workflows/runner"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
@@ -90,7 +91,7 @@ func (t *thandTask) executeRevocationTask(
 		return nil, fmt.Errorf("failed to get duration: %w", err)
 	}
 
-	revokedAt := time.Now().UTC()
+	revokedAt := runner.WorkflowTimeNow(workflowTask)
 
 	modelOutput := map[string]any{
 		"revoked":    true,

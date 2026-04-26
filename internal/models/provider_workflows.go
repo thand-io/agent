@@ -314,60 +314,49 @@ func (r *WorkflowRoleRequest) GetDuration() *time.Duration {
 	return r.Duration
 }
 
-// authorizeRoleRequestSideEffect is used to carry the result of
-// CreateAuthorizeRoleRequest across a workflow.SideEffect boundary so that
-// non-deterministic operations (config lookups, UUID generation) are isolated
-// from workflow replay.
-type authorizeRoleRequestSideEffect struct {
-	Request *AuthorizeRoleRequest `json:"request"`
-	Err     string                `json:"error"`
-}
-
 // CreateProviderAuthorizeRoleWorkflow returns a workflow function that captures the
 // live provider instance via closure. The child workflow receives the Temporal
-// workflow.Context, constructs a WorkflowTaskSupport with it, and delegates to
-// provider.AuthorizeRole — allowing the provider to dispatch activities, use
-// workflow.Go, and manage state just as it does in the primary workflow.
-// Careful: The workflow function returned by this method will be executed as a Temporal workflow, so it must be deterministic and should not perform any non-deterministic operations (like generating random numbers or accessing the current time) directly in the workflow code. Any such operations should be performed within activities or isolated using workflow.SideEffect to ensure correct behavior during workflow replay.
-func CreateProviderAuthorizeRoleWorkflow(cfg ConfigImpl, provider Provider) func(workflow.Context, WorkflowRoleRequest) (*AuthorizeRoleResponse, error) {
+// workflow.Context, dispatches a local activity to resolve the AuthorizeRoleRequest
+// (config/identity/tenant lookups and composite-role construction), and then
+// delegates to provider.AuthorizeRole — allowing the provider to dispatch activities,
+// use workflow.Go, and manage state just as it does in the primary workflow.
+func CreateProviderAuthorizeRoleWorkflow(provider Provider) func(workflow.Context, WorkflowRoleRequest) (*AuthorizeRoleResponse, error) {
 	return func(ctx workflow.Context, req WorkflowRoleRequest) (*AuthorizeRoleResponse, error) {
 
 		log := workflow.GetLogger(ctx)
 		log.Info("Starting authorize role workflow", "provider", provider.GetIdentifier())
 
-		// Wrap in a SideEffect so that the non-deterministic operations inside
-		// CreateAuthorizeRoleRequest (config/identity/tenant lookups, UUID generation
-		// for the composite role identifier) are executed only on the first run and
-		// their result is recorded in the workflow event history. On replay, Temporal
-		// replays the recorded value instead of re-executing the function, keeping
-		// workflow execution deterministic.
-		//
-		// Note: CompositeRole has a custom UnmarshalJSON to ensure UUID, Composite,
-		// and Providers fields survive JSON serialization through Temporal's data converter.
-		encodedReq := workflow.SideEffect(ctx, func(ctx workflow.Context) any {
-			result, err := CreateAuthorizeRoleRequest(cfg, provider, &req)
-			if err != nil {
-				return authorizeRoleRequestSideEffect{Err: err.Error()}
-			}
-			return authorizeRoleRequestSideEffect{Request: result}
-		})
-
-		var se authorizeRoleRequestSideEffect
-		if err := encodedReq.Get(&se); err != nil {
-			log.Error("Failed to decode authorize role request side effect", "error", err)
-			return nil, err
+		// Resolve config/provider state via a registered local activity rather than
+		// workflow.SideEffect. This keeps mutable config reads outside workflow code,
+		// records the resolved request in history with a stable activity type name,
+		// and enables retry on transient failure.
+		activityName := CreateTemporalProviderWorkflowName(
+			provider.GetIdentifier(),
+			TemporalBuildAuthorizeRoleRequestActivityName,
+		)
+		lao := workflow.LocalActivityOptions{
+			StartToCloseTimeout: 30 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval:    1 * time.Second,
+				BackoffCoefficient: 2.0,
+				MaximumInterval:    30 * time.Second,
+				MaximumAttempts:    5,
+			},
 		}
-		if se.Err != "" {
-			log.Error("Failed to create authorize role request", "error", se.Err)
-			return nil, fmt.Errorf("%s", se.Err)
+		lctx := workflow.WithLocalActivityOptions(ctx, lao)
+
+		var authReq AuthorizeRoleRequest
+		if err := workflow.ExecuteLocalActivity(lctx, activityName, &req).Get(ctx, &authReq); err != nil {
+			log.Error("Failed to build authorize role request", "error", err)
+			return nil, err
 		}
 
 		log.Debug("Constructed authorize role request, invoking provider",
 			"provider", provider.GetIdentifier(),
-			"authorizeReq", se.Request,
+			"authorizeReq", authReq,
 		)
 
-		return provider.AuthorizeRole(ctx, se.Request)
+		return provider.AuthorizeRole(ctx, &authReq)
 	}
 }
 
@@ -378,9 +367,7 @@ type WorkflowRevokeRoleRequest struct {
 
 // CreateProviderRevokeRoleWorkflow returns a workflow function that captures the
 // live provider instance via closure for revocation operations.
-// Careful: The revoke workflow may need to reconstruct the original AuthorizeRoleRequest
-// and must handle it deterministically within a workflow.SideEffect.
-func CreateProviderRevokeRoleWorkflow(cfg ConfigImpl, provider Provider) func(workflow.Context, WorkflowRevokeRoleRequest) (*RevokeRoleResponse, error) {
+func CreateProviderRevokeRoleWorkflow(provider Provider) func(workflow.Context, WorkflowRevokeRoleRequest) (*RevokeRoleResponse, error) {
 	return func(ctx workflow.Context, req WorkflowRevokeRoleRequest) (*RevokeRoleResponse, error) {
 
 		log := workflow.GetLogger(ctx)
@@ -388,27 +375,29 @@ func CreateProviderRevokeRoleWorkflow(cfg ConfigImpl, provider Provider) func(wo
 
 		var authReq *AuthorizeRoleRequest
 		if req.RevokeRoleRequest != nil {
-			// Same reasoning as in CreateProviderAuthorizeRoleWorkflow: wrap in a
-			// SideEffect to isolate non-deterministic config lookups and UUID
-			// generation from replay.
-			encodedReq := workflow.SideEffect(ctx, func(ctx workflow.Context) any {
-				result, err := CreateAuthorizeRoleRequest(cfg, provider, req.RevokeRoleRequest)
-				if err != nil {
-					return authorizeRoleRequestSideEffect{Err: err.Error()}
-				}
-				return authorizeRoleRequestSideEffect{Request: result}
-			})
+			// Resolve config/provider state via a registered local activity. See
+			// CreateProviderAuthorizeRoleWorkflow for the full rationale.
+			activityName := CreateTemporalProviderWorkflowName(
+				provider.GetIdentifier(),
+				TemporalBuildAuthorizeRoleRequestActivityName,
+			)
+			lao := workflow.LocalActivityOptions{
+				StartToCloseTimeout: 30 * time.Second,
+				RetryPolicy: &temporal.RetryPolicy{
+					InitialInterval:    1 * time.Second,
+					BackoffCoefficient: 2.0,
+					MaximumInterval:    30 * time.Second,
+					MaximumAttempts:    5,
+				},
+			}
+			lctx := workflow.WithLocalActivityOptions(ctx, lao)
 
-			var se authorizeRoleRequestSideEffect
-			if err := encodedReq.Get(&se); err != nil {
-				log.Error("Failed to decode revoke role request side effect", "error", err)
+			var result AuthorizeRoleRequest
+			if err := workflow.ExecuteLocalActivity(lctx, activityName, req.RevokeRoleRequest).Get(ctx, &result); err != nil {
+				log.Error("Failed to build authorize role request for revocation", "error", err)
 				return nil, err
 			}
-			if se.Err != "" {
-				log.Error("Failed to create revoke role request", "error", se.Err)
-				return nil, fmt.Errorf("%s", se.Err)
-			}
-			authReq = se.Request
+			authReq = &result
 		}
 
 		revokeReq := &RevokeRoleRequest{
