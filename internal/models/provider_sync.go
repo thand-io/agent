@@ -249,20 +249,13 @@ func paginatedSync[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 	onPage func(Resp),
 ) error {
 	for {
-		logrus.Debugf("Making synchronization request: %s", name)
-
 		resp, err := executePage(req)
 		if err != nil {
 			if errors.Is(err, ErrNotImplemented) {
-				logrus.Debugf("Synchronization operation %s is not implemented, skipping", name)
 				return nil
 			}
 			return err
 		}
-
-		logrus.WithFields(logrus.Fields{
-			"response": provider,
-		}).Debugf("Received synchronization response for %s", name)
 
 		resp.AddToProvider(provider)
 
@@ -272,7 +265,6 @@ func paginatedSync[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 
 		pagination := resp.GetPagination()
 		if pagination == nil || len(pagination.Token) == 0 {
-			logrus.Debugf("Synchronization operation %s completed with no more pages", name)
 			break
 		}
 
