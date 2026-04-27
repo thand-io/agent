@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"sync"
 	"time"
 
@@ -556,7 +557,14 @@ func (t *thandTask) makeAuthorizationNotifications(
 
 	// Build notification tasks for each provider
 	var notifyTasks []notifyTask
-	for providerKey, notifierRequest := range authorizeTask.Notifiers {
+	providerKeys := make([]string, 0, len(authorizeTask.Notifiers))
+	for providerKey := range authorizeTask.Notifiers {
+		providerKeys = append(providerKeys, providerKey)
+	}
+	sort.Strings(providerKeys)
+
+	for _, providerKey := range providerKeys {
+		notifierRequest := authorizeTask.Notifiers[providerKey]
 		// Create an AuthorizerNotifier for each provider
 		authorizeNotifier := NewAuthorizerNotifier(
 			t.config,
