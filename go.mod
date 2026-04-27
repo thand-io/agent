@@ -82,7 +82,7 @@ require (
 	go.opentelemetry.io/otel/log v0.19.0
 	go.opentelemetry.io/otel/sdk v1.43.0
 	go.opentelemetry.io/otel/sdk/log v0.19.0
-	go.temporal.io/api v1.62.9
+	go.temporal.io/api v1.62.11
 	go.temporal.io/sdk v1.42.0
 	golang.org/x/crypto v0.50.0
 	golang.org/x/net v0.53.0
