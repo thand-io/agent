@@ -2,7 +2,6 @@ package runner
 
 import (
 	"fmt"
-	"time"
 
 	swctx "github.com/serverlessworkflow/sdk-go/v3/impl/ctx"
 	utils "github.com/serverlessworkflow/sdk-go/v3/impl/utils"
@@ -154,7 +153,7 @@ func (d *ResumableWorkflowRunner) runTaskItem(
 	taskSupport := d.GetWorkflowTask()
 	log := d.GetLogger()
 
-	taskSupport.SetTaskStartedAt(time.Now())
+	taskSupport.SetTaskStartedAt(WorkflowTimeNow(taskSupport))
 	taskSupport.SetTaskRawInput(input)
 	taskSupport.SetTaskName(taskName)
 

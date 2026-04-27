@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -814,7 +816,9 @@ func (t *thandTask) makeApprovalNotifications(
 	// In parallel create a notifier for each of the notifiers
 	// Build notification tasks for each provider
 	var notifyTasks []notifyTask
-	for providerKey, notifierRequest := range approvalsTask.Notifiers {
+	for _, providerKey := range slices.Sorted(maps.Keys(approvalsTask.Notifiers)) {
+		notifierRequest := approvalsTask.Notifiers[providerKey]
+
 		if t.isLocalPresenceProvider(notifierRequest.Provider) {
 			continue
 		}
@@ -935,10 +939,13 @@ func (t *thandTask) notifyApprovalRejection(
 	}
 
 	// Send rejection notification using each configured notifier
-	for providerKey, notifierRequest := range approvalsTask.Notifiers {
+	for _, providerKey := range slices.Sorted(maps.Keys(approvalsTask.Notifiers)) {
+		notifierRequest := approvalsTask.Notifiers[providerKey]
+
 		if t.isLocalPresenceProvider(notifierRequest.Provider) {
 			continue
 		}
+
 		// Create a generic notifier for rejection with the approver as recipient
 		rejectionRequest := thandFunction.NotifierRequest{
 			Provider: notifierRequest.Provider,

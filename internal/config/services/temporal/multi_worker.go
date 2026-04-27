@@ -13,7 +13,7 @@ import (
 // identity-specific task queues.
 //
 // Lifecycle methods (Start/Run/Stop) are no-ops because TemporalClient
-// manages worker lifecycle directly in Initialize() and Shutdown().
+// manages worker lifecycle directly via StartWorkers() and Shutdown().
 type multiWorker struct {
 	workers []worker.Worker
 }

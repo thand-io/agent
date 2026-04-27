@@ -333,21 +333,48 @@ func (r *WorkflowRoleRequest) GetDuration() *time.Duration {
 }
 
 // CreateProviderAuthorizeRoleWorkflow returns a workflow function that captures the
-// live provider instance via closure. The child workflow receives a fully
-// materialized provider request so it can delegate directly to provider
-// activities without any workflow-side config lookups.
-func CreateProviderAuthorizeRoleWorkflow(provider Provider) func(workflow.Context, AuthorizeRoleRequest) (*AuthorizeRoleResponse, error) {
-	return func(ctx workflow.Context, req AuthorizeRoleRequest) (*AuthorizeRoleResponse, error) {
+// live provider instance via closure. The child workflow receives the Temporal
+// workflow.Context, dispatches a local activity to resolve the AuthorizeRoleRequest
+// (config/identity/tenant lookups and composite-role construction), and then
+// delegates to provider.AuthorizeRole — allowing the provider to dispatch activities,
+// use workflow.Go, and manage state just as it does in the primary workflow.
+func CreateProviderAuthorizeRoleWorkflow(provider Provider) func(workflow.Context, WorkflowRoleRequest) (*AuthorizeRoleResponse, error) {
+	return func(ctx workflow.Context, req WorkflowRoleRequest) (*AuthorizeRoleResponse, error) {
 
 		log := workflow.GetLogger(ctx)
 		log.Info("Starting authorize role workflow", "provider", provider.GetIdentifier())
 
+		// Resolve config/provider state via a registered local activity rather than
+		// workflow.SideEffect. This keeps mutable config reads outside workflow code,
+		// records the resolved request in history with a stable activity type name,
+		// and enables retry on transient failure.
+		activityName := CreateTemporalProviderWorkflowName(
+			provider.GetIdentifier(),
+			TemporalBuildAuthorizeRoleRequestActivityName,
+		)
+		lao := workflow.LocalActivityOptions{
+			StartToCloseTimeout: 30 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval:    1 * time.Second,
+				BackoffCoefficient: 2.0,
+				MaximumInterval:    30 * time.Second,
+				MaximumAttempts:    5,
+			},
+		}
+		lctx := workflow.WithLocalActivityOptions(ctx, lao)
+
+		var authReq AuthorizeRoleRequest
+		if err := workflow.ExecuteLocalActivity(lctx, activityName, &req).Get(ctx, &authReq); err != nil {
+			log.Error("Failed to build authorize role request", "error", err)
+			return nil, err
+		}
+
 		log.Debug("Constructed authorize role request, invoking provider",
 			"provider", provider.GetIdentifier(),
-			"authorizeReq", req,
+			"authorizeReq", authReq,
 		)
 
-		return provider.AuthorizeRole(ctx, &req)
+		return provider.AuthorizeRole(ctx, &authReq)
 	}
 }
 
@@ -363,6 +390,38 @@ func CreateProviderRevokeRoleWorkflow(provider Provider) func(workflow.Context, 
 
 		log := workflow.GetLogger(ctx)
 		log.Info("Starting revoke role workflow", "provider", provider.GetIdentifier())
+
+		var authReq *AuthorizeRoleRequest
+		if req.RevokeRoleRequest != nil {
+			// Resolve config/provider state via a registered local activity. See
+			// CreateProviderAuthorizeRoleWorkflow for the full rationale.
+			activityName := CreateTemporalProviderWorkflowName(
+				provider.GetIdentifier(),
+				TemporalBuildAuthorizeRoleRequestActivityName,
+			)
+			lao := workflow.LocalActivityOptions{
+				StartToCloseTimeout: 30 * time.Second,
+				RetryPolicy: &temporal.RetryPolicy{
+					InitialInterval:    1 * time.Second,
+					BackoffCoefficient: 2.0,
+					MaximumInterval:    30 * time.Second,
+					MaximumAttempts:    5,
+				},
+			}
+			lctx := workflow.WithLocalActivityOptions(ctx, lao)
+
+			var result AuthorizeRoleRequest
+			if err := workflow.ExecuteLocalActivity(lctx, activityName, req.RevokeRoleRequest).Get(ctx, &result); err != nil {
+				log.Error("Failed to build authorize role request for revocation", "error", err)
+				return nil, err
+			}
+			authReq = &result
+		}
+
+		revokeReq := &RevokeRoleRequest{
+			AuthorizeRoleRequest:  authReq,
+			AuthorizeRoleResponse: req.AuthorizeRoleResponse,
+		}
 
 		log.Debug("Constructed revoke role request, invoking provider",
 			"provider", provider.GetIdentifier(),

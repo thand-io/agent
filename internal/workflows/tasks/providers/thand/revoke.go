@@ -3,6 +3,8 @@ package thand
 import (
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -13,6 +15,7 @@ import (
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
+	runner "github.com/thand-io/agent/sdk/workflows/runner"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
@@ -123,7 +126,12 @@ func (t *thandTask) executeRevocationTask(
 
 	log := workflowTask.GetLogger()
 
-	revokedAt := time.Now().UTC()
+	duration, err := elevateRequest.AsDuration()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get duration: %w", err)
+	}
+
+	revokedAt := runner.WorkflowTimeNow(workflowTask)
 
 	modelOutput := map[string]any{
 		"revoked":    true,
@@ -406,7 +414,8 @@ func (t *thandTask) makeRevocationNotifications(
 
 	// Build notification tasks for each provider
 	var notifyTasks []notifyTask
-	for providerKey, notifierRequest := range revokeTask.Notifiers {
+	for _, providerKey := range slices.Sorted(maps.Keys(revokeTask.Notifiers)) {
+		notifierRequest := revokeTask.Notifiers[providerKey]
 		// Create a RevokeNotifier for each provider
 		revokeNotifier := NewRevokeNotifier(
 			t.config,

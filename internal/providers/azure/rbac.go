@@ -375,8 +375,10 @@ func (p *azureProvider) revokeRoleTemporal(
 			},
 		).Get(wfCtx, nil); err != nil {
 			// Non-fatal: the assignment was already removed. Log but don't fail the workflow.
-			logrus.WithError(err).WithField("role_definition_id", roleDefResp.RoleDefinitionID).
-				Warn("DeleteRoleDefinition activity failed for composite role")
+			workflow.GetLogger(wfCtx).Warn("DeleteRoleDefinition activity failed for composite role",
+				"error", err,
+				"role_definition_id", roleDefResp.RoleDefinitionID,
+			)
 		}
 	}
 

@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -29,10 +31,12 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 const (
@@ -426,6 +430,53 @@ system.forceSearchAttributesCacheRefreshOnRead:
 
 	infra.TemporalClient = c
 	infra.t.Log("Temporal client connected")
+}
+
+// SaveWorkflowHistory fetches the complete event history for a completed workflow
+// execution and writes it as a protojson file at destPath. The file can later be
+// loaded by a WorkflowReplayer replay test to guard against non-determinism.
+//
+// Typical usage (at the end of an integration test, after the workflow has finished):
+//
+//	infra.SaveWorkflowHistory(t, ctx, workflowID, "", "testdata/my-case/history.json")
+func (infra *TestInfrastructure) SaveWorkflowHistory(t *testing.T, ctx context.Context, workflowID, runID, destPath string) {
+	t.Helper()
+
+	iter := infra.TemporalClient.GetWorkflowHistory(ctx, workflowID, runID, false, enums.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+
+	var events []*historypb.HistoryEvent
+	for iter.HasNext() {
+		ev, err := iter.Next()
+		if err != nil {
+			t.Logf("Warning: error reading history event for %s: %v; skipping history save", workflowID, err)
+			return
+		}
+		events = append(events, ev)
+	}
+
+	if len(events) == 0 {
+		t.Logf("Warning: no history events found for workflow %s — skipping history save", workflowID)
+		return
+	}
+
+	history := &historypb.History{Events: events}
+	jsonBytes, err := protojson.MarshalOptions{Multiline: true}.Marshal(history)
+	if err != nil {
+		t.Logf("Warning: failed to marshal history for %s: %v", workflowID, err)
+		return
+	}
+
+	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+		t.Logf("Warning: failed to create history directory %s: %v", filepath.Dir(destPath), err)
+		return
+	}
+
+	if err := os.WriteFile(destPath, jsonBytes, 0o600); err != nil {
+		t.Logf("Warning: failed to write history file %s: %v", destPath, err)
+		return
+	}
+
+	t.Logf("Saved workflow history (%d events) → %s", len(events), destPath)
 }
 
 // RegisterCleanup adds a cleanup callback that will be called before container teardown.

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/serverlessworkflow/sdk-go/v3/model"
@@ -248,7 +250,8 @@ func (t *thandTask) makeFormNotifications(
 
 	var notifyTasks []notifyTask
 
-	for providerKey, notifierRequest := range formTask.Notifiers {
+	for _, providerKey := range slices.Sorted(maps.Keys(formTask.Notifiers)) {
+		notifierRequest := formTask.Notifiers[providerKey]
 		// Create a FormNotifier for each provider
 		formNotifier := NewFormNotifier(
 			t.config,

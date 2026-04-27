@@ -136,6 +136,20 @@ generate-data:
 	go run tools/generate-iam-dataset/main.go
 	@echo "Data generation complete!"
 
+# Run workflowcheck static analysis to detect non-deterministic workflow code.
+# workflowcheck inspects workflow functions for forbidden calls (time.Now,
+# goroutines, select, etc.) that cause Temporal replay failures.
+# Install once with: go install go.temporal.io/sdk/contrib/tools/workflowcheck@latest
+workflowcheck:
+	@if command -v workflowcheck >/dev/null 2>&1; then \
+	  echo "Running workflowcheck..."; \
+	  workflowcheck -test=false -config workflowcheck.yaml ./internal/... ./sdk/...; \
+	else \
+	  echo "workflowcheck not found. Install with:"; \
+	  echo "  go install go.temporal.io/sdk/contrib/tools/workflowcheck@latest"; \
+	  exit 1; \
+	fi
+
 # Generate Swagger documentation
 swagger:
 	@echo "Generating Swagger documentation..."
@@ -149,4 +163,4 @@ swagger:
 		exit 1; \
 	fi
 
-.PHONY: all build build-all build-linux-amd64 build-macos-privilege-services test-macos-privilege-services package-macos-privilege-services-dev install-macos-privilege-services-dev uninstall-macos-privilege-services-dev package-macos-privilege-services-release clean install run test test-functional test-integration test-e2e submodules update-submodules gen gen-buf compress generate-data swagger
+.PHONY: all build build-all build-linux-amd64 build-macos-privilege-services test-macos-privilege-services package-macos-privilege-services-dev install-macos-privilege-services-dev uninstall-macos-privilege-services-dev package-macos-privilege-services-release clean install run test test-functional test-integration test-e2e submodules update-submodules gen gen-buf compress generate-data swagger workflowcheck

@@ -3,7 +3,9 @@ package thand
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -75,7 +77,10 @@ func (t *thandTask) executeAuthorizeTask(
 	isApproved := workflowTask.IsApproved()
 
 	if isApproved != nil && *isApproved {
-		modelOutput := t.buildBasicModelOutput(elevateRequest)
+		modelOutput, err := t.buildBasicModelOutput(workflowTask, elevateRequest)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build basic model output: %w", err)
+		}
 		return &modelOutput, nil
 	}
 
@@ -83,15 +88,18 @@ func (t *thandTask) executeAuthorizeTask(
 }
 
 // buildBasicModelOutput creates the basic model output with timestamps
-func (t *thandTask) buildBasicModelOutput(elevateRequest *models.ElevateRequestInternal) map[string]any {
-	duration, _ := elevateRequest.AsDuration()
-	authorizedAt := time.Now().UTC()
+func (t *thandTask) buildBasicModelOutput(workflowTask *models.ElevateWorkflowTask, elevateRequest *models.ElevateRequestInternal) (map[string]any, error) {
+	duration, err := elevateRequest.AsDuration()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get duration: %w", err)
+	}
+	authorizedAt := runner.WorkflowTimeNow(workflowTask)
 	revocationDate := authorizedAt.Add(duration)
 
 	return map[string]any{
 		"authorized_at": authorizedAt.Format(time.RFC3339),
 		"revocation_at": revocationDate.Format(time.RFC3339),
-	}
+	}, nil
 }
 
 // authResult holds the result of an authorization operation
@@ -143,7 +151,7 @@ func (t *thandTask) executeAuthorization(
 		return nil, fmt.Errorf("failed to get duration: %w", err)
 	}
 
-	authorizedAt := time.Now().UTC()
+	authorizedAt := runner.WorkflowTimeNow(workflowTask)
 	revocationDate := authorizedAt.Add(duration)
 
 	modelOutput := map[string]any{
@@ -578,7 +586,8 @@ func (t *thandTask) makeAuthorizationNotifications(
 
 	// Build notification tasks for each provider
 	var notifyTasks []notifyTask
-	for providerKey, notifierRequest := range authorizeTask.Notifiers {
+	for _, providerKey := range slices.Sorted(maps.Keys(authorizeTask.Notifiers)) {
+		notifierRequest := authorizeTask.Notifiers[providerKey]
 		// Create an AuthorizerNotifier for each provider
 		authorizeNotifier := NewAuthorizerNotifier(
 			t.config,

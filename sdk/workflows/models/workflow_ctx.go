@@ -182,6 +182,12 @@ func (ctx *WorkflowTask) getWorkflowDefAsMap() map[string]any {
 	return map[string]any{}
 }
 
+// SetStatus appends a new status phase entry. The timestamp in StatusPhaseLog is
+// observability-only and does not affect Temporal replay correctness.
+//
+// the status value itself is deterministic and driven by workflow logic.
+//
+//workflowcheck:ignore — NewStatusPhaseLog calls time.Now for the log timestamp only;
 func (ctx *WorkflowTask) SetStatus(status swctx.StatusPhase) {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
