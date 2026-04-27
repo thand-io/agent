@@ -61,6 +61,7 @@ func (t *TemporalConfig) HasMtlsConfig() bool {
 
 type TemporalImpl interface {
 	Initialize() error
+	StartWorkers() error
 	Shutdown() error
 
 	GetClient() client.Client

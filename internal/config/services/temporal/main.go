@@ -33,6 +33,7 @@ type TemporalClient struct {
 	mu             sync.Mutex
 	readyCh        chan struct{}
 	closeReadyOnce sync.Once
+	workersStarted bool
 }
 
 func NewTemporalClient(
@@ -131,7 +132,8 @@ func (a *TemporalClient) Initialize() error {
 		}
 	}
 
-	// Create and start a worker for each identity (task queue)
+	// Create a worker for each identity (task queue).
+	// Registration must happen before workers are started.
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -147,32 +149,70 @@ func (a *TemporalClient) Initialize() error {
 			workerOptions,
 		)
 
-		logrus.WithFields(logrus.Fields{
-			"BuildID":   buildID,
-			"taskQueue": identity,
-		}).Infof("Starting Temporal worker")
-
-		if err := newWorker.Start(); err != nil {
-			logrus.WithError(err).
-				WithField("taskQueue", identity).
-				Error("Failed to start temporal worker")
-			continue
-		}
-
 		a.workers[identity] = newWorker
 	}
 
 	if len(a.workers) == 0 {
 		a.markReady() // Unblock any waiters even on failure
+		return fmt.Errorf("failed to create any Temporal workers")
+	}
+
+	return nil
+}
+
+// StartWorkers starts all registered Temporal workers.
+// This must be called only after workflow/activity registration is complete.
+func (c *TemporalClient) StartWorkers() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.client == nil {
+		return fmt.Errorf("temporal client is not initialized")
+	}
+
+	if len(c.workers) == 0 {
+		c.markReady()
+		return fmt.Errorf("no Temporal workers configured")
+	}
+
+	if c.workersStarted {
+		logrus.Warn("Temporal workers already started, skipping worker startup")
+		return nil
+	}
+
+	buildID := common.GetBuildIdentifier()
+	startedCount := 0
+
+	for identity, w := range c.workers {
+		logrus.WithFields(logrus.Fields{
+			"BuildID":   buildID,
+			"taskQueue": identity,
+		}).Info("Starting Temporal worker")
+
+		if err := w.Start(); err != nil {
+			logrus.WithError(err).
+				WithField("taskQueue", identity).
+				Error("Failed to start temporal worker")
+			delete(c.workers, identity)
+			continue
+		}
+
+		startedCount++
+	}
+
+	if startedCount == 0 {
+		c.markReady()
 		return fmt.Errorf("failed to start any Temporal workers")
 	}
 
+	c.workersStarted = true
+
 	// If versioning is enabled, confirm our deployment version is registered
 	// on the Temporal server before allowing workflow submissions via GetClient().
-	if a.config.DisableVersioning {
-		a.markReady()
+	if c.config.DisableVersioning {
+		c.markReady()
 	} else {
-		go a.awaitVersionRegistration(buildID)
+		go c.awaitVersionRegistration(buildID)
 	}
 
 	return nil
@@ -335,6 +375,7 @@ func (c *TemporalClient) Shutdown() error {
 
 	c.workers = nil
 	c.client = nil
+	c.workersStarted = false
 
 	return nil
 }

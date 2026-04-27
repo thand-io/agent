@@ -187,6 +187,12 @@ type initResult struct {
 
 // InitializeProviders initializes all providers in parallel using channels
 func (c *Config) InitializeProviders() error {
+	if c.IsServer() {
+		_ = c.GetServices()
+		if err := c.SetupTemporal(); err != nil {
+			return fmt.Errorf("setting up temporal services: %w", err)
+		}
+	}
 
 	defs := c.GetProviders().Definitions
 
@@ -363,6 +369,10 @@ func (c *Config) InitializeProviders() error {
 	c.mu.Lock()
 	c.providerInstances = results
 	c.mu.Unlock()
+
+	if err := c.StartTemporalWorkers(); err != nil {
+		return err
+	}
 
 	logrus.Debugln("All providers initialized successfully")
 
