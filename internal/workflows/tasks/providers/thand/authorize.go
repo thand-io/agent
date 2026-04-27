@@ -3,8 +3,9 @@ package thand
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 
@@ -557,13 +558,7 @@ func (t *thandTask) makeAuthorizationNotifications(
 
 	// Build notification tasks for each provider
 	var notifyTasks []notifyTask
-	providerKeys := make([]string, 0, len(authorizeTask.Notifiers))
-	for providerKey := range authorizeTask.Notifiers {
-		providerKeys = append(providerKeys, providerKey)
-	}
-	sort.Strings(providerKeys)
-
-	for _, providerKey := range providerKeys {
+	for _, providerKey := range slices.Sorted(maps.Keys(authorizeTask.Notifiers)) {
 		notifierRequest := authorizeTask.Notifiers[providerKey]
 		// Create an AuthorizerNotifier for each provider
 		authorizeNotifier := NewAuthorizerNotifier(

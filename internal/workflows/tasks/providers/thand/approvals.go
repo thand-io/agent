@@ -3,7 +3,8 @@ package thand
 import (
 	"errors"
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"time"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
@@ -435,13 +436,7 @@ func (t *thandTask) makeApprovalNotifications(
 	// In parallel create a notifier for each of the notifiers
 	// Build notification tasks for each provider
 	var notifyTasks []notifyTask
-	providerKeys := make([]string, 0, len(approvalsTask.Notifiers))
-	for providerKey := range approvalsTask.Notifiers {
-		providerKeys = append(providerKeys, providerKey)
-	}
-	sort.Strings(providerKeys)
-
-	for _, providerKey := range providerKeys {
+	for _, providerKey := range slices.Sorted(maps.Keys(approvalsTask.Notifiers)) {
 		notifierRequest := approvalsTask.Notifiers[providerKey]
 		// Create an ApprovalNotifier for each provider
 		approvalNotifier := NewApprovalsNotifier(
@@ -554,13 +549,7 @@ func (t *thandTask) notifyApprovalRejection(
 	}
 
 	// Send rejection notification using each configured notifier
-	providerKeys := make([]string, 0, len(approvalsTask.Notifiers))
-	for providerKey := range approvalsTask.Notifiers {
-		providerKeys = append(providerKeys, providerKey)
-	}
-	sort.Strings(providerKeys)
-
-	for _, providerKey := range providerKeys {
+	for _, providerKey := range slices.Sorted(maps.Keys(approvalsTask.Notifiers)) {
 		notifierRequest := approvalsTask.Notifiers[providerKey]
 		// Create a generic notifier for rejection with the approver as recipient
 		rejectionRequest := thandFunction.NotifierRequest{
