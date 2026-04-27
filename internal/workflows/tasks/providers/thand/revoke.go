@@ -3,6 +3,8 @@ package thand
 import (
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
 	"time"
 
@@ -366,7 +368,8 @@ func (t *thandTask) makeRevocationNotifications(
 
 	// Build notification tasks for each provider
 	var notifyTasks []notifyTask
-	for providerKey, notifierRequest := range revokeTask.Notifiers {
+	for _, providerKey := range slices.Sorted(maps.Keys(revokeTask.Notifiers)) {
+		notifierRequest := revokeTask.Notifiers[providerKey]
 		// Create a RevokeNotifier for each provider
 		revokeNotifier := NewRevokeNotifier(
 			t.config,
