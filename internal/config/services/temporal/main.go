@@ -160,12 +160,9 @@ func (a *TemporalClient) Initialize() error {
 		return nil
 	}
 
-	hasVersionedWorkers := false
 	for _, identity := range a.identities {
 		workerOptions := a.workerOptionsForIdentity(identity, buildID)
-		if workerOptions.DeploymentOptions.UseVersioning {
-			hasVersionedWorkers = true
-		} else if !a.config.DisableVersioning && identity == models.TemporalDeviceRegistryTaskQueue {
+		if !workerOptions.DeploymentOptions.UseVersioning && !a.config.DisableVersioning && identity == models.TemporalDeviceRegistryTaskQueue {
 			logrus.WithField("taskQueue", identity).Info("Starting Temporal worker without versioning for shared device registry queue")
 		}
 
@@ -208,6 +205,7 @@ func (c *TemporalClient) StartWorkers() error {
 
 	buildID := common.GetBuildIdentifier()
 	startedCount := 0
+	hasVersionedWorkers := false
 
 	for identity, w := range c.workers {
 		logrus.WithFields(logrus.Fields{
@@ -223,6 +221,9 @@ func (c *TemporalClient) StartWorkers() error {
 			continue
 		}
 
+		if c.shouldUseVersioning(identity) {
+			hasVersionedWorkers = true
+		}
 		startedCount++
 	}
 
@@ -235,8 +236,8 @@ func (c *TemporalClient) StartWorkers() error {
 
 	// If versioning is enabled, confirm our deployment version is registered
 	// on the Temporal server before allowing workflow submissions via GetClient().
-	if a.config.DisableVersioning || !hasVersionedWorkers {
-		a.markReady()
+	if c.config.DisableVersioning || !hasVersionedWorkers {
+		c.markReady()
 	} else {
 		go c.awaitVersionRegistration(buildID)
 	}

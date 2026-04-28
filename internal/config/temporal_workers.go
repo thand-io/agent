@@ -23,6 +23,10 @@ func (t *temporalWorkerScope) Shutdown() error {
 	return t.base.Shutdown()
 }
 
+func (t *temporalWorkerScope) StartWorkers() error {
+	return t.base.StartWorkers()
+}
+
 func (t *temporalWorkerScope) GetClient() client.Client {
 	return t.base.GetClient()
 }

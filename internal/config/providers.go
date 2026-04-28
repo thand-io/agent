@@ -343,7 +343,7 @@ func (c *Config) registerProviderTemporalBindings(providerResult models.Provider
 		worker.RegisterWorkflow(workflowsRegistry)
 	}
 
-	if err := models.RegisterProviderActivities(temporalService, providerResult); err != nil {
+	if err := models.RegisterProviderActivities(temporalService, providerResult, c); err != nil {
 		return err
 	}
 

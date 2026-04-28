@@ -126,8 +126,7 @@ func (t *thandTask) executeRevocationTask(
 
 	log := workflowTask.GetLogger()
 
-	duration, err := elevateRequest.AsDuration()
-	if err != nil {
+	if _, err := elevateRequest.AsDuration(); err != nil {
 		return nil, fmt.Errorf("failed to get duration: %w", err)
 	}
 
