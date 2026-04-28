@@ -428,7 +428,7 @@ func CreateProviderRevokeRoleWorkflow(provider Provider) func(workflow.Context, 
 			"revokeReq", req.RevokeRoleRequest,
 		)
 
-		return provider.RevokeRole(ctx, req.RevokeRoleRequest)
+		return provider.RevokeRole(ctx, revokeReq)
 	}
 }
 
