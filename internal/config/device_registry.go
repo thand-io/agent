@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -104,7 +103,51 @@ func normalizeDeviceDefinition(device models.Device) models.Device {
 }
 
 func deviceDefinitionsEqual(left, right models.Device) bool {
-	return reflect.DeepEqual(normalizeDeviceDefinition(left), normalizeDeviceDefinition(right))
+	l := normalizeDeviceDefinition(left)
+	r := normalizeDeviceDefinition(right)
+
+	if l.ID != r.ID ||
+		l.Name != r.Name ||
+		l.Description != r.Description ||
+		l.Platform != r.Platform ||
+		l.Enabled != r.Enabled {
+		return false
+	}
+
+	if (l.LocalElevation == nil) != (r.LocalElevation == nil) {
+		return false
+	}
+	if l.LocalElevation == nil {
+		return true
+	}
+
+	ll := l.LocalElevation
+	rl := r.LocalElevation
+	if ll.Enabled != rl.Enabled {
+		return false
+	}
+
+	if !slices.Equal(ll.AllowedModes, rl.AllowedModes) ||
+		!slices.Equal(ll.DeniedUsernames, rl.DeniedUsernames) ||
+		!slices.Equal(ll.AllowedUIDRanges, rl.AllowedUIDRanges) {
+		return false
+	}
+
+	if len(ll.Accounts) != len(rl.Accounts) {
+		return false
+	}
+	for i := range ll.Accounts {
+		la := ll.Accounts[i]
+		ra := rl.Accounts[i]
+		if la.Identity != ra.Identity ||
+			la.Email != ra.Email ||
+			la.Username != ra.Username ||
+			la.LocalUsername != ra.LocalUsername {
+			return false
+		}
+	}
+
+	return true
 }
 
 func queryDeviceDefinition(
