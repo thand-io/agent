@@ -50,15 +50,6 @@ func (c *Config) SetupTemporal() error {
 			return fmt.Errorf("registering provider temporal bindings: %w", err)
 		}
 
-		if c.IsServer() {
-			if err := c.EnsureDeviceRegistryWorkflows(context.Background()); err != nil {
-				return fmt.Errorf("ensuring device registries: %w", err)
-			}
-			if err := c.PublishConfiguredDeviceDefinitions(context.Background()); err != nil {
-				return fmt.Errorf("publishing device definitions: %w", err)
-			}
-		}
-
 		return nil
 
 	}
@@ -78,6 +69,17 @@ func (c *Config) StartTemporalWorkers() error {
 
 	if err := c.servicesClient.GetTemporal().StartWorkers(); err != nil {
 		return fmt.Errorf("starting temporal workers: %w", err)
+	}
+
+	// Device registry workflow management calls GetClient(), which blocks
+	// until workers have started. Run after StartWorkers so the client is
+	// ready, instead of during registration in SetupTemporal where it would
+	// deadlock.
+	if err := c.EnsureDeviceRegistryWorkflows(context.Background()); err != nil {
+		return fmt.Errorf("ensuring device registries: %w", err)
+	}
+	if err := c.PublishConfiguredDeviceDefinitions(context.Background()); err != nil {
+		return fmt.Errorf("publishing device definitions: %w", err)
 	}
 
 	return nil
