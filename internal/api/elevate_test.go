@@ -7,6 +7,7 @@ import (
 	"time"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
+	swfCtx "github.com/serverlessworkflow/sdk-go/v3/impl/ctx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/thand-io/agent/internal/config"
@@ -298,4 +299,24 @@ func TestResume_RunnerError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, sentinel)
+}
+
+func TestResume_WorkflowAlreadyCompletedReturnsExistingWorkflow(t *testing.T) {
+	task := newElevateTask()
+	runner := &mockRunner{
+		resumeFn: func(_ *models.ElevateWorkflowTask) (*models.ElevateWorkflowTask, error) {
+			return nil, errors.New("failed to signal workflow: workflow execution already completed")
+		},
+	}
+	svc := newTestService(true, runner)
+
+	result, err := svc.Resume(context.Background(), ResumeInput{
+		Workflow: task,
+		User:     &models.User{Email: "eve@example.com"},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Same(t, task, result)
+	assert.Equal(t, swfCtx.CompletedStatus, result.GetStatus())
 }

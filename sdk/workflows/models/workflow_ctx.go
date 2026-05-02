@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"strings"
 	"time"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
@@ -262,6 +263,10 @@ func (ctx *WorkflowTask) GetInputAsCloudEvent() *cloudevents.Event {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 
+	if !looksLikeCloudEventInput(ctx.Input) {
+		return nil
+	}
+
 	var event cloudevents.Event
 	if err := common.ConvertInterfaceToInterface(ctx.Input, &event); err != nil {
 		logrus.WithError(err).Error("failed to unmarshal cloudevent from workflow input")
@@ -286,6 +291,40 @@ func (ctx *WorkflowTask) GetInputAsCloudEvent() *cloudevents.Event {
 	}
 
 	return &event
+}
+
+func looksLikeCloudEventInput(input any) bool {
+	if input == nil {
+		return false
+	}
+
+	switch event := input.(type) {
+	case cloudevents.Event, *cloudevents.Event:
+		return true
+	case map[string]any:
+		for key := range event {
+			if isCloudEventField(key) {
+				return true
+			}
+		}
+	case map[string]string:
+		for key := range event {
+			if isCloudEventField(key) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func isCloudEventField(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "specversion", "id", "source", "type", "time", "data", "subject", "datacontenttype", "dataschema":
+		return true
+	default:
+		return false
+	}
 }
 
 func (ctx *WorkflowTask) GetContextAsMap() map[string]any {

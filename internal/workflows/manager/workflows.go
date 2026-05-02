@@ -32,7 +32,7 @@ func (m *ThandWorkflowManager) registerThandWorkflows() error {
 		return fmt.Errorf("temporal worker not configured")
 	}
 
-	worker := temporalService.GetWorker()
+	worker := temporalService.GetWorker(temporalService.GetTaskQueue())
 
 	// Register the primary workflow with Pinned versioning behavior
 	//

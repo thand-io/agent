@@ -2,18 +2,22 @@ package config
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
+	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 )
 
 type thandActivities struct {
-	config *Config
+	config                 *Config
+	lookupDeviceDefinition func(ctx context.Context, deviceID string) (*models.Device, error)
 }
 
 // PatchProviderUpstreamDummy is a no-op activity for thand server/agents that are not
@@ -84,4 +88,95 @@ func (t *thandActivities) PatchProviderUpstream(
 
 	return err
 
+}
+
+func (t *thandActivities) ResolveFreshDeviceRoute(
+	ctx context.Context,
+	deviceID string,
+) (*models.DeviceConnectionState, error) {
+	route, err := t.queryFreshDeviceRoute(ctx, deviceID)
+	if err == nil {
+		return route, nil
+	}
+	if errors.Is(err, ErrDeviceRouteUnavailable) {
+		return nil, temporal.NewNonRetryableApplicationError(
+			err.Error(),
+			"DeviceRouteUnavailable",
+			err,
+		)
+	}
+	return nil, err
+}
+
+func (t *thandActivities) BuildExecutionPlan(
+	ctx context.Context,
+	req models.ExecutionPlanRequest,
+) (*models.ExecutionPlan, error) {
+	if req.ElevateRequest == nil {
+		return nil, temporal.NewNonRetryableApplicationError(
+			"elevate request is required for execution planning",
+			"ExecutionPlanInvalid",
+			nil,
+		)
+	}
+
+	plan, err := BuildExecutionPlanWithOptions(t.config, req.WorkflowID, req.ElevateRequest, executionPlanBuildOptions{
+		LookupDeviceDefinition: func(deviceID string) (*models.Device, error) {
+			if t.lookupDeviceDefinition != nil {
+				return t.lookupDeviceDefinition(ctx, deviceID)
+			}
+			return t.config.querySharedDeviceDefinition(ctx, deviceID)
+		},
+	})
+	if err == nil {
+		return plan, nil
+	}
+
+	return nil, temporal.NewNonRetryableApplicationError(
+		err.Error(),
+		"ExecutionPlanInvalid",
+		err,
+	)
+}
+
+func (t *thandActivities) queryFreshDeviceRoute(
+	ctx context.Context,
+	deviceID string,
+) (*models.DeviceConnectionState, error) {
+	services := t.config.GetServices()
+	if services == nil || !services.HasTemporal() {
+		return t.config.GetFreshDeviceRoute(deviceID)
+	}
+
+	temporalService := services.GetTemporal()
+	if temporalService == nil || !temporalService.HasClient() {
+		return t.config.GetFreshDeviceRoute(deviceID)
+	}
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, deviceRouteRefreshInterval)
+	defer cancel()
+
+	queryResponse, err := temporalService.GetClient().QueryWorkflowWithOptions(timeoutCtx, &client.QueryWorkflowWithOptionsRequest{
+		WorkflowID:           models.TemporalDeviceRouteRegistryWorkflowID,
+		RunID:                "",
+		QueryType:            models.TemporalGetDeviceRouteQueryName,
+		QueryRejectCondition: enums.QUERY_REJECT_CONDITION_NOT_OPEN,
+		Args:                 []any{deviceID},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%w: device %q is not connected", ErrDeviceRouteUnavailable, strings.TrimSpace(deviceID))
+	}
+	if queryResponse == nil || queryResponse.QueryResult == nil {
+		return nil, fmt.Errorf("%w: device %q is not connected", ErrDeviceRouteUnavailable, strings.TrimSpace(deviceID))
+	}
+
+	var route models.DeviceConnectionState
+	if err := queryResponse.QueryResult.Get(&route); err != nil {
+		return nil, err
+	}
+	if !route.Connected || strings.TrimSpace(route.TaskQueue) == "" {
+		return nil, fmt.Errorf("%w: device %q is not connected", ErrDeviceRouteUnavailable, strings.TrimSpace(deviceID))
+	}
+
+	return &route, nil
 }

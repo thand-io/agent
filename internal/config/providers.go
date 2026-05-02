@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
@@ -30,6 +31,8 @@ import (
 	_ "github.com/thand-io/agent/internal/providers/terraform"
 	_ "github.com/thand-io/agent/internal/providers/thand"
 )
+
+var providerBindingsMu sync.Mutex
 
 // LoadProviders loads providers from a file or URL and maps them to their implementations
 func (c *Config) LoadProviders() (map[string]models.ProviderConfig, error) {
@@ -230,130 +233,18 @@ func (c *Config) InitializeProviders() error {
 
 		providerResult := result.provider
 
-		// Check for capabilities for RBAC and Identities
-		if providerResult.HasAnyCapability(
-			models.ProviderCapabilityIdentities,
-			models.ProviderCapabilityUsers,
-			models.ProviderCapabilityGroups,
-			models.ProviderCapabilityResources,
-			models.ProviderCapabilityRoles,
-			models.ProviderCapabilityPermissions,
-			models.ProviderCapabilityTenants,
-		) {
+		if providerNeedsTemporalBindings(providerResult) {
+			logrus.Infoln("Provider", result.key, "supports Temporal provider bindings")
 
-			logrus.Infoln("Provider", result.key, "supports RBAC/Identities capabilities")
+			if err := c.registerProviderTemporalBindings(providerResult); err != nil {
+				logrus.WithError(err).Errorln("Failed to register Temporal bindings for provider:", result.key)
+				continue
+			}
 
-			// Register provider workflows and activities with Temporal if available
 			if c.IsServer() {
-
-				if c.GetServices() != nil && c.GetServices().HasTemporal() {
-
-					logrus.Infoln("Registering Temporal workflows/activities for provider", result.key)
-
-					temporalService := c.GetServices().GetTemporal()
-
-					worker := temporalService.GetWorker()
-
-					if worker == nil {
-						logrus.Errorln("Temporal client is configured but worker is nil, cannot register workflows/activities for provider", result.key)
-						continue
-					}
-
-					syncWorkflowName := models.CreateTemporalProviderWorkflowName(
-						providerResult.GetIdentifier(),
-						models.TemporalSynchronizeWorkflowName,
-					)
-
-					logrus.WithFields(logrus.Fields{
-						"workflow": syncWorkflowName,
-					}).Infoln("Registering provider synchronize workflow with name", syncWorkflowName)
-
-					// Register the provider Synchronize workflow. This updates roles, permissions,
-					// resources and identities for RBAC. We register this on the provider itself since it's a core part of the provider's functionality, but we register all other workflows and activities separately to allow providers to opt out of Temporal if they want.
-					worker.RegisterWorkflowWithOptions(
-						models.CreateProviderSynchronizeWorkflow(providerResult),
-						workflow.RegisterOptions{
-							Name:               syncWorkflowName,
-							VersioningBehavior: workflow.VersioningBehaviorPinned,
-						},
-					)
-
-					if providerResult.HasCapability(models.ProviderCapabilityProvisioning) {
-
-						authWorkflowName := models.CreateTemporalProviderWorkflowName(
-							providerResult.GetIdentifier(),
-							models.TemporalAuthorizeRoleWorkflowName)
-
-						logrus.WithFields(logrus.Fields{
-							"workflow": authWorkflowName,
-							"provider": providerResult.GetIdentifier(),
-						}).Infoln("Registering provider authorize role workflow with name", authWorkflowName)
-
-						// Register the provider-specific authorize and revoke role workflows.
-						// These are closure-based: they capture the live provider instance so the
-						// child workflow can call provider.AuthorizeRole / RevokeRole with a
-						// full workflow.Context, allowing providers to dispatch activities,
-						// use workflow.Go, etc.
-						worker.RegisterWorkflowWithOptions(
-							models.CreateProviderAuthorizeRoleWorkflow(providerResult),
-							workflow.RegisterOptions{
-								Name:               authWorkflowName,
-								VersioningBehavior: workflow.VersioningBehaviorPinned,
-							},
-						)
-
-						revokeWorkflowName := models.CreateTemporalProviderWorkflowName(
-							providerResult.GetIdentifier(),
-							models.TemporalRevokeRoleWorkflowName)
-
-						logrus.WithFields(logrus.Fields{
-							"workflow": revokeWorkflowName,
-							"provider": providerResult.GetIdentifier(),
-						}).Infoln("Registering provider revoke role workflow with name", revokeWorkflowName)
-
-						worker.RegisterWorkflowWithOptions(
-							models.CreateProviderRevokeRoleWorkflow(providerResult),
-							workflow.RegisterOptions{
-								Name:               revokeWorkflowName,
-								VersioningBehavior: workflow.VersioningBehaviorPinned,
-							},
-						)
-					}
-					// Register all custom provider workflows
-					workflowsRegistry := providerResult.RegisterWorkflows()
-					if workflowsRegistry != nil {
-						logrus.Infoln("Registering Temporal workflows for provider", result.key)
-						worker.RegisterWorkflow(workflowsRegistry)
-					}
-
-					// Register default provider activities
-					err := models.RegisterProviderActivities(temporalService, providerResult, c)
-					if err != nil {
-						logrus.WithError(err).Errorln("Failed to register default activities for provider:", result.key)
-						continue
-					}
-
-					customActivities := providerResult.RegisterActivities()
-					if customActivities != nil {
-						// Now register any custom activities defined by the provider
-						err = models.RegisterActivities(
-							temporalService,
-							providerResult.GetIdentifier(),
-							customActivities,
-						)
-						if err != nil {
-							logrus.WithError(err).Errorln("Failed to register custom activities for provider:", result.key)
-							continue
-						}
-					}
-				}
-
 				logrus.Infoln("Synchronizing provider", result.key)
 				c.synchronizeProvider(result.provider)
-
 			} else {
-				logrus.Infoln("Skipping Temporal registration for provider", result.key, "in non-server mode")
-				// Non-server mode: provider won't be synchronized, mark ready immediately
 				providerResult.SetReady()
 			}
 		} else {
@@ -375,6 +266,127 @@ func (c *Config) InitializeProviders() error {
 	}
 
 	logrus.Debugln("All providers initialized successfully")
+
+	return nil
+}
+
+func (c *Config) registerProviderTemporalBindings(providerResult models.Provider) error {
+	if providerResult == nil {
+		return fmt.Errorf("provider is nil")
+	}
+	if c.GetServices() == nil || !c.GetServices().HasTemporal() {
+		logrus.WithFields(logrus.Fields{
+			"provider": providerResult.GetIdentifier(),
+			"mode":     c.GetMode(),
+		}).Info("Skipping provider Temporal registration because Temporal is unavailable")
+		return nil
+	}
+
+	providerBindingsMu.Lock()
+	defer providerBindingsMu.Unlock()
+
+	if c.providerBindings == nil {
+		c.providerBindings = map[string]struct{}{}
+	}
+	if _, exists := c.providerBindings[providerResult.GetIdentifier()]; exists {
+		return nil
+	}
+
+	// Provider bindings should stay on operational workers and never leak onto
+	// the shared device-registry queue.
+	temporalService := c.getOperationalTemporalService()
+	worker := temporalService.GetWorker()
+	if worker == nil {
+		return fmt.Errorf("temporal client is configured but worker is nil")
+	}
+
+	syncWorkflowName := models.CreateTemporalProviderWorkflowName(
+		providerResult.GetIdentifier(),
+		models.TemporalSynchronizeWorkflowName,
+	)
+
+	worker.RegisterWorkflowWithOptions(
+		models.CreateProviderSynchronizeWorkflow(providerResult),
+		workflow.RegisterOptions{
+			Name:               syncWorkflowName,
+			VersioningBehavior: workflow.VersioningBehaviorPinned,
+		},
+	)
+
+	if providerResult.HasCapability(models.ProviderCapabilityProvisioning) {
+		authWorkflowName := models.CreateTemporalProviderWorkflowName(
+			providerResult.GetIdentifier(),
+			models.TemporalAuthorizeRoleWorkflowName,
+		)
+		worker.RegisterWorkflowWithOptions(
+			models.CreateProviderAuthorizeRoleWorkflow(providerResult),
+			workflow.RegisterOptions{
+				Name:               authWorkflowName,
+				VersioningBehavior: workflow.VersioningBehaviorPinned,
+			},
+		)
+
+		revokeWorkflowName := models.CreateTemporalProviderWorkflowName(
+			providerResult.GetIdentifier(),
+			models.TemporalRevokeRoleWorkflowName,
+		)
+		worker.RegisterWorkflowWithOptions(
+			models.CreateProviderRevokeRoleWorkflow(providerResult),
+			workflow.RegisterOptions{
+				Name:               revokeWorkflowName,
+				VersioningBehavior: workflow.VersioningBehaviorPinned,
+			},
+		)
+	}
+
+	if workflowsRegistry := providerResult.RegisterWorkflows(); workflowsRegistry != nil {
+		worker.RegisterWorkflow(workflowsRegistry)
+	}
+
+	if err := models.RegisterProviderActivities(temporalService, providerResult, c); err != nil {
+		return err
+	}
+
+	if customActivities := providerResult.RegisterActivities(); customActivities != nil {
+		if err := models.RegisterActivities(temporalService, providerResult.GetIdentifier(), customActivities); err != nil {
+			return err
+		}
+	}
+
+	c.providerBindings[providerResult.GetIdentifier()] = struct{}{}
+	return nil
+}
+
+func providerNeedsTemporalBindings(provider models.Provider) bool {
+	return provider.HasAnyCapability(
+		models.ProviderCapabilityIdentities,
+		models.ProviderCapabilityUsers,
+		models.ProviderCapabilityGroups,
+		models.ProviderCapabilityResources,
+		models.ProviderCapabilityRoles,
+		models.ProviderCapabilityPermissions,
+		models.ProviderCapabilityTenants,
+		models.ProviderCapabilityNotifier,
+		models.ProviderCapabilityWebhook,
+	)
+}
+
+func (c *Config) EnsureProviderTemporalBindings() error {
+	c.mu.RLock()
+	providers := make([]models.Provider, 0, len(c.providerInstances))
+	for _, provider := range c.providerInstances {
+		providers = append(providers, provider)
+	}
+	c.mu.RUnlock()
+
+	for _, provider := range providers {
+		if !providerNeedsTemporalBindings(provider) {
+			continue
+		}
+		if err := c.registerProviderTemporalBindings(provider); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
@@ -447,6 +459,10 @@ func (c *Config) GetProviders() ProviderDefinitionsConfig {
 	return c.Providers
 }
 
+func (c *Config) GetProviderDefinitions() map[string]models.ProviderConfig {
+	return c.Providers.Definitions
+}
+
 func (c *Config) GetProvider(providerName string) (string, models.Provider, error) {
 
 	// Get the first provider by provider name
@@ -513,7 +529,7 @@ func (c *Config) GetProvidersByCapabilityWithUser(user *models.User, capability 
 		if len(capability) != 0 && !provider.HasAnyCapability(capability...) {
 			logrus.WithFields(logrus.Fields{
 				"capabilities": provider.GetCapabilities(),
-			}).Debugln("Skipping provider", name, "due to missing capability:", capability)
+			}).Traceln("Skipping provider", name, "due to missing capability:", capability)
 			continue
 		}
 

@@ -85,3 +85,4 @@ export THAND_PROVIDERS_AWS_REGION="us-west-2"
 - **[Providers](providers)** - Provider configurations  
 - **[Roles](roles)** - Role definitions and mappings
 - **[Workflows](workflows)** - Custom approval workflows
+- **[Local Sudo](local-sudo)** - Device-local sudo configuration

@@ -41,6 +41,22 @@ func TestThandTask_Validate(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "valid approvals task with timeout",
+			task: ThandTask{
+				Thand: ThandTypeApprovals,
+				On: &models.BasicConfig{
+					"approved": "authorize",
+					"denied":   "notify_denied",
+					"timeout":  "timeout_handler",
+				},
+				With: &models.BasicConfig{
+					"approvals": 2,
+					"timeout":   "15m",
+				},
+			},
+			wantErr: false,
+		},
+		{
 			name: "invalid approvals task with invalid on field",
 			task: ThandTask{
 				Thand: ThandTypeApprovals,
@@ -50,6 +66,54 @@ func TestThandTask_Validate(t *testing.T) {
 			},
 			wantErr: true,
 			errMsg:  "approvals task 'on' field should contain 'approved' and/or 'denied' routing",
+		},
+		{
+			name: "invalid approvals task with timeout but no timeout branch",
+			task: ThandTask{
+				Thand: ThandTypeApprovals,
+				On: &models.BasicConfig{
+					"approved": "authorize",
+					"denied":   "notify_denied",
+				},
+				With: &models.BasicConfig{
+					"approvals": 2,
+					"timeout":   "15m",
+				},
+			},
+			wantErr: true,
+			errMsg:  "approvals task requires both 'with.timeout' and 'on.timeout' when either is configured",
+		},
+		{
+			name: "invalid approvals task with timeout branch but no timeout",
+			task: ThandTask{
+				Thand: ThandTypeApprovals,
+				On: &models.BasicConfig{
+					"approved": "authorize",
+					"denied":   "notify_denied",
+					"timeout":  "timeout_handler",
+				},
+				With: &models.BasicConfig{
+					"approvals": 2,
+				},
+			},
+			wantErr: true,
+			errMsg:  "approvals task requires both 'with.timeout' and 'on.timeout' when either is configured",
+		},
+		{
+			name: "invalid approvals task with legacy local presence",
+			task: ThandTask{
+				Thand: ThandTypeApprovals,
+				On: &models.BasicConfig{
+					"approved": "authorize",
+					"denied":   "notify_denied",
+				},
+				With: &models.BasicConfig{
+					"approvals":      1,
+					"local_presence": map[string]any{"provider": "local-presence"},
+				},
+			},
+			wantErr: true,
+			errMsg:  "with.local_presence",
 		},
 		{
 			name: "valid notify task",

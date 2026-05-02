@@ -79,6 +79,17 @@ func (t *ThandTask) validateApprovalsTask() error {
 			return fmt.Errorf("approvals task 'on' field should contain 'approved' and/or 'denied' routing")
 		}
 	}
+	hasTimeout := false
+	if t.With != nil {
+		if _, hasLegacyLocalPresence := (*t.With)["local_presence"]; hasLegacyLocalPresence {
+			return fmt.Errorf("approvals task 'with.local_presence' is no longer supported; use 'with.notifiers.<name>.provider: local-presence'")
+		}
+		hasTimeout = t.With.HasString("timeout")
+	}
+	hasTimeoutBranch := t.On != nil && t.On.HasString("timeout")
+	if hasTimeout != hasTimeoutBranch {
+		return fmt.Errorf("approvals task requires both 'with.timeout' and 'on.timeout' when either is configured")
+	}
 	return nil
 }
 

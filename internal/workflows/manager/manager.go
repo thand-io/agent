@@ -205,10 +205,13 @@ func (m *ThandWorkflowManager) executeElevationWorkflow(
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"workflow_name":    workflowDsl.Document.Name,
-		"request_workflow": request.Workflow,
-		"request_reason":   request.Reason,
-		"request_duration": request.Duration,
+		"workflow_name":     workflowDsl.Document.Name,
+		"request_workflow":  request.Workflow,
+		"request_reason":    request.Reason,
+		"request_duration":  request.Duration,
+		"request_providers": request.Providers,
+		"role_providers":    request.Role.Providers,
+		"request_device":    request.Device,
 	}).Info("Starting workflow execution")
 
 	authProvider, foundAuthProvider := m.config.GetProviderByName(request.Authenticator)

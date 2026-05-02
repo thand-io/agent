@@ -43,11 +43,15 @@ type ConfigImpl interface {
 	// Tenants
 	GetTenant(name string) (*ProviderTenant, error)
 
+	// Devices
+	GetDevice(deviceID string) (*Device, error)
+
 	// Workflows
 	GetWorkflowByName(name string) (*Workflow, error)
 	GetWorkflowFromElevationRequest(elevationRequest *ElevateRequest) (*Workflow, error)
 
 	// Providers
+	GetProviderDefinitions() map[string]ProviderConfig
 	GetProviderByName(name string) (Provider, error)
 	GetProvidersByCapability(capability ...ProviderCapability) map[string]Provider
 	GetProvidersByCapabilityWithUser(user *User, capability ...ProviderCapability) map[string]Provider

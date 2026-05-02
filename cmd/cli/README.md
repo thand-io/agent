@@ -118,6 +118,16 @@ Shows current configuration including:
 - Login endpoint
 - Logging level
 
+#### `thand config device-id`
+Print the canonical device ID for the current machine.
+
+**Usage:**
+```bash
+thand config device-id
+```
+
+This prints the effective `device_id` only, with no extra label text, so it can be copied directly into device configuration.
+
 #### `thand roles`
 List available roles from the remote login server.
 

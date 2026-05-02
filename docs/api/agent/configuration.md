@@ -56,7 +56,7 @@ Currently a stub endpoint for future pre-flight validation.
 
 ## Register Agent
 
-Register an agent with the server.
+Bootstrap agent configuration from the server.
 
 **POST** `/register`
 
@@ -64,13 +64,18 @@ Register an agent with the server.
 
 - Server Mode Only
 
+`/register` is a configuration/bootstrap handshake only. It returns server-managed config snapshots, but it does not publish live device routes. Running agents publish their live route directly to Temporal after bootstrap succeeds.
+
 ### Request Body
 
 ```json
 {
+  "mode": "agent",
+  "identifier": "11111111-2222-3333-4444-555555555555",
   "environment": {
-    "name": "production",
-    "description": "Production environment configuration"
+    "name": "workstation-alpha",
+    "hostname": "workstation-alpha.example.test",
+    "platform": "local"
   }
 }
 ```
@@ -128,6 +133,11 @@ The registration response contains the complete configuration for the agent, inc
 - **Workflows**: Approval and automation workflow definitions.
 
 If the upstream server has a newer version of the configuration, the agent will update its local configuration to match the server's state. This ensures that policies and configurations are consistent across the infrastructure.
+
+For device-local workflows:
+
+- servers publish device definitions/policy to the shared device-definition registry
+- agents publish live `device_id -> task_queue` route state to the shared device-route registry
 
 ## Post-flight Check
 

@@ -360,6 +360,7 @@ func (c *Config) ReloadConfig() error {
 			logrus.Infoln("Loaded workflows from external source:", len(workflows))
 			c.mu.Lock()
 			c.Workflows.Definitions = workflows
+			c.configGeneration++
 			c.mu.Unlock()
 		} else {
 			logrus.Warningln("No workflows loaded from external source")
@@ -378,6 +379,7 @@ func (c *Config) ReloadConfig() error {
 			logrus.Infoln("Loaded providers from external source:", len(providers))
 			c.mu.Lock()
 			c.Providers.Definitions = providers
+			c.configGeneration++
 			c.mu.Unlock()
 		} else {
 			logrus.Warningln("No providers loaded from external source")
@@ -394,6 +396,7 @@ func (c *Config) ReloadConfig() error {
 			logrus.Infoln("Loaded roles from external source:", len(roles))
 			c.mu.Lock()
 			c.Roles.Definitions = roles
+			c.configGeneration++
 			c.mu.Unlock()
 		} else {
 			logrus.Warningln("No roles loaded from external source")
@@ -600,7 +603,9 @@ func (c *Config) RegisterWithThandServer() error {
 		},
 	}
 
-	registration, err := c.syncWithEndpoint(thandLoginUrl, authentication)
+	registration, err := c.syncWithEndpoint(thandLoginUrl, authentication, loginServerRegistrationOptions{
+		applyServices: true,
+	})
 
 	if err != nil {
 		return fmt.Errorf("failed to register with thand server: %w", err)
@@ -620,17 +625,39 @@ func (c *Config) RegisterWithThandServer() error {
 
 }
 
+type loginServerRegistrationOptions struct {
+	applyServices bool
+}
+
 func (c *Config) RegisterWithLoginServer(auth *model.ReferenceableAuthenticationPolicy) (*RegistrationResponse, error) {
 
 	loginUrl := c.DiscoverLoginServerApiUrl(
 		c.GetLoginServerUrl(),
 	)
 
-	return c.syncWithEndpoint(loginUrl, auth)
+	return c.syncWithEndpoint(loginUrl, auth, loginServerRegistrationOptions{
+		applyServices: true,
+	})
 
 }
 
-func (c *Config) syncWithEndpoint(loginUrl string, authentication *model.ReferenceableAuthenticationPolicy) (*RegistrationResponse, error) {
+func (c *Config) RefreshLoginServerRegistration(auth *model.ReferenceableAuthenticationPolicy) (*RegistrationResponse, error) {
+
+	loginUrl := c.DiscoverLoginServerApiUrl(
+		c.GetLoginServerUrl(),
+	)
+
+	return c.syncWithEndpoint(loginUrl, auth, loginServerRegistrationOptions{
+		applyServices: false,
+	})
+
+}
+
+func (c *Config) syncWithEndpoint(
+	loginUrl string,
+	authentication *model.ReferenceableAuthenticationPolicy,
+	options loginServerRegistrationOptions,
+) (*RegistrationResponse, error) {
 
 	version, commit, _ := common.GetModuleBuildInfo()
 
@@ -638,7 +665,7 @@ func (c *Config) syncWithEndpoint(loginUrl string, authentication *model.Referen
 		Mode:       c.GetMode(),
 		Version:    version,
 		Commit:     commit,
-		Identifier: common.GetClientIdentifier(),
+		Identifier: common.GetDeviceID(),
 		Endpoint:   c.GetLoginServerUrl(),
 		Origin:     c.GetLocalServerUrl(),
 	})
@@ -675,7 +702,7 @@ func (c *Config) syncWithEndpoint(loginUrl string, authentication *model.Referen
 		Environment: &c.Environment,
 		Version:     version,
 		Commit:      commit,
-		Identifier:  common.GetClientIdentifier(),
+		Identifier:  common.GetDeviceID(),
 		Endpoint:    c.GetLoginServerUrl(),
 		Origin:      c.GetLocalServerUrl(),
 	})
@@ -754,7 +781,7 @@ func (c *Config) syncWithEndpoint(loginUrl string, authentication *model.Referen
 		}
 	}
 
-	if registrationResponse.Services != nil {
+	if options.applyServices && registrationResponse.Services != nil {
 
 		// Setup temporal services if provided
 		if registrationResponse.Services.Temporal != nil {

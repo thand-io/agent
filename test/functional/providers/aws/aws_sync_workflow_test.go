@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/thand-io/agent/internal/models"
+	"github.com/thand-io/agent/internal/testing/temporaltest"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
@@ -250,6 +251,7 @@ func executeSyncWorkflow(
 ) *testsuite.TestWorkflowEnvironment {
 	t.Helper()
 
+	temporaltest.SeedBinaryChecksum()
 	suite := &testsuite.WorkflowTestSuite{}
 	env := suite.NewTestWorkflowEnvironment()
 

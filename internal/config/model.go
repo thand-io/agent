@@ -54,6 +54,7 @@ type Config struct {
 	Roles     RoleConfig                `mapstructure:"roles"`
 	Workflows WorkflowConfig            `mapstructure:"workflows"` // These are workflows to run for role associated workflows
 	Providers ProviderDefinitionsConfig `mapstructure:"providers"` // These are integration providers like AWS, GCP, etc.
+	Devices   DeviceDefinitionsConfig   `mapstructure:"devices"`   // Device definitions and per-device policy managed by the server
 
 	// This is ONLY if the agent is running in server mode
 	// and you want to use https://www.thand.io hosted services
@@ -64,12 +65,23 @@ type Config struct {
 	logger thandLogger
 	mu     sync.RWMutex
 
+	// Incremented whenever synced config definitions actually change.
+	// Definition maps should be treated as immutable snapshots: callers should
+	// replace whole entries or whole maps rather than mutating nested state
+	// in place. Legacy mutation-prone paths are being tracked in issue #306.
+	configGeneration uint64
+
 	// Cached services client
 	initializeServiceClientOnce sync.Once
 	servicesClient              models.ServicesClientImpl
 
 	// Provider instances
 	providerInstances map[string]models.Provider
+	providerBindings  map[string]struct{}
+
+	// Device runtime state.
+	deviceConnections   map[string]*models.DeviceConnectionState
+	deviceConnectionsMu sync.RWMutex
 }
 
 func (c *Config) GetSecret() string {
@@ -115,6 +127,10 @@ func (c *Config) GetWorkflowsConfig() *WorkflowConfig {
 
 func (c *Config) GetProvidersConfig() *ProviderDefinitionsConfig {
 	return &c.Providers
+}
+
+func (c *Config) GetDevicesConfig() *DeviceDefinitionsConfig {
+	return &c.Devices
 }
 
 func (c *Config) GetThandConfig() *models.ThandConfig {
@@ -232,6 +248,16 @@ func (p *ProviderDefinitionsConfig) GetDefinitions() map[string]models.ProviderC
 	return p.Definitions
 }
 
+type DeviceDefinitionsConfig struct {
+	Path string `mapstructure:"path" json:"path"`
+
+	Definitions map[string]models.Device `mapstructure:",remain" json:"definitions"`
+}
+
+func (d *DeviceDefinitionsConfig) GetDefinitions() map[string]models.Device {
+	return d.Definitions
+}
+
 type ProviderPluginConfig struct {
 	Path string `mapstructure:"path"`
 	URL  string `mapstructure:"url"`
@@ -280,7 +306,7 @@ func (c *Config) GetThandServerUrl() string {
 }
 
 func (c *Config) DiscoverThandServerApiUrl() string {
-	return c.discoverServerApiUrl(c.Thand.Endpoint, &model.ReferenceableAuthenticationPolicy{
+	return c.discoverServerApiUrl("Thand server", c.Thand.Endpoint, &model.ReferenceableAuthenticationPolicy{
 		AuthenticationPolicy: &model.AuthenticationPolicy{
 			Bearer: &model.BearerAuthenticationPolicy{
 				Token: c.Thand.ApiKey,
@@ -290,11 +316,12 @@ func (c *Config) DiscoverThandServerApiUrl() string {
 }
 
 func (c *Config) DiscoverLoginServerApiUrl(loginServer string) string {
-	return c.discoverServerApiUrl(loginServer, nil)
+	return c.discoverServerApiUrl("login server", loginServer, nil)
 }
 
 func (c *Config) discoverServerApiUrl(
-	loginServer string,
+	serviceName string,
+	serverURL string,
 	auth *model.ReferenceableAuthenticationPolicy,
 ) string {
 
@@ -302,8 +329,8 @@ func (c *Config) discoverServerApiUrl(
 	// /.well-known/api-configuration endpoint
 	// to get the base param which is our api endpoint using resty
 
-	discoveryCheckUrl := fmt.Sprintf("%s/.well-known/api-configuration", loginServer)
-	defaultUrl := fmt.Sprintf("%s/api/v1", loginServer)
+	discoveryCheckUrl := fmt.Sprintf("%s/.well-known/api-configuration", serverURL)
+	defaultUrl := fmt.Sprintf("%s/api/v1", serverURL)
 
 	resp, err := common.InvokeHttpRequest(&model.HTTPArguments{
 		Endpoint: &model.Endpoint{
@@ -334,12 +361,12 @@ func (c *Config) discoverServerApiUrl(
 	}
 
 	if len(discoveryCheckResponse.BaseUrl) > 0 {
-		logrus.Debugf("Discovered login server base URL: %s", discoveryCheckResponse.BaseUrl)
-		loginServer = strings.TrimSuffix(discoveryCheckResponse.BaseUrl, "/")
+		logrus.Debugf("Discovered %s base URL: %s", serviceName, discoveryCheckResponse.BaseUrl)
+		serverURL = strings.TrimSuffix(discoveryCheckResponse.BaseUrl, "/")
 	}
 
 	trimPath := strings.TrimSuffix(strings.TrimPrefix(discoveryCheckResponse.ApiBasePath, "/"), "/")
-	return fmt.Sprintf("%s/%s", loginServer, trimPath)
+	return fmt.Sprintf("%s/%s", serverURL, trimPath)
 }
 
 func (c *Config) GetLoginServerHostname() string {

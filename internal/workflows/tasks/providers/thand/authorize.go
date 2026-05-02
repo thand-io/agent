@@ -6,6 +6,7 @@ import (
 	"maps"
 	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -104,16 +105,20 @@ func (t *thandTask) buildBasicModelOutput(workflowTask *models.ElevateWorkflowTa
 // authResult holds the result of an authorization operation
 type authResult struct {
 	Identity     string
-	AuthRequest  *models.WorkflowRoleRequest
+	EntryID      string
+	DeviceID     string
+	AuthRequest  *models.AuthorizeRoleRequest
 	AuthResponse *models.AuthorizeRoleResponse
 	Error        error
 }
 
 // authTask represents an authorization task with all necessary context
 type authTask struct {
-	ProviderName string
-	Identity     string
-	AuthRequest  *models.WorkflowRoleRequest
+	EntryID          string
+	ProviderName     string
+	Identity         string
+	DeviceID         string
+	AuthorizeRequest *models.AuthorizeRoleRequest
 }
 
 // executeAuthorization performs the main authorization workflow
@@ -154,54 +159,39 @@ func (t *thandTask) executeAuthorization(
 		"revocation_at": revocationDate.Format(time.RFC3339),
 	}
 
-	// Collect all authorization tasks
+	plan, err := t.ensureExecutionPlan(workflowTask, elevateRequest)
+	if err != nil {
+		return nil, err
+	}
+
 	var authTasks []authTask
-
-	if len(elevateRequest.Providers) == 0 {
-		return nil, fmt.Errorf("no providers specified for authorization")
-	}
-
-	if len(elevateRequest.Identities) == 0 {
-		return nil, fmt.Errorf("no identities specified for authorization")
-	}
-
-	for _, providerName := range elevateRequest.Providers {
-
-		for _, identityId := range elevateRequest.Identities {
-
-			// Check if we have tenants specified in our request. If so, we need
-			// to create an authorization task for each identity and tenant combination
-			// if there are no tenants, we just create one task per identity
-			if len(elevateRequest.Tenants) == 0 {
-				elevateRequest.Tenants = []string{""} // Use empty string to indicate no tenant
-			}
-
-			for _, tenantId := range elevateRequest.Tenants {
-
-				authReq := models.WorkflowRoleRequest{
-					WorkflowID: workflowTask.GetWorkflowID(),
-					Identity:   identityId,
-					Role:       elevateRequest.Role,
-					Duration:   &duration,
-					Tenant:     tenantId,
-				}
-
-				authTasks = append(authTasks, authTask{
-					ProviderName: providerName,
-					Identity:     identityId,
-					AuthRequest:  &authReq,
-				})
-
-				log.WithFields(logrus.Fields{
-					"identity": identityId,
-					"role":     authReq.Role.GetName(),
-					"provider": providerName,
-					"duration": duration,
-					"tenant":   tenantId,
-				}).Info("Preparing authorization logic")
-
-			}
+	for _, entry := range plan.Entries {
+		if strings.TrimSpace(entry.ProviderName) == "" {
+			return nil, fmt.Errorf("execution plan entry is missing provider name")
 		}
+		if entry.AuthorizeRequest == nil {
+			return nil, fmt.Errorf("execution plan entry for provider %q is missing authorize request", entry.ProviderName)
+		}
+		identityID := identityKeyFromAuthorizeRequest(entry.AuthorizeRequest)
+		if identityID == "" {
+			return nil, fmt.Errorf("execution plan entry for provider %q is missing identity information", entry.ProviderName)
+		}
+
+		authTasks = append(authTasks, authTask{
+			EntryID:          entry.EntryID,
+			ProviderName:     entry.ProviderName,
+			Identity:         identityID,
+			DeviceID:         entry.DeviceID,
+			AuthorizeRequest: models.CloneAuthorizeRoleRequest(entry.AuthorizeRequest),
+		})
+
+		log.WithFields(logrus.Fields{
+			"identity": identityID,
+			"role":     entry.AuthorizeRequest.Role.GetName(),
+			"provider": entry.ProviderName,
+			"duration": duration,
+			"tenant":   authorizeRequestTenantID(entry.AuthorizeRequest),
+		}).Info("Preparing authorization logic")
 	}
 
 	var authResults []authResult
@@ -238,22 +228,7 @@ func (t *thandTask) executeAuthorization(
 	}
 
 	for _, req := range authTasks {
-		var dur *time.Duration
-		if req.AuthRequest.Duration != nil {
-			d := *req.AuthRequest.Duration
-			dur = &d
-		}
-		// Create a non-composite role from the workflow's base role definition
-		// The role will be resolved properly by the provider if needed
-		requests[req.Identity] = &models.AuthorizeRoleRequest{
-			Identity: &models.Identity{ID: req.AuthRequest.Identity},
-			Tenant:   &models.ProviderTenant{ID: req.AuthRequest.Tenant},
-			Role: &models.CompositeRole{
-				Role:      *req.AuthRequest.Role,
-				Composite: false, // Explicitly set - this is a base role from workflow
-			},
-			Duration: dur,
-		}
+		requests[req.Identity] = models.CloneAuthorizeRoleRequest(req.AuthorizeRequest)
 	}
 
 	if len(returnedErrors) > 0 && len(authorizations) == 0 {
@@ -294,10 +269,36 @@ func (t *thandTask) executeAuthorization(
 	return modelOutput, nil
 }
 
+func identityKeyFromAuthorizeRequest(req *models.AuthorizeRoleRequest) string {
+	if req == nil || req.Identity == nil {
+		return ""
+	}
+	if trimmed := strings.TrimSpace(req.Identity.ID); trimmed != "" {
+		return trimmed
+	}
+	if req.Identity.User != nil {
+		if trimmed := strings.TrimSpace(req.Identity.User.Email); trimmed != "" {
+			return trimmed
+		}
+		if trimmed := strings.TrimSpace(req.Identity.User.Username); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func authorizeRequestTenantID(req *models.AuthorizeRoleRequest) string {
+	if req == nil || req.Tenant == nil {
+		return ""
+	}
+	return req.Tenant.ID
+}
+
 // When a Temporal context is available, it dispatches a child workflow using
-// the parent workflow's task queue (typically the agent identity), assuming
-// the provider is registered on that worker. Otherwise it falls back to local
-// provider execution.
+// the parent workflow's task queue by default. If the request carries a
+// DeviceID, it waits for a fresh live route for that device and overrides the
+// child workflow routing to the device's task queue instead. Otherwise it
+// falls back to local provider execution.
 func (t *thandTask) runAuthTask(
 	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	task authTask,
@@ -310,34 +311,63 @@ func (t *thandTask) runAuthTask(
 		wfName := models.CreateTemporalProviderWorkflowName(
 			task.ProviderName, models.TemporalAuthorizeRoleWorkflowName)
 
+		taskQueue := workflowTask.GetTaskQueue()
+		childTimeout := time.Duration(0)
+		if strings.TrimSpace(task.DeviceID) != "" {
+			route, remaining, err := t.waitForFreshDeviceRoute(
+				ctx,
+				task.DeviceID,
+				deviceDispatchBudget(task.AuthorizeRequest),
+			)
+			if err != nil {
+				return authResult{
+					Identity:    task.Identity,
+					EntryID:     task.EntryID,
+					DeviceID:    task.DeviceID,
+					AuthRequest: task.AuthorizeRequest,
+					Error:       err,
+				}
+			}
+			taskQueue = route.TaskQueue
+			childTimeout = remaining
+		}
+
 		// Create unique child workflow ID using hash of composite identifier
 		// (provider + role + identity + tenant) to ensure uniqueness across
 		// different identities/tenants requesting the same role
 		childOpts := workflow.ChildWorkflowOptions{
-			WorkflowID: models.CreateChildWorkflowID(
+			WorkflowID: models.CreateChildWorkflowIDForEntry(
 				workflowTask.GetWorkflowID(),
 				"authorizeRole",
-				task.ProviderName,
-				task.AuthRequest,
+				task.EntryID,
 			),
-			TaskQueue: workflowTask.GetTaskQueue(),
+			TaskQueue: taskQueue,
 		}
+		if childTimeout > 0 {
+			childOpts.WorkflowExecutionTimeout = childTimeout
+			childOpts.WorkflowRunTimeout = childTimeout
+		}
+		childOpts = childWorkflowOptionsForTaskQueue(workflowTask.GetTaskQueue(), taskQueue, childOpts)
 		ctx = workflow.WithChildOptions(ctx, childOpts)
 
-		req := task.AuthRequest
+		req := models.CloneAuthorizeRoleRequest(task.AuthorizeRequest)
 
 		var resp models.AuthorizeRoleResponse
-		err := workflow.ExecuteChildWorkflow(ctx, wfName, req).Get(ctx, &resp)
+		err := workflow.ExecuteChildWorkflow(ctx, wfName, *req).Get(ctx, &resp)
 		if err != nil {
 			return authResult{
 				Identity:    task.Identity,
-				AuthRequest: task.AuthRequest,
+				EntryID:     task.EntryID,
+				DeviceID:    task.DeviceID,
+				AuthRequest: task.AuthorizeRequest,
 				Error:       err,
 			}
 		}
 		return authResult{
 			Identity:     task.Identity,
-			AuthRequest:  task.AuthRequest,
+			EntryID:      task.EntryID,
+			DeviceID:     task.DeviceID,
+			AuthRequest:  task.AuthorizeRequest,
 			AuthResponse: &resp,
 			Error:        nil,
 		}
@@ -348,26 +378,18 @@ func (t *thandTask) runAuthTask(
 	if err != nil {
 		return authResult{
 			Identity:    task.Identity,
-			AuthRequest: task.AuthRequest,
+			EntryID:     task.EntryID,
+			DeviceID:    task.DeviceID,
+			AuthRequest: task.AuthorizeRequest,
 			Error:       fmt.Errorf("failed to get provider: %w", err),
 		}
 	}
-	authRoleReq, err := models.CreateAuthorizeRoleRequest(
-		t.config,
-		providerCall,
-		task.AuthRequest,
-	)
-	if err != nil {
-		return authResult{
-			Identity:    task.Identity,
-			AuthRequest: task.AuthRequest,
-			Error:       fmt.Errorf("failed to create authorize role request: %w", err),
-		}
-	}
-	authOut, err := providerCall.AuthorizeRole(workflowTask.GetContext(), authRoleReq)
+	authOut, err := providerCall.AuthorizeRole(workflowTask.GetContext(), models.CloneAuthorizeRoleRequest(task.AuthorizeRequest))
 	return authResult{
 		Identity:     task.Identity,
-		AuthRequest:  task.AuthRequest,
+		EntryID:      task.EntryID,
+		DeviceID:     task.DeviceID,
+		AuthRequest:  task.AuthorizeRequest,
 		AuthResponse: authOut,
 		Error:        err,
 	}
@@ -599,6 +621,7 @@ func (t *thandTask) makeAuthorizationNotifications(
 				CallFunc:  authorizeNotifier.GetCallFunction(recipientIdentity),
 				Payload:   recipientPayload,
 				Provider:  authorizeNotifier.GetProviderName(),
+				DeviceID:  notificationPayloadDeviceID(recipientPayload),
 			})
 
 			log.WithFields(logrus.Fields{

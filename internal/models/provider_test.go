@@ -463,4 +463,32 @@ func TestProvider_BasicConfigMethods(t *testing.T) {
 		_, ok = config.GetString("missing_key")
 		assert.False(t, ok)
 	})
+
+	t.Run("GetBool parses bool-like values", func(t *testing.T) {
+		config := models.BasicConfig{
+			"bool_key":   true,
+			"string_key": "true",
+			"int_key":    1,
+			"float_key":  0.0,
+		}
+
+		val, ok := config.GetBool("bool_key")
+		assert.True(t, ok)
+		assert.True(t, val)
+
+		val, ok = config.GetBool("string_key")
+		assert.True(t, ok)
+		assert.True(t, val)
+
+		val, ok = config.GetBool("int_key")
+		assert.True(t, ok)
+		assert.True(t, val)
+
+		val, ok = config.GetBool("float_key")
+		assert.True(t, ok)
+		assert.False(t, val)
+
+		_, ok = config.GetBool("missing_key")
+		assert.False(t, ok)
+	})
 }

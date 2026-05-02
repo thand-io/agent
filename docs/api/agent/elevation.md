@@ -187,3 +187,7 @@ Raw encrypted workflow state or task token for resuming workflows.
 - Used internally by workflow engine to resume paused workflows
 - State parameter contains encrypted workflow context
 - Supports both query parameter and body-based resumption
+
+## Related Guides
+
+- [Local Sudo Usage](local-sudo.md)

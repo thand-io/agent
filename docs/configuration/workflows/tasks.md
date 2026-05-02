@@ -127,6 +127,7 @@ The `approvals` task handles approval workflows by sending notifications to appr
     thand: approvals
     with:
       approvals: number          # Required approvals
+      timeout: duration          # Optional overall deadline; requires on.timeout
       notifiers:                  # Notification configuration
         key:
           provider: string
@@ -135,6 +136,7 @@ The `approvals` task handles approval workflows by sending notifications to appr
     on:
       approved: target-step
       denied: target-step
+      timeout: target-step        # Required when with.timeout is set
     then: default-step
 ```
 
@@ -143,7 +145,32 @@ The `approvals` task handles approval workflows by sending notifications to appr
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `approvals` | number | Yes | Number of approvals required |
-| `notifiers` | object | Yes | Notification configuration |
+| `timeout` | duration | No | Overall approval deadline. Requires `on.timeout` when set |
+| `notifiers` | object | No | Notification configuration |
+
+### Local Presence Configuration
+
+Use a normal notifier entry with `provider: local-presence` to add a device-routed macOS owner-authentication prompt. The routed agent reports the prompt result back into the same approval result path used by Slack and email callbacks, so an approved local presence check can satisfy the configured `approvals` count.
+
+```yaml
+notifiers:
+  touch_id:
+    provider: local-presence
+    device: "${ .device }"
+    prompt: "Approve this access request on your Mac"
+```
+
+Device resolution uses this order:
+
+1. the notifier entry `device`
+2. the elevation request `device`
+3. request metadata `device_id`
+
+Local presence uses the approvals task's remaining `with.timeout` deadline for device routing and the native macOS prompt. If the target device is offline or the prompt times out, the task routes to `on.timeout` instead of treating the result as a denial. User cancel or authentication failure is a denial and routes to `on.denied`.
+
+Local presence is not ordered ahead of other notifiers inside one approvals task. If you want "try Touch ID first, then fall back to humans," model that as two approvals tasks: a short local-presence task whose `on.timeout` branch points to a second Slack/email approvals task.
+
+The check requires a live macOS agent in an interactive login session. It proves that macOS device-owner authentication succeeded on the routed device; it is not a cryptographic enrolled-device attestation.
 
 ### Notifiers Configuration
 
@@ -163,6 +190,8 @@ notifiers:
 |----------|---------|---------------|
 | `slack` | Slack notifications | Channel ID: `C0123456789` or User ID |
 | `email` | Email notifications | Email address |
+| `local-presence` | macOS device-owner approval prompt | `device_id` |
+| `local-notification` | macOS local user notification | `device_id` |
 
 ### Flow Control
 
@@ -173,11 +202,12 @@ The approvals task uses the `on` directive for conditional flow:
     thand: approvals
     with:
       approvals: 2
+      timeout: 15m
       notifiers: ...
     on:
       approved: grant-access     # If approved
       denied: send-denial        # If denied
-    then: timeout-handler        # If insufficient approvals (loops back)
+      timeout: timeout-handler   # If no final answer before timeout
 ```
 
 ### Approval Logic
@@ -188,7 +218,8 @@ The approvals task implements the following logic:
 3. Collects approvals in the workflow context
 4. If any approval is `false` (denied), routes to the `denied` state
 5. If the number of `true` approvals meets the required count, routes to the `approved` state
-6. Otherwise, loops back to wait for more approvals
+6. If `with.timeout` expires before approval or denial, routes to the `timeout` state
+7. Otherwise, loops back to wait for more approvals
 
 ### Examples
 
@@ -198,6 +229,7 @@ The approvals task implements the following logic:
     thand: approvals
     with:
       approvals: 1
+      timeout: 30m
       notifiers:
         slack:
           provider: slack
@@ -207,7 +239,7 @@ The approvals task implements the following logic:
     on:
       approved: grant-access
       denied: deny-request
-    then: deny-request
+      timeout: deny-request
 ```
 
 **Email Approval**
@@ -224,6 +256,77 @@ The approvals task implements the following logic:
     on:
       approved: authorize
       denied: denied
+```
+
+**macOS Local Presence-Gated Sudo**
+```yaml
+- presence:
+    thand: approvals
+    with:
+      approvals: 1
+      timeout: 2m
+      notifiers:
+        touch_id:
+          provider: local-presence
+          device: "${ .device }"
+          prompt: "Approve this sudo request on your Mac"
+    on:
+      approved: authorize
+      denied: denied
+      timeout: human_approval
+```
+
+## Execution Planning
+
+`authorize` runs an internal execution-plan activity that compiles the current workflow request into the execution plan later used by `authorize` and `revoke`.
+
+Treat `authorize` as the last request-shaping step before access is granted. It should run only after approvals, form collection, and other workflow logic that might change the final request shape.
+
+### Execution-Plan Process
+
+The execution-plan activity:
+
+1. **Reads** the normalized elevate request from workflow context
+2. **Resolves** the provider, identity, device, and local policy data needed for execution
+3. **Compiles** one or more provider authorization requests into an internal execution plan
+4. **Stores** that execution plan in workflow context/history for later `authorize` and `revoke` steps
+
+### Requirements and Constraints
+
+- execution planning is required before provider authorization work starts
+- `authorize` should appear immediately after approvals or any other request-shaping step
+- `authorize` and `revoke` depend on the recorded execution plan and do not rebuild it later
+- `revoke` fails if the execution plan is missing
+
+### Failure Behavior
+
+- if execution planning cannot compile the request, the workflow fails before authorization starts
+- if `revoke` runs without a recorded execution plan, it fails instead of trying to recover implicitly
+
+### Examples
+
+**Validation, Approval, and Authorization**
+```yaml
+- validate:
+    thand: validate
+    then: approvals
+
+- approvals:
+    thand: approvals
+    on:
+      approved: authorize
+      denied: denied
+    then: denied
+
+- authorize:
+    thand: authorize
+```
+
+**Validation and Authorization Without Approval**
+```yaml
+- validate:
+    thand: validate
+    then: authorize
 ```
 
 ## authorize
@@ -250,14 +353,17 @@ The `authorize` task grants temporary access to the requested role and resources
 
 The authorize task:
 
-1. **Validates** the request is approved (checks workflow context)
-2. **Creates** temporary credentials/access across all specified providers
-3. **Registers** the session information
-4. **Returns** authorization details with timestamps
+1. **Builds or reuses** the recorded execution plan from workflow context/history
+2. **Validates** the request is approved (checks workflow context)
+3. **Creates** temporary credentials/access across all specified providers
+4. **Registers** the session information
+5. **Returns** authorization details with timestamps
 
 ### Authorization Context
 
-The authorize task checks if the request has been approved by looking at the workflow context. If already approved, it returns basic model output with timestamps.
+The authorize task checks if the request has been approved by looking at the workflow context. It also snapshots the final request into the execution plan it and `revoke` later consume.
+
+For any workflow that grants access, treat `authorize` as the first step that may perform provider-side effects.
 
 ### Examples
 
@@ -352,8 +458,8 @@ The `revoke` task removes granted access and cleans up temporary credentials.
 
 The revoke task:
 
-1. **Validates** the elevate request from workflow context
-2. **Iterates** through all providers and identities
+1. **Reads** the recorded execution plan from workflow context/history
+2. **Uses** the stored authorization request shape to build revocation work
 3. **Calls** provider-specific revocation methods
 4. **Logs** revocation events
 5. **Returns** revocation status with timestamp
@@ -386,12 +492,10 @@ The `notify` task sends notifications to users, administrators, or external syst
 - notify:
     thand: notify
     with:
-      approvals: number          # Number of approvals needed
-      notifiers:                  # Notification configuration
-        key:
-          provider: string
-          to: string
-          message: string
+      provider: string
+      to: string
+      message: string
+      device: string             # Optional; used by local-notification
     then: next-step
 ```
 
@@ -399,8 +503,10 @@ The `notify` task sends notifications to users, administrators, or external syst
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `approvals` | number | Yes | Number of approvals required (for approval notifications) |
-| `notifier` | object | Yes | Notification configuration |
+| `provider` | string | Yes | Notification provider |
+| `to` | string or array | Yes | Recipient identity, channel, or email address |
+| `message` | string | No | Notification body |
+| `device` | string | No | Target device for `local-notification` |
 
 ### Notification Process
 
@@ -414,6 +520,9 @@ The notify task:
 
 - **Slack**: Sends rich notifications with approval buttons
 - **Email**: Sends email notifications
+- **Local Notification**: Sends a macOS user notification on a routed agent device with `provider: local-notification`
+
+`local-notification` requires a live macOS agent and a target device. Device resolution follows the explicit notifier `device` field first, then the request `device`, then request metadata `device_id`. The same routing applies when `local-notification` is used in `thand: notify`, `authorize.with.notifiers`, `revoke.with.notifiers`, or `approvals.with.notifiers` approval prompts. It uses the signed helper and `UNUserNotificationCenter`; it does not replace broker-triggered sudo lease notifications, which remain in place for now.
 
 ### Examples
 
@@ -422,12 +531,20 @@ The notify task:
 - slack-notify:
     thand: notify
     with:
-      approvals: 1
-      notifiers:
-        slack:
-          provider: slack
-          to: "C0123456789"
-          message: "Access granted to user"
+      provider: slack
+      to: "C0123456789"
+      message: "Access granted to user"
+```
+
+**macOS Local Notification**
+```yaml
+- local-notify:
+    thand: notify
+    with:
+      provider: local-notification
+      to: ${ $context.user.email }
+      device: "${ .device }"
+      message: "Your local sudo request was approved"
 ```
 
 **Note**: The notify task is primarily used internally by the approvals task. For standalone notifications, consider using standard Serverless Workflow `call` tasks to external APIs.
@@ -576,7 +693,13 @@ Error: authorization failed for user 'alice' role 'admin'
 ```
 **Solution**: Verify the request has been properly approved and the user has permission to request the role.
 
-#### 4. Monitoring Limitations
+#### 4. Missing Execution Plan
+```
+Error: failed to get execution plan from workflow context
+```
+**Solution**: Ensure `thand: revoke` only runs on paths where `thand: authorize` has already executed and recorded the execution plan.
+
+#### 5. Monitoring Limitations
 ```
 Error: Monitoring is only supported with temporal
 ```

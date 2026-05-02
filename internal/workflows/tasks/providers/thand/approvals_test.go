@@ -1,6 +1,7 @@
 package thand
 
 import (
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -12,10 +13,12 @@ import (
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/providers/aws"
-	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
+	"github.com/thand-io/agent/internal/testing/temporaltest"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
 	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
+	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/workflow"
 )
 
 // TestEvaluateApprovalSwitch tests the approval switch logic with various scenarios
@@ -755,7 +758,7 @@ func TestApprovalsTask_Helpers(t *testing.T) {
 	})
 
 	t.Run("HasNotifiers", func(t *testing.T) {
-		task := &ApprovalsTask{Notifiers: map[string]thandFunction.NotifierRequest{"email": {}}}
+		task := &ApprovalsTask{Notifiers: map[string]ApprovalNotifierRequest{"email": {}}}
 		assert.True(t, task.HasNotifiers())
 
 		taskEmpty := &ApprovalsTask{}
@@ -766,6 +769,175 @@ func TestApprovalsTask_Helpers(t *testing.T) {
 func encodeUserIdentityForEvent(userID string) string {
 	identity := (&models.User{ID: userID, Email: userID}).AsIdentity()
 	return identity.EncodeBase64()
+}
+
+func newApprovalTimeoutWorkflowTask(workflowID string) *models.ElevateWorkflowTask {
+	return models.NewElevateWorkflowTask(&sdkWorkflowsModel.WorkflowTask{
+		WorkflowID:   workflowID,
+		WorkflowName: "Approval Timeout Test",
+		Context: map[string]any{
+			"user": map[string]any{
+				"id":    "requester@example.com",
+				"email": "requester@example.com",
+			},
+			"identities": []string{"target@example.com"},
+			"approvals":  map[string]any{},
+		},
+	})
+}
+
+func newApprovalTimeoutTaskDef(requiredApprovals int, timeout string) *taskModel.ThandTask {
+	return &taskModel.ThandTask{
+		With: &models.BasicConfig{
+			"approvals": requiredApprovals,
+			"timeout":   timeout,
+		},
+		On: &models.BasicConfig{
+			"approved": "authorize",
+			"denied":   "denied",
+			"timeout":  "timed_out",
+		},
+	}
+}
+
+func newApprovalSignalEvent(approverID string, approved bool) cloudevents.Event {
+	event := cloudevents.NewEvent()
+	event.SetType(ThandApprovalEventType)
+	event.SetSource("test-source")
+	event.SetExtension(sdkConstants.VarsContextUser, encodeUserIdentityForEvent(approverID))
+	_ = event.SetData(cloudevents.ApplicationJSON, map[string]any{
+		"approved": approved,
+	})
+	return event
+}
+
+func executeApprovalTimeoutTestWorkflow(
+	ctx workflow.Context,
+	workflowID string,
+	taskDef *taskModel.ThandTask,
+) (string, error) {
+	workflowTask := newApprovalTimeoutWorkflowTask(workflowID)
+	workflowTask.WithTemporalContext(ctx)
+
+	result, err := (&thandTask{config: &config.Config{}}).executeApprovalsTask(
+		workflowTask,
+		"approval_task",
+		taskDef,
+		nil,
+	)
+	if err != nil {
+		return "", err
+	}
+	directive, ok := result.(*model.FlowDirective)
+	if !ok {
+		return "", fmt.Errorf("approval task returned %T, want *model.FlowDirective", result)
+	}
+	return directive.Value, nil
+}
+
+func TestExecuteApprovalsTaskTimeoutBranchesToTimeout(t *testing.T) {
+	temporaltest.SeedBinaryChecksum()
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	taskDef := newApprovalTimeoutTaskDef(1, "2s")
+
+	env.ExecuteWorkflow(func(ctx workflow.Context) (string, error) {
+		return executeApprovalTimeoutTestWorkflow(ctx, "wf-approval-timeout", taskDef)
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+
+	var state string
+	require.NoError(t, env.GetWorkflowResult(&state))
+	assert.Equal(t, "timed_out", state)
+}
+
+func TestExecuteApprovalsTaskTimeoutApprovesBeforeDeadline(t *testing.T) {
+	temporaltest.SeedBinaryChecksum()
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	taskDef := newApprovalTimeoutTaskDef(1, "5s")
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(sdkWorkflowsModel.TemporalEventSignalName, newApprovalSignalEvent("approver@example.com", true))
+	}, time.Second)
+
+	env.ExecuteWorkflow(func(ctx workflow.Context) (string, error) {
+		return executeApprovalTimeoutTestWorkflow(ctx, "wf-approval-before-timeout", taskDef)
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+
+	var state string
+	require.NoError(t, env.GetWorkflowResult(&state))
+	assert.Equal(t, "authorize", state)
+}
+
+func TestExecuteApprovalsTaskTimeoutDeniesBeforeDeadline(t *testing.T) {
+	temporaltest.SeedBinaryChecksum()
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	taskDef := newApprovalTimeoutTaskDef(1, "5s")
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(sdkWorkflowsModel.TemporalEventSignalName, newApprovalSignalEvent("approver@example.com", false))
+	}, time.Second)
+
+	env.ExecuteWorkflow(func(ctx workflow.Context) (string, error) {
+		return executeApprovalTimeoutTestWorkflow(ctx, "wf-denial-before-timeout", taskDef)
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+
+	var state string
+	require.NoError(t, env.GetWorkflowResult(&state))
+	assert.Equal(t, "denied", state)
+}
+
+func TestExecuteApprovalsTaskTimeoutPartialApprovalDoesNotResetDeadline(t *testing.T) {
+	temporaltest.SeedBinaryChecksum()
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	taskDef := newApprovalTimeoutTaskDef(2, "5s")
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(sdkWorkflowsModel.TemporalEventSignalName, newApprovalSignalEvent("approver@example.com", true))
+	}, time.Second)
+
+	env.ExecuteWorkflow(func(ctx workflow.Context) (string, error) {
+		workflowTask := newApprovalTimeoutWorkflowTask("wf-partial-approval-timeout")
+		workflowTask.WithTemporalContext(ctx)
+		task := &thandTask{config: &config.Config{}}
+
+		firstResult, err := task.executeApprovalsTask(workflowTask, "approval_task", taskDef, nil)
+		if err != nil {
+			return "", err
+		}
+		firstDirective := firstResult.(*model.FlowDirective)
+		if firstDirective.Value != "approval_task" {
+			return "", fmt.Errorf("first approval state = %q, want approval_task", firstDirective.Value)
+		}
+
+		firstDeadline := workflowTask.GetContextAsMap()[approvalDeadlinesContextKey]
+		secondResult, err := task.executeApprovalsTask(workflowTask, "approval_task", taskDef, nil)
+		if err != nil {
+			return "", err
+		}
+		secondDeadline := workflowTask.GetContextAsMap()[approvalDeadlinesContextKey]
+		if fmt.Sprintf("%v", firstDeadline) != fmt.Sprintf("%v", secondDeadline) {
+			return "", fmt.Errorf("approval deadline was reset: first=%v second=%v", firstDeadline, secondDeadline)
+		}
+
+		secondDirective := secondResult.(*model.FlowDirective)
+		return secondDirective.Value, nil
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+
+	var state string
+	require.NoError(t, env.GetWorkflowResult(&state))
+	assert.Equal(t, "timed_out", state)
 }
 
 func TestExecuteApprovalsTask_ProcessEvent(t *testing.T) {

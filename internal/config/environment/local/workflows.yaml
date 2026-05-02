@@ -32,3 +32,34 @@ workflows:
             thand: revoke
             then: end
 
+  local_sudo_timed_elevation:
+    name: "Local Sudo Timed Elevation"
+    description: Time-bound local sudo access on a server-managed device
+    authentication: default
+    enabled: true
+    workflow:
+      document:
+        dsl: "1.0.0-alpha5"
+        namespace: "thand"
+        name: "local-sudo-timed-elevation"
+        version: "1.0.0"
+      do:
+        - validate:
+            thand: validate
+            with:
+              validator: static
+            then: authorize
+        - authorize:
+            thand: authorize
+            with:
+              revocation: revoke
+            then: monitor
+        - monitor:
+            thand: monitor
+            with:
+              monitor: basic
+              threshold: 100
+            then: revoke
+        - revoke:
+            thand: revoke
+            then: end

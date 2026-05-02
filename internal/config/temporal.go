@@ -6,6 +6,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/workflow"
 )
 
 // Register temporal workflows and activities
@@ -14,11 +15,31 @@ func (c *Config) registerTemporalWorkflows() error {
 		return fmt.Errorf("temporal service is not initialized")
 	}
 
-	temporalWorker := c.servicesClient.GetTemporal().GetWorker()
-
-	if temporalWorker == nil {
-		return fmt.Errorf("temporal worker is not initialized")
+	if !c.IsServer() {
+		return nil
 	}
+
+	// Registry singletons live on the shared device-registry queue rather than
+	// the per-server operational queue.
+	registryWorker := c.getDeviceRegistryWorker()
+	if registryWorker == nil {
+		return fmt.Errorf("device registry worker is not initialized")
+	}
+
+	registryWorker.RegisterWorkflowWithOptions(
+		deviceRouteRegistryWorkflow,
+		workflow.RegisterOptions{
+			Name:               models.TemporalDeviceRouteRegistryWorkflowName,
+			VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
+		},
+	)
+	registryWorker.RegisterWorkflowWithOptions(
+		deviceDefinitionRegistryWorkflow,
+		workflow.RegisterOptions{
+			Name:               models.TemporalDeviceDefinitionRegistryWorkflowName,
+			VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
+		},
+	)
 
 	return nil
 
@@ -29,7 +50,7 @@ func (c *Config) registerTemporalActivities() error {
 		return fmt.Errorf("temporal service is not initialized")
 	}
 
-	temporalWorker := c.servicesClient.GetTemporal().GetWorker()
+	temporalWorker := c.getOperationalTemporalWorker()
 
 	if temporalWorker == nil {
 		return fmt.Errorf("temporal worker is not initialized")
@@ -61,6 +82,19 @@ func (c *Config) registerTemporalActivities() error {
 			},
 		)
 	}
+
+	temporalWorker.RegisterActivityWithOptions(
+		thandActivities.ResolveFreshDeviceRoute,
+		activity.RegisterOptions{
+			Name: models.TemporalResolveFreshDeviceRouteActivityName,
+		},
+	)
+	temporalWorker.RegisterActivityWithOptions(
+		thandActivities.BuildExecutionPlan,
+		activity.RegisterOptions{
+			Name: models.TemporalBuildExecutionPlanActivityName,
+		},
+	)
 
 	return nil
 

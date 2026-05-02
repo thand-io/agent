@@ -144,6 +144,12 @@
                         </template>
                     </select>
 
+                    <input name="device"
+                           x-model="device"
+                           type="text"
+                           placeholder="Canonical device_id (required for device-local roles such as local sudo)"
+                           class="form-input">
+
                     <!-- Reason Textarea -->
                     <textarea name="reason" 
                               x-model="reason" 
@@ -323,6 +329,7 @@
         let PREFILLED_PROVIDERS = [];
         let PREFILLED_TENANTS = [];
         let PREFILLED_ROLES = [];
+        let PREFILLED_DEVICE = '';
         let PREFILLED_DURATION = '';
         let PREFILLED_REASON = '';
         
@@ -358,6 +365,7 @@
             PREFILLED_ROLES = [];
         }
         
+        PREFILLED_DEVICE = '{{.Device}}' || '';
         PREFILLED_DURATION = '{{.Duration}}' || '';
         PREFILLED_REASON = '{{.Reason}}' || '';
         
@@ -650,6 +658,7 @@
                 evaluationError: null,
                 loadingEvaluatedRole: false,
                 duration: 'PT1M',
+                device: '',
                 reason: '',
                 loading: false,
                 loadingRoles: false,
@@ -814,6 +823,7 @@
                     this.prefilledProviders = PREFILLED_PROVIDERS;
                     this.prefilledTenants = PREFILLED_TENANTS;
                     this.prefilledRoles = PREFILLED_ROLES;
+                    this.device = PREFILLED_DEVICE;
                     
                     if (PREFILLED_REASON) {
                         this.reason = PREFILLED_REASON;
@@ -1174,6 +1184,11 @@
                     // Add duration
                     if (this.duration) {
                         params.set('duration', this.duration);
+                    }
+
+                    // Add device
+                    if (this.device) {
+                        params.set('device', this.device);
                     }
                     
                     // Add reason

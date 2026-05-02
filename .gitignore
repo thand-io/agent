@@ -28,6 +28,7 @@ go.work.sum
 /bin/
 /dist/
 /build/
+/.build/
 
 # Temporary files
 *.tmp
@@ -105,3 +106,8 @@ config/workflows/*.json
 config/temporal/*.key
 config/temporal/*.pem
 config/README.md
+
+# Generated protobuf/gRPC sources
+internal/localbroker/proto/localbroker/v1/*.pb.go
+platform/macos/PrivilegeServices/Generated/LocalBroker/*.swift
+platform/macos/PrivilegeServices/ThandPrivilegeServices.xcodeproj/

@@ -6,7 +6,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
+	swfCtx "github.com/serverlessworkflow/sdk-go/v3/impl/ctx"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
 	sdkConstants "github.com/thand-io/agent/sdk/constants"
@@ -55,6 +57,10 @@ func (s *Service) Elevate(ctx context.Context, input ElevationInput) (*models.Wo
 	}
 
 	request := input.Request
+
+	if err := models.NormalizeLocalSudoRequest(&request, s.cfg.GetProviderDefinitions()); err != nil {
+		return nil, fmt.Errorf("failed to normalize elevation request: %w", err)
+	}
 
 	if input.User != nil {
 		exportableSession := &models.ExportableSession{
@@ -115,6 +121,13 @@ func (s *Service) Resume(ctx context.Context, input ResumeInput) (*models.Elevat
 
 	workflowTask, err := s.workflows.ResumeWorkflow(workflow)
 	if err != nil {
+		if isAlreadyCompletedResumeError(err) {
+			logrus.WithFields(logrus.Fields{
+				"workflow_id": workflow.GetWorkflowID(),
+			}).Debug("elevation resume: workflow already completed")
+			workflow.Status = swfCtx.CompletedStatus
+			return workflow, nil
+		}
 		return nil, fmt.Errorf("failed to resume workflow: %w", err)
 	}
 
@@ -127,4 +140,11 @@ func (s *Service) Resume(ctx context.Context, input ResumeInput) (*models.Elevat
 	}).Info("elevation resume: returning result to caller")
 
 	return workflowTask, nil
+}
+
+func isAlreadyCompletedResumeError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "workflow execution already completed")
 }
