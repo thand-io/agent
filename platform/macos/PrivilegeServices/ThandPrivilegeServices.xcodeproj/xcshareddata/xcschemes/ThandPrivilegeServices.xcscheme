@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Scheme
+   LastUpgradeVersion = "1430"
+   version = "1.7">
+   <BuildAction
+      parallelizeBuildables = "YES"
+      buildImplicitDependencies = "YES"
+      runPostActionsOnFailure = "NO">
+      <BuildActionEntries>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "5A6D4F378BD4AB4EF3FFD5E7"
+               BuildableName = "libPrivilegeServicesAppSupport.a"
+               BlueprintName = "PrivilegeServicesAppSupport"
+               ReferencedContainer = "container:ThandPrivilegeServices.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "77ADF7D20A2500EA95A698AA"
+               BuildableName = "libPrivilegeServicesLocalBrokerProto.a"
+               BlueprintName = "PrivilegeServicesLocalBrokerProto"
+               ReferencedContainer = "container:ThandPrivilegeServices.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "29869D8109AF1316CC96A0D0"
+               BuildableName = "libPrivilegeServicesShared.a"
+               BlueprintName = "PrivilegeServicesShared"
+               ReferencedContainer = "container:ThandPrivilegeServices.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "999A3BCF284C473B8A9C0181"
+               BuildableName = "ThandPrivilegeBrokerCtl"
+               BlueprintName = "ThandPrivilegeBrokerCtl"
+               ReferencedContainer = "container:ThandPrivilegeServices.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "60D8FF72C7A185BBDCCA6FA2"
+               BuildableName = "ThandPrivilegeBrokerDaemon"
+               BlueprintName = "ThandPrivilegeBrokerDaemon"
+               ReferencedContainer = "container:ThandPrivilegeServices.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "4FBAFF1EC8EA50012B7DCB65"
+               BuildableName = "ThandPrivilegeNotifier.app"
+               BlueprintName = "ThandPrivilegeNotifier"
+               ReferencedContainer = "container:ThandPrivilegeServices.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "FAD0CC253A198E48CC78DC44"
+               BuildableName = "ThandPrivilegeServices.app"
+               BlueprintName = "ThandPrivilegeServices"
+               ReferencedContainer = "container:ThandPrivilegeServices.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+      </BuildActionEntries>
+   </BuildAction>
+   <TestAction
+      buildConfiguration = "Debug"
+      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+      shouldUseLaunchSchemeArgsEnv = "YES"
+      onlyGenerateCoverageForSpecifiedTargets = "NO">
+      <MacroExpansion>
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "5A6D4F378BD4AB4EF3FFD5E7"
+            BuildableName = "libPrivilegeServicesAppSupport.a"
+            BlueprintName = "PrivilegeServicesAppSupport"
+            ReferencedContainer = "container:ThandPrivilegeServices.xcodeproj">
+         </BuildableReference>
+      </MacroExpansion>
+      <Testables>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "117A5448AAE9F8A6A943D58B"
+               BuildableName = "PrivilegeServicesTests.xctest"
+               BlueprintName = "PrivilegeServicesTests"
+               ReferencedContainer = "container:ThandPrivilegeServices.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+      </Testables>
+      <CommandLineArguments>
+      </CommandLineArguments>
+   </TestAction>
+   <LaunchAction
+      buildConfiguration = "Debug"
+      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+      launchStyle = "0"
+      useCustomWorkingDirectory = "NO"
+      ignoresPersistentStateOnLaunch = "NO"
+      debugDocumentVersioning = "YES"
+      debugServiceExtension = "internal"
+      allowLocationSimulation = "YES">
+      <MacroExpansion>
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "5A6D4F378BD4AB4EF3FFD5E7"
+            BuildableName = "libPrivilegeServicesAppSupport.a"
+            BlueprintName = "PrivilegeServicesAppSupport"
+            ReferencedContainer = "container:ThandPrivilegeServices.xcodeproj">
+         </BuildableReference>
+      </MacroExpansion>
+   </LaunchAction>
+   <ProfileAction
+      buildConfiguration = "Release"
+      shouldUseLaunchSchemeArgsEnv = "YES"
+      savedToolIdentifier = ""
+      useCustomWorkingDirectory = "NO"
+      debugDocumentVersioning = "YES">
+      <MacroExpansion>
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "5A6D4F378BD4AB4EF3FFD5E7"
+            BuildableName = "libPrivilegeServicesAppSupport.a"
+            BlueprintName = "PrivilegeServicesAppSupport"
+            ReferencedContainer = "container:ThandPrivilegeServices.xcodeproj">
+         </BuildableReference>
+      </MacroExpansion>
+   </ProfileAction>
+   <AnalyzeAction
+      buildConfiguration = "Debug">
+   </AnalyzeAction>
+   <ArchiveAction
+      buildConfiguration = "Release"
+      revealArchiveInOrganizer = "YES">
+   </ArchiveAction>
+</Scheme>

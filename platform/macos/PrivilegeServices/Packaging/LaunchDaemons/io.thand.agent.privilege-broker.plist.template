@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>__SERVICE_LABEL__</string>
+  <key>MachServices</key>
+  <dict>
+    <key>__SERVICE_LABEL__</key>
+    <true/>
+    <key>__SERVICE_LABEL__.notifier</key>
+    <true/>
+  </dict>
+  <key>BundleProgram</key>
+  <string>Contents/Resources/ThandPrivilegeBrokerDaemon</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>THAND_PRIVILEGE_BROKER_SERVICE_LABEL</key>
+    <string>__SERVICE_LABEL__</string>
+    <key>THAND_PRIVILEGE_BROKER_STATE_DIR</key>
+    <string>__STATE_DIR__</string>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/var/log/thand-privilege-broker.log</string>
+  <key>StandardErrorPath</key>
+  <string>/var/log/thand-privilege-broker.log</string>
+</dict>
+</plist>

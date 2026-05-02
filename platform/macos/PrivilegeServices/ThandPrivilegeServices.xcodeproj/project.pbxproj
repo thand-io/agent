@@ -1,0 +1,1343 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1659F04633938D803FB12ADD /* RuntimeArguments.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5D14322F3E991AF4FFCC64B /* RuntimeArguments.swift */; };
+		19091662326C10E330EB80A8 /* localbroker.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4738721E79BC3D66B976FDE /* localbroker.pb.swift */; };
+		2394D5822AD1E05D626B4F9E /* LeaseStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 156DFDDE2C1368C00139E4B9 /* LeaseStore.swift */; };
+		273BC08F4CCC211BFDC13D8B /* RuntimeArgumentsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76D105E2E024920F35E6C90D /* RuntimeArgumentsTests.swift */; };
+		33BBC0F7B62524D1D3682727 /* LocalNotificationPoster.swift in Sources */ = {isa = PBXBuildFile; fileRef = B051DBDDB666BA90BF2B9AF7 /* LocalNotificationPoster.swift */; };
+		344F0CF983D20D0B66A924D4 /* LocalNotificationPosterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 408E7B0471842FF0E83DE661 /* LocalNotificationPosterTests.swift */; };
+		3B27B0CD0FD58FD25AA54CBB /* NotificationFormatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A55229BBCEEFC1CE6B3B8740 /* NotificationFormatterTests.swift */; };
+		496EDB9E9EFA9B2E2AB557D8 /* libPrivilegeServicesLocalBrokerProto.a in Frameworks */ = {isa = PBXBuildFile; fileRef = DB3C5E4BCADF636436FEDEE8 /* libPrivilegeServicesLocalBrokerProto.a */; };
+		4B4B403B6D23C97B6F623EC3 /* BrokerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21BBE3931931ECEF4003D60B /* BrokerService.swift */; };
+		53BD22C33869E21BAC45387C /* PeerRequirementPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D3AA41C9DC7EF795521489F /* PeerRequirementPolicyTests.swift */; };
+		5735284C81D763D5A6D6266A /* NotificationFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 169CF84A5F1609C3D3F677A5 /* NotificationFormatter.swift */; };
+		59CE0BEFE6EDE5F6B9ABDE80 /* libPrivilegeServicesAppSupport.a in Frameworks */ = {isa = PBXBuildFile; fileRef = C9567359465B12137F00CE28 /* libPrivilegeServicesAppSupport.a */; };
+		60112ABFFBAF63940AEBB6FF /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27FA4FB679D9FBC74050D1A9 /* Models.swift */; };
+		6334222F8D0C86CCE37B9878 /* libPrivilegeServicesLocalBrokerProto.a in Frameworks */ = {isa = PBXBuildFile; fileRef = DB3C5E4BCADF636436FEDEE8 /* libPrivilegeServicesLocalBrokerProto.a */; };
+		66336C60B44AB480BA635DC3 /* localbroker.grpc.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B64687560166770F9CAD738 /* localbroker.grpc.swift */; };
+		6977FE8469A493A2860AE043 /* GRPCProtobuf in Frameworks */ = {isa = PBXBuildFile; productRef = 9CB4D7992B7169F6BE472B02 /* GRPCProtobuf */; };
+		6F74968F8F948E38AC5A4C39 /* BrokerConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06F2D20ED9595FF49F8520D2 /* BrokerConfig.swift */; };
+		7BAEAB67626A82B298963792 /* libPrivilegeServicesShared.a in Frameworks */ = {isa = PBXBuildFile; fileRef = E395A280DEE75F2862BCCAB1 /* libPrivilegeServicesShared.a */; };
+		7C766983807F1F274D2F20A1 /* BrokerServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 948B8B62907785480C44DE33 /* BrokerServiceTests.swift */; };
+		7CD678C3AB7ADD52EFEAE0D8 /* LocalPrivilegeManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C025677B6D6D11813E575C73 /* LocalPrivilegeManagerTests.swift */; };
+		7DD1E9B86B38F71C6EF74903 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = E686485AEDAB4A71209470DB /* main.swift */; };
+		853F493CF5A71A0546ECC465 /* PrivilegeServicesCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D59DD7E734754535F7AD06A /* PrivilegeServicesCommandTests.swift */; };
+		8DEE29E68E6E690AE08CCF98 /* Command.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46BD163F695DFD96A11D0602 /* Command.swift */; };
+		92F290C5F485CBC69717D9B4 /* GRPCNIOTransportHTTP2TransportServices in Frameworks */ = {isa = PBXBuildFile; productRef = 90517FBAFFC139A68D6D0067 /* GRPCNIOTransportHTTP2TransportServices */; };
+		96A7912F70BBBBEB451AC2D4 /* LocalPrivilegeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B69C84BD00923FED1039B523 /* LocalPrivilegeManager.swift */; };
+		991F9B660272195191E57B2D /* PeerAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = D913D59372CF2A9CDF1F3B17 /* PeerAuth.swift */; };
+		9A6C8183E3D9DDA517105CF5 /* GRPCCore in Frameworks */ = {isa = PBXBuildFile; productRef = DEA60BD13B7B83D075821F5D /* GRPCCore */; };
+		9EEA5B2006560806D5C67A0A /* LocalPresenceAuthenticatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63CDC9377F74E47ADA1D3978 /* LocalPresenceAuthenticatorTests.swift */; };
+		A42203186F312ABAF92A2A0A /* SwiftProtobuf in Frameworks */ = {isa = PBXBuildFile; productRef = AFFA6098741511A184E80E94 /* SwiftProtobuf */; };
+		A95717FA9E1AA86C57723392 /* NotifierXPCTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB54C282E2A546B4591EF40F /* NotifierXPCTests.swift */; };
+		A9C0E54113615F9FEA7AFABF /* ServiceManagementController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C230D8A9CED56B7CB9A16D8D /* ServiceManagementController.swift */; };
+		AD48AF84BFA7302BA0AEE716 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 030F7F8CC065DF39738E7E4D /* main.swift */; };
+		BA9E317C906638279C6E4B18 /* LocalPresenceAuthenticator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5487AEEFA08C2825FFE3AFBA /* LocalPresenceAuthenticator.swift */; };
+		BC4332484E1BFB67F4D05FBB /* BrokerSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = F029679EA59524F232799D85 /* BrokerSupport.swift */; };
+		C61BD377FA6E73270C1FE824 /* BrokerCtlMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E3E388DD6B1CFC4A9274718 /* BrokerCtlMain.swift */; };
+		C7A61BD3F9DB13C4F9D2F849 /* GRPCProtobuf in Frameworks */ = {isa = PBXBuildFile; productRef = D6B7F268B5976E2E22910E70 /* GRPCProtobuf */; };
+		CCEAFE2651328FC670AD2EF8 /* libPrivilegeServicesShared.a in Frameworks */ = {isa = PBXBuildFile; fileRef = E395A280DEE75F2862BCCAB1 /* libPrivilegeServicesShared.a */; };
+		CED6BDB5289313A7DDDAFDAF /* libPrivilegeServicesShared.a in Frameworks */ = {isa = PBXBuildFile; fileRef = E395A280DEE75F2862BCCAB1 /* libPrivilegeServicesShared.a */; };
+		D528E6EC7A174DFA75DAA2F7 /* NotifierXPC.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36AF3EE3656E76FD893809D /* NotifierXPC.swift */; };
+		E771BF3AE5CEA6D6751FE68D /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0F3657D03A4F44F6022F4DD /* main.swift */; };
+		EB5CBC1BAD79A00239EE5E8D /* XPCTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B6D35A871258AEEC9489B1A /* XPCTransport.swift */; };
+		F5E1E5EFA52BA1F1BFABA4D2 /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A84E78855E3B2846D3274E /* Logger.swift */; };
+		F74361C071508514B7204F27 /* libPrivilegeServicesAppSupport.a in Frameworks */ = {isa = PBXBuildFile; fileRef = C9567359465B12137F00CE28 /* libPrivilegeServicesAppSupport.a */; };
+		FDCE27BEA9359D894DF06D6A /* libPrivilegeServicesShared.a in Frameworks */ = {isa = PBXBuildFile; fileRef = E395A280DEE75F2862BCCAB1 /* libPrivilegeServicesShared.a */; };
+		FE0124A0B209EEEDA29A3F26 /* SwiftProtobuf in Frameworks */ = {isa = PBXBuildFile; productRef = 74CC81B991A1358367737B92 /* SwiftProtobuf */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		1078416289C67E94B71BECEE /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 11941C0F3F4A4191C0B95713 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 77ADF7D20A2500EA95A698AA;
+			remoteInfo = PrivilegeServicesLocalBrokerProto;
+		};
+		6C46B16E0AB939259BBF2E7F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 11941C0F3F4A4191C0B95713 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5A6D4F378BD4AB4EF3FFD5E7;
+			remoteInfo = PrivilegeServicesAppSupport;
+		};
+		99286202D88182C194B69051 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 11941C0F3F4A4191C0B95713 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5A6D4F378BD4AB4EF3FFD5E7;
+			remoteInfo = PrivilegeServicesAppSupport;
+		};
+		AB49DF3AF043D2B066AF4BC8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 11941C0F3F4A4191C0B95713 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 29869D8109AF1316CC96A0D0;
+			remoteInfo = PrivilegeServicesShared;
+		};
+		E1725CEDA8C0333DB7CEDAE2 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 11941C0F3F4A4191C0B95713 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 77ADF7D20A2500EA95A698AA;
+			remoteInfo = PrivilegeServicesLocalBrokerProto;
+		};
+		E933CC83FEC50A20A24847DD /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 11941C0F3F4A4191C0B95713 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 29869D8109AF1316CC96A0D0;
+			remoteInfo = PrivilegeServicesShared;
+		};
+		EA73419861BCDB02A673689D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 11941C0F3F4A4191C0B95713 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 29869D8109AF1316CC96A0D0;
+			remoteInfo = PrivilegeServicesShared;
+		};
+		F0F2E74391E31925E9BA525E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 11941C0F3F4A4191C0B95713 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 29869D8109AF1316CC96A0D0;
+			remoteInfo = PrivilegeServicesShared;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		030F7F8CC065DF39738E7E4D /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		06F2D20ED9595FF49F8520D2 /* BrokerConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrokerConfig.swift; sourceTree = "<group>"; };
+		156DFDDE2C1368C00139E4B9 /* LeaseStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeaseStore.swift; sourceTree = "<group>"; };
+		169CF84A5F1609C3D3F677A5 /* NotificationFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationFormatter.swift; sourceTree = "<group>"; };
+		1B6D35A871258AEEC9489B1A /* XPCTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XPCTransport.swift; sourceTree = "<group>"; };
+		21BBE3931931ECEF4003D60B /* BrokerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrokerService.swift; sourceTree = "<group>"; };
+		22697D12DF4B2B4D4F3A0792 /* PrivilegeServicesTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PrivilegeServicesTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		27FA4FB679D9FBC74050D1A9 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		2ECB78CBE530D8C4F3FF289C /* ThandPrivilegeNotifier.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ThandPrivilegeNotifier.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3E3E388DD6B1CFC4A9274718 /* BrokerCtlMain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrokerCtlMain.swift; sourceTree = "<group>"; };
+		408E7B0471842FF0E83DE661 /* LocalNotificationPosterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalNotificationPosterTests.swift; sourceTree = "<group>"; };
+		46BD163F695DFD96A11D0602 /* Command.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Command.swift; sourceTree = "<group>"; };
+		4B64687560166770F9CAD738 /* localbroker.grpc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = localbroker.grpc.swift; sourceTree = "<group>"; };
+		4D3AA41C9DC7EF795521489F /* PeerRequirementPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerRequirementPolicyTests.swift; sourceTree = "<group>"; };
+		5487AEEFA08C2825FFE3AFBA /* LocalPresenceAuthenticator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalPresenceAuthenticator.swift; sourceTree = "<group>"; };
+		63CDC9377F74E47ADA1D3978 /* LocalPresenceAuthenticatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalPresenceAuthenticatorTests.swift; sourceTree = "<group>"; };
+		76D105E2E024920F35E6C90D /* RuntimeArgumentsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeArgumentsTests.swift; sourceTree = "<group>"; };
+		7D59DD7E734754535F7AD06A /* PrivilegeServicesCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivilegeServicesCommandTests.swift; sourceTree = "<group>"; };
+		83B7FB6FAF2B32F79C351E2F /* ThandPrivilegeServices.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ThandPrivilegeServices.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		948B8B62907785480C44DE33 /* BrokerServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrokerServiceTests.swift; sourceTree = "<group>"; };
+		A4738721E79BC3D66B976FDE /* localbroker.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = localbroker.pb.swift; sourceTree = "<group>"; };
+		A55229BBCEEFC1CE6B3B8740 /* NotificationFormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationFormatterTests.swift; sourceTree = "<group>"; };
+		B051DBDDB666BA90BF2B9AF7 /* LocalNotificationPoster.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalNotificationPoster.swift; sourceTree = "<group>"; };
+		B36AF3EE3656E76FD893809D /* NotifierXPC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotifierXPC.swift; sourceTree = "<group>"; };
+		B69C84BD00923FED1039B523 /* LocalPrivilegeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalPrivilegeManager.swift; sourceTree = "<group>"; };
+		C025677B6D6D11813E575C73 /* LocalPrivilegeManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalPrivilegeManagerTests.swift; sourceTree = "<group>"; };
+		C230D8A9CED56B7CB9A16D8D /* ServiceManagementController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceManagementController.swift; sourceTree = "<group>"; };
+		C4A84E78855E3B2846D3274E /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
+		C9567359465B12137F00CE28 /* libPrivilegeServicesAppSupport.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libPrivilegeServicesAppSupport.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		CCD8B9527075EEDC2E29C0DD /* ThandPrivilegeBrokerDaemon */ = {isa = PBXFileReference; includeInIndex = 0; path = ThandPrivilegeBrokerDaemon; sourceTree = BUILT_PRODUCTS_DIR; };
+		D913D59372CF2A9CDF1F3B17 /* PeerAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerAuth.swift; sourceTree = "<group>"; };
+		DB3C5E4BCADF636436FEDEE8 /* libPrivilegeServicesLocalBrokerProto.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libPrivilegeServicesLocalBrokerProto.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		DB482FC97962F6E200522333 /* ThandPrivilegeBrokerCtl */ = {isa = PBXFileReference; includeInIndex = 0; path = ThandPrivilegeBrokerCtl; sourceTree = BUILT_PRODUCTS_DIR; };
+		DB54C282E2A546B4591EF40F /* NotifierXPCTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotifierXPCTests.swift; sourceTree = "<group>"; };
+		E395A280DEE75F2862BCCAB1 /* libPrivilegeServicesShared.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libPrivilegeServicesShared.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		E686485AEDAB4A71209470DB /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		F029679EA59524F232799D85 /* BrokerSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrokerSupport.swift; sourceTree = "<group>"; };
+		F0F3657D03A4F44F6022F4DD /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		F5D14322F3E991AF4FFCC64B /* RuntimeArguments.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeArguments.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		0E48EA7775A094A2AD46F285 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				59CE0BEFE6EDE5F6B9ABDE80 /* libPrivilegeServicesAppSupport.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		148C5B52AB42C126FFE28FEB /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CED6BDB5289313A7DDDAFDAF /* libPrivilegeServicesShared.a in Frameworks */,
+				6334222F8D0C86CCE37B9878 /* libPrivilegeServicesLocalBrokerProto.a in Frameworks */,
+				9A6C8183E3D9DDA517105CF5 /* GRPCCore in Frameworks */,
+				6977FE8469A493A2860AE043 /* GRPCProtobuf in Frameworks */,
+				92F290C5F485CBC69717D9B4 /* GRPCNIOTransportHTTP2TransportServices in Frameworks */,
+				A42203186F312ABAF92A2A0A /* SwiftProtobuf in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1DC87BDD81FF86BEF5D4E7E4 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CCEAFE2651328FC670AD2EF8 /* libPrivilegeServicesShared.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1C6899617B60DC9202A8B92 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FDCE27BEA9359D894DF06D6A /* libPrivilegeServicesShared.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F4C326A798666B7731EDA162 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7BAEAB67626A82B298963792 /* libPrivilegeServicesShared.a in Frameworks */,
+				F74361C071508514B7204F27 /* libPrivilegeServicesAppSupport.a in Frameworks */,
+				496EDB9E9EFA9B2E2AB557D8 /* libPrivilegeServicesLocalBrokerProto.a in Frameworks */,
+				C7A61BD3F9DB13C4F9D2F849 /* GRPCProtobuf in Frameworks */,
+				FE0124A0B209EEEDA29A3F26 /* SwiftProtobuf in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		1DBAF9F1F2D2552FB22559E2 /* LocalBroker */ = {
+			isa = PBXGroup;
+			children = (
+				4B64687560166770F9CAD738 /* localbroker.grpc.swift */,
+				A4738721E79BC3D66B976FDE /* localbroker.pb.swift */,
+			);
+			path = LocalBroker;
+			sourceTree = "<group>";
+		};
+		355DE89D271FC1C8B94299B3 /* Daemon */ = {
+			isa = PBXGroup;
+			children = (
+				E686485AEDAB4A71209470DB /* main.swift */,
+			);
+			path = Daemon;
+			sourceTree = "<group>";
+		};
+		42515B2A26A306C17D260E03 /* Ctl */ = {
+			isa = PBXGroup;
+			children = (
+				3E3E388DD6B1CFC4A9274718 /* BrokerCtlMain.swift */,
+			);
+			path = Ctl;
+			sourceTree = "<group>";
+		};
+		4E3EEAC0D1DBBE72B1ED0E14 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				7D59DD7E734754535F7AD06A /* PrivilegeServicesCommandTests.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		586282D5763FEF651503AC9F /* LoginItem */ = {
+			isa = PBXGroup;
+			children = (
+				030F7F8CC065DF39738E7E4D /* main.swift */,
+			);
+			path = LoginItem;
+			sourceTree = "<group>";
+		};
+		5939FF6A0F0AB5B50FE5DC30 = {
+			isa = PBXGroup;
+			children = (
+				8F0695D2850D15C38C060529 /* App */,
+				42515B2A26A306C17D260E03 /* Ctl */,
+				355DE89D271FC1C8B94299B3 /* Daemon */,
+				79A79776F7C15B702B1F395C /* Generated */,
+				586282D5763FEF651503AC9F /* LoginItem */,
+				940C38320261DB0025C2F8DA /* Shared */,
+				7C583BE5F9BDD63A5FDA3812 /* Tests */,
+				8ABD0A86813CE55A35DB3388 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		79A79776F7C15B702B1F395C /* Generated */ = {
+			isa = PBXGroup;
+			children = (
+				1DBAF9F1F2D2552FB22559E2 /* LocalBroker */,
+			);
+			path = Generated;
+			sourceTree = "<group>";
+		};
+		7C583BE5F9BDD63A5FDA3812 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				4E3EEAC0D1DBBE72B1ED0E14 /* App */,
+				881CA0B95E1B7EA8EA938132 /* Shared */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		881CA0B95E1B7EA8EA938132 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				948B8B62907785480C44DE33 /* BrokerServiceTests.swift */,
+				408E7B0471842FF0E83DE661 /* LocalNotificationPosterTests.swift */,
+				63CDC9377F74E47ADA1D3978 /* LocalPresenceAuthenticatorTests.swift */,
+				C025677B6D6D11813E575C73 /* LocalPrivilegeManagerTests.swift */,
+				A55229BBCEEFC1CE6B3B8740 /* NotificationFormatterTests.swift */,
+				DB54C282E2A546B4591EF40F /* NotifierXPCTests.swift */,
+				4D3AA41C9DC7EF795521489F /* PeerRequirementPolicyTests.swift */,
+				76D105E2E024920F35E6C90D /* RuntimeArgumentsTests.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		8ABD0A86813CE55A35DB3388 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				C9567359465B12137F00CE28 /* libPrivilegeServicesAppSupport.a */,
+				DB3C5E4BCADF636436FEDEE8 /* libPrivilegeServicesLocalBrokerProto.a */,
+				E395A280DEE75F2862BCCAB1 /* libPrivilegeServicesShared.a */,
+				22697D12DF4B2B4D4F3A0792 /* PrivilegeServicesTests.xctest */,
+				DB482FC97962F6E200522333 /* ThandPrivilegeBrokerCtl */,
+				CCD8B9527075EEDC2E29C0DD /* ThandPrivilegeBrokerDaemon */,
+				2ECB78CBE530D8C4F3FF289C /* ThandPrivilegeNotifier.app */,
+				83B7FB6FAF2B32F79C351E2F /* ThandPrivilegeServices.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		8F0695D2850D15C38C060529 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				46BD163F695DFD96A11D0602 /* Command.swift */,
+				F0F3657D03A4F44F6022F4DD /* main.swift */,
+				C230D8A9CED56B7CB9A16D8D /* ServiceManagementController.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		940C38320261DB0025C2F8DA /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				06F2D20ED9595FF49F8520D2 /* BrokerConfig.swift */,
+				21BBE3931931ECEF4003D60B /* BrokerService.swift */,
+				F029679EA59524F232799D85 /* BrokerSupport.swift */,
+				156DFDDE2C1368C00139E4B9 /* LeaseStore.swift */,
+				B051DBDDB666BA90BF2B9AF7 /* LocalNotificationPoster.swift */,
+				5487AEEFA08C2825FFE3AFBA /* LocalPresenceAuthenticator.swift */,
+				B69C84BD00923FED1039B523 /* LocalPrivilegeManager.swift */,
+				C4A84E78855E3B2846D3274E /* Logger.swift */,
+				27FA4FB679D9FBC74050D1A9 /* Models.swift */,
+				169CF84A5F1609C3D3F677A5 /* NotificationFormatter.swift */,
+				B36AF3EE3656E76FD893809D /* NotifierXPC.swift */,
+				D913D59372CF2A9CDF1F3B17 /* PeerAuth.swift */,
+				F5D14322F3E991AF4FFCC64B /* RuntimeArguments.swift */,
+				1B6D35A871258AEEC9489B1A /* XPCTransport.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		117A5448AAE9F8A6A943D58B /* PrivilegeServicesTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CEEA1DC438AF7E93DC1B84B4 /* Build configuration list for PBXNativeTarget "PrivilegeServicesTests" */;
+			buildPhases = (
+				419FDB70926D10BE5A14C336 /* Sources */,
+				F4C326A798666B7731EDA162 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				DD99E3727DED1F1105DBA268 /* PBXTargetDependency */,
+				D97EF60CAF1E07DBF3F73DBC /* PBXTargetDependency */,
+				9A28D3C007030A9D009B6BB7 /* PBXTargetDependency */,
+			);
+			name = PrivilegeServicesTests;
+			packageProductDependencies = (
+				D6B7F268B5976E2E22910E70 /* GRPCProtobuf */,
+				74CC81B991A1358367737B92 /* SwiftProtobuf */,
+			);
+			productName = PrivilegeServicesTests;
+			productReference = 22697D12DF4B2B4D4F3A0792 /* PrivilegeServicesTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		29869D8109AF1316CC96A0D0 /* PrivilegeServicesShared */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B4459BC113F64525177756B0 /* Build configuration list for PBXNativeTarget "PrivilegeServicesShared" */;
+			buildPhases = (
+				0191C5972DA04DEBD10EAE07 /* Sources */,
+				889A701AA920C1E0C6B31386 /* Copy Swift Objective-C Interface Header */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PrivilegeServicesShared;
+			packageProductDependencies = (
+			);
+			productName = PrivilegeServicesShared;
+			productReference = E395A280DEE75F2862BCCAB1 /* libPrivilegeServicesShared.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+		4FBAFF1EC8EA50012B7DCB65 /* ThandPrivilegeNotifier */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 15489B74C0950415503A5957 /* Build configuration list for PBXNativeTarget "ThandPrivilegeNotifier" */;
+			buildPhases = (
+				6320D2C99F748DF9366A9D87 /* Sources */,
+				1DC87BDD81FF86BEF5D4E7E4 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8EF00370F54F992F41FFEA6E /* PBXTargetDependency */,
+			);
+			name = ThandPrivilegeNotifier;
+			packageProductDependencies = (
+			);
+			productName = ThandPrivilegeNotifier;
+			productReference = 2ECB78CBE530D8C4F3FF289C /* ThandPrivilegeNotifier.app */;
+			productType = "com.apple.product-type.application";
+		};
+		5A6D4F378BD4AB4EF3FFD5E7 /* PrivilegeServicesAppSupport */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 32F488D72B70F8C65028D68D /* Build configuration list for PBXNativeTarget "PrivilegeServicesAppSupport" */;
+			buildPhases = (
+				973DBAC7DBB0A3A0588B5F84 /* Sources */,
+				DC413EF5B3820F5FC273BA16 /* Copy Swift Objective-C Interface Header */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PrivilegeServicesAppSupport;
+			packageProductDependencies = (
+			);
+			productName = PrivilegeServicesAppSupport;
+			productReference = C9567359465B12137F00CE28 /* libPrivilegeServicesAppSupport.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+		60D8FF72C7A185BBDCCA6FA2 /* ThandPrivilegeBrokerDaemon */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 31C91711739025A6F0A408ED /* Build configuration list for PBXNativeTarget "ThandPrivilegeBrokerDaemon" */;
+			buildPhases = (
+				F8392A6A34DA92819E916197 /* Sources */,
+				B1C6899617B60DC9202A8B92 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				26858DF57C6AD7DAF96B4E27 /* PBXTargetDependency */,
+			);
+			name = ThandPrivilegeBrokerDaemon;
+			packageProductDependencies = (
+			);
+			productName = ThandPrivilegeBrokerDaemon;
+			productReference = CCD8B9527075EEDC2E29C0DD /* ThandPrivilegeBrokerDaemon */;
+			productType = "com.apple.product-type.tool";
+		};
+		77ADF7D20A2500EA95A698AA /* PrivilegeServicesLocalBrokerProto */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C9384C43CC74AF3186DE4233 /* Build configuration list for PBXNativeTarget "PrivilegeServicesLocalBrokerProto" */;
+			buildPhases = (
+				7F3B686C8B9DA50C0CE5CCE0 /* Sources */,
+				B758096318BBCE12618C20AD /* Copy Swift Objective-C Interface Header */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				5AA5E5CB4DA87EDA4671C36F /* PBXTargetDependency */,
+				344F5DCB7DB53663789DDF35 /* PBXTargetDependency */,
+				E4E3DBC7116E520A3AF440A6 /* PBXTargetDependency */,
+			);
+			name = PrivilegeServicesLocalBrokerProto;
+			packageProductDependencies = (
+				50AEF0F0008319B3D603FBAA /* GRPCCore */,
+				0C2E774761D9D0299FD32B97 /* GRPCProtobuf */,
+				92AFD2FAAB1D19C424106BDA /* SwiftProtobuf */,
+			);
+			productName = PrivilegeServicesLocalBrokerProto;
+			productReference = DB3C5E4BCADF636436FEDEE8 /* libPrivilegeServicesLocalBrokerProto.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+		999A3BCF284C473B8A9C0181 /* ThandPrivilegeBrokerCtl */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3068F0BB3CD65673FDE1C66B /* Build configuration list for PBXNativeTarget "ThandPrivilegeBrokerCtl" */;
+			buildPhases = (
+				E5C2EABB672E120B7DC08D6D /* Sources */,
+				148C5B52AB42C126FFE28FEB /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				1CA0A730B3C144739265F97F /* PBXTargetDependency */,
+				08117590929BD0ADA0FB460D /* PBXTargetDependency */,
+			);
+			name = ThandPrivilegeBrokerCtl;
+			packageProductDependencies = (
+				DEA60BD13B7B83D075821F5D /* GRPCCore */,
+				9CB4D7992B7169F6BE472B02 /* GRPCProtobuf */,
+				90517FBAFFC139A68D6D0067 /* GRPCNIOTransportHTTP2TransportServices */,
+				AFFA6098741511A184E80E94 /* SwiftProtobuf */,
+			);
+			productName = ThandPrivilegeBrokerCtl;
+			productReference = DB482FC97962F6E200522333 /* ThandPrivilegeBrokerCtl */;
+			productType = "com.apple.product-type.tool";
+		};
+		FAD0CC253A198E48CC78DC44 /* ThandPrivilegeServices */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A29651DA62B2922AE4326A7D /* Build configuration list for PBXNativeTarget "ThandPrivilegeServices" */;
+			buildPhases = (
+				4BC26A5101A7B972DFD7AC6B /* Sources */,
+				0E48EA7775A094A2AD46F285 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				75DC661DBC21DFC50BA4F672 /* PBXTargetDependency */,
+			);
+			name = ThandPrivilegeServices;
+			packageProductDependencies = (
+			);
+			productName = ThandPrivilegeServices;
+			productReference = 83B7FB6FAF2B32F79C351E2F /* ThandPrivilegeServices.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		11941C0F3F4A4191C0B95713 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+				};
+			};
+			buildConfigurationList = D904B523750D89B4E2034017 /* Build configuration list for PBXProject "ThandPrivilegeServices" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 5939FF6A0F0AB5B50FE5DC30;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				06B97B0EB31B64E930551497 /* XCRemoteSwiftPackageReference "grpc-swift-2" */,
+				1BC6F23F69C84EA66A992C5E /* XCRemoteSwiftPackageReference "grpc-swift-nio-transport" */,
+				C8C269035254D641671B1415 /* XCRemoteSwiftPackageReference "grpc-swift-protobuf" */,
+				494FC233D90D4377B2E27A8E /* XCRemoteSwiftPackageReference "swift-nio" */,
+				014ED1ED248A9911386634E3 /* XCRemoteSwiftPackageReference "swift-protobuf" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 8ABD0A86813CE55A35DB3388 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				5A6D4F378BD4AB4EF3FFD5E7 /* PrivilegeServicesAppSupport */,
+				77ADF7D20A2500EA95A698AA /* PrivilegeServicesLocalBrokerProto */,
+				29869D8109AF1316CC96A0D0 /* PrivilegeServicesShared */,
+				117A5448AAE9F8A6A943D58B /* PrivilegeServicesTests */,
+				999A3BCF284C473B8A9C0181 /* ThandPrivilegeBrokerCtl */,
+				60D8FF72C7A185BBDCCA6FA2 /* ThandPrivilegeBrokerDaemon */,
+				4FBAFF1EC8EA50012B7DCB65 /* ThandPrivilegeNotifier */,
+				FAD0CC253A198E48CC78DC44 /* ThandPrivilegeServices */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		889A701AA920C1E0C6B31386 /* Copy Swift Objective-C Interface Header */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(DERIVED_SOURCES_DIR)/$(SWIFT_OBJC_INTERFACE_HEADER_NAME)",
+			);
+			name = "Copy Swift Objective-C Interface Header";
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/include/$(PRODUCT_MODULE_NAME)/$(SWIFT_OBJC_INTERFACE_HEADER_NAME)",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "ditto \"${SCRIPT_INPUT_FILE_0}\" \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+		};
+		B758096318BBCE12618C20AD /* Copy Swift Objective-C Interface Header */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(DERIVED_SOURCES_DIR)/$(SWIFT_OBJC_INTERFACE_HEADER_NAME)",
+			);
+			name = "Copy Swift Objective-C Interface Header";
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/include/$(PRODUCT_MODULE_NAME)/$(SWIFT_OBJC_INTERFACE_HEADER_NAME)",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "ditto \"${SCRIPT_INPUT_FILE_0}\" \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+		};
+		DC413EF5B3820F5FC273BA16 /* Copy Swift Objective-C Interface Header */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(DERIVED_SOURCES_DIR)/$(SWIFT_OBJC_INTERFACE_HEADER_NAME)",
+			);
+			name = "Copy Swift Objective-C Interface Header";
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/include/$(PRODUCT_MODULE_NAME)/$(SWIFT_OBJC_INTERFACE_HEADER_NAME)",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "ditto \"${SCRIPT_INPUT_FILE_0}\" \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		0191C5972DA04DEBD10EAE07 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6F74968F8F948E38AC5A4C39 /* BrokerConfig.swift in Sources */,
+				4B4B403B6D23C97B6F623EC3 /* BrokerService.swift in Sources */,
+				BC4332484E1BFB67F4D05FBB /* BrokerSupport.swift in Sources */,
+				2394D5822AD1E05D626B4F9E /* LeaseStore.swift in Sources */,
+				33BBC0F7B62524D1D3682727 /* LocalNotificationPoster.swift in Sources */,
+				BA9E317C906638279C6E4B18 /* LocalPresenceAuthenticator.swift in Sources */,
+				96A7912F70BBBBEB451AC2D4 /* LocalPrivilegeManager.swift in Sources */,
+				F5E1E5EFA52BA1F1BFABA4D2 /* Logger.swift in Sources */,
+				60112ABFFBAF63940AEBB6FF /* Models.swift in Sources */,
+				5735284C81D763D5A6D6266A /* NotificationFormatter.swift in Sources */,
+				D528E6EC7A174DFA75DAA2F7 /* NotifierXPC.swift in Sources */,
+				991F9B660272195191E57B2D /* PeerAuth.swift in Sources */,
+				1659F04633938D803FB12ADD /* RuntimeArguments.swift in Sources */,
+				EB5CBC1BAD79A00239EE5E8D /* XPCTransport.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		419FDB70926D10BE5A14C336 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7C766983807F1F274D2F20A1 /* BrokerServiceTests.swift in Sources */,
+				344F0CF983D20D0B66A924D4 /* LocalNotificationPosterTests.swift in Sources */,
+				9EEA5B2006560806D5C67A0A /* LocalPresenceAuthenticatorTests.swift in Sources */,
+				7CD678C3AB7ADD52EFEAE0D8 /* LocalPrivilegeManagerTests.swift in Sources */,
+				3B27B0CD0FD58FD25AA54CBB /* NotificationFormatterTests.swift in Sources */,
+				A95717FA9E1AA86C57723392 /* NotifierXPCTests.swift in Sources */,
+				53BD22C33869E21BAC45387C /* PeerRequirementPolicyTests.swift in Sources */,
+				853F493CF5A71A0546ECC465 /* PrivilegeServicesCommandTests.swift in Sources */,
+				273BC08F4CCC211BFDC13D8B /* RuntimeArgumentsTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4BC26A5101A7B972DFD7AC6B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E771BF3AE5CEA6D6751FE68D /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6320D2C99F748DF9366A9D87 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AD48AF84BFA7302BA0AEE716 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7F3B686C8B9DA50C0CE5CCE0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				66336C60B44AB480BA635DC3 /* localbroker.grpc.swift in Sources */,
+				19091662326C10E330EB80A8 /* localbroker.pb.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		973DBAC7DBB0A3A0588B5F84 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8DEE29E68E6E690AE08CCF98 /* Command.swift in Sources */,
+				A9C0E54113615F9FEA7AFABF /* ServiceManagementController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E5C2EABB672E120B7DC08D6D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C61BD377FA6E73270C1FE824 /* BrokerCtlMain.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F8392A6A34DA92819E916197 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7DD1E9B86B38F71C6EF74903 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		08117590929BD0ADA0FB460D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 77ADF7D20A2500EA95A698AA /* PrivilegeServicesLocalBrokerProto */;
+			targetProxy = 1078416289C67E94B71BECEE /* PBXContainerItemProxy */;
+		};
+		1CA0A730B3C144739265F97F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 29869D8109AF1316CC96A0D0 /* PrivilegeServicesShared */;
+			targetProxy = F0F2E74391E31925E9BA525E /* PBXContainerItemProxy */;
+		};
+		26858DF57C6AD7DAF96B4E27 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 29869D8109AF1316CC96A0D0 /* PrivilegeServicesShared */;
+			targetProxy = E933CC83FEC50A20A24847DD /* PBXContainerItemProxy */;
+		};
+		344F5DCB7DB53663789DDF35 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			productRef = 0C2E774761D9D0299FD32B97 /* GRPCProtobuf */;
+		};
+		5AA5E5CB4DA87EDA4671C36F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			productRef = 50AEF0F0008319B3D603FBAA /* GRPCCore */;
+		};
+		75DC661DBC21DFC50BA4F672 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5A6D4F378BD4AB4EF3FFD5E7 /* PrivilegeServicesAppSupport */;
+			targetProxy = 99286202D88182C194B69051 /* PBXContainerItemProxy */;
+		};
+		8EF00370F54F992F41FFEA6E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 29869D8109AF1316CC96A0D0 /* PrivilegeServicesShared */;
+			targetProxy = EA73419861BCDB02A673689D /* PBXContainerItemProxy */;
+		};
+		9A28D3C007030A9D009B6BB7 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 77ADF7D20A2500EA95A698AA /* PrivilegeServicesLocalBrokerProto */;
+			targetProxy = E1725CEDA8C0333DB7CEDAE2 /* PBXContainerItemProxy */;
+		};
+		D97EF60CAF1E07DBF3F73DBC /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5A6D4F378BD4AB4EF3FFD5E7 /* PrivilegeServicesAppSupport */;
+			targetProxy = 6C46B16E0AB939259BBF2E7F /* PBXContainerItemProxy */;
+		};
+		DD99E3727DED1F1105DBA268 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 29869D8109AF1316CC96A0D0 /* PrivilegeServicesShared */;
+			targetProxy = AB49DF3AF043D2B066AF4BC8 /* PBXContainerItemProxy */;
+		};
+		E4E3DBC7116E520A3AF440A6 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			productRef = 92AFD2FAAB1D19C424106BDA /* SwiftProtobuf */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		15B58980E9616AFEFBAA0A87 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "io.thand.agent.privilege-services-tests";
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		1AA997717F9E2BDBB6180AE6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_MODULE_NAME = PrivilegeServicesShared;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		3366B01243F5D152012C5F1C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "io.thand.agent.privilege-broker";
+				PRODUCT_MODULE_NAME = ThandPrivilegeBrokerDaemon;
+				PRODUCT_NAME = ThandPrivilegeBrokerDaemon;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		472F02504F53C3D9BF634A7C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "io.thand.agent.privilege-services-tests";
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		4DD4112EFACBDA8B85A2ABD2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = Resources/App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "io.thand.agent.privilege-services";
+				PRODUCT_MODULE_NAME = ThandPrivilegeServices;
+				PRODUCT_NAME = ThandPrivilegeServices;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		530C615821D5DA7C2E6E67D2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = Resources/LoginItem/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "io.thand.agent.privilege-notifier";
+				PRODUCT_MODULE_NAME = ThandPrivilegeNotifier;
+				PRODUCT_NAME = ThandPrivilegeNotifier;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		5D8D057E986F367FB20C50B8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_MODULE_NAME = PrivilegeServicesLocalBrokerProto;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		5DCA8A2770507D98C247FB75 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "io.thand.agent.privilege-broker";
+				PRODUCT_MODULE_NAME = ThandPrivilegeBrokerDaemon;
+				PRODUCT_NAME = ThandPrivilegeBrokerDaemon;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		6402EF1337B36C5587BC5BAE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_MODULE_NAME = PrivilegeServicesAppSupport;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		799B0943D83A06907FEBA19E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		885B3DC7F02493B3AF2D962E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_MODULE_NAME = PrivilegeServicesLocalBrokerProto;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		9570598991C906850EE88BDB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		A0BCC8D6CA79D66B19C72BD5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_MODULE_NAME = PrivilegeServicesShared;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		E1E1B53DE18A90C2DAEDFD6F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.thand.agent;
+				PRODUCT_MODULE_NAME = ThandPrivilegeBrokerCtl;
+				PRODUCT_NAME = "thand-macos-privilege-brokerctl";
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		E26F9ACFA25DDF251F1B362F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.thand.agent;
+				PRODUCT_MODULE_NAME = ThandPrivilegeBrokerCtl;
+				PRODUCT_NAME = "thand-macos-privilege-brokerctl";
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		E6209627F6364428C4D65843 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = Resources/LoginItem/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "io.thand.agent.privilege-notifier";
+				PRODUCT_MODULE_NAME = ThandPrivilegeNotifier;
+				PRODUCT_NAME = ThandPrivilegeNotifier;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		EAE88203D542598EB32C23D4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = Resources/App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "io.thand.agent.privilege-services";
+				PRODUCT_MODULE_NAME = ThandPrivilegeServices;
+				PRODUCT_NAME = ThandPrivilegeServices;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		F6C26A5B52EC15E88DA0E673 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_MODULE_NAME = PrivilegeServicesAppSupport;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		15489B74C0950415503A5957 /* Build configuration list for PBXNativeTarget "ThandPrivilegeNotifier" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				530C615821D5DA7C2E6E67D2 /* Debug */,
+				E6209627F6364428C4D65843 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		3068F0BB3CD65673FDE1C66B /* Build configuration list for PBXNativeTarget "ThandPrivilegeBrokerCtl" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E1E1B53DE18A90C2DAEDFD6F /* Debug */,
+				E26F9ACFA25DDF251F1B362F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		31C91711739025A6F0A408ED /* Build configuration list for PBXNativeTarget "ThandPrivilegeBrokerDaemon" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3366B01243F5D152012C5F1C /* Debug */,
+				5DCA8A2770507D98C247FB75 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		32F488D72B70F8C65028D68D /* Build configuration list for PBXNativeTarget "PrivilegeServicesAppSupport" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6402EF1337B36C5587BC5BAE /* Debug */,
+				F6C26A5B52EC15E88DA0E673 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		A29651DA62B2922AE4326A7D /* Build configuration list for PBXNativeTarget "ThandPrivilegeServices" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EAE88203D542598EB32C23D4 /* Debug */,
+				4DD4112EFACBDA8B85A2ABD2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		B4459BC113F64525177756B0 /* Build configuration list for PBXNativeTarget "PrivilegeServicesShared" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A0BCC8D6CA79D66B19C72BD5 /* Debug */,
+				1AA997717F9E2BDBB6180AE6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C9384C43CC74AF3186DE4233 /* Build configuration list for PBXNativeTarget "PrivilegeServicesLocalBrokerProto" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5D8D057E986F367FB20C50B8 /* Debug */,
+				885B3DC7F02493B3AF2D962E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		CEEA1DC438AF7E93DC1B84B4 /* Build configuration list for PBXNativeTarget "PrivilegeServicesTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				472F02504F53C3D9BF634A7C /* Debug */,
+				15B58980E9616AFEFBAA0A87 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D904B523750D89B4E2034017 /* Build configuration list for PBXProject "ThandPrivilegeServices" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				799B0943D83A06907FEBA19E /* Debug */,
+				9570598991C906850EE88BDB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		014ED1ED248A9911386634E3 /* XCRemoteSwiftPackageReference "swift-protobuf" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-protobuf.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.37.0;
+			};
+		};
+		06B97B0EB31B64E930551497 /* XCRemoteSwiftPackageReference "grpc-swift-2" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/grpc/grpc-swift-2.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.4.0;
+			};
+		};
+		1BC6F23F69C84EA66A992C5E /* XCRemoteSwiftPackageReference "grpc-swift-nio-transport" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/grpc/grpc-swift-nio-transport.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.7.0;
+			};
+		};
+		494FC233D90D4377B2E27A8E /* XCRemoteSwiftPackageReference "swift-nio" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-nio.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.96.0;
+			};
+		};
+		C8C269035254D641671B1415 /* XCRemoteSwiftPackageReference "grpc-swift-protobuf" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/grpc/grpc-swift-protobuf.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.3.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		0C2E774761D9D0299FD32B97 /* GRPCProtobuf */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C8C269035254D641671B1415 /* XCRemoteSwiftPackageReference "grpc-swift-protobuf" */;
+			productName = GRPCProtobuf;
+		};
+		50AEF0F0008319B3D603FBAA /* GRPCCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 06B97B0EB31B64E930551497 /* XCRemoteSwiftPackageReference "grpc-swift-2" */;
+			productName = GRPCCore;
+		};
+		74CC81B991A1358367737B92 /* SwiftProtobuf */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 014ED1ED248A9911386634E3 /* XCRemoteSwiftPackageReference "swift-protobuf" */;
+			productName = SwiftProtobuf;
+		};
+		90517FBAFFC139A68D6D0067 /* GRPCNIOTransportHTTP2TransportServices */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1BC6F23F69C84EA66A992C5E /* XCRemoteSwiftPackageReference "grpc-swift-nio-transport" */;
+			productName = GRPCNIOTransportHTTP2TransportServices;
+		};
+		92AFD2FAAB1D19C424106BDA /* SwiftProtobuf */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 014ED1ED248A9911386634E3 /* XCRemoteSwiftPackageReference "swift-protobuf" */;
+			productName = SwiftProtobuf;
+		};
+		9CB4D7992B7169F6BE472B02 /* GRPCProtobuf */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C8C269035254D641671B1415 /* XCRemoteSwiftPackageReference "grpc-swift-protobuf" */;
+			productName = GRPCProtobuf;
+		};
+		AFFA6098741511A184E80E94 /* SwiftProtobuf */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 014ED1ED248A9911386634E3 /* XCRemoteSwiftPackageReference "swift-protobuf" */;
+			productName = SwiftProtobuf;
+		};
+		D6B7F268B5976E2E22910E70 /* GRPCProtobuf */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C8C269035254D641671B1415 /* XCRemoteSwiftPackageReference "grpc-swift-protobuf" */;
+			productName = GRPCProtobuf;
+		};
+		DEA60BD13B7B83D075821F5D /* GRPCCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 06B97B0EB31B64E930551497 /* XCRemoteSwiftPackageReference "grpc-swift-2" */;
+			productName = GRPCCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 11941C0F3F4A4191C0B95713 /* Project object */;
+}
