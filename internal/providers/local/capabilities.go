@@ -6,14 +6,15 @@ import (
 )
 
 var LocalCapabilities = models.NewProviderCapabilities().
-	// Notifier gets run on the agent
-	WithNotifierConfiguration(models.NotifierConfiguration{
-		Enabled: true,
-		Runtime: sdkConstants.ModeAgent,
+	WithPermissionsConfiguration(models.PermissionsConfiguration{
+		SynchronizableConfiguration: models.SynchronizableConfiguration{
+			Enabled:        true,
+			Synchronizable: false,
+		},
+		SupportsWildcards: true,
 	}).
 	WithProvisioningConfiguration(models.ProvisioningConfiguration{
-		Enabled: true,
 		Runtime: sdkConstants.ModeAgent,
 	}).
-	// Everything else gets run on the server
+	WithDefaultProvisioningConfiguration().
 	WithDefaultTenantsConfiguration()
