@@ -9,6 +9,7 @@ import (
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
 func TestInitializeSingleProvider_ClientModeSkipsConfigValidation(t *testing.T) {
@@ -65,7 +66,7 @@ func TestInitializeSingleProvider_ClientModeSkipsConfigValidation(t *testing.T) 
 func TestInitializeSingleProvider_ServerModeStillValidatesConfig(t *testing.T) {
 	t.Parallel()
 
-	cfg := &Config{mode: ModeServer}
+	cfg := &Config{mode: sdkConstants.ModeServer}
 	providerCfg := &models.ProviderConfig{
 		Name:        "JumpCloud OAuth2",
 		Description: "Missing required oauth2 credentials",

@@ -4,8 +4,10 @@ import (
 	"fmt"
 
 	"github.com/sirupsen/logrus"
+	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/workflow"
 )
 
 // Register temporal workflows and activities
@@ -18,6 +20,41 @@ func (c *Config) registerTemporalWorkflows() error {
 
 	if temporalWorker == nil {
 		return fmt.Errorf("temporal worker is not initialized")
+	}
+
+	// Use the system id as the workflow id to ensure no other workflows
+	// use the same id.
+	systemID := common.GetClientIdentifier()
+
+	if c.IsServer() {
+
+		temporalWorker.RegisterWorkflowWithOptions(
+			CreateServerWorkflow(c, ServerWorkflowStart{
+				Identities: []string{
+					systemID.String(),
+				},
+			}),
+			workflow.RegisterOptions{
+				Name:               systemID.String(),
+				VersioningBehavior: workflow.VersioningBehaviorPinned,
+			},
+		)
+
+	} else if c.IsAgent() {
+
+		// Get the registered identities on the system and bind them
+
+		temporalWorker.RegisterWorkflowWithOptions(
+			CreateAgentWorkflow(c, AgentWorkflowStart{
+				Identities: []string{
+					systemID.String(),
+				},
+			}),
+			workflow.RegisterOptions{
+				Name:               systemID.String(),
+				VersioningBehavior: workflow.VersioningBehaviorPinned,
+			},
+		)
 	}
 
 	return nil

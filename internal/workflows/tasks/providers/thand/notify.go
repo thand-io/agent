@@ -1,6 +1,7 @@
 package thand
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -13,7 +14,9 @@ import (
 	"github.com/thand-io/agent/internal/models"
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	sdkWorkflowsRunner "github.com/thand-io/agent/sdk/workflows/runner"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -65,6 +68,9 @@ func (t *thandTask) executeNotifyTask(
 		return nil, errors.New("invalid notification request")
 	}
 
+	// TODO(hugh): fix this - this cannot happen here. A subworkflow needs to be
+	// created to correctly lookup where the provider lives and execute the workflow
+	// there
 	notifierProviders := t.config.GetProvidersByCapability(
 		models.ProviderCapabilityNotifier)
 
@@ -212,13 +218,6 @@ func (t *thandTask) executeNotifyTemporalParallel(
 
 	temporalContext := workflowTask.GetTemporalContext()
 
-	ao := workflow.ActivityOptions{
-		TaskQueue:           workflowTask.GetTaskQueue(),
-		StartToCloseTimeout: 10 * time.Minute,
-		RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
-	}
-	aoctx := workflow.WithActivityOptions(temporalContext, ao)
-
 	// Create channel and results slice
 	results := make([]notifyResult, len(notifyTasks))
 	resultCh := workflow.NewChannel(temporalContext)
@@ -235,13 +234,56 @@ func (t *thandTask) executeNotifyTemporalParallel(
 		}).Info("Scheduling notify activity via workflow.Go")
 
 		workflow.Go(temporalContext, func(ctx workflow.Context) {
+
 			log := workflow.GetLogger(ctx)
+
 			log.Info("Inside workflow.Go - about to execute activity",
 				"recipient", notifyTask.Recipient,
 				"activityName", thandFunction.ThandNotifyFunction,
 			)
 
-			err := workflow.ExecuteActivity(
+			providerDetial, err := t.config.GetProviderByName(notifyTask.Provider)
+
+			if err != nil {
+				logrus.WithError(err).Error("failed to fetch provider information")
+				return
+			}
+
+			taskQueue := workflowTask.GetTaskQueue()
+
+			// Check where the provider needs to run the activity. If on the agent then
+			// we need to lookup the task queue for where it needs to be run
+			if providerDetial.GetRuntime().Mode == sdkConstants.ModeAgent {
+
+				temporalService := t.config.GetServices().GetTemporal()
+
+				// Use the recipient to lookup the task queue id
+				temporalClient := temporalService.GetClient()
+				listResponse, err := temporalClient.ListWorkflow(context.Background(),
+					&workflowservice.ListWorkflowExecutionsRequest{
+						Namespace: temporalService.GetNamespace(),
+						Query:     fmt.Sprintf("identities IN %s", task.Recipient),
+					})
+				if err != nil {
+					logrus.WithError(err).Error("failed to lookup clients")
+					return
+				}
+
+				// TODO: check that there are workers subscribed
+				for _, exec := range listResponse.Executions {
+					taskQueue = exec.Execution.WorkflowId
+					break
+				}
+			}
+
+			ao := workflow.ActivityOptions{
+				TaskQueue:           taskQueue,
+				StartToCloseTimeout: 10 * time.Minute,
+				RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+			}
+			aoctx := workflow.WithActivityOptions(temporalContext, ao)
+
+			err = workflow.ExecuteActivity(
 				aoctx,
 				thandFunction.ThandNotifyFunction,
 				workflowTask,

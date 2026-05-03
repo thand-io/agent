@@ -67,7 +67,7 @@ func (l *TestCaseLoader) CreateUIConfigFromTestCase(_ *testing.T, tc *TestCase) 
 	}
 
 	// Override mode to Server for UI tests
-	cfg.SetMode(config.ModeServer)
+	cfg.SetMode(sdkConstants.ModeServer)
 
 	return cfg, nil
 }

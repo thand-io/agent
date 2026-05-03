@@ -15,23 +15,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
+	sdkConfig "github.com/thand-io/agent/sdk/config"
 	sdkConstants "github.com/thand-io/agent/sdk/constants"
-)
-
-type Mode string
-
-const (
-
-	// Runs in cloud environment as a login server
-	// allows agents to sync roles and policies and get tasking
-	ModeServer Mode = "server"
-
-	// Runs as a background agent to store session data and
-	// exec platform specific elevations
-	ModeAgent Mode = "agent"
-
-	// Just the CLI mode - used to connect to login-servers
-	ModeClient Mode = "client"
 )
 
 // Config represents the application configuration structure
@@ -60,7 +45,7 @@ type Config struct {
 	Thand models.ThandConfig `mapstructure:"thand"`
 
 	// Internal mode of operation
-	mode   Mode
+	mode   sdkConfig.Mode
 	logger thandLogger
 	mu     sync.RWMutex
 
@@ -76,25 +61,25 @@ func (c *Config) GetSecret() string {
 	return c.Secret
 }
 
-func (c *Config) GetMode() Mode {
+func (c *Config) GetMode() sdkConfig.Mode {
 	return c.mode
 }
 
-func (c *Config) SetMode(mode Mode) {
+func (c *Config) SetMode(mode sdkConfig.Mode) {
 	logrus.Debugf("Setting mode: %s", mode)
 	c.mode = mode
 }
 
 func (c *Config) IsServer() bool {
-	return c.mode == ModeServer
+	return c.mode == sdkConstants.ModeServer
 }
 
 func (c *Config) IsAgent() bool {
-	return c.mode == ModeAgent
+	return c.mode == sdkConstants.ModeAgent
 }
 
 func (c *Config) IsClient() bool {
-	return c.mode == ModeClient
+	return c.mode == sdkConstants.ModeClient
 }
 
 func (c *Config) GetServicesConfig() *models.ServicesConfig {

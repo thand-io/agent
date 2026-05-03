@@ -18,6 +18,7 @@ import (
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
 	sessionManager "github.com/thand-io/agent/internal/sessions"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
 const (
@@ -27,7 +28,7 @@ const (
 
 func TestAuthCookieLargeProviderSessionRoundTripUsesV2Shards(t *testing.T) {
 	provider := "oauth2-large"
-	server := newTestCookieServer(t, config.ModeServer, provider)
+	server := newTestCookieServer(t, sdkConstants.ModeServer, provider)
 	localSession := newLocalSessionForSignedCookieRange(
 		t,
 		provider,
@@ -84,7 +85,7 @@ func TestAuthCookieLargeProviderSessionRoundTripUsesV2Shards(t *testing.T) {
 
 func TestAuthCookieCleansStaleV2ShardsWhenSessionShrinks(t *testing.T) {
 	provider := "oauth2-shrink"
-	server := newTestCookieServer(t, config.ModeServer, provider)
+	server := newTestCookieServer(t, sdkConstants.ModeServer, provider)
 
 	largeSession := newLocalSessionForExactShardCount(
 		t,
@@ -141,7 +142,7 @@ func TestAuthCookieCleansStaleV2ShardsWhenSessionShrinks(t *testing.T) {
 
 func TestAuthCookieRewritingSameWidthShardSetDoesNotExpireRewrittenNames(t *testing.T) {
 	provider := "oauth2-rewrite"
-	server := newTestCookieServer(t, config.ModeServer, provider)
+	server := newTestCookieServer(t, sdkConstants.ModeServer, provider)
 
 	firstSession := newLocalSessionForExactShardCount(
 		t,
@@ -209,7 +210,7 @@ func TestAuthCookieRewritingSameWidthShardSetDoesNotExpireRewrittenNames(t *test
 
 func TestProviderCookieReassemblesV2ShardedSession(t *testing.T) {
 	provider := "oauth2-v2"
-	server := newTestCookieServer(t, config.ModeServer, provider)
+	server := newTestCookieServer(t, sdkConstants.ModeServer, provider)
 	localSession := newLocalSessionForSignedCookieRange(
 		t,
 		provider,
@@ -247,7 +248,7 @@ func TestProviderCookieReassemblesV2ShardedSession(t *testing.T) {
 
 func TestProviderCookieFallsBackToLegacyV1WhenV2Absent(t *testing.T) {
 	provider := "oauth2-v1-fallback"
-	server := newTestCookieServer(t, config.ModeServer, provider)
+	server := newTestCookieServer(t, sdkConstants.ModeServer, provider)
 	localSession := newTestLocalSession(provider, 64)
 
 	expectedSession, err := localSession.GetDecodedSession(newMockEncryptor())
@@ -280,7 +281,7 @@ func TestProviderCookieFallsBackToLegacyV1WhenV2Absent(t *testing.T) {
 
 func TestProviderCookieRejectsPartialV2AndDoesNotFallbackToV1(t *testing.T) {
 	provider := "oauth2-partial"
-	server := newTestCookieServer(t, config.ModeServer, provider)
+	server := newTestCookieServer(t, sdkConstants.ModeServer, provider)
 
 	legacySession := newTestLocalSession(provider, 64)
 	legacyCookie := &http.Cookie{
@@ -331,7 +332,7 @@ func TestProviderCookieRejectsPartialV2AndDoesNotFallbackToV1(t *testing.T) {
 
 func TestProviderCookieRejectsOversizedUnshardedV2BaseCookie(t *testing.T) {
 	provider := "oauth2-oversized-base"
-	server := newTestCookieServer(t, config.ModeServer, provider)
+	server := newTestCookieServer(t, sdkConstants.ModeServer, provider)
 	v2CookieName := createVersionedCookieName(testThandCookieV2, provider)
 
 	requestCookies := []*http.Cookie{
@@ -365,7 +366,7 @@ func TestProviderCookieRejectsOversizedUnshardedV2BaseCookie(t *testing.T) {
 
 func TestProviderCookieRejectsOversizedV2Shard(t *testing.T) {
 	provider := "oauth2-oversized-shard"
-	server := newTestCookieServer(t, config.ModeServer, provider)
+	server := newTestCookieServer(t, sdkConstants.ModeServer, provider)
 	v2CookieName := createVersionedCookieName(testThandCookieV2, provider)
 
 	requestCookies := []*http.Cookie{
@@ -404,7 +405,7 @@ func TestProviderCookieRejectsOversizedV2Shard(t *testing.T) {
 
 func TestProviderCookieRejectsReassembledPayloadOverBoundedBudget(t *testing.T) {
 	provider := "oauth2-oversized-total"
-	server := newTestCookieServer(t, config.ModeServer, provider)
+	server := newTestCookieServer(t, sdkConstants.ModeServer, provider)
 	v2CookieName := createVersionedCookieName(testThandCookieV2, provider)
 
 	requestCookies := []*http.Cookie{
@@ -453,7 +454,7 @@ func TestProviderCookieRejectsReassembledPayloadOverBoundedBudget(t *testing.T) 
 
 func TestReadCurrentProviderCookieValueRejectsOversizedUnshardedBase(t *testing.T) {
 	provider := "oauth2-read-oversized-base"
-	server := newTestCookieServer(t, config.ModeServer, provider)
+	server := newTestCookieServer(t, sdkConstants.ModeServer, provider)
 	v2CookieName := createVersionedCookieName(testThandCookieV2, provider)
 
 	req := httptest.NewRequest(http.MethodGet, "/provider-cookie", nil)
@@ -471,7 +472,7 @@ func TestReadCurrentProviderCookieValueRejectsOversizedUnshardedBase(t *testing.
 
 func TestReadCurrentProviderCookieValueRejectsOversizedChunksPrefixedBase(t *testing.T) {
 	provider := "oauth2-read-oversized-chunks-prefix"
-	server := newTestCookieServer(t, config.ModeServer, provider)
+	server := newTestCookieServer(t, sdkConstants.ModeServer, provider)
 	v2CookieName := createVersionedCookieName(testThandCookieV2, provider)
 
 	req := httptest.NewRequest(http.MethodGet, "/provider-cookie", nil)
@@ -489,7 +490,7 @@ func TestReadCurrentProviderCookieValueRejectsOversizedChunksPrefixedBase(t *tes
 
 func TestReadCurrentProviderCookieValueRejectsOversizedShard(t *testing.T) {
 	provider := "oauth2-read-oversized-shard"
-	server := newTestCookieServer(t, config.ModeServer, provider)
+	server := newTestCookieServer(t, sdkConstants.ModeServer, provider)
 	v2CookieName := createVersionedCookieName(testThandCookieV2, provider)
 
 	req := httptest.NewRequest(http.MethodGet, "/provider-cookie", nil)
@@ -511,7 +512,7 @@ func TestReadCurrentProviderCookieValueRejectsOversizedShard(t *testing.T) {
 
 func TestReadCurrentProviderCookieValueRejectsOversizedReassembledValue(t *testing.T) {
 	provider := "oauth2-read-oversized-total"
-	server := newTestCookieServer(t, config.ModeServer, provider)
+	server := newTestCookieServer(t, sdkConstants.ModeServer, provider)
 	v2CookieName := createVersionedCookieName(testThandCookieV2, provider)
 
 	req := httptest.NewRequest(http.MethodGet, "/provider-cookie", nil)
@@ -541,7 +542,7 @@ func TestReadCurrentProviderCookieValueRejectsOversizedReassembledValue(t *testi
 
 func TestDeleteSessionClearsLegacyAndV2ProviderCookies(t *testing.T) {
 	provider := "oauth2-delete"
-	server := newTestCookieServer(t, config.ModeServer, provider)
+	server := newTestCookieServer(t, sdkConstants.ModeServer, provider)
 	localSession := newTestLocalSession(provider, 64)
 
 	requestCookies := []*http.Cookie{
@@ -587,7 +588,7 @@ func TestDeleteSessionClearsLegacyAndV2ProviderCookies(t *testing.T) {
 
 func TestGetLogoutPageClearsLegacyAndV2Cookies(t *testing.T) {
 	provider := "oauth2-logout"
-	server := newTestCookieServer(t, config.ModeServer, provider)
+	server := newTestCookieServer(t, sdkConstants.ModeServer, provider)
 	localSession := newTestLocalSession(provider, 64)
 
 	requestCookies := []*http.Cookie{

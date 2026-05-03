@@ -11,6 +11,7 @@ import (
 	"github.com/thand-io/agent/internal/providers/email"
 	"github.com/thand-io/agent/internal/providers/gcp"
 	"github.com/thand-io/agent/internal/providers/kubernetes"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
 // newMockProvider creates the correct mock implementation for the given provider type.
@@ -39,7 +40,7 @@ func newTestConfig(t *testing.T, roles map[string]models.Role, providerDefs map[
 	t.Helper()
 
 	config := &Config{
-		mode: ModeServer,
+		mode: sdkConstants.ModeServer,
 		Roles: RoleConfig{
 			Definitions: roles,
 		},

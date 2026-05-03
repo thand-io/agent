@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/thand-io/agent/internal/models"
 	_ "github.com/thand-io/agent/internal/testing/mocks/providers"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
 // syncPatchCall captures an outgoing PATCH request made by MergeConfiguration.
@@ -72,7 +73,7 @@ func newSyncTestConfig(
 	}
 
 	config := &Config{
-		mode: ModeServer,
+		mode: sdkConstants.ModeServer,
 		Roles: RoleConfig{
 			Definitions: roles,
 		},
