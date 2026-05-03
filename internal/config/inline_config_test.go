@@ -816,7 +816,7 @@ workflows:
     enabled: true
 `
 	config := viperFromYAML(t, yaml)
-	config.mode = ModeClient // client mode doesn't require workflow.Workflow field
+	config.mode = sdkConstants.ModeClient // client mode doesn't require workflow.Workflow field
 
 	externalWorkflows := []*models.WorkflowDefinitions{
 		{
@@ -851,7 +851,7 @@ workflows:
     enabled: true
 `
 	config := viperFromYAML(t, yaml)
-	config.mode = ModeClient
+	config.mode = sdkConstants.ModeClient
 
 	result, err := config.ApplyWorkflows([]*models.WorkflowDefinitions{})
 	require.NoError(t, err)

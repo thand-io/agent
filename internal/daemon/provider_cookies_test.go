@@ -634,7 +634,7 @@ func TestGetLogoutPageClearsLegacyAndV2Cookies(t *testing.T) {
 
 func TestHandleAgentModeMigratesLegacyV1CookieWithoutRedirectLoop(t *testing.T) {
 	provider := "oauth2-agent"
-	server := newTestCookieServer(t, config.ModeAgent)
+	server := newTestCookieServer(t, sdkConstants.ModeAgent)
 
 	restoreSessionManagerPath := sessionManager.SESSION_MANAGER_PATH
 	restoreServers := sessionManager.GetSessionManager().Servers
@@ -697,7 +697,7 @@ func TestHandleAgentModeMigratesLegacyV1CookieWithoutRedirectLoop(t *testing.T) 
 	require.Equal(t, http.StatusOK, secondResp.Code, secondResp.Body.String())
 }
 
-func newTestCookieServer(t *testing.T, mode config.Mode, providers ...string) *Server {
+func newTestCookieServer(t *testing.T, mode sdkConstants.Mode, providers ...string) *Server {
 	t.Helper()
 
 	cfg := &config.Config{

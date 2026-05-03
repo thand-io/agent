@@ -107,7 +107,6 @@ type Provider interface {
 	GetProvider() string
 	GetBaseRole() *Role
 	HasPermission(user *User) bool
-	GetRuntime() ProviderRuntimeConfiguration
 
 	Synchronize(ctx context.Context, temporalClient TemporalImpl, req *SynchronizeRequest) error
 

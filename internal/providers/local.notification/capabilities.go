@@ -11,9 +11,5 @@ var LocalCapabilities = models.NewProviderCapabilities().
 		Enabled: true,
 		Runtime: sdkConstants.ModeAgent,
 	}).
-	WithProvisioningConfiguration(models.ProvisioningConfiguration{
-		Enabled: true,
-		Runtime: sdkConstants.ModeAgent,
-	}).
 	// Everything else gets run on the server
 	WithDefaultTenantsConfiguration()

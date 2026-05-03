@@ -21,7 +21,7 @@ func TestInitializeSingleProvider_ClientModeSkipsConfigValidation(t *testing.T) 
 	defer loginServer.Close()
 
 	cfg := &Config{
-		mode: ModeClient,
+		mode: sdkConstants.ModeClient,
 		Login: models.LoginConfig{
 			Endpoint: &model.Endpoint{
 				EndpointConfig: &model.EndpointConfiguration{

@@ -253,7 +253,7 @@ func (t *thandTask) executeNotifyTemporalParallel(
 
 			// Check where the provider needs to run the activity. If on the agent then
 			// we need to lookup the task queue for where it needs to be run
-			if providerDetial.GetRuntime().Mode == sdkConstants.ModeAgent {
+			if providerDetial.GetCapabilities().Notifier.Runtime == sdkConstants.ModeAgent {
 
 				temporalService := t.config.GetServices().GetTemporal()
 

@@ -55,9 +55,6 @@ type PermissionsConfiguration struct {
 	SupportsWildcards bool `json:"supports_wildcards,omitempty"`
 }
 
-type ProviderRuntimeConfiguration struct {
-	Mode sdkConstants.Mode `json"mode"`
-}
 type ResourcesConfiguration = SynchronizableConfiguration
 type IdentitiesConfiguration = SynchronizableConfiguration
 type UsersConfiguration = SynchronizableConfiguration
@@ -127,7 +124,8 @@ type WebhookConfiguration = ProviderConfiguration
 type ProvisioningConfiguration = ProviderConfiguration
 
 type ProviderConfiguration struct {
-	Enabled bool `json:"enabled,omitempty"`
+	Enabled bool              `json:"enabled,omitempty"`
+	Runtime sdkConstants.Mode `json:"mode,omitempty"`
 }
 
 type ProviderConfigurationImpl interface {
@@ -149,9 +147,6 @@ func (dc *ProviderConfiguration) Disable() {
 }
 
 type ProviderCapabilities struct {
-
-	// Runtime
-	Runtime *ProviderRuntimeConfiguration `json:"runtime,omitempty"`
 
 	// Identity management capabilities
 	Identities *IdentitiesConfiguration `json:"identities,omitempty"`
@@ -284,11 +279,6 @@ func (pc *ProviderCapabilities) WithProvisioningConfiguration(config Provisionin
 
 func (pc *ProviderCapabilities) WithTenantsConfiguration(config TenantsConfiguration) *ProviderCapabilities {
 	pc.Tenants = &config
-	return pc
-}
-
-func (pc *ProviderCapabilities) WithRuntime(config ProviderRuntimeConfiguration) *ProviderCapabilities {
-	pc.Runtime = &config
 	return pc
 }
 
@@ -474,9 +464,6 @@ func NewCapability() *ProviderConfiguration {
 
 func NewProviderCapabilities() *ProviderCapabilities {
 	return &ProviderCapabilities{
-		Runtime: &ProviderRuntimeConfiguration{
-			Mode: sdkConstants.ModeServer,
-		},
 		Roles:        &RolesConfiguration{},
 		Permissions:  &PermissionsConfiguration{},
 		Resources:    &ResourcesConfiguration{},
@@ -608,8 +595,4 @@ func (p *BaseProvider) CanSynchronizeTenants() bool {
 
 func (p *BaseProvider) CanSynchronizeResources() bool {
 	return p.CanSynchronize(ProviderCapabilityResources)
-}
-
-func (p *BaseProvider) GetRuntime() ProviderRuntimeConfiguration {
-	return *p.GetCapabilities().Runtime
 }
