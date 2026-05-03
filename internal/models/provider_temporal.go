@@ -12,8 +12,13 @@ import (
 )
 
 const TemporalSynchronizeWorkflowName = "synchronize"
+
 const TemporalAuthorizeRoleWorkflowName = "authorize-role"
 const TemporalRevokeRoleWorkflowName = "revoke-role"
+
+const TemporalNotifyWorkflowName = "notify"
+
+const TemporalLookupSystemIdentifierActivityName = "lookup-system-identifier"
 const TemporalPatchProviderUpstreamActivityName = "patch-provider-upstream"
 const TemporalBuildAuthorizeRoleRequestActivityName = "build-authorize-role-request"
 

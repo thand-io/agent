@@ -181,7 +181,7 @@ func (p *localProvider) authorizeRoleDirect(
 		return nil, fmt.Errorf("user and role must be provided to authorize local sudo access")
 	}
 
-	meta, err := decodeLocalSudoRequestMetadata(req.Metadata)
+	meta, err := decodeLocalSudoRequestMetadata(req.Role)
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +204,7 @@ func (p *localProvider) revokeRoleDirect(
 		return &models.RevokeRoleResponse{}, nil
 	}
 
-	meta, err := decodeLocalSudoAuthorizationMetadata(req.AuthorizeRoleResponse.Metadata)
+	meta, err := decodeLocalSudoAuthorizationMetadata(req.Role)
 	if err != nil {
 		return nil, err
 	}
@@ -1127,12 +1127,12 @@ func sudoersCommandSpec(command []string) (string, error) {
 	return strings.Join(escaped, " "), nil
 }
 
-func decodeLocalSudoRequestMetadata(value map[string]any) (models.LocalSudoRequestMetadata, error) {
-	return models.DecodeLocalSudoRequestMetadata(value)
+func decodeLocalSudoRequestMetadata(value *models.CompositeRole) (models.LocalSudoRequestMetadata, error) {
+	return models.DecodeLocalSudoRequest(value)
 }
 
-func decodeLocalSudoAuthorizationMetadata(value map[string]any) (models.LocalSudoAuthorizationMetadata, error) {
-	return models.DecodeLocalSudoAuthorizationMetadata(value)
+func decodeLocalSudoAuthorizationMetadata(value *models.CompositeRole) (models.LocalSudoAuthorizationMetadata, error) {
+	return models.DecodeLocalSudoAuthorization(value)
 }
 
 func runSystemCommand(name string, args ...string) (commandResult, error) {

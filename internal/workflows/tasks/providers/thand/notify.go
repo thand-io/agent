@@ -1,12 +1,10 @@
 package thand
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
@@ -14,9 +12,7 @@ import (
 	"github.com/thand-io/agent/internal/models"
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
-	sdkConstants "github.com/thand-io/agent/sdk/constants"
-	sdkWorkflowsRunner "github.com/thand-io/agent/sdk/workflows/runner"
-	"go.temporal.io/api/workflowservice/v1"
+	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -32,10 +28,10 @@ type notifyResult struct {
 
 // notifyTask represents a notification task with all necessary context
 type notifyTask struct {
-	Recipient string
-	CallFunc  model.CallFunction
-	Payload   models.NotificationRequest
-	Provider  string
+	ProviderName string
+	Recipient    string
+	CallFunc     model.CallFunction
+	Payload      models.NotificationRequest
 }
 
 // temporalNotifyResult represents the result of a notification operation for temporal communication
@@ -66,26 +62,6 @@ func (t *thandTask) executeNotifyTask(
 
 	if !notifyReq.IsValid() {
 		return nil, errors.New("invalid notification request")
-	}
-
-	// TODO(hugh): fix this - this cannot happen here. A subworkflow needs to be
-	// created to correctly lookup where the provider lives and execute the workflow
-	// there
-	notifierProviders := t.config.GetProvidersByCapability(
-		models.ProviderCapabilityNotifier)
-
-	if !hasMatchingProvider(notifyReq, notifierProviders) {
-		return nil, fmt.Errorf("no matching provider found for name: %s", notifyReq.Provider)
-	}
-
-	elevationReq, err := workflowTask.GetContextAsElevationRequest()
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to get elevation request from input: %w", err)
-	}
-
-	if !elevationReq.IsValid() {
-		return nil, errors.New("elevation request is not valid")
 	}
 
 	notifyImpl := NewDefaultNotifierImpl(notifyReq)
@@ -130,10 +106,10 @@ func (t *thandTask) executeNotify(
 		recipientPayload := notify.GetPayload(recipientIdentity)
 
 		notifyTasks = append(notifyTasks, notifyTask{
-			Recipient: recipientId,
-			CallFunc:  notify.GetCallFunction(recipientIdentity),
-			Payload:   recipientPayload,
-			Provider:  notify.GetProviderName(),
+			Recipient:    recipientId,
+			CallFunc:     notify.GetCallFunction(recipientIdentity),
+			Payload:      recipientPayload,
+			ProviderName: notify.GetProviderName(),
 		})
 
 		log.WithFields(logrus.Fields{
@@ -204,6 +180,71 @@ func hasMatchingProvider(notificationReq thandFunction.NotifierRequest, notifier
 	return false
 }
 
+// When a Temporal context is available, it dispatches a child workflow using
+// the parent workflow's task queue (typically the agent identity), assuming
+// the provider is registered on that worker. Otherwise it falls back to local
+// provider execution.
+func (t *thandTask) runNotifyTask(
+	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
+	task notifyTask,
+) notifyResult {
+
+	// Temporal path: dispatch a child workflow to the agent with this provider
+	if workflowTask.HasTemporalContext() {
+		ctx := workflowTask.GetTemporalContext()
+
+		wfName := models.CreateTemporalProviderWorkflowName(
+			task.ProviderName, models.TemporalAuthorizeRoleWorkflowName)
+
+		// Create unique child workflow ID using hash of composite identifier
+		// (provider + role + identity + tenant) to ensure uniqueness across
+		// different identities/tenants requesting the same role
+		childOpts := workflow.ChildWorkflowOptions{
+			WorkflowID: models.CreateChildWorkflowID(
+				workflowTask.GetWorkflowID(),
+				models.TemporalAuthorizeRoleWorkflowName,
+				task.ProviderName,
+				task.Recipient,
+			),
+			TaskQueue: workflowTask.GetTaskQueue(),
+		}
+		ctx = workflow.WithChildOptions(ctx, childOpts)
+
+		req := task.Payload
+
+		var resp models.AuthorizeRoleResponse
+		err := workflow.ExecuteChildWorkflow(ctx, wfName, req).Get(ctx, &resp)
+		if err != nil {
+			return notifyResult{
+				Recipient: task.Recipient,
+				Error:     err,
+			}
+		}
+		return notifyResult{
+			Recipient: task.Recipient,
+			Error:     nil,
+		}
+	}
+
+	// Non-Temporal fallback: execute locally
+	providerCall, err := t.config.GetProviderByName(task.ProviderName)
+	if err != nil {
+		return notifyResult{
+			Recipient: task.Recipient,
+			Error:     fmt.Errorf("failed to get provider: %w", err),
+		}
+	}
+
+	err = providerCall.SendNotification(
+		workflowTask.GetContext(),
+		task.Payload,
+	)
+	return notifyResult{
+		Recipient: task.Recipient,
+		Error:     err,
+	}
+}
+
 // executeNotifyTemporalParallel executes notification tasks in parallel using Temporal
 func (t *thandTask) executeNotifyTemporalParallel(
 	workflowTask *models.ElevateWorkflowTask,
@@ -230,7 +271,7 @@ func (t *thandTask) executeNotifyTemporalParallel(
 		logrus.WithFields(logrus.Fields{
 			"taskIndex": taskIndex,
 			"recipient": notifyTask.Recipient,
-			"provider":  notifyTask.Provider,
+			"provider":  notifyTask.ProviderName,
 		}).Info("Scheduling notify activity via workflow.Go")
 
 		workflow.Go(temporalContext, func(ctx workflow.Context) {
@@ -242,66 +283,13 @@ func (t *thandTask) executeNotifyTemporalParallel(
 				"activityName", thandFunction.ThandNotifyFunction,
 			)
 
-			providerDetial, err := t.config.GetProviderByName(notifyTask.Provider)
-
-			if err != nil {
-				logrus.WithError(err).Error("failed to fetch provider information")
-				return
-			}
-
-			taskQueue := workflowTask.GetTaskQueue()
-
-			// Check where the provider needs to run the activity. If on the agent then
-			// we need to lookup the task queue for where it needs to be run
-			if providerDetial.GetCapabilities().Notifier.Runtime == sdkConstants.ModeAgent {
-
-				temporalService := t.config.GetServices().GetTemporal()
-
-				// Use the recipient to lookup the task queue id
-				temporalClient := temporalService.GetClient()
-				listResponse, err := temporalClient.ListWorkflow(context.Background(),
-					&workflowservice.ListWorkflowExecutionsRequest{
-						Namespace: temporalService.GetNamespace(),
-						Query:     fmt.Sprintf("identities IN %s", task.Recipient),
-					})
-				if err != nil {
-					logrus.WithError(err).Error("failed to lookup clients")
-					return
-				}
-
-				// TODO: check that there are workers subscribed
-				for _, exec := range listResponse.Executions {
-					taskQueue = exec.Execution.WorkflowId
-					break
-				}
-			}
-
-			ao := workflow.ActivityOptions{
-				TaskQueue:           taskQueue,
-				StartToCloseTimeout: 10 * time.Minute,
-				RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
-			}
-			aoctx := workflow.WithActivityOptions(temporalContext, ao)
-
-			err = workflow.ExecuteActivity(
-				aoctx,
-				thandFunction.ThandNotifyFunction,
-				workflowTask,
-				taskName,
-				notifyTask.CallFunc,
-				notifyTask.Payload,
-			).Get(ctx, nil)
-
-			log.Info("Activity completed",
-				"recipient", notifyTask.Recipient,
-				"error", err,
-			)
+			notifyResult := t.runNotifyTask(workflowTask, task)
 
 			// Send result through channel
 			resultCh.Send(ctx, temporalNotifyResult{
 				Index:     taskIndex,
-				Recipient: notifyTask.Recipient,
-				Err:       err,
+				Recipient: notifyResult.Recipient,
+				Err:       notifyResult.Error,
 			})
 		})
 	}
@@ -335,7 +323,7 @@ func (t *thandTask) executeNotifyGoParallel(
 			defer wg.Done()
 
 			// Get provider config
-			provider, err := t.config.GetProviderByName(notifyTask.Provider)
+			provider, err := t.config.GetProviderByName(notifyTask.ProviderName)
 			if err != nil {
 				results[index] = notifyResult{
 					Recipient: notifyTask.Recipient,

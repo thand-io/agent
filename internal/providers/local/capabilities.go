@@ -16,5 +16,11 @@ var LocalCapabilities = models.NewProviderCapabilities().
 	WithProvisioningConfiguration(models.ProvisioningConfiguration{
 		Runtime: sdkConstants.ModeAgent,
 	}).
+	WithPermissionsConfiguration(models.PermissionsConfiguration{
+		// Runtime: sdkConstants.ModeAgent,
+	}).
+	WithRolesConfiguration(models.RolesConfiguration{
+		//
+	}).
 	WithDefaultProvisioningConfiguration().
 	WithDefaultTenantsConfiguration()

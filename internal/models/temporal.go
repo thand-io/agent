@@ -12,6 +12,11 @@ const TemporalExecuteElevationWorkflowName = "ExecuteElevationWorkflow"
 const TemporalIsApprovedQueryName = "isApproved"
 const TemporalGetWorkflowTaskQueryName = "getWorkflowTask"
 
+// System workflow (internal/config) query + update names
+const TemporalSystemPingQueryName = "ping"
+const TemporalSystemUpdateIdentitiesUpdateName = "updateIdentities"
+const TemporalSystemShutdownUpdateName = "shutdown"
+
 // TemporalAuthAPIKey represents API Key authentication configuration
 type TemporalAuthAPIKey struct {
 	ApiKey string `mapstructure:"api_key" default:""`

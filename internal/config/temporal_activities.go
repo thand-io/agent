@@ -8,12 +8,93 @@ import (
 	"github.com/serverlessworkflow/sdk-go/v3/model"
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 )
 
 type thandActivities struct {
 	config *Config
+}
+
+// This queries both system and agent workflows to get the task queue
+// identifier - used in order to figure out where the workflow op should
+// run
+func (t *thandActivities) LookupSystemIdentifier(
+	ctx context.Context,
+) (string, error) {
+
+	c := t.config
+
+	log := activity.GetLogger(ctx)
+
+	if !c.GetServices().HasTemporal() {
+
+		log.Warn("Thand service is not configured; skipping PatchProviderUpstream activity")
+
+		return "", temporal.NewNonRetryableApplicationError(
+			"Thand service is not configured",
+			"ThandServiceNotConfigured",
+			nil,
+		)
+	}
+
+	temporalService := c.GetServices().GetTemporal()
+
+	if !temporalService.HasClient() {
+		log.Warn("Thand service is not configured; skipping PatchProviderUpstream activity")
+
+		return "", temporal.NewNonRetryableApplicationError(
+			"Thand service is not configured",
+			"ThandServiceNotConfigured",
+			nil,
+		)
+	}
+
+	// Now lookup
+
+	temporalClient := temporalService.GetClient()
+
+	listResponse, err := temporalClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: temporalService.GetNamespace(),
+		Query:     "status = RUNNING",
+	})
+
+	if err != nil {
+		return "", err
+	}
+
+	for _, workflowExec := range listResponse.GetExecutions() {
+
+		// Send a quick query to see if there is a worker avaliable
+		// we'll keep going until we find an alive system
+
+		// We'll signal the workflow to see if its alive
+
+		_, err := temporalClient.QueryWorkflow(
+			ctx,
+			workflowExec.Execution.GetWorkflowId(),
+			workflowExec.Execution.GetRunId(),
+			models.TemporalSystemPingQueryName,
+			nil, // empty ping
+		)
+
+		if err != nil {
+			log.Info("failed to query workflow",
+				"workflowId", workflowExec.Execution.GetWorkflowId())
+			continue
+		}
+
+		// Device is alive - we'll query this one
+		return workflowExec.Execution.WorkflowId, nil
+	}
+
+	return "", temporal.NewNonRetryableApplicationError(
+		"Thand service is not configured",
+		"ThandServiceNotConfigured",
+		nil,
+	)
+
 }
 
 // PatchProviderUpstreamDummy is a no-op activity for thand server/agents that are not

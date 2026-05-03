@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/sirupsen/logrus"
@@ -16,6 +17,7 @@ func (c *Config) registerTemporalWorkflows() error {
 		return fmt.Errorf("temporal service is not initialized")
 	}
 
+	temporalClient := c.servicesClient.GetTemporal().GetClient()
 	temporalWorker := c.servicesClient.GetTemporal().GetWorker()
 
 	if temporalWorker == nil {
@@ -30,8 +32,10 @@ func (c *Config) registerTemporalWorkflows() error {
 
 		temporalWorker.RegisterWorkflowWithOptions(
 			CreateServerWorkflow(c, ServerWorkflowStart{
-				Identities: []string{
-					systemID.String(),
+				ThandSystemStart: ThandSystemStart{
+					Identities: []string{
+						systemID.String(),
+					},
 				},
 			}),
 			workflow.RegisterOptions{
@@ -46,8 +50,10 @@ func (c *Config) registerTemporalWorkflows() error {
 
 		temporalWorker.RegisterWorkflowWithOptions(
 			CreateAgentWorkflow(c, AgentWorkflowStart{
-				Identities: []string{
-					systemID.String(),
+				ThandSystemStart: ThandSystemStart{
+					Identities: []string{
+						systemID.String(),
+					},
 				},
 			}),
 			workflow.RegisterOptions{
@@ -56,6 +62,15 @@ func (c *Config) registerTemporalWorkflows() error {
 			},
 		)
 	}
+
+	// Signal the workflow with a heartbeat
+	temporalClient.SignalWorkflow(
+		context.Background(),
+		systemID.String(),
+		"",
+		"heartbeat",
+		map[string]string{},
+	)
 
 	return nil
 
@@ -75,6 +90,15 @@ func (c *Config) registerTemporalActivities() error {
 	thandActivities := &thandActivities{
 		config: c,
 	}
+
+	logrus.Info("Registering system identifier lookup")
+
+	temporalWorker.RegisterActivityWithOptions(
+		thandActivities.LookupSystemIdentifier,
+		activity.RegisterOptions{
+			Name: models.TemporalLookupSystemIdentifierActivityName,
+		},
+	)
 
 	if c.HasThandService() {
 

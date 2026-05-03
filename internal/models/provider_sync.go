@@ -243,7 +243,6 @@ func Synchronize(
 // (runSyncLoop) and the pure-Go path (executeSync) delegate to this function.
 func paginatedSync[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 	provider Provider,
-	name SynchronizeCapability,
 	req Req,
 	executePage func(Req) (Resp, error),
 	onPage func(Resp),
@@ -294,7 +293,7 @@ func executeSync[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 	wg.Go(func() {
 		logrus.Infof("Starting synchronization operation: %s", name)
 
-		err := paginatedSync(provider, name, req,
+		err := paginatedSync(provider, req,
 			func(r Req) (Resp, error) { return syncOp(ctx, r) },
 			nil, // no post-page hook in the pure-Go path - TODO add patching support
 		)

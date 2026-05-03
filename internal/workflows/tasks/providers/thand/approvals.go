@@ -478,10 +478,10 @@ func (t *thandTask) makeApprovalNotifications(
 			recipientPayload := approvalNotifier.GetPayload(recipientIdentity)
 
 			notifyTasks = append(notifyTasks, notifyTask{
-				Recipient: recipientID,
-				CallFunc:  approvalNotifier.GetCallFunction(recipientIdentity),
-				Payload:   recipientPayload,
-				Provider:  approvalNotifier.GetProviderName(),
+				Recipient:    recipientID,
+				CallFunc:     approvalNotifier.GetCallFunction(recipientIdentity),
+				Payload:      recipientPayload,
+				ProviderName: approvalNotifier.GetProviderName(),
 			})
 
 			logrus.WithFields(logrus.Fields{
