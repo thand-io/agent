@@ -43,14 +43,15 @@ func (p *localNotificationProvider) RegisterActivities() any {
 }
 
 func (p *localNotificationProvider) SendNotification(
-	ctx context.Context,
+	ctx models.ProviderContext,
 	notification models.NotificationRequest,
 ) error {
+	goCtx := models.ContextFromProviderContext(ctx)
 	var req models.LocalNotificationRequest
 	if err := common.ConvertInterfaceToInterface(notification, &req); err != nil {
 		return localNotificationNonRetryableError("failed to parse local notification payload", err)
 	}
-	if err := p.postLocalNotificationDirect(ctx, req); err != nil {
+	if err := p.postLocalNotificationDirect(goCtx, req); err != nil {
 		return wrapLocalNotificationProviderError(err)
 	}
 	return nil

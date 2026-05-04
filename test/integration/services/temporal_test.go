@@ -50,10 +50,10 @@ func temporalConfig(infra *testinfra.TestInfrastructure, disableVersioning bool)
 }
 
 // initAndRegister creates a TemporalClient, initialises it, and registers
-// the echo workflow/activity on every worker.
-func initAndRegister(t *testing.T, infra *testinfra.TestInfrastructure, cfg *models.TemporalConfig, identities ...string) *temporalService.TemporalClient {
+// the echo workflow/activity on the worker.
+func initAndRegister(t *testing.T, infra *testinfra.TestInfrastructure, cfg *models.TemporalConfig, taskQueue string) *temporalService.TemporalClient {
 	t.Helper()
-	tc := temporalService.NewTemporalClient(cfg, nil, identities...)
+	tc := temporalService.NewTemporalClient(cfg, nil, taskQueue)
 	require.NoError(t, tc.Initialize(), "Initialize should succeed")
 	infra.RegisterCleanup(func() { _ = tc.Shutdown() })
 
@@ -162,33 +162,6 @@ func TestTemporalServiceVersioningEnabled(t *testing.T) {
 	}
 }
 
-// TestTemporalServiceMultiIdentityWorkers ensures multiple task-queue
-// identities each get their own worker and can execute workflows independently.
-func TestTemporalServiceMultiIdentityWorkers(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
-	ctx := context.Background()
-	infra := testinfra.SetupTemporalInfrastructure(t, ctx)
-	defer infra.Teardown()
-
-	cfg := temporalConfig(infra, true)
-	tc := initAndRegister(t, infra, cfg, "queue-a", "queue-b")
-
-	cl := tc.GetClient()
-	require.NotNil(t, cl)
-
-	// Each queue should have a dedicated worker.
-	wA := tc.GetWorker("queue-a")
-	wB := tc.GetWorker("queue-b")
-	require.NotNil(t, wA, "worker for queue-a must exist")
-	require.NotNil(t, wB, "worker for queue-b must exist")
-	assert.Nil(t, tc.GetWorker("queue-c"), "non-existent queue returns nil")
-
-	executeEchoWorkflow(t, cl, "queue-a", "msg-a")
-	executeEchoWorkflow(t, cl, "queue-b", "msg-b")
-}
-
 // TestTemporalServiceShutdownUnblocksGetClient confirms that calling
 // Shutdown before readiness unblocks a waiting GetClient caller.
 func TestTemporalServiceShutdownUnblocksGetClient(t *testing.T) {
@@ -223,7 +196,7 @@ func TestTemporalServiceShutdownUnblocksGetClient(t *testing.T) {
 }
 
 // TestTemporalServiceNoIdentities confirms Initialize returns an error
-// when no identities are provided.
+// when no task queue is provided.
 func TestTemporalServiceNoIdentities(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
@@ -233,34 +206,10 @@ func TestTemporalServiceNoIdentities(t *testing.T) {
 	defer infra.Teardown()
 
 	cfg := temporalConfig(infra, true)
-	tc := temporalService.NewTemporalClient(cfg, nil)
+	tc := temporalService.NewTemporalClient(cfg, nil, "")
 	err := tc.Initialize()
-	require.Error(t, err, "Initialize with zero identities should fail")
-	assert.Contains(t, err.Error(), "at least one identity")
-}
-
-// TestTemporalServiceIdentityDedup verifies that duplicate identities are
-// de-duplicated so only one worker is started per unique task queue.
-func TestTemporalServiceIdentityDedup(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
-	ctx := context.Background()
-	infra := testinfra.SetupTemporalInfrastructure(t, ctx)
-	defer infra.Teardown()
-
-	cfg := temporalConfig(infra, true)
-	tc := initAndRegister(t, infra, cfg, "dup-queue", "dup-queue", "dup-queue")
-
-	cl := tc.GetClient()
-	require.NotNil(t, cl)
-
-	// Only one worker should exist despite three identical identity args.
-	wAll := tc.GetWorker()
-	require.NotNil(t, wAll, "GetWorker must return a worker")
-	assert.Nil(t, tc.GetWorker("other"), "non-existent queue returns nil")
-
-	executeEchoWorkflow(t, cl, "dup-queue", "dedup-msg")
+	require.Error(t, err, "Initialize with empty task queue should fail")
+	assert.Contains(t, err.Error(), "task queue")
 }
 
 // TestTemporalServiceNamespaceValidation exercises the live Temporal
@@ -318,34 +267,7 @@ func TestTemporalServiceGetClientAccessorsAreSafe(t *testing.T) {
 			_ = tc.HasClient()
 			_ = tc.HasWorker()
 			_ = tc.GetWorker()
-			_ = tc.GetWorker("race-queue")
 		}()
 	}
 	wg.Wait()
-}
-
-// TestTemporalServiceMaxWorkersCap verifies that NewTemporalClient caps
-// the number of workers at MaxWorkers.
-func TestTemporalServiceMaxWorkersCap(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
-
-	ids := make([]string, temporalService.MaxWorkers+3)
-	for i := range ids {
-		ids[i] = "q-" + strconv.Itoa(i)
-	}
-
-	cfg := &models.TemporalConfig{
-		Host:              "localhost",
-		Port:              7233,
-		Namespace:         "default",
-		DisableVersioning: true,
-	}
-	tc := temporalService.NewTemporalClient(cfg, nil, ids...)
-
-	// We can't call Initialize (no real server), but GetTaskQueue/GetIdentity
-	// reflect the first identity and the cap is applied internally.
-	assert.Equal(t, "q-0", tc.GetTaskQueue())
-	assert.Equal(t, "q-0", tc.GetIdentity())
 }

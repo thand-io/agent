@@ -9,6 +9,7 @@ type SimpleServices struct {
 
 type SimpleConfig struct {
 	ApiBasePath string
+	Mode        string
 	Server      SimpleServer
 	Services    SimpleServices
 }

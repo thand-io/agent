@@ -1,7 +1,6 @@
 package models
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -520,11 +519,17 @@ type WorkflowNotifyResponse struct {
 // CreateProviderNotifyWorkflow
 // the notify workflow is being executed outside of the request auth/revoke auth
 // so it may not have access to the local providers.
+//
+// The workflow forwards the workflow.Context (which satisfies ProviderContext)
+// to provider.SendNotification. Providers that wrap the underlying API call
+// as a Temporal activity (email, slack, local.notification) detect the
+// workflow context and dispatch via ExecuteActivity for retry/replay
+// determinism. This mirrors CreateProviderAuthorizeRoleWorkflow.
 func CreateProviderNotifyWorkflow(provider Provider) func(workflow.Context, WorkflowNotifyRequest) (*WorkflowNotifyResponse, error) {
 	return func(ctx workflow.Context, req WorkflowNotifyRequest) (*WorkflowNotifyResponse, error) {
 
 		log := workflow.GetLogger(ctx)
-		log.Info("Starting authorize role workflow", "provider", provider.GetIdentifier())
+		log.Info("Starting notify workflow", "provider", provider.GetIdentifier())
 
 		if len(req.Recipient) == 0 {
 			return nil, fmt.Errorf("recipient is required for notification")
@@ -532,16 +537,11 @@ func CreateProviderNotifyWorkflow(provider Provider) func(workflow.Context, Work
 
 		ctx = evaluateRuntime(
 			ctx,
-			provider.GetCapabilities().Provisioning.Runtime,
+			provider.GetCapabilities().Notifier.Runtime,
 			req.Recipient, // Lookup based on identifier hugh@thand.io or hostname
 		)
 
-		// TODO(hugh): send notificaiotn is quite simple wrap this in a activity
-		// to retry it
-		err := provider.SendNotification(
-			context.Background(), req.Payload)
-
-		if err != nil {
+		if err := provider.SendNotification(ctx, req.Payload); err != nil {
 			log.Error("failed to send notification", "error", err)
 			return nil, err
 		}

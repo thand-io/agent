@@ -187,7 +187,7 @@ func (p *emailProviderMock) Initialize(identifier string, provider models.Provid
 
 // SendNotification captures the email instead of sending it
 func (p *emailProviderMock) SendNotification(
-	ctx context.Context, notification models.NotificationRequest,
+	ctx models.ProviderContext, notification models.NotificationRequest,
 ) error {
 	// Convert NotificationRequest to EmailNotificationRequest
 	emailRequest := &models.EmailNotificationRequest{}

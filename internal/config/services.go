@@ -27,7 +27,7 @@ func (c *Config) GetServices() models.ServicesClientImpl {
 func (c *Config) SetupTemporal() error {
 	if c.servicesClient != nil && c.servicesClient.GetTemporal() != nil {
 
-		logrus.Infoln("Setting up temporal services...")
+		logrus.Infoln("Setting up temporal workflows and activities...")
 
 		// Register workflows
 		err := c.registerTemporalWorkflows()
@@ -51,10 +51,6 @@ func (c *Config) SetupTemporal() error {
 
 func (c *Config) StartTemporalWorkers() error {
 	if c.servicesClient == nil || c.servicesClient.GetTemporal() == nil {
-		return nil
-	}
-
-	if !c.IsServer() {
 		return nil
 	}
 

@@ -22,6 +22,13 @@ const TemporalLookupSystemIdentifierActivityName = "lookup-system-identifier"
 const TemporalPatchProviderUpstreamActivityName = "patch-provider-upstream"
 const TemporalBuildAuthorizeRoleRequestActivityName = "build-authorize-role-request"
 
+// SendNotificationActivityName is the unqualified Temporal activity name that
+// notifier providers (email, slack, local.notification, ...) expose via their
+// RegisterActivities() struct so the shared notify workflow can dispatch
+// SendNotification calls as a Temporal activity. The fully qualified name is
+// produced via CreateTemporalProviderWorkflowName(<provider id>, SendNotificationActivityName).
+const SendNotificationActivityName = "SendNotificationActivity"
+
 func CreateTemporalProviderWorkflowIdentifier(identifier, base string) string {
 	return CreateTemporalWorkflowIdentifier(fmt.Sprintf("%s-%s", identifier, base))
 }

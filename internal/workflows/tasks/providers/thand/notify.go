@@ -12,6 +12,7 @@ import (
 	"github.com/thand-io/agent/internal/models"
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 	taskModel "github.com/thand-io/agent/internal/workflows/tasks/model"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	sdkWorkflowsModel "github.com/thand-io/agent/sdk/workflows/models"
 	"go.temporal.io/sdk/workflow"
 )
@@ -195,6 +196,21 @@ func (t *thandTask) runNotifyTask(
 		wfName := models.CreateTemporalProviderWorkflowName(
 			task.ProviderName, models.TemporalNotifyWorkflowName)
 
+		// Determine which task queue should receive the child workflow.
+		// Notifier providers that declare ModeAgent register their notify
+		// workflow only on the agent worker (task queue == agent identity),
+		// so dispatching against the parent's task queue (typically the
+		// server queue) results in "unable to find workflow type". Route the
+		// child to the recipient identity in that case so it lands on the
+		// agent worker that registered the workflow.
+		taskQueue := workflowTask.GetTaskQueue()
+		if provider, err := t.config.GetProviderByName(task.ProviderName); err == nil &&
+			provider != nil &&
+			provider.GetCapabilities() != nil &&
+			provider.GetCapabilities().Notifier.Runtime == sdkConstants.ModeAgent {
+			taskQueue = task.Recipient
+		}
+
 		// Create unique child workflow ID using hash of composite identifier
 		// (provider + role + identity + tenant) to ensure uniqueness across
 		// different identities/tenants requesting the same role
@@ -205,7 +221,7 @@ func (t *thandTask) runNotifyTask(
 				task.ProviderName,
 				task.Recipient,
 			),
-			TaskQueue: workflowTask.GetTaskQueue(),
+			TaskQueue: taskQueue,
 		}
 		ctx = workflow.WithChildOptions(ctx, childOpts)
 

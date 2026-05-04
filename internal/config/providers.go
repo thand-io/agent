@@ -10,6 +10,7 @@ import (
 	"github.com/thand-io/agent/internal/config/environment"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/providers"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	providerSdk "github.com/thand-io/agent/sdk/providers"
 	"go.temporal.io/sdk/workflow"
 
@@ -193,7 +194,7 @@ func (c *Config) InitializeProviders() error {
 	if c.IsServer() {
 		_ = c.GetServices()
 		if err := c.SetupTemporal(); err != nil {
-			return fmt.Errorf("setting up temporal services: %w", err)
+			return fmt.Errorf("failed to set up temporal services: %w", err)
 		}
 	}
 
@@ -294,7 +295,7 @@ func (c *Config) InitializeProviders() error {
 				// Register the provisioning capability
 				if providerCapabilities != nil &&
 					providerCapabilities.Provisioning.Enabled &&
-					providerCapabilities.Provisioning.Runtime == c.GetMode() {
+					(providerCapabilities.Provisioning.Runtime == c.GetMode() || (providerCapabilities.Provisioning.Runtime == sdkConstants.ModeAgent && c.IsClient())) {
 
 					authWorkflowName := models.CreateTemporalProviderWorkflowName(
 						providerResult.GetIdentifier(),
@@ -334,6 +335,19 @@ func (c *Config) InitializeProviders() error {
 							VersioningBehavior: workflow.VersioningBehaviorPinned,
 						},
 					)
+				} else {
+					provisioningEnabled := false
+					provisioningRuntime := sdkConstants.Mode("")
+					if providerCapabilities != nil && providerCapabilities.Provisioning != nil {
+						provisioningEnabled = providerCapabilities.Provisioning.Enabled
+						provisioningRuntime = providerCapabilities.Provisioning.Runtime
+					}
+					logrus.WithFields(logrus.Fields{
+						"provider":             result.key,
+						"mode":                 c.GetMode(),
+						"provisioning.enabled": provisioningEnabled,
+						"provisioning.runtime": provisioningRuntime,
+					}).Infoln("Skipping provisioning workflow registration: provider does not support provisioning in this runtime")
 				}
 
 				if providerResult.GetIdentifier() == "local" {
@@ -346,7 +360,7 @@ func (c *Config) InitializeProviders() error {
 				// Register the notification capability
 				if providerCapabilities != nil &&
 					providerCapabilities.Notifier.Enabled &&
-					providerCapabilities.Notifier.Runtime == c.GetMode() {
+					((providerCapabilities.Notifier.Runtime == c.GetMode()) || (providerCapabilities.Notifier.Runtime == sdkConstants.ModeAgent && c.IsClient())) {
 
 					notifierWorkflowName := models.CreateTemporalProviderWorkflowName(
 						providerResult.GetIdentifier(),
@@ -364,6 +378,19 @@ func (c *Config) InitializeProviders() error {
 							VersioningBehavior: workflow.VersioningBehaviorPinned,
 						},
 					)
+				} else {
+					notifierEnabled := false
+					notifierRuntime := sdkConstants.Mode("")
+					if providerCapabilities != nil && providerCapabilities.Notifier != nil {
+						notifierEnabled = providerCapabilities.Notifier.Enabled
+						notifierRuntime = providerCapabilities.Notifier.Runtime
+					}
+					logrus.WithFields(logrus.Fields{
+						"provider":         result.key,
+						"mode":             c.GetMode(),
+						"notifier.enabled": notifierEnabled,
+						"notifier.runtime": notifierRuntime,
+					}).Infoln("Skipping notify workflow registration: provider does not support notifier in this runtime")
 				}
 
 				// Register all custom provider workflows

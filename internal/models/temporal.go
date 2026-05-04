@@ -72,9 +72,8 @@ type TemporalImpl interface {
 	GetClient() client.Client
 	HasClient() bool
 
-	// GetWorker returns a synthetic worker that broadcasts registration calls
-	// across all (or a filtered subset of) identity-specific workers.
-	GetWorker(identities ...string) worker.Worker
+	// GetWorker returns the underlying Temporal worker, or nil if not initialized.
+	GetWorker() worker.Worker
 	HasWorker() bool
 
 	GetHostPort() string

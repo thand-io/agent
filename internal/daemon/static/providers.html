@@ -13,7 +13,8 @@
                             <th>Name</th>
                             <th>Provider Type</th>
                             <th>Status</th>
-                            <th style="width: 420px;">Actions</th>
+                            <th style="width: 360px;">Actions</th>
+                            <th style="width: 320px;">Capabilities</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -46,14 +47,56 @@
                                 {{if and $provider.Result.Capabilities.Permissions $provider.Result.Capabilities.Permissions.Enabled}}
                                 <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$provider.Result.Identifier}}/permissions" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">Permissions</a>
                                 {{end}}
+                                {{if and $provider.Result.Capabilities.Resources $provider.Result.Capabilities.Resources.Enabled}}
+                                <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$provider.Result.Identifier}}/resources" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">Resources</a>
+                                {{end}}
                                 {{if and $provider.Result.Capabilities.Tenants $provider.Result.Capabilities.Tenants.Enabled}}
                                 <a href="{{$.TemplateData.Config.ApiBasePath}}/provider/{{$provider.Result.Identifier}}/tenants" class="button button-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem;">Tenants</a>
+                                {{end}}
+                            </td>
+                            <td>
+                                {{$systemMode := $.TemplateData.Config.Mode}}
+                                {{with $cap := $provider.Result.Capabilities.Authorizer}}
+                                    {{if $cap.Enabled}}
+                                    {{$runtime := printf "%s" $cap.Runtime}}
+                                    {{$active := and (eq $runtime "server") (eq $systemMode "server")}}
+                                    <button type="button" disabled class="button button-secondary"
+                                        title="Authorizer capability — runtime: {{if $runtime}}{{$runtime}}{{else}}unset{{end}}; system mode: {{$systemMode}}{{if $active}} (active){{else}} (inactive — requires server runtime and server mode){{end}}"
+                                        style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem; {{if $active}}background-color: hsl(var(--status-active) / 0.15); border-color: hsl(var(--status-active)); color: hsl(var(--status-active));{{else}}background-color: hsl(var(--error-bg)); border-color: hsl(var(--error-border)); color: hsl(var(--error-text));{{end}}">Authorizer</button>
+                                    {{end}}
+                                {{end}}
+                                {{with $cap := $provider.Result.Capabilities.Notifier}}
+                                    {{if $cap.Enabled}}
+                                    {{$runtime := printf "%s" $cap.Runtime}}
+                                    {{$active := and (eq $runtime "server") (eq $systemMode "server")}}
+                                    <button type="button" disabled class="button button-secondary"
+                                        title="Notifier capability — runtime: {{if $runtime}}{{$runtime}}{{else}}unset{{end}}; system mode: {{$systemMode}}{{if $active}} (active){{else}} (inactive — requires server runtime and server mode){{end}}"
+                                        style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem; {{if $active}}background-color: hsl(var(--status-active) / 0.15); border-color: hsl(var(--status-active)); color: hsl(var(--status-active));{{else}}background-color: hsl(var(--error-bg)); border-color: hsl(var(--error-border)); color: hsl(var(--error-text));{{end}}">Notifier</button>
+                                    {{end}}
+                                {{end}}
+                                {{with $cap := $provider.Result.Capabilities.Webhook}}
+                                    {{if $cap.Enabled}}
+                                    {{$runtime := printf "%s" $cap.Runtime}}
+                                    {{$active := and (eq $runtime "server") (eq $systemMode "server")}}
+                                    <button type="button" disabled class="button button-secondary"
+                                        title="Webhook capability — runtime: {{if $runtime}}{{$runtime}}{{else}}unset{{end}}; system mode: {{$systemMode}}{{if $active}} (active){{else}} (inactive — requires server runtime and server mode){{end}}"
+                                        style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem; {{if $active}}background-color: hsl(var(--status-active) / 0.15); border-color: hsl(var(--status-active)); color: hsl(var(--status-active));{{else}}background-color: hsl(var(--error-bg)); border-color: hsl(var(--error-border)); color: hsl(var(--error-text));{{end}}">Webhook</button>
+                                    {{end}}
+                                {{end}}
+                                {{with $cap := $provider.Result.Capabilities.Provisioning}}
+                                    {{if $cap.Enabled}}
+                                    {{$runtime := printf "%s" $cap.Runtime}}
+                                    {{$active := and (eq $runtime "server") (eq $systemMode "server")}}
+                                    <button type="button" disabled class="button button-secondary"
+                                        title="Provisioning capability — runtime: {{if $runtime}}{{$runtime}}{{else}}unset{{end}}; system mode: {{$systemMode}}{{if $active}} (active){{else}} (inactive — requires server runtime and server mode){{end}}"
+                                        style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.5rem; {{if $active}}background-color: hsl(var(--status-active) / 0.15); border-color: hsl(var(--status-active)); color: hsl(var(--status-active));{{else}}background-color: hsl(var(--error-bg)); border-color: hsl(var(--error-border)); color: hsl(var(--error-text));{{end}}">Provisioning</button>
+                                    {{end}}
                                 {{end}}
                             </td>
                         </tr>
                         {{else}}
                         <tr>
-                            <td colspan="4" class="text-muted" style="text-align: center; padding: 2rem;">
+                            <td colspan="5" class="text-muted" style="text-align: center; padding: 2rem;">
                                 No providers configured. Or you do not have access to view any providers.
                             </td>
                         </tr>

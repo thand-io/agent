@@ -7,5 +7,6 @@ import (
 
 var LocalPresenceCapabilities = models.NewProviderCapabilities().
 	WithNotifierConfiguration(models.NotifierConfiguration{
+		Enabled: true,
 		Runtime: sdkConstants.ModeAgent,
 	})
