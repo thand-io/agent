@@ -509,7 +509,7 @@ func CreateAuthorizeRoleRequest(
 
 type WorkflowNotifyRequest struct {
 	WorkflowID string              `json:"workflow_id"` // ID of the workflow for which the role is being authorized
-	Recipient  string              `json:"recipient`
+	Recipient  string              `json:"recipient"`
 	Payload    NotificationRequest `json:"request"`
 }
 

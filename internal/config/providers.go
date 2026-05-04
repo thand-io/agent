@@ -292,10 +292,14 @@ func (c *Config) InitializeProviders() error {
 				// Check the provider capability is either agent or server
 				providerCapabilities := providerResult.GetCapabilities()
 
+				// We always register the provider on the server
+				// so that it can re-set the task queue if needed.
+				// only register on agent/client if its needed.
+
 				// Register the provisioning capability
 				if providerCapabilities != nil &&
 					providerCapabilities.Provisioning.Enabled &&
-					(providerCapabilities.Provisioning.Runtime == c.GetMode() || (providerCapabilities.Provisioning.Runtime == sdkConstants.ModeAgent && c.IsClient())) {
+					(providerCapabilities.Provisioning.Runtime == c.GetMode() || (providerCapabilities.Provisioning.Runtime == sdkConstants.ModeAgent && c.IsClient()) || c.IsServer()) {
 
 					authWorkflowName := models.CreateTemporalProviderWorkflowName(
 						providerResult.GetIdentifier(),
@@ -350,17 +354,10 @@ func (c *Config) InitializeProviders() error {
 					}).Infoln("Skipping provisioning workflow registration: provider does not support provisioning in this runtime")
 				}
 
-				if providerResult.GetIdentifier() == "local" {
-
-					logrus.Infoln("Registering Local provider specific workflows")
-				} else if providerResult.GetIdentifier() == "email" {
-					logrus.Infoln("Registering Email provider specific workflows")
-				}
-
 				// Register the notification capability
 				if providerCapabilities != nil &&
 					providerCapabilities.Notifier.Enabled &&
-					((providerCapabilities.Notifier.Runtime == c.GetMode()) || (providerCapabilities.Notifier.Runtime == sdkConstants.ModeAgent && c.IsClient())) {
+					((providerCapabilities.Notifier.Runtime == c.GetMode()) || (providerCapabilities.Notifier.Runtime == sdkConstants.ModeAgent && c.IsClient()) || c.IsServer()) {
 
 					notifierWorkflowName := models.CreateTemporalProviderWorkflowName(
 						providerResult.GetIdentifier(),
