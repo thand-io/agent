@@ -10,6 +10,8 @@ import (
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 	emailProvider "github.com/thand-io/agent/internal/providers/email"
+	localNotificationProvider "github.com/thand-io/agent/internal/providers/local.notification"
+	localPresenceProvider "github.com/thand-io/agent/internal/providers/local.presence"
 	slackProvider "github.com/thand-io/agent/internal/providers/slack"
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 )
@@ -105,6 +107,18 @@ func (f *formNotifier) GetPayload(toIdentity *models.Identity) models.Notificati
 			logrus.WithError(err).Error("Failed to convert email request")
 			return models.NotificationRequest{}
 		}
+	} else if strings.Compare(f.GetProviderName(), localNotificationProvider.ProviderName) == 0 {
+		title := "Form required"
+		if len(f.req.Title) > 0 {
+			title = f.req.Title
+		}
+		return BuildLocalNotificationPayload(toIdentity, "Form required", fmt.Sprintf("Complete: %s", title))
+	} else if strings.Compare(f.GetProviderName(), localPresenceProvider.ProviderName) == 0 {
+		title := "form"
+		if len(f.req.Title) > 0 {
+			title = f.req.Title
+		}
+		return BuildLocalPresencePayload(toIdentity, fmt.Sprintf("Approve form: %s", title))
 	} else {
 		logrus.WithField("provider", f.GetProviderName()).Error("Unsupported provider type for form notification")
 		return models.NotificationRequest{}

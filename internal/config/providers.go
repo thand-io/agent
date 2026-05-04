@@ -397,6 +397,8 @@ func (c *Config) InitializeProviders() error {
 					worker.RegisterWorkflow(workflowsRegistry)
 				}
 
+				logrus.Infoln("Finished registering Temporal workflows/activities for provider", result.key)
+
 				// Register default provider activities
 				err := models.RegisterProviderActivities(temporalService, providerResult, c)
 				if err != nil {
@@ -404,8 +406,13 @@ func (c *Config) InitializeProviders() error {
 					continue
 				}
 
+				logrus.Infoln("Registered default activities for provider", providerResult.GetName())
+
 				customActivities := providerResult.RegisterActivities()
 				if customActivities != nil {
+
+					logrus.Infoln("Registering custom Temporal activities for provider", result.key)
+
 					// Now register any custom activities defined by the provider
 					err = models.RegisterActivities(
 						temporalService,
@@ -416,6 +423,8 @@ func (c *Config) InitializeProviders() error {
 						logrus.WithError(err).Errorln("Failed to register custom activities for provider:", result.key)
 						continue
 					}
+				} else {
+					logrus.Infoln("No custom activities to register for provider", result.key)
 				}
 
 				logrus.Infoln("Synchronizing provider", result.key)
@@ -495,7 +504,8 @@ func (c *Config) initializeSingleProvider(providerKey string, p *models.Provider
 // getProviderImplementation returns the appropriate provider implementation based on config mode
 func (c *Config) getProviderImplementation(providerKey string, providerName string) (models.Provider, error) {
 
-	if c.IsServer() || c.IsAgent() {
+	// TODO
+	if c.IsServer() || c.IsAgent() || c.IsClient() {
 		return providers.CreateInstance(strings.ToLower(providerName))
 	}
 

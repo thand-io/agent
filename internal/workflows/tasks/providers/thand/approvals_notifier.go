@@ -10,6 +10,8 @@ import (
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 	emailProvider "github.com/thand-io/agent/internal/providers/email"
+	localNotificationProvider "github.com/thand-io/agent/internal/providers/local.notification"
+	localPresenceProvider "github.com/thand-io/agent/internal/providers/local.presence"
 	slackProvider "github.com/thand-io/agent/internal/providers/slack"
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 )
@@ -102,6 +104,29 @@ func (a *approvalsNotifier) GetPayload(toIdentity *models.Identity) models.Notif
 			logrus.WithError(err).Error("Failed to convert email request")
 			return models.NotificationRequest{}
 		}
+	} else if strings.Compare(a.GetProviderName(), localNotificationProvider.ProviderName) == 0 {
+		roleName := "unknown"
+		if elevationReq.Role != nil && len(elevationReq.Role.Name) > 0 {
+			roleName = elevationReq.Role.Name
+		}
+		requestedBy := ""
+		if elevationReq.User != nil {
+			requestedBy = strings.TrimSpace(elevationReq.User.Email)
+			if requestedBy == "" {
+				requestedBy = strings.TrimSpace(elevationReq.User.Name)
+			}
+		}
+		body := fmt.Sprintf("Approval needed: %s", roleName)
+		if requestedBy != "" {
+			body = fmt.Sprintf("Approval needed: %s (by %s)", roleName, requestedBy)
+		}
+		return BuildLocalNotificationPayload(toIdentity, "Approval needed", body)
+	} else if strings.Compare(a.GetProviderName(), localPresenceProvider.ProviderName) == 0 {
+		roleName := "unknown"
+		if elevationReq.Role != nil && len(elevationReq.Role.Name) > 0 {
+			roleName = elevationReq.Role.Name
+		}
+		return BuildLocalPresencePayload(toIdentity, fmt.Sprintf("Approve access for %s", roleName))
 	} else {
 		logrus.WithField("provider", a.GetProviderName()).Error("Unsupported provider type")
 		return models.NotificationRequest{}

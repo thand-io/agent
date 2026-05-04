@@ -5,17 +5,22 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/localbroker"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/providers"
+	sdkWorkflowsRunner "github.com/thand-io/agent/sdk/workflows/runner"
 	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 )
 
 const (
 	ProviderName                     = "local-presence"
 	CheckLocalPresenceActivityName   = "CheckLocalPresenceActivity"
+	SendNotificationActivityName     = "SendNotificationActivity"
 	defaultLocalPresencePrompt       = "Approve this access request on your Mac"
 	localPresenceProviderErrorType   = "LocalPresenceProviderActivityError"
 	localPresenceBrokerErrorType     = "LocalPresenceBrokerError"
@@ -38,8 +43,69 @@ func (p *localPresenceProvider) Initialize(identifier string, provider models.Pr
 	return nil
 }
 
-func (p *localPresenceProvider) RegisterActivities() any {
-	return &localPresenceProviderActivities{provider: p}
+// SendNotification satisfies the notifier capability advertised by the
+// local-presence provider. It maps the incoming NotificationRequest into a
+// LocalPresenceApprovalRequest and triggers a presence challenge via the
+// macOS helper. The challenge is fire-and-forget from the notifier
+// interface's perspective: a denied/timed-out prompt surfaces as a
+// non-retryable application error, while transient broker failures remain
+// retryable.
+func (p *localPresenceProvider) SendNotification(
+	ctx models.ProviderContext,
+	notification models.NotificationRequest,
+) error {
+	// When invoked from a Temporal workflow coroutine, dispatch the actual
+	// broker RPC as a Temporal activity so it benefits from retry, history,
+	// and replay determinism (mirrors the email/slack providers).
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		wfCtx := workflow.WithActivityOptions(workflowCtx, workflow.ActivityOptions{
+			StartToCloseTimeout: 2 * time.Minute,
+			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+		})
+		return workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), models.SendNotificationActivityName),
+			notification,
+		).Get(wfCtx, nil)
+	}
+
+	return p.sendNotificationDirect(models.ContextFromProviderContext(ctx), notification)
+}
+
+func (p *localPresenceProvider) sendNotificationDirect(
+	ctx context.Context,
+	notification models.NotificationRequest,
+) error {
+	var req models.LocalPresenceApprovalRequest
+	if err := common.ConvertInterfaceToInterface(notification, &req); err != nil {
+		return temporal.NewNonRetryableApplicationError(
+			"failed to parse local presence payload",
+			localPresenceProviderErrorType,
+			err,
+		)
+	}
+
+	resp, err := p.checkLocalPresenceDirect(ctx, &req)
+	if err != nil {
+		return err
+	}
+
+	if resp == nil || !resp.Approved {
+		failureReason := ""
+		if resp != nil {
+			failureReason = strings.TrimSpace(resp.FailureReason)
+		}
+		if failureReason == "" {
+			failureReason = "local presence challenge was not approved"
+		}
+		return temporal.NewNonRetryableApplicationError(
+			failureReason,
+			localPresenceProviderErrorType,
+			nil,
+		)
+	}
+
+	return nil
 }
 
 func (p *localPresenceProvider) checkLocalPresenceDirect(

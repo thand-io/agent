@@ -89,7 +89,7 @@ func RegisterActivities(temporalClient TemporalImpl, identifier string, s any) e
 			},
 		)
 
-		logrus.Debugf("Registered activity: %s for provider: %s", activityName, identifier)
+		logrus.Infof("Registered activity: %s for provider: %s", activityName, identifier)
 		count++
 	}
 

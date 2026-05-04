@@ -1077,7 +1077,11 @@ func (p *awsProvider) execGetIdentityCenterInstance(
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
 		var resp GetIdentityCenterInstanceResponse
-		if err := workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), GetIdentityCenterInstanceActivityName), req).Get(wfCtx, &resp); err != nil {
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), GetIdentityCenterInstanceActivityName),
+			req,
+		).Get(wfCtx, &resp); err != nil {
 			return nil, err
 		}
 		return &resp, nil
@@ -1103,7 +1107,11 @@ func (p *awsProvider) execFindOrCreatePermissionSet(
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
 		var resp FindOrCreatePermissionSetResponse
-		if err := workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), FindOrCreatePermissionSetActivityName), req).Get(wfCtx, &resp); err != nil {
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), FindOrCreatePermissionSetActivityName),
+			req,
+		).Get(wfCtx, &resp); err != nil {
 			return nil, err
 		}
 		return &resp, nil
@@ -1137,7 +1145,11 @@ func (p *awsProvider) execFindIdentityCenterUser(
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
 		var resp FindIdentityCenterUserResponse
-		if err := workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), FindIdentityCenterUserActivityName), req).Get(wfCtx, &resp); err != nil {
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), FindIdentityCenterUserActivityName),
+			req,
+		).Get(wfCtx, &resp); err != nil {
 			return nil, err
 		}
 		return &resp, nil
@@ -1162,7 +1174,11 @@ func (p *awsProvider) execCreateAccountAssignment(
 			StartToCloseTimeout: 2 * time.Minute,
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
-		return workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), CreateAccountAssignmentActivityName), req).Get(wfCtx, nil)
+		return workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), CreateAccountAssignmentActivityName),
+			req,
+		).Get(wfCtx, nil)
 	}
 	localCtx, ok := ctx.(context.Context)
 	if !ok {
@@ -1181,7 +1197,11 @@ func (p *awsProvider) execFindPermissionSetByName(
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
 		var resp FindPermissionSetByNameResponse
-		if err := workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), FindPermissionSetByNameActivityName), req).Get(wfCtx, &resp); err != nil {
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), FindPermissionSetByNameActivityName),
+			req,
+		).Get(wfCtx, &resp); err != nil {
 			return nil, err
 		}
 		return &resp, nil
@@ -1211,7 +1231,11 @@ func (p *awsProvider) execDeleteAccountAssignment(
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
 		var resp DeleteAccountAssignmentResponse
-		if err := workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), DeleteAccountAssignmentActivityName), req).Get(wfCtx, &resp); err != nil {
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), DeleteAccountAssignmentActivityName),
+			req,
+		).Get(wfCtx, &resp); err != nil {
 			return nil, err
 		}
 		return &resp, nil
@@ -1237,7 +1261,11 @@ func (p *awsProvider) execCheckAssignmentDeletionStatus(
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
 		var resp CheckAssignmentDeletionStatusResponse
-		if err := workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), CheckAssignmentDeletionStatusActivityName), req).Get(wfCtx, &resp); err != nil {
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), CheckAssignmentDeletionStatusActivityName),
+			req,
+		).Get(wfCtx, &resp); err != nil {
 			return nil, err
 		}
 		return &resp, nil
@@ -1265,7 +1293,11 @@ func (p *awsProvider) execCleanupPermissionSet(
 			StartToCloseTimeout: 1 * time.Minute,
 			RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 1},
 		})
-		_ = workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), CleanupPermissionSetActivityName), req).Get(wfCtx, nil)
+		_ = workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), CleanupPermissionSetActivityName),
+			req,
+		).Get(wfCtx, nil)
 		return
 	}
 	localCtx, ok := ctx.(context.Context)
@@ -1285,7 +1317,11 @@ func (p *awsProvider) execProvisionPermissionSet(
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
 		var resp ProvisionPermissionSetResponse
-		if err := workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), ProvisionPermissionSetActivityName), req).Get(wfCtx, &resp); err != nil {
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), ProvisionPermissionSetActivityName),
+			req,
+		).Get(wfCtx, &resp); err != nil {
 			return nil, err
 		}
 		return &resp, nil
@@ -1311,7 +1347,11 @@ func (p *awsProvider) execCheckPermissionSetProvisioningStatus(
 			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
 		})
 		var resp CheckPermissionSetProvisioningStatusResponse
-		if err := workflow.ExecuteActivity(wfCtx, models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), CheckPermissionSetProvisioningStatusActivityName), req).Get(wfCtx, &resp); err != nil {
+		if err := workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), CheckPermissionSetProvisioningStatusActivityName),
+			req,
+		).Get(wfCtx, &resp); err != nil {
 			return nil, err
 		}
 		return &resp, nil

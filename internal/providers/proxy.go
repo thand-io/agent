@@ -30,6 +30,18 @@ func NewRemoteProviderProxy(providerKey, endpoint string) models.Provider {
 	}
 }
 
+// TODO fix this. - we need to register workflows/activities for any provider that is proxied in order to be able to call them from temporal workflows. We can have a generic set of workflows/activities that can be used for any proxied provider, and then we can have the provider return a list of custom workflows/activities that it wants to register as well. The activities would just be responsible for proxying the request to the provider's API and returning the response.
+// andy proxy requests
+/*
+func (p *remoteProviderProxy) RegisterWorkflows() any {
+	return nil
+}
+
+func (p *remoteProviderProxy) RegisterActivities() any {
+	return nil
+}
+*/
+
 func (p *remoteProviderProxy) Initialize(identifier string, provider models.ProviderConfig) error {
 
 	p.BaseProvider = models.NewBaseProvider(

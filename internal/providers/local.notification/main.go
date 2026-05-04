@@ -6,13 +6,16 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/localbroker"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/providers"
+	sdkWorkflowsRunner "github.com/thand-io/agent/sdk/workflows/runner"
 	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 )
 
 const (
@@ -38,14 +41,25 @@ func (p *localNotificationProvider) Initialize(identifier string, provider model
 	return nil
 }
 
-func (p *localNotificationProvider) RegisterActivities() any {
-	return &localNotificationProviderActivities{provider: p}
-}
-
 func (p *localNotificationProvider) SendNotification(
 	ctx models.ProviderContext,
 	notification models.NotificationRequest,
 ) error {
+	// When invoked from a Temporal workflow coroutine, dispatch the actual
+	// broker RPC as a Temporal activity so it benefits from retry, history,
+	// and replay determinism (mirrors the email/slack providers).
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		wfCtx := workflow.WithActivityOptions(workflowCtx, workflow.ActivityOptions{
+			StartToCloseTimeout: 2 * time.Minute,
+			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+		})
+		return workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), models.SendNotificationActivityName),
+			notification,
+		).Get(wfCtx, nil)
+	}
+
 	goCtx := models.ContextFromProviderContext(ctx)
 	var req models.LocalNotificationRequest
 	if err := common.ConvertInterfaceToInterface(notification, &req); err != nil {

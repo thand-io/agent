@@ -13,6 +13,10 @@ type localPresenceProviderActivities struct {
 	provider *localPresenceProvider
 }
 
+func (p *localPresenceProvider) RegisterActivities() any {
+	return &localPresenceProviderActivities{provider: p}
+}
+
 func (a *localPresenceProviderActivities) CheckLocalPresenceActivity(
 	ctx context.Context,
 	req *models.LocalPresenceApprovalRequest,
@@ -23,6 +27,17 @@ func (a *localPresenceProviderActivities) CheckLocalPresenceActivity(
 	}
 
 	return resp, nil
+}
+
+// SendNotificationActivity is the Temporal activity wrapper around
+// localPresenceProvider.sendNotificationDirect. The exported method name must
+// match models.SendNotificationActivityName so reflection-based registration
+// in the worker locates it.
+func (a *localPresenceProviderActivities) SendNotificationActivity(
+	ctx context.Context,
+	notification models.NotificationRequest,
+) error {
+	return a.provider.sendNotificationDirect(ctx, notification)
 }
 
 func wrapLocalPresenceProviderActivityError(err error) error {

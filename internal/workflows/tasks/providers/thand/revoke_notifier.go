@@ -10,6 +10,8 @@ import (
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 	emailProvider "github.com/thand-io/agent/internal/providers/email"
+	localNotificationProvider "github.com/thand-io/agent/internal/providers/local.notification"
+	localPresenceProvider "github.com/thand-io/agent/internal/providers/local.presence"
 	slackProvider "github.com/thand-io/agent/internal/providers/slack"
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 )
@@ -106,6 +108,18 @@ func (r *revokeNotifier) GetPayload(toIdentity *models.Identity) models.Notifica
 			logrus.WithError(err).Error("Failed to convert email request")
 			return models.NotificationRequest{}
 		}
+	} else if strings.Compare(r.GetProviderName(), localNotificationProvider.ProviderName) == 0 {
+		roleName := "unknown"
+		if elevationReq.Role != nil && len(elevationReq.Role.Name) > 0 {
+			roleName = elevationReq.Role.Name
+		}
+		return BuildLocalNotificationPayload(toIdentity, "Access revoked", fmt.Sprintf("Revoked: %s", roleName))
+	} else if strings.Compare(r.GetProviderName(), localPresenceProvider.ProviderName) == 0 {
+		roleName := "unknown"
+		if elevationReq.Role != nil && len(elevationReq.Role.Name) > 0 {
+			roleName = elevationReq.Role.Name
+		}
+		return BuildLocalPresencePayload(toIdentity, fmt.Sprintf("Acknowledge revoke for %s", roleName))
 	} else {
 		logrus.WithField("provider", r.GetProviderName()).Error("Unsupported provider type")
 		return models.NotificationRequest{}

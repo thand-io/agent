@@ -10,6 +10,10 @@ type localNotificationProviderActivities struct {
 	provider *localNotificationProvider
 }
 
+func (p *localNotificationProvider) RegisterActivities() any {
+	return &localNotificationProviderActivities{provider: p}
+}
+
 func (a *localNotificationProviderActivities) SendNotificationActivity(
 	ctx context.Context,
 	notification models.NotificationRequest,

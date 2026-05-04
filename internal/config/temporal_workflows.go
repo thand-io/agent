@@ -86,14 +86,27 @@ func systemHandler(
 
 	cancelCtx, cancelHandler := workflow.WithCancel(rootCtx)
 
-	identities := dedupeStringsStable(req.GetIdentities())
+	rawIdentities := req.GetIdentities()
+	log.Info("Workflow start input identities",
+		"ReqType", fmt.Sprintf("%T", req),
+		"ReqValue", fmt.Sprintf("%+v", req),
+		"RawIdentities", rawIdentities,
+		"RawCount", len(rawIdentities),
+	)
+
+	identities := dedupeStringsStable(rawIdentities)
+	log.Info("Workflow identities after dedupe",
+		"Identities", identities,
+		"Count", len(identities),
+	)
 	shutdownReason := ""
 	var terminationRequest *models.TemporalTerminationRequest
 
 	if err := upsertIdentitiesSearchAttribute(cancelCtx, identities); err != nil {
-		log.Error("Failed to upsert identities search attribute", "Error", err)
+		log.Error("Failed to upsert identities search attribute", "Error", err, "Identities", identities)
 		return nil, err
 	}
+	log.Info("Upserted identities search attribute", "Identities", identities, "Count", len(identities))
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -219,9 +232,15 @@ func dedupeStringsStable(in []string) []string {
 }
 
 func upsertIdentitiesSearchAttribute(ctx workflow.Context, identities []string) error {
+	log := workflow.GetLogger(ctx)
 	if len(identities) == 0 {
+		log.Warn("upsertIdentitiesSearchAttribute called with empty identities; skipping upsert")
 		return nil
 	}
+	log.Info("Upserting identities typed search attribute",
+		"Key", sdkConstants.TypedSearchAttributeIdentities.GetName(),
+		"Identities", identities,
+	)
 	return workflow.UpsertTypedSearchAttributes(
 		ctx,
 		sdkConstants.TypedSearchAttributeIdentities.ValueSet(identities),
