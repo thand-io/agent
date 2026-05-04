@@ -459,6 +459,7 @@ func NewSynchronizableCapability() *SynchronizableConfiguration {
 func NewCapability() *ProviderConfiguration {
 	return &ProviderConfiguration{
 		Enabled: true,
+		Runtime: sdkConstants.ModeServer,
 	}
 }
 

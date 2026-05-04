@@ -526,6 +526,10 @@ func CreateProviderNotifyWorkflow(provider Provider) func(workflow.Context, Work
 		log := workflow.GetLogger(ctx)
 		log.Info("Starting authorize role workflow", "provider", provider.GetIdentifier())
 
+		if len(req.Recipient) == 0 {
+			return nil, fmt.Errorf("recipient is required for notification")
+		}
+
 		ctx = evaluateRuntime(
 			ctx,
 			provider.GetCapabilities().Provisioning.Runtime,
@@ -575,9 +579,14 @@ func evaluateRuntime(
 
 	log := workflow.GetLogger(ctx)
 
+	if runtime == sdkConstants.ModeServer {
+		log.Info("Evaluating server runtime for provider workflow", "identifier", identifier)
+		return ctx
+	}
+
 	log.Info("Running system id activity")
 
-	lao := workflow.LocalActivityOptions{
+	lao := workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    1 * time.Second,
@@ -587,12 +596,14 @@ func evaluateRuntime(
 		},
 	}
 
-	lctx := workflow.WithLocalActivityOptions(ctx, lao)
+	lctx := workflow.WithActivityOptions(ctx, lao)
 
 	var result string
-	if err := workflow.ExecuteActivity(lctx,
+	if err := workflow.ExecuteActivity(
+		lctx,
 		TemporalLookupSystemIdentifierActivityName,
-		identifier).Get(ctx, &result); err != nil {
+		identifier,
+	).Get(ctx, &result); err != nil {
 		log.Error("Failed to build authorize role request for revocation", "error", err)
 		return ctx
 	}

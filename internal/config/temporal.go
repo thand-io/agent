@@ -7,7 +7,9 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
+	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -17,8 +19,9 @@ func (c *Config) registerTemporalWorkflows() error {
 		return fmt.Errorf("temporal service is not initialized")
 	}
 
-	temporalClient := c.servicesClient.GetTemporal().GetClient()
-	temporalWorker := c.servicesClient.GetTemporal().GetWorker()
+	temporalService := c.servicesClient.GetTemporal()
+	temporalClient := temporalService.GetClient()
+	temporalWorker := temporalService.GetWorker()
 
 	if temporalWorker == nil {
 		return fmt.Errorf("temporal worker is not initialized")
@@ -28,49 +31,66 @@ func (c *Config) registerTemporalWorkflows() error {
 	// use the same id.
 	systemID := common.GetClientIdentifier()
 
+	ctx := context.Background()
+
+	startOptions := client.StartWorkflowOptions{
+		ID:                       systemID.String(),
+		TaskQueue:                temporalService.GetTaskQueue(),
+		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+	}
+
 	if c.IsServer() {
 
 		temporalWorker.RegisterWorkflowWithOptions(
-			CreateServerWorkflow(c, ServerWorkflowStart{
-				ThandSystemStart: ThandSystemStart{
-					Identities: []string{
-						systemID.String(),
-					},
-				},
-			}),
+			CreateServerWorkflow(),
 			workflow.RegisterOptions{
-				Name:               systemID.String(),
+				Name:               "server-workflow",
 				VersioningBehavior: workflow.VersioningBehaviorPinned,
 			},
 		)
+
+		if _, err := temporalClient.ExecuteWorkflow(
+			ctx,
+			startOptions,
+			"server-workflow",
+			ServerWorkflowStart{
+				ThandSystemStart: ThandSystemStart{
+					Identities: []string{},
+				},
+			},
+		); err != nil {
+			return fmt.Errorf("failed to start server workflow: %w", err)
+		}
 
 	} else if c.IsAgent() {
 
 		// Get the registered identities on the system and bind them
 
 		temporalWorker.RegisterWorkflowWithOptions(
-			CreateAgentWorkflow(c, AgentWorkflowStart{
-				ThandSystemStart: ThandSystemStart{
-					Identities: []string{
-						systemID.String(),
-					},
-				},
-			}),
+			CreateAgentWorkflow(),
 			workflow.RegisterOptions{
-				Name:               systemID.String(),
+				Name:               "agent-workflow",
 				VersioningBehavior: workflow.VersioningBehaviorPinned,
 			},
 		)
-	}
 
-	// Signal the workflow with a heartbeat
-	temporalClient.SignalWorkflow(
-		context.Background(),
-		systemID.String(),
-		"",
-		"heartbeat",
-		map[string]string{},
-	)
+		if _, err := temporalClient.ExecuteWorkflow(
+			ctx,
+			startOptions,
+			"agent-workflow",
+			AgentWorkflowStart{
+				ThandSystemStart: ThandSystemStart{
+					Identities: []string{
+						"hugh@thand.io",
+					},
+				},
+			},
+		); err != nil {
+			return fmt.Errorf("failed to start agent workflow: %w", err)
+		}
+
+	}
 
 	return nil
 

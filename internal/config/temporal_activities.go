@@ -22,11 +22,25 @@ type thandActivities struct {
 // run
 func (t *thandActivities) LookupSystemIdentifier(
 	ctx context.Context,
+	identifier string,
 ) (string, error) {
+
+	if len(identifier) == 0 {
+		return "", temporal.NewNonRetryableApplicationError(
+			"Identifier cannot be empty",
+			"InvalidIdentifier",
+			nil,
+		)
+	}
 
 	c := t.config
 
 	log := activity.GetLogger(ctx)
+
+	log.Info("Looking up system identifier in temporal workflows", "identifier", identifier)
+
+	// First we'll query the system workflows to see if there is a match
+	// if there is a match, we'll return the workflow id which is the same as the system id
 
 	if !c.GetServices().HasTemporal() {
 
@@ -57,12 +71,18 @@ func (t *thandActivities) LookupSystemIdentifier(
 
 	listResponse, err := temporalClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: temporalService.GetNamespace(),
-		Query:     "status = RUNNING",
+		Query: fmt.Sprintf(
+			"`identities` in(\"%s\") AND `WorkflowType`=\"server\" AND `ExecutionStatus`=\"Running\"",
+			identifier,
+		),
 	})
 
 	if err != nil {
+		log.Error("failed to list workflows", "error", err)
 		return "", err
 	}
+
+	log.Info("Found workflows for system identifier", "count", len(listResponse.GetExecutions()))
 
 	for _, workflowExec := range listResponse.GetExecutions() {
 
@@ -90,8 +110,8 @@ func (t *thandActivities) LookupSystemIdentifier(
 	}
 
 	return "", temporal.NewNonRetryableApplicationError(
-		"Thand service is not configured",
-		"ThandServiceNotConfigured",
+		fmt.Sprintf("No active workflow found for identifier %q", identifier),
+		"NoActiveWorkflowFound",
 		nil,
 	)
 

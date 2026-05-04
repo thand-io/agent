@@ -49,15 +49,8 @@ type SystemWorkflowShutdown struct {
 type ServerWorkflowShutdown = SystemWorkflowShutdown
 type AgentWorkflowShutdown = SystemWorkflowShutdown
 
-func CreateServerWorkflow(
-	configImpl models.ConfigImpl,
-	start ServerWorkflowStart,
-) func(workflow.Context, ServerWorkflowStart) (*ServerWorkflowShutdown, error) {
-	_ = configImpl
+func CreateServerWorkflow() func(workflow.Context, ServerWorkflowStart) (*ServerWorkflowShutdown, error) {
 	return func(ctx workflow.Context, req ServerWorkflowStart) (*ServerWorkflowShutdown, error) {
-		if len(req.Identities) == 0 {
-			req = start
-		}
 		shutdown, err := systemHandler(ctx, &req)
 		if shutdown == nil {
 			return nil, err
@@ -66,15 +59,8 @@ func CreateServerWorkflow(
 	}
 }
 
-func CreateAgentWorkflow(
-	configImpl models.ConfigImpl,
-	start AgentWorkflowStart,
-) func(workflow.Context, AgentWorkflowStart) (*AgentWorkflowShutdown, error) {
-	_ = configImpl
+func CreateAgentWorkflow() func(workflow.Context, AgentWorkflowStart) (*AgentWorkflowShutdown, error) {
 	return func(ctx workflow.Context, req AgentWorkflowStart) (*AgentWorkflowShutdown, error) {
-		if len(req.Identities) == 0 {
-			req = start
-		}
 		shutdown, err := systemHandler(ctx, &req)
 		if shutdown == nil {
 			return nil, err

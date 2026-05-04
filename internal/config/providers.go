@@ -242,6 +242,8 @@ func (c *Config) InitializeProviders() error {
 			models.ProviderCapabilityRoles,
 			models.ProviderCapabilityPermissions,
 			models.ProviderCapabilityTenants,
+			models.ProviderCapabilityNotifier,
+			models.ProviderCapabilityProvisioning,
 		) {
 
 			logrus.Infoln("Provider", result.key, "supports RBAC/Identities capabilities")
@@ -284,11 +286,14 @@ func (c *Config) InitializeProviders() error {
 					)
 				}
 
+				logrus.Info("Registering default activities for provider", providerResult.GetName())
+
 				// Check the provider capability is either agent or server
 				providerCapabilities := providerResult.GetCapabilities()
 
 				// Register the provisioning capability
 				if providerCapabilities != nil &&
+					providerCapabilities.Provisioning.Enabled &&
 					providerCapabilities.Provisioning.Runtime == c.GetMode() {
 
 					authWorkflowName := models.CreateTemporalProviderWorkflowName(
@@ -331,8 +336,16 @@ func (c *Config) InitializeProviders() error {
 					)
 				}
 
+				if providerResult.GetIdentifier() == "local" {
+
+					logrus.Infoln("Registering Local provider specific workflows")
+				} else if providerResult.GetIdentifier() == "email" {
+					logrus.Infoln("Registering Email provider specific workflows")
+				}
+
 				// Register the notification capability
 				if providerCapabilities != nil &&
+					providerCapabilities.Notifier.Enabled &&
 					providerCapabilities.Notifier.Runtime == c.GetMode() {
 
 					notifierWorkflowName := models.CreateTemporalProviderWorkflowName(

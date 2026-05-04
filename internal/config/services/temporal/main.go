@@ -219,7 +219,13 @@ func (c *TemporalClient) StartWorkers() error {
 }
 
 func (c *TemporalClient) GetClient() client.Client {
-	<-c.readyCh
+	c.mu.Lock()
+	shouldWait := c.workersStarted && !c.config.DisableVersioning
+	c.mu.Unlock()
+
+	if shouldWait {
+		<-c.readyCh
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.client

@@ -185,16 +185,15 @@ func hasMatchingProvider(notificationReq thandFunction.NotifierRequest, notifier
 // the provider is registered on that worker. Otherwise it falls back to local
 // provider execution.
 func (t *thandTask) runNotifyTask(
+	ctx workflow.Context,
 	workflowTask sdkWorkflowsModel.WorkflowTaskSupport,
 	task notifyTask,
 ) notifyResult {
 
 	// Temporal path: dispatch a child workflow to the agent with this provider
 	if workflowTask.HasTemporalContext() {
-		ctx := workflowTask.GetTemporalContext()
-
 		wfName := models.CreateTemporalProviderWorkflowName(
-			task.ProviderName, models.TemporalAuthorizeRoleWorkflowName)
+			task.ProviderName, models.TemporalNotifyWorkflowName)
 
 		// Create unique child workflow ID using hash of composite identifier
 		// (provider + role + identity + tenant) to ensure uniqueness across
@@ -202,7 +201,7 @@ func (t *thandTask) runNotifyTask(
 		childOpts := workflow.ChildWorkflowOptions{
 			WorkflowID: models.CreateChildWorkflowID(
 				workflowTask.GetWorkflowID(),
-				models.TemporalAuthorizeRoleWorkflowName,
+				models.TemporalNotifyWorkflowName,
 				task.ProviderName,
 				task.Recipient,
 			),
@@ -210,10 +209,11 @@ func (t *thandTask) runNotifyTask(
 		}
 		ctx = workflow.WithChildOptions(ctx, childOpts)
 
-		req := task.Payload
-
-		var resp models.AuthorizeRoleResponse
-		err := workflow.ExecuteChildWorkflow(ctx, wfName, req).Get(ctx, &resp)
+		req := models.WorkflowNotifyRequest{
+			Recipient: task.Recipient,
+			Payload:   task.Payload,
+		}
+		err := workflow.ExecuteChildWorkflow(ctx, wfName, req).Get(ctx, nil)
 		if err != nil {
 			return notifyResult{
 				Recipient: task.Recipient,
@@ -266,12 +266,12 @@ func (t *thandTask) executeNotifyTemporalParallel(
 	// Start all tasks in parallel using workflow.Go
 	for i, task := range notifyTasks {
 		taskIndex := i
-		notifyTask := task
+		taskForGoroutine := task
 
 		logrus.WithFields(logrus.Fields{
 			"taskIndex": taskIndex,
-			"recipient": notifyTask.Recipient,
-			"provider":  notifyTask.ProviderName,
+			"recipient": taskForGoroutine.Recipient,
+			"provider":  taskForGoroutine.ProviderName,
 		}).Info("Scheduling notify activity via workflow.Go")
 
 		workflow.Go(temporalContext, func(ctx workflow.Context) {
@@ -279,11 +279,11 @@ func (t *thandTask) executeNotifyTemporalParallel(
 			log := workflow.GetLogger(ctx)
 
 			log.Info("Inside workflow.Go - about to execute activity",
-				"recipient", notifyTask.Recipient,
+				"recipient", taskForGoroutine.Recipient,
 				"activityName", thandFunction.ThandNotifyFunction,
 			)
 
-			notifyResult := t.runNotifyTask(workflowTask, task)
+			notifyResult := t.runNotifyTask(ctx, workflowTask, taskForGoroutine)
 
 			// Send result through channel
 			resultCh.Send(ctx, temporalNotifyResult{
