@@ -1,0 +1,10 @@
+# Thand Backend Configuration
+
+login:
+  endpoint: "http://localhost:9090"
+  
+# Logging Configuration
+logging:
+  level: "debug" # debug, info, warn, error
+  format: "json" # json, text
+  output: "stdout" # stdout, stderr, file path

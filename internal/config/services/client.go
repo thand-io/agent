@@ -371,12 +371,6 @@ func (e *localClient) ReloadTemporal() error {
 		e.mu.Unlock()
 	}
 
-	// Client mode NEVER starts Temporal
-	if e.config.IsClient() {
-		logrus.Info("Skipping Temporal initialization in client mode")
-		return nil
-	}
-
 	logrus.Infof("Initializing temporal...")
 
 	// Determine identities based on mode

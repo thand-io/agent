@@ -72,7 +72,7 @@ func (t *thandActivities) LookupSystemIdentifier(
 	listResponse, err := temporalClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: temporalService.GetNamespace(),
 		Query: fmt.Sprintf(
-			"`identities` in(\"%s\") AND `WorkflowType`=\"server\" AND `ExecutionStatus`=\"Running\"",
+			"`identities` in(\"%s\") AND (`WorkflowType`=\"server-workflow\" OR `WorkflowType`=\"agent-workflow\") AND `ExecutionStatus`=\"Running\"",
 			identifier,
 		),
 	})

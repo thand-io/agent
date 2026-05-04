@@ -29,10 +29,6 @@ func (c *Config) SetupTemporal() error {
 
 		logrus.Infoln("Setting up temporal services...")
 
-		if !c.IsServer() {
-			return fmt.Errorf("temporal services can only be set up in server mode")
-		}
-
 		// Register workflows
 		err := c.registerTemporalWorkflows()
 		if err != nil {

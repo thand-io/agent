@@ -42,6 +42,8 @@ func (c *Config) registerTemporalWorkflows() error {
 
 	if c.IsServer() {
 
+		logrus.Infoln("Registering server workflow", "workflowId", systemID.String())
+
 		temporalWorker.RegisterWorkflowWithOptions(
 			CreateServerWorkflow(),
 			workflow.RegisterOptions{
@@ -60,10 +62,13 @@ func (c *Config) registerTemporalWorkflows() error {
 				},
 			},
 		); err != nil {
+			logrus.WithError(err).Errorf("Failed to start server workflow: %v", err)
 			return fmt.Errorf("failed to start server workflow: %w", err)
 		}
 
-	} else if c.IsAgent() {
+	} else if c.IsAgent() || c.IsClient() {
+
+		logrus.Infoln("Registering agent workflow", "workflowId", systemID.String())
 
 		// Get the registered identities on the system and bind them
 
@@ -87,6 +92,7 @@ func (c *Config) registerTemporalWorkflows() error {
 				},
 			},
 		); err != nil {
+			logrus.WithError(err).Errorf("Failed to start agent workflow: %v", err)
 			return fmt.Errorf("failed to start agent workflow: %w", err)
 		}
 
