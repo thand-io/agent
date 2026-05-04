@@ -182,10 +182,26 @@ func BuildLocalNotificationPayload(toIdentity *models.Identity, title, body stri
 // notifier surface offers, so callers should pass a short human-readable
 // summary of the action being authorized.
 func BuildLocalPresencePayload(toIdentity *models.Identity, prompt string) models.NotificationRequest {
+	return BuildLocalPresenceApprovalPayload(toIdentity, prompt, nil)
+}
+
+// BuildLocalPresenceApprovalPayload is the approval-flow variant of
+// BuildLocalPresencePayload. When signalTarget is non-nil, the provider
+// will deliver the broker's approve/deny outcome to the originating
+// workflow via the registered signal-workflow activity — matching the way
+// slack/email approval URLs signal the same listener. Pass a nil
+// signalTarget for fire-and-forget challenges (form/authorize/revoke
+// notifiers) where no workflow listener is waiting.
+func BuildLocalPresenceApprovalPayload(
+	toIdentity *models.Identity,
+	prompt string,
+	signalTarget *models.LocalPresenceSignalTarget,
+) models.NotificationRequest {
 	presenceReq := models.LocalPresenceApprovalRequest{
-		DeviceID: toIdentity.GetEmail(),
-		TaskName: thandFunction.ThandNotifyFunction,
-		Prompt:   prompt,
+		DeviceID:     toIdentity.GetEmail(),
+		TaskName:     thandFunction.ThandNotifyFunction,
+		Prompt:       prompt,
+		SignalTarget: signalTarget,
 	}
 
 	var notificationPayload models.NotificationRequest

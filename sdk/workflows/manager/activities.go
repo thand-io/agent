@@ -169,57 +169,6 @@ func (m *WorkflowManager) registerActivities() error {
 		Name: sdkConstants.TemporalOpenAPIActivityName,
 	})
 
-	/*
-		Signal Workflow Activity
-	*/
-	worker.RegisterActivityWithOptions(func(
-		ctx context.Context,
-		workflowId string,
-		runId string,
-		signalName string,
-		signalInput any,
-	) error {
-
-		services := m.GetConfig()
-
-		if !services.HasTemporal() {
-			return temporal.NewNonRetryableApplicationError(
-				"Temporal service is not configured",
-				"TemporalServiceNotConfigured",
-				nil,
-			)
-		}
-
-		if !services.GetTemporal().HasClient() {
-			return temporal.NewNonRetryableApplicationError(
-				"Temporal client is not configured",
-				"TemporalClientNotConfigured",
-				nil,
-			)
-		}
-
-		log := activity.GetLogger(ctx)
-
-		log.Info("Signaling workflow")
-
-		err := services.GetTemporal().GetClient().SignalWorkflow(
-			ctx,
-			workflowId,
-			runId,
-			signalName,
-			signalInput,
-		)
-
-		if err != nil {
-			log.Error("Failed to signal workflow")
-			return err
-		}
-
-		return nil
-	}, activity.RegisterOptions{
-		Name: sdkConstants.TemporalSignalWorkflowActivityName,
-	})
-
 	return nil
 }
 

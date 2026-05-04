@@ -23,7 +23,7 @@ public struct LocalNotificationPostRequest: Codable, Sendable, Equatable {
     }
 }
 
-public enum LocalNotificationPostFailure: Error, Equatable, CustomStringConvertible {
+public enum LocalNotificationPostFailure: Error, Equatable, CustomStringConvertible, LocalizedError {
     case invalidRequest(String)
     case permissionDenied
     case notificationCenterUnavailable(String)
@@ -41,6 +41,12 @@ public enum LocalNotificationPostFailure: Error, Equatable, CustomStringConverti
             return "failed to post local notification: \(message)"
         }
     }
+
+    // LocalizedError conformance ensures the bridged NSError surfaces the
+    // case-specific message instead of the generic "The operation couldn't
+    // be completed. (... error N.)" — which otherwise hides whether the
+    // failure was permission, bundle context, or a posting error.
+    public var errorDescription: String? { description }
 }
 
 public protocol LocalNotificationPosting: Sendable {
@@ -53,14 +59,41 @@ public struct LocalNotificationPoster: LocalNotificationPosting {
 
     public init(
         requestAuthorization: @escaping @Sendable () async throws -> Bool = {
-            try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+            // UNUserNotificationCenter.current() aborts via NSException
+            // (`bundleProxyForCurrentProcess is nil`) when invoked from a
+            // non-bundled CLI — which is exactly how the privilege broker
+            // is launched (a bare executable under .../PrivilegeBroker/bin/).
+            // Throw a typed error before we trigger that abort so the
+            // caller surfaces a clean gRPC error instead of crashing the
+            // whole broker process.
+            try Self.requireBundleContext()
+            return try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
         },
         addNotification: @escaping @Sendable (LocalNotificationPostRequest) async throws -> Void = { request in
+            try Self.requireBundleContext()
             try await Self.addSystemNotification(request)
         }
     ) {
         self.requestAuthorization = requestAuthorization
         self.addNotification = addNotification
+    }
+
+    /// Throws `notificationCenterUnavailable` when the host process does
+    /// not have a `CFBundleIdentifier`. `UserNotifications` requires a
+    /// bundled app context; without it, calls to
+    /// `UNUserNotificationCenter.current()` abort the process with an
+    /// `NSInternalInconsistencyException` rather than throwing a Swift
+    /// error. Detect that condition early so the broker keeps running.
+    ///
+    /// `public` so default-argument expressions in the `public init`
+    /// (which Swift treats as part of the public API surface) can call
+    /// it; the helper is otherwise an implementation detail.
+    public static func requireBundleContext() throws {
+        if Bundle.main.bundleIdentifier == nil {
+            throw LocalNotificationPostFailure.notificationCenterUnavailable(
+                "host process is not running inside an application bundle; \(Bundle.main.bundleURL.path)"
+            )
+        }
     }
 
     public func post(_ request: LocalNotificationPostRequest) async throws {

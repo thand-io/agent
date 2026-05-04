@@ -126,7 +126,11 @@ func (a *approvalsNotifier) GetPayload(toIdentity *models.Identity) models.Notif
 		if elevationReq.Role != nil && len(elevationReq.Role.Name) > 0 {
 			roleName = elevationReq.Role.Name
 		}
-		return BuildLocalPresencePayload(toIdentity, fmt.Sprintf("Approve access for %s", roleName))
+		return BuildLocalPresenceApprovalPayload(
+			toIdentity,
+			fmt.Sprintf("Approve access for %s", roleName),
+			newPresenceApprovalSignalTarget(a.workflowTask, toIdentity),
+		)
 	} else {
 		logrus.WithField("provider", a.GetProviderName()).Error("Unsupported provider type")
 		return models.NotificationRequest{}

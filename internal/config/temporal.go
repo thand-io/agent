@@ -207,6 +207,15 @@ func (c *Config) registerTemporalActivities() error {
 		},
 	)
 
+	/*
+		Signal Workflow Activity
+	*/
+	temporalWorker.RegisterActivityWithOptions(
+		thandActivities.SignalWorkflow,
+		activity.RegisterOptions{
+			Name: sdkConstants.TemporalSignalWorkflowActivityName,
+		})
+
 	if c.HasThandService() {
 
 		logrus.Info("Registering upstream patching activities for Thand service")

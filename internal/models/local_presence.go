@@ -27,6 +27,31 @@ type LocalPresenceApprovalRequest struct {
 	RequestedBy string        `json:"requested_by,omitempty"`
 	RoleName    string        `json:"role_name,omitempty"`
 	Reason      string        `json:"reason,omitempty"`
+	// SignalTarget, when populated, instructs the local-presence provider
+	// to deliver the approve/deny outcome back to the originating workflow
+	// via the registered signal-workflow activity. This mirrors the slack
+	// and email approval flows where the user click signals the workflow
+	// listener; for presence the broker's Touch ID result is what triggers
+	// the signal.
+	SignalTarget *LocalPresenceSignalTarget `json:"signal_target,omitempty"`
+}
+
+// LocalPresenceSignalTarget describes the workflow execution that should
+// receive a cloudevent signal once the presence challenge has been resolved.
+// SignalName defaults to the listener's expected channel and EventType to
+// the approval cloudevent type when either is empty.
+type LocalPresenceSignalTarget struct {
+	WorkflowID  string `json:"workflow_id,omitempty"`
+	RunID       string `json:"run_id,omitempty"`
+	SignalName  string `json:"signal_name,omitempty"`
+	EventType   string `json:"event_type,omitempty"`
+	EventSource string `json:"event_source,omitempty"`
+	// UserBase64 is the base64-encoded approver identity that should be
+	// attached to the signaled cloudevent as the `user` extension. The
+	// approve task ListenTaskHandler in approvals.go requires this
+	// extension to identify who approved/denied; without it the listener
+	// logs "Approval event missing user extension" and loops back.
+	UserBase64 string `json:"user_base64,omitempty"`
 }
 
 func (r LocalPresenceApprovalRequest) EffectiveTimeout() time.Duration {

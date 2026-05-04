@@ -17,6 +17,52 @@ type thandActivities struct {
 	config *Config
 }
 
+func (t *thandActivities) SignalWorkflow(ctx context.Context,
+	workflowId string,
+	runId string,
+	signalName string,
+	signalInput any,
+) error {
+
+	services := t.config.GetServices()
+
+	if !services.HasTemporal() {
+		return temporal.NewNonRetryableApplicationError(
+			"Temporal service is not configured",
+			"TemporalServiceNotConfigured",
+			nil,
+		)
+	}
+
+	if !services.GetTemporal().HasClient() {
+		return temporal.NewNonRetryableApplicationError(
+			"Temporal client is not configured",
+			"TemporalClientNotConfigured",
+			nil,
+		)
+	}
+
+	log := activity.GetLogger(ctx)
+
+	log.Info("Signaling workflow")
+
+	err := services.GetTemporal().GetClient().SignalWorkflow(
+		ctx,
+		workflowId,
+		runId,
+		signalName,
+		signalInput,
+	)
+
+	if err != nil {
+		log.Error("Failed to signal workflow")
+		return err
+	}
+
+	return nil
+
+}
+
 // This queries both system and agent workflows to get the task queue
 // identifier - used in order to figure out where the workflow op should
 // run
