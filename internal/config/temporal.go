@@ -15,22 +15,74 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-// Register temporal workflows and activities
+// registerTemporalWorkflows registers workflow types with the local worker.
+//
+// This only registers workflow definitions; it does NOT start any workflow
+// runs. Workflow execution is deferred to startSystemWorkflow which must
+// run AFTER StartTemporalWorkers — when worker versioning is enabled, the
+// pinned deployment version is only "present" on the task queue once the
+// worker has polled and Temporal has registered the version, so starting
+// a pinned workflow before workers run fails with
+// "Pinned version ... is not present in task queue".
 func (c *Config) registerTemporalWorkflows() error {
 	if c.servicesClient == nil || c.servicesClient.GetTemporal() == nil {
 		return fmt.Errorf("temporal service is not initialized")
 	}
 
 	temporalService := c.servicesClient.GetTemporal()
-	temporalClient := temporalService.GetClient()
 	temporalWorker := temporalService.GetWorker()
 
 	if temporalWorker == nil {
 		return fmt.Errorf("temporal worker is not initialized")
 	}
 
-	// Use the system id as the workflow id to ensure no other workflows
-	// use the same id.
+	systemID := common.GetClientIdentifier()
+
+	if c.IsServer() {
+
+		logrus.Infoln("Registering server workflow", "workflowId", systemID.String())
+
+		temporalWorker.RegisterWorkflowWithOptions(
+			CreateServerWorkflow(),
+			workflow.RegisterOptions{
+				Name:               "server-workflow",
+				VersioningBehavior: workflow.VersioningBehaviorPinned,
+			},
+		)
+
+	} else if c.IsAgent() || c.IsClient() {
+
+		logrus.Infoln("Registering agent workflow", "workflowId", systemID.String())
+
+		temporalWorker.RegisterWorkflowWithOptions(
+			CreateAgentWorkflow(),
+			workflow.RegisterOptions{
+				Name:               "agent-workflow",
+				VersioningBehavior: workflow.VersioningBehaviorPinned,
+			},
+		)
+	}
+
+	return nil
+}
+
+// StartSystemWorkflow starts the long-running per-system server or agent
+// workflow. Must be called AFTER StartTemporalWorkers so that, when worker
+// versioning is enabled, the deployment version is registered with the
+// Temporal server before we submit a workflow pinned to it. The temporal
+// service's GetClient gates on version registration to make this safe.
+func (c *Config) StartSystemWorkflow() error {
+	if c.servicesClient == nil || c.servicesClient.GetTemporal() == nil {
+		return nil
+	}
+
+	temporalService := c.servicesClient.GetTemporal()
+	temporalClient := temporalService.GetClient()
+
+	if temporalClient == nil {
+		return fmt.Errorf("temporal client is not initialized")
+	}
+
 	systemID := common.GetClientIdentifier()
 
 	ctx := context.Background()
@@ -60,16 +112,6 @@ func (c *Config) registerTemporalWorkflows() error {
 
 	if c.IsServer() {
 
-		logrus.Infoln("Registering server workflow", "workflowId", systemID.String())
-
-		temporalWorker.RegisterWorkflowWithOptions(
-			CreateServerWorkflow(),
-			workflow.RegisterOptions{
-				Name:               "server-workflow",
-				VersioningBehavior: workflow.VersioningBehaviorPinned,
-			},
-		)
-
 		if _, err := temporalClient.ExecuteWorkflow(
 			ctx,
 			startOptions,
@@ -85,18 +127,6 @@ func (c *Config) registerTemporalWorkflows() error {
 		}
 
 	} else if c.IsAgent() || c.IsClient() {
-
-		logrus.Infoln("Registering agent workflow", "workflowId", systemID.String())
-
-		// Get the registered identities on the system and bind them
-
-		temporalWorker.RegisterWorkflowWithOptions(
-			CreateAgentWorkflow(),
-			workflow.RegisterOptions{
-				Name:               "agent-workflow",
-				VersioningBehavior: workflow.VersioningBehaviorPinned,
-			},
-		)
 
 		agentIdentities := []string{
 			"hugh@thand.io",
@@ -138,14 +168,8 @@ func (c *Config) registerTemporalWorkflows() error {
 		// Because WorkflowIDConflictPolicy is USE_EXISTING, the start args
 		// above are ignored when an agent workflow with the same ID is
 		// already running. Send an update so the running workflow always
-		// reflects the latest identities.
-		//
-		// IMPORTANT: this must run asynchronously. registerTemporalWorkflows
-		// is called BEFORE StartTemporalWorkers, so the local worker isn't
-		// polling yet. A synchronous UpdateWorkflow call (WaitForStage
-		// Completed/Accepted) blocks waiting for a workflow task to be
-		// processed, which never happens — causing a startup deadlock and
-		// preventing the worker from ever starting.
+		// reflects the latest identities. Dispatched asynchronously so
+		// startup is not blocked on the round-trip update completion.
 		go func(workflowID, runID string, identities []string) {
 			updateCtx := context.Background()
 			updateHandle, err := temporalClient.UpdateWorkflow(updateCtx, client.UpdateWorkflowOptions{

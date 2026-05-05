@@ -58,5 +58,16 @@ func (c *Config) StartTemporalWorkers() error {
 		return fmt.Errorf("starting temporal workers: %w", err)
 	}
 
+	// Start the long-running per-system server/agent workflow only after
+	// workers are running. When worker versioning is enabled, the pinned
+	// deployment version is only registered with the Temporal server once
+	// the worker has polled the task queue, so submitting a pinned workflow
+	// before that point fails with "Pinned version ... is not present in
+	// task queue". GetClient() on the temporal service blocks until version
+	// registration completes, making this safe.
+	if err := c.StartSystemWorkflow(); err != nil {
+		return fmt.Errorf("starting system workflow: %w", err)
+	}
+
 	return nil
 }
