@@ -42,7 +42,7 @@ type SynchronizeResponse struct {
 }
 
 // BaseProvider provides a base implementation of the ProviderImpl interface
-func (b *BaseProvider) RegisterWorkflows() any {
+func (b *BaseProvider) RegisterWorkflows(runtime sdkConstants.Mode) any {
 	return nil
 }
 

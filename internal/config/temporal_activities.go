@@ -155,11 +155,8 @@ func (t *thandActivities) LookupSystemIdentifier(
 		return workflowExec.Execution.WorkflowId, nil
 	}
 
-	return "", temporal.NewNonRetryableApplicationError(
-		fmt.Sprintf("No active workflow found for identifier %q", identifier),
-		"NoActiveWorkflowFound",
-		nil,
-	)
+	// Re-try the query after a short delay - this is to handle the case where the workflow has just been started and is not yet available in the list query
+	return "", fmt.Errorf("no active workflows found for identifier: %s", identifier)
 
 }
 

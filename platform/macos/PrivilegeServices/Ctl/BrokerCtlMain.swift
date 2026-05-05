@@ -165,28 +165,30 @@ private final class LocalBrokerControlService: Thand_Localbroker_V1_LocalBrokerC
             }
         }
 
-        let poster = LocalNotificationPoster()
-        do {
-            try await poster.post(LocalNotificationPostRequest(
+        // brokerctl is a bare CLI (no CFBundleIdentifier) and therefore
+        // cannot drive UNUserNotificationCenter directly — the framework
+        // requires a bundled app context. Forward the request to the
+        // privileged daemon over XPC; the daemon will publish a
+        // localNotification BrokerEvent which the bundled
+        // ThandPrivilegeNotifier login item app receives via the existing
+        // notifier subscription and posts via UserNotifications.
+        let username = NSUserName()
+        let payload = BrokerLocalNotificationRequest(
+            username: username,
+            notification: LocalNotificationPostRequest(
                 notificationID: request.notificationID,
                 title: request.title,
                 subtitle: request.subtitle,
                 body: request.body,
                 threadID: request.threadID
+            )
+        )
+
+        _ = try callBroker { client in
+            try client.send(BrokerControlRequest(
+                operation: .postLocalNotification,
+                localNotification: payload
             ))
-        } catch let failure as LocalNotificationPostFailure {
-            switch failure {
-            case .invalidRequest(let message):
-                throw RPCError(code: .invalidArgument, message: message)
-            case .permissionDenied:
-                throw RPCError(code: .permissionDenied, message: failure.description)
-            case .notificationCenterUnavailable(let message):
-                throw RPCError(code: .unavailable, message: message)
-            case .postingFailed(let message):
-                throw RPCError(code: .unavailable, message: message)
-            }
-        } catch {
-            throw RPCError(code: .internalError, message: String(describing: error))
         }
 
         var proto = Thand_Localbroker_V1_PostLocalNotificationResponse()

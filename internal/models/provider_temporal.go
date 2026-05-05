@@ -24,7 +24,7 @@ const TemporalBuildAuthorizeRoleRequestActivityName = "build-authorize-role-requ
 
 // SendNotificationActivityName is the unqualified Temporal activity name that
 // notifier providers (email, slack, local.notification, ...) expose via their
-// RegisterActivities() struct so the shared notify workflow can dispatch
+// RegisterActivities(runtime sdkConstants.Mode) struct so the shared notify workflow can dispatch
 // SendNotification calls as a Temporal activity. The fully qualified name is
 // produced via CreateTemporalProviderWorkflowName(<provider id>, SendNotificationActivityName).
 const SendNotificationActivityName = "SendNotificationActivity"

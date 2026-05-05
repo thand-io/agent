@@ -391,7 +391,7 @@ func (c *Config) InitializeProviders() error {
 				}
 
 				// Register all custom provider workflows
-				workflowsRegistry := providerResult.RegisterWorkflows()
+				workflowsRegistry := providerResult.RegisterWorkflows(c.GetMode())
 				if workflowsRegistry != nil {
 					logrus.Infoln("Registering Temporal workflows for provider", result.key)
 					worker.RegisterWorkflow(workflowsRegistry)
@@ -408,7 +408,7 @@ func (c *Config) InitializeProviders() error {
 
 				logrus.Infoln("Registered default activities for provider", providerResult.GetName())
 
-				customActivities := providerResult.RegisterActivities()
+				customActivities := providerResult.RegisterActivities(c.GetMode())
 				if customActivities != nil {
 
 					logrus.Infoln("Registering custom Temporal activities for provider", result.key)

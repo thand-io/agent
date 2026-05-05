@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/thand-io/agent/internal/localbroker"
 	"github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	"go.temporal.io/sdk/temporal"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -24,7 +25,7 @@ func TestLocalNotificationProviderAdvertisesNotifierCapabilityOnly(t *testing.T)
 
 func TestLocalNotificationProviderRegistersActivities(t *testing.T) {
 	provider := newTestProvider(t, "darwin")
-	require.NotNil(t, provider.RegisterActivities())
+	require.NotNil(t, provider.RegisterActivities(sdkConstants.ModeAgent))
 }
 
 func TestSendNotificationCallsBrokerHelperOnDarwin(t *testing.T) {

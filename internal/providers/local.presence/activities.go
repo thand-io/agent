@@ -6,6 +6,7 @@ import (
 
 	"github.com/thand-io/agent/internal/localbroker"
 	"github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	"go.temporal.io/sdk/temporal"
 )
 
@@ -13,7 +14,7 @@ type localPresenceProviderActivities struct {
 	provider *localPresenceProvider
 }
 
-func (p *localPresenceProvider) RegisterActivities() any {
+func (p *localPresenceProvider) RegisterActivities(runtime sdkConstants.Mode) any {
 	return &localPresenceProviderActivities{provider: p}
 }
 

@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/go-version"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/interpolate"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
 var ErrNotImplemented = errors.New("not implemented")
@@ -111,8 +112,8 @@ type Provider interface {
 	Synchronize(ctx context.Context, temporalClient TemporalImpl, req *SynchronizeRequest) error
 
 	// Temporal
-	RegisterWorkflows() any
-	RegisterActivities() any
+	RegisterWorkflows(runtime sdkConstants.Mode) any
+	RegisterActivities(runtime sdkConstants.Mode) any
 
 	GetCapabilities() *ProviderCapabilities
 	HasCapability(capability ProviderCapability) bool

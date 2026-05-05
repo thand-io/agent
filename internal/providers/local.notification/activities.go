@@ -4,13 +4,14 @@ import (
 	"context"
 
 	"github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
 type localNotificationProviderActivities struct {
 	provider *localNotificationProvider
 }
 
-func (p *localNotificationProvider) RegisterActivities() any {
+func (p *localNotificationProvider) RegisterActivities(runtime sdkConstants.Mode) any {
 	return &localNotificationProviderActivities{provider: p}
 }
 
