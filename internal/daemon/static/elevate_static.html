@@ -574,6 +574,18 @@
         }
 
         /**
+         * Mask any AWS account IDs (12-digit numeric runs, typically inside ARNs
+         * or as bare tenant IDs) appearing in a free-form string, preserving the
+         * last 4 digits. Used so identity labels / IDs and tenant names don't
+         * expose full account IDs in the UI. The unmasked value is still used as
+         * the option value for submission/search.
+         */
+        function maskAccountIdsInText(text) {
+            const s = String(text == null ? '' : text);
+            return s.replace(/\b\d{12}\b/g, (m) => '\u2022'.repeat(8) + m.slice(-4));
+        }
+
+        /**
          * Parse the identities API response into Choices.js format
          * @param {Object} data - API response data
          * @returns {Array} Formatted choices array
@@ -598,9 +610,12 @@
                         var title = identity.id;
                     }
 
+                    const displayTitle = maskAccountIdsInText(title);
+                    const displayLabel = maskAccountIdsInText(identity.label);
+
                     let label = identity.label + matchHint
-                        ? `${identity.label} (${title})`  + matchHint
-                        : identity.id;
+                        ? `${displayLabel} (${displayTitle})`  + matchHint
+                        : maskAccountIdsInText(identity.id);
 
                     choices.push({
                         value: identity.id,
@@ -1045,8 +1060,9 @@
                             }
                             const key = tenant.id || tenant.key || tenant.name || String(index);
                             const name = tenant.name || key;
-                            const idSuffix = tenant.name ? ` (${escapeHtml(key)})` : '';
-                            let label = icon + escapeHtml(name) + idSuffix;
+                            const idSuffix = tenant.name ? ` (${escapeHtml(maskAccountIdsInText(key))})` : '';
+                            const displayName = tenant.name ? name : maskAccountIdsInText(name);
+                            let label = icon + escapeHtml(displayName) + idSuffix;
                             if (matchHint) {
                                 label += matchHint;
                             }

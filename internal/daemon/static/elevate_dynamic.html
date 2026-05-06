@@ -160,6 +160,18 @@
     </div>
 
     <script>
+        /**
+         * Mask any AWS account IDs (12-digit numeric runs, typically inside ARNs
+         * or as bare account IDs) appearing in a free-form string, preserving the
+         * last 4 digits. Used so identity labels / IDs containing ARNs don't
+         * expose full account IDs in the UI. The unmasked value is still used as
+         * the option value for submission/search.
+         */
+        function maskAccountIdsInText(text) {
+            const s = String(text == null ? '' : text);
+            return s.replace(/\b\d{12}\b/g, (m) => '\u2022'.repeat(8) + m.slice(-4));
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             let selectedProviders = [];
             let availablePermissions = [];
@@ -388,8 +400,8 @@
                             const identity = identityData._source;
 
                             const label = identity.label ? 
-                                `${identity.label} (${identity.id})` : 
-                                (identity.label || identity.id);
+                                `${maskAccountIdsInText(identity.label)} (${maskAccountIdsInText(identity.id)})` : 
+                                maskAccountIdsInText(identity.label || identity.id);
 
                             let type = 'unknown';
 
