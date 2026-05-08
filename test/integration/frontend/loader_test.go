@@ -9,6 +9,7 @@ import (
 
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	"github.com/thand-io/agent/test/integration/testinfra"
 	"gopkg.in/yaml.v3"
 )
