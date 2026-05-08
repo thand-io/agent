@@ -9,6 +9,7 @@ import (
 
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	"github.com/thand-io/agent/test/integration/testinfra"
 	"gopkg.in/yaml.v3"
 )
@@ -67,7 +68,7 @@ func (l *TestCaseLoader) CreateUIConfigFromTestCase(_ *testing.T, tc *TestCase) 
 	}
 
 	// Override mode to Server for UI tests
-	cfg.SetMode(config.ModeServer)
+	cfg.SetMode(sdkConstants.ModeServer)
 
 	return cfg, nil
 }

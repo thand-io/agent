@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/go-version"
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	"gopkg.in/yaml.v3"
 )
 
@@ -161,7 +162,7 @@ func (l *TestCaseLoader) substituteVariables(content []byte) []byte {
 
 	// Define variable substitutions
 	substitutions := map[string]string{
-		"${LOCALSTACK_ENDPOINT}":  l.infra.LocalStackEndpoint,
+		"${LOCALSTACK_ENDPOINT}": l.infra.LocalStackEndpoint,
 		"${MAILHOG_HOST}":        mailhogHost,
 		"${MAILHOG_PORT}":        mailhogPort,
 		"${MAILHOG_SMTP}":        l.infra.MailHogSMTP,
@@ -188,7 +189,7 @@ func (l *TestCaseLoader) CreateConfigFromTestCase(tc *TestCase) (*config.Config,
 	cfg := config.DefaultConfig()
 
 	// Set mode to Server so providers are initialized locally (not via proxy)
-	cfg.SetMode(config.ModeServer)
+	cfg.SetMode(sdkConstants.ModeServer)
 
 	// Set up roles first (before providers in case providers need them)
 	cfg.Roles.Definitions = tc.Roles
