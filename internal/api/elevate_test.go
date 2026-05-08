@@ -50,9 +50,9 @@ func (m *mockRunner) ResumeWorkflow(wf *models.ElevateWorkflowTask) (*models.Ele
 func newTestService(serverMode bool, runner *mockRunner) *Service {
 	cfg := config.DefaultConfig()
 	if serverMode {
-		cfg.SetMode(config.ModeServer)
+		cfg.SetMode(sdkConstants.ModeServer)
 	} else {
-		cfg.SetMode(config.ModeClient)
+		cfg.SetMode(sdkConstants.ModeClient)
 	}
 	return &Service{cfg: cfg, workflows: runner}
 }

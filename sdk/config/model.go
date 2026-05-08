@@ -5,13 +5,14 @@ package config
 
 import (
 	internal "github.com/thand-io/agent/internal/config"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
 // Mode represents the operational mode of the agent, such as "client", "agent" or "server".
 // client - Local CLI operations without server connectivity.
 // agent - Runs locally to manage local access and session management with server connectivity.
 // server - Public endpoint to execute workflows without direct access to infrastructure.
-type Mode = internal.Mode
+type Mode = sdkConstants.Mode
 
 // PreflightRequest represents the request sent before registration to validate
 // configuration and check prerequisites for agent setup.

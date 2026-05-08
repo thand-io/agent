@@ -14,6 +14,7 @@ import (
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/config"
 	"github.com/thand-io/agent/internal/sessions"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
 // Global configuration instance
@@ -38,11 +39,11 @@ func loadUserSessionState(logonServer string) *sessions.SessionManager {
 }
 
 func preRunClientConfigE(cmd *cobra.Command, _ []string) error {
-	return preRunConfigE(cmd, config.ModeClient)
+	return preRunConfigE(cmd, sdkConstants.ModeClient)
 }
 
 func preRunClientConfigWithServerE(cmd *cobra.Command, args []string) error {
-	err := preRunConfigE(cmd, config.ModeClient)
+	err := preRunConfigE(cmd, sdkConstants.ModeClient)
 
 	if err != nil {
 		return err
@@ -70,14 +71,14 @@ func preRunClientConfigWithSessionE(cmd *cobra.Command, args []string) error {
 }
 
 func preRunServerConfigE(cmd *cobra.Command, _ []string) error {
-	return preRunConfigE(cmd, config.ModeServer)
+	return preRunConfigE(cmd, sdkConstants.ModeServer)
 }
 
 func preRunAgentConfigE(cmd *cobra.Command, args []string) error {
-	return preRunConfigE(cmd, config.ModeAgent)
+	return preRunConfigE(cmd, sdkConstants.ModeAgent)
 }
 
-func preRunConfigE(cmd *cobra.Command, mode config.Mode) error {
+func preRunConfigE(cmd *cobra.Command, mode sdkConstants.Mode) error {
 	// Load configuration before any command runs
 	var err error
 	cfg, err = loadConfig(cmd)
@@ -95,7 +96,7 @@ func preRunConfigE(cmd *cobra.Command, mode config.Mode) error {
 	}
 
 	switch mode {
-	case config.ModeClient:
+	case sdkConstants.ModeClient:
 
 		// Get the login server override from the flag
 		loginServer, err := cmd.Flags().GetString("login-server")
@@ -118,7 +119,7 @@ func preRunConfigE(cmd *cobra.Command, mode config.Mode) error {
 		// Load users session state before any command runs
 		sessionManager = loadUserSessionState(cfg.GetLoginServerHostname())
 
-	case config.ModeAgent:
+	case sdkConstants.ModeAgent:
 
 		// Initialize providers
 		err = cfg.InitializeProviders()
@@ -128,7 +129,7 @@ func preRunConfigE(cmd *cobra.Command, mode config.Mode) error {
 			return err
 		}
 
-	case config.ModeServer:
+	case sdkConstants.ModeServer:
 
 		// Load local config first before registering with the thand server.
 		// So we can figure out whats missing.

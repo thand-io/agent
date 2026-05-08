@@ -18,22 +18,6 @@ import (
 	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
-type Mode string
-
-const (
-
-	// Runs in cloud environment as a login server
-	// allows agents to sync roles and policies and get tasking
-	ModeServer Mode = "server"
-
-	// Runs as a background agent to store session data and
-	// exec platform specific elevations
-	ModeAgent Mode = "agent"
-
-	// Just the CLI mode - used to connect to login-servers
-	ModeClient Mode = "client"
-)
-
 // Config represents the application configuration structure
 type Config struct {
 
@@ -60,7 +44,7 @@ type Config struct {
 	Thand models.ThandConfig `mapstructure:"thand"`
 
 	// Internal mode of operation
-	mode   Mode
+	mode   sdkConstants.Mode
 	logger thandLogger
 	mu     sync.RWMutex
 
@@ -76,25 +60,25 @@ func (c *Config) GetSecret() string {
 	return c.Secret
 }
 
-func (c *Config) GetMode() Mode {
+func (c *Config) GetMode() sdkConstants.Mode {
 	return c.mode
 }
 
-func (c *Config) SetMode(mode Mode) {
+func (c *Config) SetMode(mode sdkConstants.Mode) {
 	logrus.Debugf("Setting mode: %s", mode)
 	c.mode = mode
 }
 
 func (c *Config) IsServer() bool {
-	return c.mode == ModeServer
+	return c.mode == sdkConstants.ModeServer
 }
 
 func (c *Config) IsAgent() bool {
-	return c.mode == ModeAgent
+	return c.mode == sdkConstants.ModeAgent
 }
 
 func (c *Config) IsClient() bool {
-	return c.mode == ModeClient
+	return c.mode == sdkConstants.ModeClient
 }
 
 func (c *Config) GetServicesConfig() *models.ServicesConfig {
@@ -499,12 +483,12 @@ func (r *Config) HasThandService() bool {
 }
 
 type PreflightRequest struct {
-	Mode       Mode      `json:"mode,omitempty"`
-	Version    string    `json:"version,omitempty"`
-	Commit     string    `json:"commit,omitempty"`
-	Identifier uuid.UUID `json:"identifier,omitempty"`
-	Endpoint   string    `json:"endpoint,omitempty"` // Login server endpoint
-	Origin     string    `json:"origin,omitempty"`   // Where the agent is running, used for logging and analytics
+	Mode       sdkConstants.Mode `json:"mode,omitempty"`
+	Version    string            `json:"version,omitempty"`
+	Commit     string            `json:"commit,omitempty"`
+	Identifier uuid.UUID         `json:"identifier,omitempty"`
+	Endpoint   string            `json:"endpoint,omitempty"` // Login server endpoint
+	Origin     string            `json:"origin,omitempty"`   // Where the agent is running, used for logging and analytics
 }
 
 type PreflightResponse struct {
@@ -512,7 +496,7 @@ type PreflightResponse struct {
 }
 
 type RegistrationRequest struct {
-	Mode        Mode                      `json:"mode,omitempty"`
+	Mode        sdkConstants.Mode         `json:"mode,omitempty"`
 	Environment *models.EnvironmentConfig `json:"environment,omitempty"`
 	Version     string                    `json:"version,omitempty"`
 	Commit      string                    `json:"commit,omitempty"`
@@ -531,11 +515,11 @@ type RegistrationResponse struct {
 }
 
 type PostflightRequest struct {
-	Mode       Mode      `json:"mode,omitempty"`
-	Version    string    `json:"version,omitempty"`
-	Commit     string    `json:"commit,omitempty"`
-	Identifier uuid.UUID `json:"identifier,omitempty"`
-	Endpoint   string    `json:"endpoint,omitempty"`
+	Mode       sdkConstants.Mode `json:"mode,omitempty"`
+	Version    string            `json:"version,omitempty"`
+	Commit     string            `json:"commit,omitempty"`
+	Identifier uuid.UUID         `json:"identifier,omitempty"`
+	Endpoint   string            `json:"endpoint,omitempty"`
 }
 
 type PostflightResponse struct {
