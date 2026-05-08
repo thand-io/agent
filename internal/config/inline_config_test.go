@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
 // viperFromYAML loads YAML into Viper, unmarshals it into a Config,
@@ -502,7 +503,7 @@ providers:
       endpoint: "https://auth.thand.dev"
 `
 	config := viperFromYAML(t, yaml)
-	config.mode = ModeServer
+	config.mode = sdkConstants.ModeServer
 
 	// Run through ApplyProviders (the pipeline ReloadConfig uses)
 	result, err := config.ApplyProviders([]*models.ProviderDefinitions{})
@@ -537,7 +538,7 @@ providers:
       endpoint: "https://auth.thand.dev"
 `
 	config := viperFromYAML(t, yaml)
-	config.mode = ModeServer
+	config.mode = sdkConstants.ModeServer
 
 	// Verify inline config before reload
 	require.NotNil(t, config.Providers.Definitions["thand"].Config)
@@ -650,7 +651,7 @@ providers:
     enabled: true
 `
 	config := viperFromYAML(t, yaml)
-	config.mode = ModeServer
+	config.mode = sdkConstants.ModeServer
 
 	// Simulate externally loaded providers (e.g. from path or defaults)
 	externalProviders := []*models.ProviderDefinitions{
@@ -698,7 +699,7 @@ providers:
     enabled: true
 `
 	config := viperFromYAML(t, yaml)
-	config.mode = ModeServer
+	config.mode = sdkConstants.ModeServer
 
 	// Empty external providers list - simulates no path/url/vault
 	result, err := config.ApplyProviders([]*models.ProviderDefinitions{})
@@ -732,7 +733,7 @@ providers:
     enabled: false
 `
 	config := viperFromYAML(t, yaml)
-	config.mode = ModeServer
+	config.mode = sdkConstants.ModeServer
 
 	result, err := config.ApplyProviders([]*models.ProviderDefinitions{})
 	require.NoError(t, err)
@@ -756,7 +757,7 @@ roles:
     enabled: true
 `
 	config := viperFromYAML(t, yaml)
-	config.mode = ModeServer
+	config.mode = sdkConstants.ModeServer
 
 	externalRoles := []*models.RoleDefinitions{
 		{
@@ -794,7 +795,7 @@ roles:
     enabled: true
 `
 	config := viperFromYAML(t, yaml)
-	config.mode = ModeServer
+	config.mode = sdkConstants.ModeServer
 
 	result, err := config.ApplyRoles([]*models.RoleDefinitions{})
 	require.NoError(t, err)
@@ -815,7 +816,7 @@ workflows:
     enabled: true
 `
 	config := viperFromYAML(t, yaml)
-	config.mode = ModeClient // client mode doesn't require workflow.Workflow field
+	config.mode = sdkConstants.ModeClient // client mode doesn't require workflow.Workflow field
 
 	externalWorkflows := []*models.WorkflowDefinitions{
 		{
@@ -850,7 +851,7 @@ workflows:
     enabled: true
 `
 	config := viperFromYAML(t, yaml)
-	config.mode = ModeClient
+	config.mode = sdkConstants.ModeClient
 
 	result, err := config.ApplyWorkflows([]*models.WorkflowDefinitions{})
 	require.NoError(t, err)
@@ -884,7 +885,7 @@ roles:
 `
 
 	config := viperFromYAML(t, yaml)
-	config.mode = ModeServer
+	config.mode = sdkConstants.ModeServer
 
 	// Verify inline definitions are present before ReloadConfig
 	require.Contains(t, config.Providers.Definitions, "my-custom-aws",
@@ -946,7 +947,7 @@ providers:
     enabled: true
 `
 	config := viperFromYAML(t, yaml)
-	config.mode = ModeServer
+	config.mode = sdkConstants.ModeServer
 
 	// First apply with empty externals - should include inline
 	result1, err := config.ApplyProviders([]*models.ProviderDefinitions{})
@@ -981,7 +982,7 @@ providers:
     enabled: true
 `
 	config := viperFromYAML(t, yaml)
-	config.mode = ModeServer
+	config.mode = sdkConstants.ModeServer
 
 	externalProviders := []*models.ProviderDefinitions{
 		{

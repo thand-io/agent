@@ -7,13 +7,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
 // TestProcessProviderDefinitions_KeyIsPreserved verifies that the YAML map key
 // used in a ProviderDefinitions entry becomes the map key in the returned
 // map[string]ProviderConfig and is not altered in any way.
 func TestProcessProviderDefinitions_KeyIsPreserved(t *testing.T) {
-	cfg := &Config{mode: ModeServer}
+	cfg := &Config{mode: sdkConstants.ModeServer}
 
 	yamlKey := "my-custom-provider"
 	defs := []*models.ProviderDefinitions{

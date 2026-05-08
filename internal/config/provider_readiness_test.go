@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/providers/aws"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
 // newNotReadyMockProvider creates a mock AWS provider that has been
@@ -41,7 +42,7 @@ func newReadyMockProvider(t *testing.T, name string) models.Provider {
 // does so explicitly.
 func newReadinessTestConfig(providers map[string]models.Provider) *Config {
 	return &Config{
-		mode:              ModeServer,
+		mode:              sdkConstants.ModeServer,
 		providerInstances: providers,
 	}
 }
@@ -269,7 +270,7 @@ func TestCompositeRole_SkipsInheritedRoleWhenProviderNotReady(t *testing.T) {
 	}
 
 	cfg := &Config{
-		mode: ModeServer,
+		mode: sdkConstants.ModeServer,
 		Roles: RoleConfig{
 			Definitions: roles,
 		},

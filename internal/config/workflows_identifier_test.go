@@ -8,13 +8,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
 // TestApplyWorkflows_KeyBecomesIdentifier verifies that the YAML map key used
 // in a WorkflowDefinitions entry is assigned as the Identifier on the
 // resulting Workflow and is not modified.
 func TestApplyWorkflows_KeyBecomesIdentifier(t *testing.T) {
-	cfg := &Config{mode: ModeServer}
+	cfg := &Config{mode: sdkConstants.ModeServer}
 
 	yamlKey := "onboarding-flow"
 	defs := []*models.WorkflowDefinitions{
