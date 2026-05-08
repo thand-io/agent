@@ -21,9 +21,13 @@ import (
 var ThandApprovalsTask = "approvals"
 
 type ApprovalsTask struct {
-	Approvals   int                                      `json:"approvals" default:"1"`
-	SelfApprove bool                                     `json:"selfApprove" default:"false"`
-	Notifiers   map[string]thandFunction.NotifierRequest `json:"notifiers"`
+	Approvals   int  `json:"approvals" default:"1"`
+	SelfApprove bool `json:"selfApprove" default:"false"`
+	// DisableUI hides the Approve/Reject controls on the workflow execution
+	// page in the UI. Approvals must instead be made through configured
+	// notifiers (e.g. Slack, email, local device presence). Defaults to false.
+	DisableUI bool                                     `json:"disableUI" default:"false"`
+	Notifiers map[string]thandFunction.NotifierRequest `json:"notifiers"`
 }
 
 func (n *ApprovalsTask) IsValid() bool {

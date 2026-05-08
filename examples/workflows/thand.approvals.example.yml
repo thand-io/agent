@@ -38,6 +38,11 @@ workflows:
 
               approvals: 1 # number of approvals required
               selfApprove: true # can the requester approve their own request
+              # Optional. When true, hides the inline Approve/Reject buttons
+              # on the workflow execution page in the UI so approvals must
+              # come from a configured notifier channel (e.g. Slack, email,
+              # local device presence). Defaults to false.
+              # disableUI: false
               # 1. The thand notifier simplifies multiple workflow steps down
               #    to a single call.
               #    Slack - Sends request to channel

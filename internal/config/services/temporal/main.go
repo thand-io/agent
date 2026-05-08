@@ -275,6 +275,15 @@ func (c *TemporalClient) awaitVersionRegistration(buildID string) {
 				"BuildID":        buildID,
 				"DeploymentName": deploymentName,
 			}).Info("Temporal deployment version registered and ready")
+
+			// Promote this build to the deployment's current version so that
+			// AutoUpgrade workflows (e.g. the long-running system workflows
+			// in internal/config/temporal_workflows.go) route to this worker
+			// after a binary upgrade. Without this, a running AutoUpgrade
+			// workflow would stay on whichever BuildID was current when it
+			// was last polled and the new worker could not serve its
+			// queries/updates. Pinned workflows are unaffected.
+			c.promoteDeploymentToCurrent(ctx, handle, buildID, deploymentName)
 			return
 		}
 
@@ -291,6 +300,40 @@ func (c *TemporalClient) awaitVersionRegistration(buildID string) {
 			}
 		}
 	}
+}
+
+// promoteDeploymentToCurrent marks buildID as the current version of the
+// worker deployment so AutoUpgrade workflows route their next workflow task
+// to this worker. Failures are logged but non-fatal: the worker can still
+// serve its own pinned workflows, and a subsequent worker startup will
+// retry the promotion. Best-effort; safe to call when this build is
+// already current (the server treats it as a no-op).
+func (c *TemporalClient) promoteDeploymentToCurrent(
+	ctx context.Context,
+	handle client.WorkerDeploymentHandle,
+	buildID string,
+	deploymentName string,
+) {
+	_, err := handle.SetCurrentVersion(ctx, client.WorkerDeploymentSetCurrentVersionOptions{
+		BuildID: buildID,
+		// AutoUpgrade workflows are the only consumers of "current" routing
+		// here. Late-starting workers on the same task queue will register
+		// their own polls before they take work, so missing-task-queue
+		// protection isn't useful for our single-queue topology and would
+		// reject the promotion during a rolling restart of the only worker.
+		IgnoreMissingTaskQueues: true,
+	})
+	if err != nil {
+		logrus.WithError(err).WithFields(logrus.Fields{
+			"BuildID":        buildID,
+			"DeploymentName": deploymentName,
+		}).Warn("Failed to promote Temporal deployment to current version; AutoUpgrade workflows may not route to this worker until a future startup")
+		return
+	}
+	logrus.WithFields(logrus.Fields{
+		"BuildID":        buildID,
+		"DeploymentName": deploymentName,
+	}).Info("Promoted Temporal deployment to current version")
 }
 
 func (c *TemporalClient) Shutdown() error {

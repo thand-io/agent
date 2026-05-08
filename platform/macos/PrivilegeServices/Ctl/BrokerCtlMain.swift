@@ -25,6 +25,18 @@ private struct ProcessIdentity {
 }
 
 private actor OneShotServerController {
+    // Delay between a handler returning its response and the server starting
+    // graceful shutdown. The response is written to the unix domain socket by
+    // the gRPC framework *after* the handler returns, so triggering
+    // beginGracefulShutdown() synchronously from the handler's `defer` races
+    // against the response/trailer flush. When the GOAWAY wins the race the
+    // Go client sees `code = Unavailable, received prior goaway: NO_ERROR`
+    // followed by `error reading from server: EOF` and Temporal then retries
+    // the activity (re-prompting the user). A short delay lets the framework
+    // finish writing the response before any GOAWAY is sent. The window only
+    // needs to cover a local UDS round-trip; 500ms is conservative.
+    private static let shutdownDelay: Duration = .milliseconds(500)
+
     private var shutdown: (@Sendable () -> Void)?
 
     func install(_ callback: @escaping @Sendable () -> Void) {
@@ -34,7 +46,11 @@ private actor OneShotServerController {
     func finishRequest() {
         let callback = shutdown
         shutdown = nil
-        callback?()
+        guard let callback else { return }
+        Task {
+            try? await Task.sleep(for: OneShotServerController.shutdownDelay)
+            callback()
+        }
     }
 }
 

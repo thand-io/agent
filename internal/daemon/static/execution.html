@@ -136,8 +136,8 @@
                                                  x-text="getTaskKey(task)">
                                             </div>
                                             
-                                            <!-- Status Badge (hide if current task is a form) -->
-                                            <template x-if="!(isCurrentTask(task) && (isThandFormTask(task) || getThandTaskType(task) === 'approvals'))">
+                                            <!-- Status Badge (hide if current task is a form, or an approvals task with UI controls enabled) -->
+                                            <template x-if="!(isCurrentTask(task) && (isThandFormTask(task) || (getThandTaskType(task) === 'approvals' && !isApprovalsUIDisabled(task))))">
                                                 <div :class="getTaskBadgeClass(task)"
                                                      style="font-size: 0.75rem; padding: 0.25rem 0.5rem;"
                                                      :style="{
@@ -160,8 +160,8 @@
                                                 </a>
                                             </template>
                                             
-                                            <!-- Approve / Reject Buttons for thand approval tasks -->
-                                            <template x-if="isCurrentTask(task) && getThandTaskType(task) === 'approvals'">
+                                            <!-- Approve / Reject Buttons for thand approval tasks (hidden when disableUI: true) -->
+                                            <template x-if="isCurrentTask(task) && getThandTaskType(task) === 'approvals' && !isApprovalsUIDisabled(task)">
                                                 <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
                                                     <button class="button button-primary" style="font-size: 0.75rem; padding: 0.375rem 0.75rem;" @click.stop.prevent="signalApproval(true)">Approve</button>
                                                     <button class="button button-destructive" style="font-size: 0.75rem; padding: 0.375rem 0.75rem;" @click.stop.prevent="signalApproval(false)">Reject</button>
@@ -649,6 +649,19 @@
                 isThandFormTask(task) {
                     const thandType = this.getThandTaskType(task);
                     return thandType === 'form';
+                },
+
+                // Check if a thand approvals task has the UI Approve/Reject
+                // controls disabled via `with: { disableUI: true }`. Used to hide
+                // the inline approve/reject buttons on the execution page when
+                // approvals must be made through other channels (e.g. Slack,
+                // email, local device presence).
+                isApprovalsUIDisabled(task) {
+                    if (this.getThandTaskType(task) !== 'approvals') {
+                        return false;
+                    }
+                    const taskDef = this.getTaskDefinition(task);
+                    return taskDef?.with?.disableUI === true;
                 },
                 
                 isCurrentTask(task) {

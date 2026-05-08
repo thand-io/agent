@@ -11,7 +11,6 @@ import (
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -42,11 +41,17 @@ func (c *Config) registerTemporalWorkflows() error {
 
 		logrus.Infoln("Registering server workflow", "workflowId", systemID.String())
 
+		// AutoUpgrade so the long-running per-system workflow transitions
+		// to the deployment's current Build ID on the next workflow task
+		// after a binary upgrade. Pinning would strand a running execution
+		// on the previous BuildID and break ping/update once that worker
+		// stops. Any non-deterministic change to the workflow body must be
+		// guarded with workflow.GetVersion / patches.
 		temporalWorker.RegisterWorkflowWithOptions(
 			CreateServerWorkflow(),
 			workflow.RegisterOptions{
 				Name:               "server-workflow",
-				VersioningBehavior: workflow.VersioningBehaviorPinned,
+				VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
 			},
 		)
 
@@ -54,11 +59,12 @@ func (c *Config) registerTemporalWorkflows() error {
 
 		logrus.Infoln("Registering agent workflow", "workflowId", systemID.String())
 
+		// AutoUpgrade: see server-workflow comment above.
 		temporalWorker.RegisterWorkflowWithOptions(
 			CreateAgentWorkflow(),
 			workflow.RegisterOptions{
 				Name:               "agent-workflow",
-				VersioningBehavior: workflow.VersioningBehaviorPinned,
+				VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
 			},
 		)
 	}
@@ -94,21 +100,14 @@ func (c *Config) StartSystemWorkflow() error {
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 	}
 
-	// When worker versioning is enabled, pin the workflow to this worker's
-	// deployment version at start time. Without an override, the server has
-	// no deployment routing info on the WorkflowExecutionStarted event and
-	// the first workflow task can sit unscheduled until the deployment
-	// becomes "current" — which blocks search-attribute upserts and update
-	// handlers from ever running. This mirrors the pattern used in
-	// sdk/workflows/manager/manager.go.
-	if !temporalService.IsVersioningDisabled() {
-		startOptions.VersioningOverride = &client.PinnedVersioningOverride{
-			Version: worker.WorkerDeploymentVersion{
-				DeploymentName: sdkConstants.TemporalDeploymentName,
-				BuildID:        common.GetBuildIdentifier(),
-			},
-		}
-	}
+	// Note: the system workflows are registered with AutoUpgrade behaviour
+	// (see registerTemporalWorkflows). We deliberately do NOT apply a
+	// PinnedVersioningOverride here — that would strand the long-running
+	// execution on the BuildID that started it and prevent future workers
+	// (with newer BuildIDs) from serving its workflow tasks, queries, and
+	// updates. The deployment's "current" version is promoted on worker
+	// startup (see internal/config/services/temporal), which is what
+	// AutoUpgrade workflows route to.
 
 	if c.IsServer() {
 

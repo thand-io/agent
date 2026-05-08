@@ -15,6 +15,18 @@ import (
 )
 
 // This file creates long-running workflows for a given system id.
+//
+// The server-workflow and agent-workflow registrations use
+// VersioningBehaviorAutoUpgrade (see registerTemporalWorkflows). That means
+// a running execution will transition to the deployment's new current
+// BuildID on its next workflow task after a worker restart, instead of
+// being stranded on the BuildID that started it. To keep that transition
+// safe across binary upgrades, any change to systemHandler or the
+// query/update handlers below that introduces non-deterministic
+// behaviour (new commands, reordered awaits, removed/renamed handlers,
+// changed selector composition, etc.) MUST be guarded with
+// workflow.GetVersion / workflow patches. Adding a new query/update
+// handler is safe; removing one is not.
 
 type ThandSystemStart struct {
 	Identities []string
