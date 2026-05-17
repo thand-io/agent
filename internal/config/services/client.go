@@ -5,9 +5,9 @@ import (
 	"sync"
 
 	"github.com/sirupsen/logrus"
+	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/config/services/temporal"
 	"github.com/thand-io/agent/internal/models"
-	"github.com/thand-io/agent/internal/sessions"
 )
 
 type localClient struct {
@@ -371,44 +371,17 @@ func (e *localClient) ReloadTemporal() error {
 		e.mu.Unlock()
 	}
 
-	// Client mode NEVER starts Temporal
-	if e.config.IsClient() {
-		logrus.Info("Skipping Temporal initialization in client mode")
-		return nil
-	}
-
 	logrus.Infof("Initializing temporal...")
 
-	// Determine identities based on mode
-	environment := e.config.GetEnvironment()
-	identities := []string{environment.GetIdentifier()}
-
-	if e.config.IsAgent() {
-		// Agent mode: query session manager for all active identities + hostname
-		sessionMgr := sessions.GetSessionManager()
-		loginServerName := e.config.GetLoginServerHostname()
-
-		loginServer, err := sessionMgr.GetLoginServer(loginServerName)
-
-		if err != nil {
-			logrus.WithError(err).Warn("Failed to get login server, using hostname identity only")
-		} else {
-			activeSessions := loginServer.GetSessions()
-
-			// Add active session providers as identities
-			for providerName, session := range activeSessions {
-				if !session.IsExpired() {
-					identities = append(identities, providerName)
-					logrus.WithFields(logrus.Fields{
-						"provider": providerName,
-						"expiry":   session.Expiry,
-					}).Debug("Adding active session identity to worker pool")
-				}
-			}
-		}
-
-		logrus.WithField("identities", identities).Info("Configuring Temporal workers for agent mode")
+	// Determine task queue based on mode:
+	// - Server: shared default task queue
+	// - Agent / Client: per-client task queue derived from the client identifier
+	taskQueue := temporal.DefaultTaskQueue
+	if e.config.IsAgent() || e.config.IsClient() {
+		taskQueue = common.GetClientIdentifier().String()
 	}
+
+	logrus.WithField("taskQueue", taskQueue).Info("Configuring Temporal worker")
 
 	// Get Temporal config from services
 	servicesConfig := e.config.GetServicesConfig()
@@ -422,7 +395,7 @@ func (e *localClient) ReloadTemporal() error {
 	temporalService := temporal.NewTemporalClient(
 		temporalConfig,
 		e.vault,
-		identities...,
+		taskQueue,
 	)
 	if err := temporalService.Initialize(); err != nil {
 		logrus.Errorf("Error initializing temporal: %v", err)

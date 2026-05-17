@@ -145,6 +145,7 @@ func TestHasMTLSFile(t *testing.T) {
 			temporalClient := NewTemporalClient(
 				config,
 				nil,
+				"test-identity",
 			)
 
 			got := temporalClient.hasMTLSFile()

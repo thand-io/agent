@@ -26,9 +26,11 @@ func newTestClient() *TemporalClient {
 	)
 }
 
-func TestGetClient_BlocksUntilReady(t *testing.T) {
+func TestGetClient_BlocksUntilReady_WhenVersioningEnabledAndWorkersStarted(t *testing.T) {
 	t.Parallel()
 	tc := newTestClient()
+	tc.config.DisableVersioning = false
+	tc.workersStarted = true
 
 	done := make(chan struct{})
 	go func() {
@@ -57,6 +59,8 @@ func TestGetClient_BlocksUntilReady(t *testing.T) {
 func TestGetClient_ImmediateWhenAlreadyReady(t *testing.T) {
 	t.Parallel()
 	tc := newTestClient()
+	tc.config.DisableVersioning = false
+	tc.workersStarted = true
 	tc.markReady()
 
 	done := make(chan struct{})
@@ -76,6 +80,8 @@ func TestGetClient_ImmediateWhenAlreadyReady(t *testing.T) {
 func TestGetClient_MultipleWaiters(t *testing.T) {
 	t.Parallel()
 	tc := newTestClient()
+	tc.config.DisableVersioning = false
+	tc.workersStarted = true
 
 	const n = 10
 	var wg sync.WaitGroup
@@ -157,6 +163,8 @@ func TestMarkReady_ConcurrentSafe(t *testing.T) {
 func TestShutdown_UnblocksGetClient(t *testing.T) {
 	t.Parallel()
 	tc := newTestClient()
+	tc.config.DisableVersioning = false
+	tc.workersStarted = true
 
 	done := make(chan struct{})
 	go func() {
@@ -184,6 +192,8 @@ func TestShutdown_UnblocksGetClient(t *testing.T) {
 func TestGetClient_ShutdownNoDeadlock(t *testing.T) {
 	t.Parallel()
 	tc := newTestClient()
+	tc.config.DisableVersioning = false
+	tc.workersStarted = true
 
 	// Launch many GetClient callers
 	const n = 20
