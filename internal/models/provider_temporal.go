@@ -12,10 +12,22 @@ import (
 )
 
 const TemporalSynchronizeWorkflowName = "synchronize"
+
 const TemporalAuthorizeRoleWorkflowName = "authorize-role"
 const TemporalRevokeRoleWorkflowName = "revoke-role"
+
+const TemporalNotifyWorkflowName = "notify"
+
+const TemporalLookupSystemIdentifierActivityName = "lookup-system-identifier"
 const TemporalPatchProviderUpstreamActivityName = "patch-provider-upstream"
 const TemporalBuildAuthorizeRoleRequestActivityName = "build-authorize-role-request"
+
+// SendNotificationActivityName is the unqualified Temporal activity name that
+// notifier providers (email, slack, local.notification, ...) expose via their
+// RegisterActivities(runtime sdkConstants.Mode) struct so the shared notify workflow can dispatch
+// SendNotification calls as a Temporal activity. The fully qualified name is
+// produced via CreateTemporalProviderWorkflowName(<provider id>, SendNotificationActivityName).
+const SendNotificationActivityName = "SendNotificationActivity"
 
 func CreateTemporalProviderWorkflowIdentifier(identifier, base string) string {
 	return CreateTemporalWorkflowIdentifier(fmt.Sprintf("%s-%s", identifier, base))
@@ -77,7 +89,7 @@ func RegisterActivities(temporalClient TemporalImpl, identifier string, s any) e
 			},
 		)
 
-		logrus.Debugf("Registered activity: %s for provider: %s", activityName, identifier)
+		logrus.Infof("Registered activity: %s for provider: %s", activityName, identifier)
 		count++
 	}
 

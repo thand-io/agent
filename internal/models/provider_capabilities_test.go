@@ -1,10 +1,12 @@
 package models_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
 func TestBaseProvider_HasCapability(t *testing.T) {
@@ -155,6 +157,29 @@ func TestBaseProvider_HasCapability(t *testing.T) {
 			assert.Equal(t, tt.expected, result, "HasCapability(%s) returned unexpected result", tt.checkCap)
 		})
 	}
+}
+
+func TestProviderConfiguration_UnmarshalJSON_DefaultsRuntimeToServer(t *testing.T) {
+	t.Run("omitted mode defaults to server", func(t *testing.T) {
+		var cfg models.ProviderConfiguration
+		err := json.Unmarshal([]byte(`{"enabled":true}`), &cfg)
+		assert.NoError(t, err)
+		assert.Equal(t, sdkConstants.ModeServer, cfg.Runtime)
+	})
+
+	t.Run("empty mode defaults to server", func(t *testing.T) {
+		var cfg models.ProviderConfiguration
+		err := json.Unmarshal([]byte(`{"enabled":true,"mode":""}`), &cfg)
+		assert.NoError(t, err)
+		assert.Equal(t, sdkConstants.ModeServer, cfg.Runtime)
+	})
+
+	t.Run("explicit mode is preserved", func(t *testing.T) {
+		var cfg models.ProviderConfiguration
+		err := json.Unmarshal([]byte(`{"enabled":true,"mode":"agent"}`), &cfg)
+		assert.NoError(t, err)
+		assert.Equal(t, sdkConstants.ModeAgent, cfg.Runtime)
+	})
 }
 
 // Helper to create fully initialized capabilities for testing Enable/Disable

@@ -1,7 +1,6 @@
 package email_smtp
 
 import (
-	"context"
 	"fmt"
 
 	"crypto/tls"
@@ -79,8 +78,14 @@ func (p *emailSmtpProvider) Initialize(identifier string, provider models.Provid
 }
 
 func (p *emailSmtpProvider) SendNotification(
-	ctx context.Context, notification models.NotificationRequest,
+	ctx models.ProviderContext, notification models.NotificationRequest,
 ) error {
+
+	// gomail's dialer does not accept a context; the ProviderContext is only
+	// used to satisfy the ProviderNotifier interface and may also carry a
+	// workflow.Context when invoked from within a Temporal workflow (the
+	// outer email provider performs the activity dispatch).
+	_ = ctx
 
 	// Lets convert NotificationRequest to EmailNotificationRequest
 	emailRequest := &models.EmailNotificationRequest{}

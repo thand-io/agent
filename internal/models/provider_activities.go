@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/sirupsen/logrus"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 )
@@ -16,7 +17,7 @@ import (
 // To expose additional, provider-specific activities, override RegisterActivities
 // on your provider struct to return a populated activities struct (or nil to skip):
 //
-//	func (p *myProvider) RegisterActivities() any {
+//	func (p *myProvider) RegisterActivities(runtime sdkConstants.Mode) any {
 //	    return &myProviderActivities{provider: p}
 //	}
 //
@@ -68,7 +69,7 @@ func RegisterProviderActivities(temporalClient TemporalImpl, provider Provider, 
 }
 
 // RegisterActivities — BaseProvider default; returns ErrNotImplemented.
-func (b *BaseProvider) RegisterActivities() any {
+func (b *BaseProvider) RegisterActivities(runtime sdkConstants.Mode) any {
 	return nil
 }
 

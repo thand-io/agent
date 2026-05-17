@@ -1,7 +1,6 @@
 package email_ses
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -58,8 +57,10 @@ func (p *emailSesProvider) Initialize(identifier string, provider models.Provide
 }
 
 func (p *emailSesProvider) SendNotification(
-	ctx context.Context, notification models.NotificationRequest,
+	ctx models.ProviderContext, notification models.NotificationRequest,
 ) error {
+
+	goCtx := models.ContextFromProviderContext(ctx)
 
 	// Convert NotificationRequest to EmailNotificationRequest
 	emailRequest := &models.EmailNotificationRequest{}
@@ -117,7 +118,7 @@ func (p *emailSesProvider) SendNotification(
 		Content:          emailContent,
 	}
 
-	_, err := p.sesClient.SendEmail(ctx, input)
+	_, err := p.sesClient.SendEmail(goCtx, input)
 	if err != nil {
 		return fmt.Errorf("failed to send email via SES: %w", err)
 	}

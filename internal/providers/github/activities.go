@@ -5,9 +5,10 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
-func (b *githubProvider) RegisterActivities() any {
+func (b *githubProvider) RegisterActivities(runtime sdkConstants.Mode) any {
 	return &githubProviderActivities{provider: b}
 }
 

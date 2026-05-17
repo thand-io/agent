@@ -5,9 +5,10 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
-func (b *azureProvider) RegisterActivities() any {
+func (b *azureProvider) RegisterActivities(runtime sdkConstants.Mode) any {
 	return &azureProviderActivities{provider: b}
 }
 

@@ -95,6 +95,7 @@ func TestHasAPIKeyAuth(t *testing.T) {
 			temporalClient := NewTemporalClient(
 				config,
 				nil,
+				"test-identity",
 			)
 
 			got := temporalClient.hasAPIKeyAuth()

@@ -1,5 +1,9 @@
 package terraform
 
-func (b *terraformProvider) RegisterActivities() any {
+import (
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
+)
+
+func (b *terraformProvider) RegisterActivities(runtime sdkConstants.Mode) any {
 	return &terraformProviderActivities{provider: b}
 }

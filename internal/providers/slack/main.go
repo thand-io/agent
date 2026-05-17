@@ -10,7 +10,9 @@ import (
 	"github.com/thand-io/agent/internal/common"
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/providers"
+	sdkWorkflowsRunner "github.com/thand-io/agent/sdk/workflows/runner"
 	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 )
 
 const SlackProviderName = "slack"
@@ -55,7 +57,27 @@ type SlackNotificationRequest struct {
 	Attachments []slack.Attachment `json:"attachments,omitempty"`
 }
 
-func (p *slackProvider) SendNotification(ctx context.Context, notification models.NotificationRequest) error {
+func (p *slackProvider) SendNotification(ctx models.ProviderContext, notification models.NotificationRequest) error {
+	// When invoked from a Temporal workflow coroutine, dispatch the actual
+	// Slack API call as a Temporal activity so it benefits from retry,
+	// history, and replay determinism. Mirrors the AWS provider's exec*
+	// helpers.
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		wfCtx := workflow.WithActivityOptions(workflowCtx, workflow.ActivityOptions{
+			StartToCloseTimeout: 2 * time.Minute,
+			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+		})
+		return workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), models.SendNotificationActivityName),
+			notification,
+		).Get(wfCtx, nil)
+	}
+
+	return p.sendNotificationDirect(models.ContextFromProviderContext(ctx), notification)
+}
+
+func (p *slackProvider) sendNotificationDirect(ctx context.Context, notification models.NotificationRequest) error {
 	// Convert NotificationRequest to SlackNotificationRequest
 	slackRequest := &SlackNotificationRequest{}
 	common.ConvertMapToInterface(notification, slackRequest)

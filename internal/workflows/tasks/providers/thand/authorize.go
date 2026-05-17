@@ -314,9 +314,9 @@ func (t *thandTask) runAuthTask(
 		// (provider + role + identity + tenant) to ensure uniqueness across
 		// different identities/tenants requesting the same role
 		childOpts := workflow.ChildWorkflowOptions{
-			WorkflowID: models.CreateChildWorkflowID(
+			WorkflowID: models.CreateChildWorkflowIDFromRole(
 				workflowTask.GetWorkflowID(),
-				"authorizeRole",
+				models.TemporalAuthorizeRoleWorkflowName, // This can be anything
 				task.ProviderName,
 				task.AuthRequest,
 			),
@@ -595,10 +595,10 @@ func (t *thandTask) makeAuthorizationNotifications(
 			recipientPayload := authorizeNotifier.GetPayload(recipientIdentity)
 
 			notifyTasks = append(notifyTasks, notifyTask{
-				Recipient: recipientId,
-				CallFunc:  authorizeNotifier.GetCallFunction(recipientIdentity),
-				Payload:   recipientPayload,
-				Provider:  authorizeNotifier.GetProviderName(),
+				Recipient:    recipientId,
+				CallFunc:     authorizeNotifier.GetCallFunction(recipientIdentity),
+				Payload:      recipientPayload,
+				ProviderName: authorizeNotifier.GetProviderName(),
 			})
 
 			log.WithFields(logrus.Fields{
