@@ -5,9 +5,10 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/thand-io/agent/internal/models"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
-func (b *awsProvider) RegisterActivities() any {
+func (b *awsProvider) RegisterActivities(runtime sdkConstants.Mode) any {
 	return &awsProviderActivities{provider: b}
 }
 

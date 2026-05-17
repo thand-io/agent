@@ -249,7 +249,7 @@ func (t *thandTask) runRevokeTask(
 		// (provider + role + identity + tenant) to ensure uniqueness across
 		// different identities/tenants requesting the same role
 		childOpts := workflow.ChildWorkflowOptions{
-			WorkflowID: models.CreateChildWorkflowID(
+			WorkflowID: models.CreateChildWorkflowIDFromRole(
 				workflowTask.GetWorkflowID(),
 				"revokeRole",
 				task.ProviderName,
@@ -397,10 +397,10 @@ func (t *thandTask) makeRevocationNotifications(
 			recipientPayload := revokeNotifier.GetPayload(recipientIdentity)
 
 			notifyTasks = append(notifyTasks, notifyTask{
-				Recipient: recipientId,
-				CallFunc:  revokeNotifier.GetCallFunction(recipientIdentity),
-				Payload:   recipientPayload,
-				Provider:  revokeNotifier.GetProviderName(),
+				Recipient:    recipientId,
+				CallFunc:     revokeNotifier.GetCallFunction(recipientIdentity),
+				Payload:      recipientPayload,
+				ProviderName: revokeNotifier.GetProviderName(),
 			})
 
 			log.WithFields(logrus.Fields{
@@ -416,7 +416,11 @@ func (t *thandTask) makeRevocationNotifications(
 	var notifyResults []notifyResult
 
 	if workflowTask.HasTemporalContext() {
-		notifyResults, err = t.executeNotifyTemporalParallel(workflowTask, fmt.Sprintf("%s.notify", taskName), notifyTasks)
+		notifyResults, err = t.executeNotifyTemporalParallel(
+			workflowTask,
+			fmt.Sprintf("%s.notify", taskName),
+			notifyTasks,
+		)
 	} else {
 		notifyResults, err = t.executeNotifyGoParallel(workflowTask, notifyTasks)
 	}

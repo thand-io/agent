@@ -2,7 +2,6 @@ package email_acs
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -65,8 +64,10 @@ func (p *emailAcsProvider) Initialize(identifier string, provider models.Provide
 }
 
 func (p *emailAcsProvider) SendNotification(
-	ctx context.Context, notification models.NotificationRequest,
+	ctx models.ProviderContext, notification models.NotificationRequest,
 ) error {
+
+	goCtx := models.ContextFromProviderContext(ctx)
 
 	// Convert NotificationRequest to EmailNotificationRequest
 	emailRequest := &models.EmailNotificationRequest{}
@@ -116,7 +117,7 @@ func (p *emailAcsProvider) SendNotification(
 	}
 
 	// Get access token
-	token, err := p.credential.Token.GetToken(ctx, policy.TokenRequestOptions{
+	token, err := p.credential.Token.GetToken(goCtx, policy.TokenRequestOptions{
 		Scopes: []string{"https://communication.azure.com/.default"},
 	})
 	if err != nil {
@@ -125,7 +126,7 @@ func (p *emailAcsProvider) SendNotification(
 
 	// Send email using Azure Communication Services REST API
 	url := fmt.Sprintf("%s/emails:send?api-version=2023-03-31", p.endpoint)
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(requestBody))
+	req, err := http.NewRequestWithContext(goCtx, "POST", url, bytes.NewBuffer(requestBody))
 	if err != nil {
 		return fmt.Errorf("failed to create HTTP request: %w", err)
 	}

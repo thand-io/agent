@@ -11,6 +11,10 @@ import (
 	"time"
 
 	"github.com/thand-io/agent/internal/common"
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
+
+	// thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
+
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
@@ -38,7 +42,7 @@ type SynchronizeResponse struct {
 }
 
 // BaseProvider provides a base implementation of the ProviderImpl interface
-func (b *BaseProvider) RegisterWorkflows() any {
+func (b *BaseProvider) RegisterWorkflows(runtime sdkConstants.Mode) any {
 	return nil
 }
 
@@ -46,17 +50,13 @@ func CreateTemporalWorkflowIdentifier(workflowName string) string {
 	return strings.ToLower(fmt.Sprintf("%s-%s", common.GetClientIdentifier(), workflowName))
 }
 
-// CreateChildWorkflowID generates a unique child workflow ID by hashing a composite
+// CreateChildWorkflowIDFromRole generates a unique child workflow ID by hashing a composite
 // identifier built from provider, role, identity, tenant, and parent workflow ID.
 // This ensures uniqueness across different identities/tenants requesting the same role.
 // Format: parentWorkflowID_operation_hash
-func CreateChildWorkflowID(parentWorkflowID, operation, provider string, req *WorkflowRoleRequest) string {
-	// Build composite identifier similar to CompositeRoleWorkflowIdentifier
-	// but using the data available in WorkflowRoleRequest
-	parts := []string{
-		parentWorkflowID,
-		provider,
-	}
+func CreateChildWorkflowIDFromRole(parentWorkflowID, operation, provider string, req *WorkflowRoleRequest) string {
+
+	parts := []string{}
 
 	if req.Role != nil {
 		parts = append(parts, req.Role.Identifier)
@@ -69,6 +69,24 @@ func CreateChildWorkflowID(parentWorkflowID, operation, provider string, req *Wo
 	if len(req.Tenant) > 0 {
 		parts = append(parts, req.Tenant)
 	}
+
+	return CreateChildWorkflowID(
+		parentWorkflowID,
+		operation,
+		provider,
+		parts...,
+	)
+}
+
+func CreateChildWorkflowID(parentWorkflowID, operation, provider string, newParts ...string) string {
+	// Build composite identifier similar to CompositeRoleWorkflowIdentifier
+	// but using the data available in WorkflowRoleRequest
+	parts := []string{
+		parentWorkflowID,
+		provider,
+	}
+
+	parts = append(parts, newParts...)
 
 	// Create composite string
 	composite := strings.Join(parts, ":")
@@ -115,7 +133,7 @@ func runSyncLoop[Req SynchronizeRequestImpl, Resp SynchronizeResponseImpl](
 	// even when thousands of pages are produced.
 	var patchPayloads []Resp
 
-	err := paginatedSync(provider, activityMethod, req,
+	err := paginatedSync(provider, req,
 		// executePage: run the local activity and return the deserialized response.
 		func(r Req) (Resp, error) {
 			var resp Resp
@@ -356,6 +374,14 @@ func CreateProviderAuthorizeRoleWorkflow(provider Provider) func(workflow.Contex
 			"authorizeReq", authReq,
 		)
 
+		ctx = evaluateRuntime(
+			ctx,
+			provider.GetCapabilities().Provisioning.Runtime,
+			common.GetClientIdentifier().String(),
+		)
+
+		// We can just execute this without an activity - as this is a handler
+		// that has several activities inside for all the operations
 		return provider.AuthorizeRole(ctx, &authReq)
 	}
 }
@@ -410,6 +436,14 @@ func CreateProviderRevokeRoleWorkflow(provider Provider) func(workflow.Context, 
 			"revokeReq", revokeReq,
 		)
 
+		ctx = evaluateRuntime(
+			ctx,
+			provider.GetCapabilities().Provisioning.Runtime,
+			common.GetClientIdentifier().String(),
+		)
+
+		// We can just execute this without an activity - as this is a handler
+		// that has several activities inside for all the operations
 		return provider.RevokeRole(ctx, revokeReq)
 	}
 }
@@ -473,6 +507,49 @@ func CreateAuthorizeRoleRequest(
 	}, nil
 }
 
+type WorkflowNotifyRequest struct {
+	WorkflowID string              `json:"workflow_id"` // ID of the workflow for which the role is being authorized
+	Recipient  string              `json:"recipient"`
+	Payload    NotificationRequest `json:"request"`
+}
+
+type WorkflowNotifyResponse struct {
+}
+
+// CreateProviderNotifyWorkflow
+// the notify workflow is being executed outside of the request auth/revoke auth
+// so it may not have access to the local providers.
+//
+// The workflow forwards the workflow.Context (which satisfies ProviderContext)
+// to provider.SendNotification. Providers that wrap the underlying API call
+// as a Temporal activity (email, slack, local.notification) detect the
+// workflow context and dispatch via ExecuteActivity for retry/replay
+// determinism. This mirrors CreateProviderAuthorizeRoleWorkflow.
+func CreateProviderNotifyWorkflow(provider Provider) func(workflow.Context, WorkflowNotifyRequest) (*WorkflowNotifyResponse, error) {
+	return func(ctx workflow.Context, req WorkflowNotifyRequest) (*WorkflowNotifyResponse, error) {
+
+		log := workflow.GetLogger(ctx)
+		log.Info("Starting notify workflow", "provider", provider.GetIdentifier())
+
+		if len(req.Recipient) == 0 {
+			return nil, fmt.Errorf("recipient is required for notification")
+		}
+
+		ctx = evaluateRuntime(
+			ctx,
+			provider.GetCapabilities().Notifier.Runtime,
+			req.Recipient, // Lookup based on identifier hugh@thand.io or hostname
+		)
+
+		if err := provider.SendNotification(ctx, req.Payload); err != nil {
+			log.Error("failed to send notification", "error", err)
+			return nil, err
+		}
+
+		return &WorkflowNotifyResponse{}, nil
+	}
+}
+
 // validateRoleAndBuildOutput validates the role and builds the initial model output
 // Careful: This function is called within a workflow.SideEffect, so it must be deterministic and cannot perform any Temporal operations (activities, child workflows, timers) or access non-deterministic data (current time, random numbers). It can only use the data passed in the parameters and perform pure computations.
 func validateRoleAndBuildOutput(
@@ -492,4 +569,47 @@ func validateRoleAndBuildOutput(
 	}
 
 	return modelOutput, nil
+}
+
+func evaluateRuntime(
+	ctx workflow.Context,
+	runtime sdkConstants.Mode,
+	identifier string,
+) workflow.Context {
+
+	log := workflow.GetLogger(ctx)
+
+	if runtime == sdkConstants.ModeServer {
+		log.Info("Evaluating server runtime for provider workflow", "identifier", identifier)
+		return ctx
+	}
+
+	log.Info("Running system id activity")
+
+	lao := workflow.ActivityOptions{
+		StartToCloseTimeout: 30 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    1 * time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    30 * time.Second,
+			MaximumAttempts:    5,
+		},
+	}
+
+	lctx := workflow.WithActivityOptions(ctx, lao)
+
+	var result string
+	if err := workflow.ExecuteActivity(
+		lctx,
+		TemporalLookupSystemIdentifierActivityName,
+		identifier,
+	).Get(ctx, &result); err != nil {
+		log.Error("Failed to build authorize role request for revocation", "error", err)
+		return ctx
+	}
+
+	log.Info("found system id", "identifiter", result)
+
+	return workflow.WithTaskQueue(ctx, result)
+
 }

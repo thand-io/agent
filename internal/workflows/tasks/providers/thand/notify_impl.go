@@ -13,6 +13,8 @@ import (
 	thandFunction "github.com/thand-io/agent/internal/workflows/functions/providers/thand"
 )
 
+const defaultLocalNotificationTitle = "Workflow Notification"
+
 type NotifierImpl interface {
 	GetProviderName() string
 	GetRecipients() []string

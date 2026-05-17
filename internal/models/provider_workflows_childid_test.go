@@ -56,10 +56,10 @@ func TestCreateChildWorkflowID_Uniqueness(t *testing.T) {
 	provider := "aws"
 
 	// Generate child workflow IDs
-	wfID1 := CreateChildWorkflowID(parentWfID, "authorizeRole", provider, req1)
-	wfID2 := CreateChildWorkflowID(parentWfID, "authorizeRole", provider, req2)
-	wfID3 := CreateChildWorkflowID(parentWfID, "authorizeRole", provider, req3)
-	wfID4 := CreateChildWorkflowID(parentWfID, "authorizeRole", provider, req4)
+	wfID1 := CreateChildWorkflowIDFromRole(parentWfID, "authorizeRole", provider, req1)
+	wfID2 := CreateChildWorkflowIDFromRole(parentWfID, "authorizeRole", provider, req2)
+	wfID3 := CreateChildWorkflowIDFromRole(parentWfID, "authorizeRole", provider, req3)
+	wfID4 := CreateChildWorkflowIDFromRole(parentWfID, "authorizeRole", provider, req4)
 
 	// Verify all IDs are different
 	assert.NotEqual(t, wfID1, wfID2, "Different identities should produce different workflow IDs")
@@ -107,9 +107,9 @@ func TestCreateChildWorkflowID_Deterministic(t *testing.T) {
 	provider := "gcp"
 
 	// Generate the same ID multiple times
-	wfID1 := CreateChildWorkflowID(parentWfID, "authorizeRole", provider, req)
-	wfID2 := CreateChildWorkflowID(parentWfID, "authorizeRole", provider, req)
-	wfID3 := CreateChildWorkflowID(parentWfID, "authorizeRole", provider, req)
+	wfID1 := CreateChildWorkflowIDFromRole(parentWfID, "authorizeRole", provider, req)
+	wfID2 := CreateChildWorkflowIDFromRole(parentWfID, "authorizeRole", provider, req)
+	wfID3 := CreateChildWorkflowIDFromRole(parentWfID, "authorizeRole", provider, req)
 
 	// Verify all IDs are identical
 	assert.Equal(t, wfID1, wfID2, "Same input should produce identical workflow IDs")
@@ -136,9 +136,9 @@ func TestCreateChildWorkflowID_DifferentProviders(t *testing.T) {
 	}
 
 	// Generate IDs for different providers
-	wfIDAWS := CreateChildWorkflowID(parentWfID, "authorizeRole", "aws", req)
-	wfIDGCP := CreateChildWorkflowID(parentWfID, "authorizeRole", "gcp", req)
-	wfIDAzure := CreateChildWorkflowID(parentWfID, "authorizeRole", "azure", req)
+	wfIDAWS := CreateChildWorkflowIDFromRole(parentWfID, "authorizeRole", "aws", req)
+	wfIDGCP := CreateChildWorkflowIDFromRole(parentWfID, "authorizeRole", "gcp", req)
+	wfIDAzure := CreateChildWorkflowIDFromRole(parentWfID, "authorizeRole", "azure", req)
 
 	// Verify all IDs are different
 	assert.NotEqual(t, wfIDAWS, wfIDGCP, "Different providers should produce different workflow IDs")
@@ -171,8 +171,8 @@ func TestCreateChildWorkflowID_DifferentOperations(t *testing.T) {
 	provider := "aws"
 
 	// Generate IDs for different operations
-	authID := CreateChildWorkflowID(parentWfID, "authorizeRole", provider, req)
-	revokeID := CreateChildWorkflowID(parentWfID, "revokeRole", provider, req)
+	authID := CreateChildWorkflowIDFromRole(parentWfID, "authorizeRole", provider, req)
+	revokeID := CreateChildWorkflowIDFromRole(parentWfID, "revokeRole", provider, req)
 
 	// Verify IDs are different (different operations)
 	assert.NotEqual(t, authID, revokeID, "Different operations should produce different workflow IDs")

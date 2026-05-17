@@ -284,10 +284,10 @@ func (t *thandTask) makeFormNotifications(
 			recipientPayload := formNotifier.GetPayload(recipientIdentity)
 
 			notifyTasks = append(notifyTasks, notifyTask{
-				Recipient: recipientId,
-				CallFunc:  formNotifier.GetCallFunction(recipientIdentity),
-				Payload:   recipientPayload,
-				Provider:  formNotifier.GetProviderName(),
+				Recipient:    recipientId,
+				CallFunc:     formNotifier.GetCallFunction(recipientIdentity),
+				Payload:      recipientPayload,
+				ProviderName: formNotifier.GetProviderName(),
 			})
 
 			logrus.WithFields(logrus.Fields{

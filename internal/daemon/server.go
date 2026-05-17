@@ -156,6 +156,7 @@ func (s *Server) GetTemplateData(c *gin.Context) TemplateData {
 	return TemplateData{
 		Config: SimpleConfig{
 			ApiBasePath: s.Config.GetApiBasePath(),
+			Mode:        string(s.Config.GetMode()),
 			Server: SimpleServer{
 				Host: s.Config.Server.Host,
 				Port: s.Config.Server.Port,

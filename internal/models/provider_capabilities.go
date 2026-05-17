@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	sdkConstants "github.com/thand-io/agent/sdk/constants"
 )
 
 type ProviderCapability string
@@ -122,7 +124,8 @@ type WebhookConfiguration = ProviderConfiguration
 type ProvisioningConfiguration = ProviderConfiguration
 
 type ProviderConfiguration struct {
-	Enabled bool `json:"enabled,omitempty"`
+	Enabled bool              `json:"enabled,omitempty"`
+	Runtime sdkConstants.Mode `json:"mode,omitempty"`
 }
 
 type ProviderConfigurationImpl interface {
@@ -456,6 +459,7 @@ func NewSynchronizableCapability() *SynchronizableConfiguration {
 func NewCapability() *ProviderConfiguration {
 	return &ProviderConfiguration{
 		Enabled: true,
+		Runtime: sdkConstants.ModeServer,
 	}
 }
 

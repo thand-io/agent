@@ -3,12 +3,15 @@ package email
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/thand-io/agent/internal/models"
 	"github.com/thand-io/agent/internal/providers"
 	emailacs "github.com/thand-io/agent/internal/providers/email.acs"
 	ses "github.com/thand-io/agent/internal/providers/email.ses"
 	smtp "github.com/thand-io/agent/internal/providers/email.smtp"
+	sdkWorkflowsRunner "github.com/thand-io/agent/sdk/workflows/runner"
+	"go.temporal.io/sdk/workflow"
 )
 
 const EmailProviderName = "email"
@@ -54,13 +57,43 @@ func (p *emailProvider) Initialize(identifier string, provider models.ProviderCo
 }
 
 func (p *emailProvider) SendNotification(
-	ctx context.Context, notification models.NotificationRequest,
+	ctx models.ProviderContext, notification models.NotificationRequest,
 ) error {
 
 	if p.proxy == nil {
 		return fmt.Errorf("email provider proxy is not initialized")
 	}
 
+	// When invoked from a Temporal workflow coroutine, dispatch the actual
+	// email API call as a Temporal activity so it benefits from retry,
+	// history, and replay determinism. Mirrors the AWS provider's exec*
+	// helpers.
+	if workflowCtx, ok := ctx.(workflow.Context); ok {
+		wfCtx := workflow.WithActivityOptions(workflowCtx, workflow.ActivityOptions{
+			StartToCloseTimeout: 2 * time.Minute,
+			RetryPolicy:         sdkWorkflowsRunner.DefaultRetryPolicy,
+		})
+		return workflow.ExecuteActivity(
+			wfCtx,
+			models.CreateTemporalProviderWorkflowName(p.GetIdentifier(), models.SendNotificationActivityName),
+			notification,
+		).Get(wfCtx, nil)
+	}
+
+	return p.sendNotificationDirect(models.ContextFromProviderContext(ctx), notification)
+}
+
+// sendNotificationDirect performs the underlying API call against the
+// configured email proxy (smtp / ses / acs / mock). It is invoked both
+// directly (when no Temporal workflow context is present) and as the body of
+// the SendNotificationActivity Temporal activity.
+func (p *emailProvider) sendNotificationDirect(
+	ctx context.Context,
+	notification models.NotificationRequest,
+) error {
+	if p.proxy == nil {
+		return fmt.Errorf("email provider proxy is not initialized")
+	}
 	return p.proxy.SendNotification(ctx, notification)
 }
 
