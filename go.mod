@@ -89,7 +89,7 @@ require (
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/text v0.37.0
 	google.golang.org/api v0.278.0
-	google.golang.org/genai v1.56.0
+	google.golang.org/genai v1.57.0
 	google.golang.org/grpc v1.81.0
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
