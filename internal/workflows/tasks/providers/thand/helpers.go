@@ -21,6 +21,7 @@ func sortedStrings(s []string) []string {
 // sortedStatementsWithSortedFields returns a new slice of Statements derived
 // from stmts where:
 //  1. Operations and Targets within each Statement are sorted A-Z.
+//     1a. Binding is preserved as-is.
 //  2. The statements themselves are sorted A-Z with a fully deterministic
 //     comparator: Operations are compared element-by-element (shorter slice
 //     sorts first on a tie), then Targets are used as a further tie-breaker
@@ -35,9 +36,11 @@ func sortedStatementsWithSortedFields(stmts models.RoleStatements) models.RoleSt
 	out := make(models.RoleStatements, len(stmts))
 	for i, stmt := range stmts {
 		out[i] = models.Statement{
+			ID:         stmt.ID,
 			Operations: sortedStrings(stmt.Operations),
 			Targets:    sortedStrings(stmt.Targets),
 			Conditions: stmt.Conditions,
+			Binding:    stmt.Binding,
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool {

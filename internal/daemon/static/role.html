@@ -134,14 +134,23 @@
                                 <table class="table">
                                     <thead>
                                         <tr>
+                                            <th>ID</th>
                                             <th>Operations</th>
                                             <th>Targets</th>
+                                            <th>Binding</th>
                                             <th>Conditions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {{range .CompositeRole.Permissions.Allow}}
                                         <tr>
+                                            <td>
+                                                {{if .ID}}
+                                                    <code style="font-size: 0.75rem; background: hsl(var(--muted)); padding: 0.125rem 0.25rem; border-radius: 0.25rem;">{{.ID}}</code>
+                                                {{else}}
+                                                    <span class="text-muted">—</span>
+                                                {{end}}
+                                            </td>
                                             <td>
                                                 {{if .Operations}}
                                                     {{range $i, $op := .Operations}}
@@ -158,6 +167,13 @@
                                                     {{end}}
                                                 {{else}}
                                                     <span class="text-muted">All</span>
+                                                {{end}}
+                                            </td>
+                                            <td>
+                                                {{if .Binding}}
+                                                    <code style="font-size: 0.75rem; background: hsl(var(--muted)); padding: 0.125rem 0.25rem; border-radius: 0.25rem;">{{.Binding}}</code>
+                                                {{else}}
+                                                    <span class="text-muted">—</span>
                                                 {{end}}
                                             </td>
                                             <td>
@@ -192,14 +208,23 @@
                                 <table class="table">
                                     <thead>
                                         <tr>
+                                            <th>ID</th>
                                             <th>Operations</th>
                                             <th>Targets</th>
+                                            <th>Binding</th>
                                             <th>Conditions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {{range .CompositeRole.Permissions.Deny}}
                                         <tr>
+                                            <td>
+                                                {{if .ID}}
+                                                    <code style="font-size: 0.75rem; background: hsl(var(--muted)); padding: 0.125rem 0.25rem; border-radius: 0.25rem;">{{.ID}}</code>
+                                                {{else}}
+                                                    <span class="text-muted">—</span>
+                                                {{end}}
+                                            </td>
                                             <td>
                                                 {{if .Operations}}
                                                     {{range $i, $op := .Operations}}
@@ -216,6 +241,13 @@
                                                     {{end}}
                                                 {{else}}
                                                     <span class="text-muted">All</span>
+                                                {{end}}
+                                            </td>
+                                            <td>
+                                                {{if .Binding}}
+                                                    <code style="font-size: 0.75rem; background: hsl(var(--muted)); padding: 0.125rem 0.25rem; border-radius: 0.25rem;">{{.Binding}}</code>
+                                                {{else}}
+                                                    <span class="text-muted">—</span>
                                                 {{end}}
                                             </td>
                                             <td>

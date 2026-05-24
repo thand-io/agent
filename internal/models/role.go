@@ -80,29 +80,29 @@ func (r *CompositeRole) IsComposite() bool {
 func (r *CompositeRole) MarshalJSON() ([]byte, error) {
 	// Create a map to hold all fields
 	result := make(map[string]any)
-	
+
 	// Marshal the embedded Role first
 	roleBytes, err := json.Marshal(r.Role)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal embedded role: %w", err)
 	}
-	
+
 	// Unmarshal Role fields into the result map
 	if err := json.Unmarshal(roleBytes, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal role fields: %w", err)
 	}
-	
+
 	// Add CompositeRole-specific fields (these will override if there are conflicts)
 	result["uuid"] = r.UUID
 	result["composite_providers"] = r.Providers
 	result["composite"] = r.Composite
-	
+
 	return json.Marshal(result)
 }
 
 // UnmarshalJSON implements custom JSON unmarshaling for CompositeRole.
 // This is CRITICAL for workflow.SideEffect serialization to work correctly in Temporal workflows.
-// 
+//
 // Without this custom unmarshaler, CompositeRole fields (UUID, Providers, Composite) are lost
 // during Temporal's workflow.SideEffect serialization/deserialization cycle because:
 // 1. The embedded Role struct (marked with json:",inline") has its own UnmarshalJSON method
@@ -506,6 +506,13 @@ func (s *RoleStatements) UnmarshalJSON(data []byte) error {
 // This design allows passing through provider-native conditions without requiring
 // this system to understand every provider's condition syntax.
 type Statement struct {
+	// ID is an optional identifier for this statement, used to derive
+	// deterministic per-statement custom role IDs in providers like GCP.
+	// Must be strict snake_case (lowercase alphanumeric and underscores,
+	// starting with a letter). When omitted, the statement's index in the
+	// list is used as a fallback suffix.
+	ID string `json:"id,omitempty" validate:"omitempty,snake_case,min=1,max=64"`
+
 	// Operations contains provider-specific actions/permissions.
 	// Examples: ["s3:GetObject", "s3:PutObject"] for AWS, ["storage.buckets.get"] for GCP
 	Operations []string `json:"operations" validate:"max=500,dive,min=1,max=500"`
@@ -519,6 +526,26 @@ type Statement struct {
 	// Enforcement is delegated to the target provider's IAM system.
 	// Examples: {"IpAddress": {"aws:SourceIp": "10.0.0.0/8"}} for AWS
 	Conditions map[string]any `json:"conditions,omitempty" validate:"max=10,dive,keys,min=1,max=100"`
+
+	// Binding declares the explicit CSP resource at which this permission statement
+	// should be created and assigned, independent of the tenant used at request time.
+	//
+	// Format is provider-specific:
+	//   GCP:   "projects/{id}" — the project where the custom role is created and
+	//          where the IAM binding is applied.
+	//          Note: organization-scope via this field is not currently supported;
+	//          use the provider-level 'organization_id' config for org-scoped roles.
+	//   Azure: "/subscriptions/{id}" or "/subscriptions/{id}/resourceGroups/{rg}"
+	//   AWS:   "arn:aws:iam::{account-id}:root"
+	//
+	// When set, the provider uses this value to determine where a custom role is
+	// created and where the IAM binding is applied, regardless of the request tenant
+	// (e.g. regardless of whether the tenant is a folder, project, or org).
+	//
+	// When omitted, the provider falls back to the request tenant for binding scope.
+	// Providers may additionally attempt to infer a binding resource from Targets
+	// for backwards compatibility.
+	Binding string `json:"binding,omitempty" validate:"omitempty,csp_binding,max=500"`
 }
 
 // ScopeIdentities defines identity-based restrictions for users, groups, and domains.

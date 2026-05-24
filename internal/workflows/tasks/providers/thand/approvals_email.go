@@ -108,6 +108,9 @@ func (a *approvalsNotifier) createApprovalEmailBody() (string, string) {
 				if len(stmt.Operations) > 0 {
 					fmt.Fprintf(&plainText, "- Operations: %s\n", strings.Join(stmt.Operations, ", "))
 				}
+				if len(stmt.Binding) > 0 {
+					fmt.Fprintf(&plainText, "  Binding: %s\n", stmt.Binding)
+				}
 				if len(stmt.Targets) > 0 {
 					fmt.Fprintf(&plainText, "  Targets: %s\n", strings.Join(stmt.Targets, ", "))
 				}
@@ -118,6 +121,9 @@ func (a *approvalsNotifier) createApprovalEmailBody() (string, string) {
 			for _, stmt := range sortedStatementsWithSortedFields(elevateRequest.Role.Permissions.Deny) {
 				if len(stmt.Operations) > 0 {
 					fmt.Fprintf(&plainText, "- Operations: %s\n", strings.Join(stmt.Operations, ", "))
+				}
+				if len(stmt.Binding) > 0 {
+					fmt.Fprintf(&plainText, "  Binding: %s\n", stmt.Binding)
 				}
 				if len(stmt.Targets) > 0 {
 					fmt.Fprintf(&plainText, "  Targets: %s\n", strings.Join(stmt.Targets, ", "))

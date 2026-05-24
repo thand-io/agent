@@ -54,6 +54,21 @@ func (a *authorizerNotifier) createAuthorizeEmailBody() (string, string) {
 		}
 	}
 
+	if elevationReq.Role != nil && len(elevationReq.Role.Permissions.Allow) > 0 {
+		plainText.WriteString("\nGranted Permissions:\n")
+		for _, stmt := range sortedStatementsWithSortedFields(elevationReq.Role.Permissions.Allow) {
+			if len(stmt.Operations) > 0 {
+				plainText.WriteString(fmt.Sprintf("- Operations: %s\n", strings.Join(stmt.Operations, ", ")))
+			}
+			if len(stmt.Binding) > 0 {
+				plainText.WriteString(fmt.Sprintf("  Binding: %s\n", stmt.Binding))
+			}
+			if len(stmt.Targets) > 0 {
+				plainText.WriteString(fmt.Sprintf("  Targets: %s\n", strings.Join(stmt.Targets, ", ")))
+			}
+		}
+	}
+
 	plainText.WriteString("\nYour access is now active. Please use it responsibly.")
 
 	// Build data map for template
@@ -78,7 +93,7 @@ func (a *authorizerNotifier) createAuthorizeEmailBody() (string, string) {
 
 		// Add permissions if available
 		if len(elevationReq.Role.Permissions.Allow) > 0 {
-			data["Permissions"] = elevationReq.Role.Permissions.Allow
+			data["Permissions"] = sortedStatementsWithSortedFields(elevationReq.Role.Permissions.Allow)
 		}
 	}
 
