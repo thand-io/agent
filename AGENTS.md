@@ -89,7 +89,7 @@ commands that match CI behavior.
 
 Notes:
 
-- CI uses Go `1.26` and `GOEXPERIMENT=jsonv2`; match that when reproducing build or release
+- CI uses Go `1.27` and `GOEXPERIMENT=jsonv2`; match that when reproducing build or release
   behavior.
 - Frontend, functional, and many integration tests depend on Docker/testcontainers. Frontend E2E
   also expects Chromium on Linux in CI.

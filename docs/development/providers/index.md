@@ -12,7 +12,7 @@ This guide explains how to develop a new provider for the Thand Agent. Providers
 
 ## Prerequisites
 
-- Go 1.21+
+- Go 1.27+
 - Understanding of the Thand Agent architecture
 - Access to the `internal/providers` directory
 
