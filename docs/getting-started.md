@@ -62,7 +62,7 @@ Invoke-WebRequest -Uri "https://github.com/thand-io/agent/releases/latest/downlo
 
 Before installing Thand Agent, ensure you have:
 
-- Go 1.21 or later (if building from source)
+- Go 1.27 or later (if building from source)
 - Access to your target infrastructure (GCP, AWS, etc.)
 
 Clone the repository and build the agent:
