@@ -237,6 +237,151 @@ See the [Conditions documentation](./index#conditions) for full details and AWS 
 
 ---
 
+## 6. New: Binding Field on Statements
+
+The `binding` field is an optional property on permission statements that declares the explicit CSP resource where a custom role should be created and where the resulting IAM binding should be applied.
+
+### Why it exists
+
+Some providers create custom roles at a different scope than the request tenant. The most common case is **GCP**: custom roles can only be created at the `projects/{id}` or `organizations/{id}` level, but a request tenant may be a folder (`folders/{id}`). Without `binding`, the GCP provider would fail when asked to create a custom role for a folder tenant.
+
+The field exists to resolve this explicitly and cleanly, regardless of provider. See [Binding](./index#binding) in the reference documentation for the full format per provider.
+
+### No migration required — but a deprecation warning may appear
+
+If your existing roles have `permissions.allow` statements that include `targets` pointing at a specific project (e.g. `projects/my-project/...`), the GCP provider previously attempted to infer the binding project from those targets whenever the request tenant was a folder. This inference still works, but it now emits a **deprecation warning** in the agent logs:
+
+```
+level=warning msg="permissions.allow statements are missing 'binding'; inferring project from targets. Set an explicit 'binding' on each statement to remove this warning."
+```
+
+If only some statements in the role set `binding`, a different warning is emitted:
+
+```
+level=warning msg="some permissions.allow statements have 'binding' set but not all; the explicit binding values will be ignored and the project will be inferred from targets instead. Set 'binding' on every statement or remove it from all statements."
+```
+
+To silence the warning and make the intent explicit, add `binding` to the relevant statements:
+
+```yaml
+# Before (still works, but logs a deprecation warning)
+permissions:
+  allow:
+    - operations:
+        - "gcp-prod:secretmanager.secrets.get"
+      targets:
+        - "projects/my-project/secrets/*"
+
+# After (explicit, no warning)
+permissions:
+  allow:
+    - binding: "projects/my-project"
+      operations:
+        - "gcp-prod:secretmanager.secrets.get"
+      targets:
+        - "projects/my-project/secrets/*"
+```
+
+### Validation
+
+- All statements within the same role that set `binding` must agree on the same value. Conflicting values produce a configuration error.
+- `binding: "folders/..."` is rejected by the GCP provider — folders are not a valid scope for custom role creation.
+- `binding` does not restrict which resources the operations act on; `targets` continues to control that.
+
+---
+
+## 7. New: Statement ID Field
+
+The `id` field is an optional property on permission statements that provides a stable identifier for per-statement custom role naming. It is most useful when a role contains **multiple statements**, each requiring its own custom role in the provider.
+
+### Why it exists
+
+When a role has multiple `allow` statements, the provider must create a separate custom role for each one. Without `id`, the generated role names use a positional index suffix (e.g., `thand_my_role_s0`, `thand_my_role_s1`). This means reordering or inserting statements changes the generated names, which can cause unnecessary role deletions and recreations.
+
+Setting `id` on each statement produces **stable, human-readable** names:
+
+```yaml
+# Without id — positional names (fragile)
+permissions:
+  allow:
+    - operations:                          # → thand_my_role_s0
+        - secretmanager.secrets.get
+    - operations:                          # → thand_my_role_s1
+        - storage.buckets.get
+
+# With id — stable names
+permissions:
+  allow:
+    - id: secrets_read                     # → thand_my_role_secrets_read
+      operations:
+        - secretmanager.secrets.get
+    - id: storage_read                     # → thand_my_role_storage_read
+      operations:
+        - storage.buckets.get
+```
+
+### Validation
+
+- Must be **snake_case**: lowercase letters, digits, and underscores only (regex: `^[a-z][a-z0-9_]*$`).
+- Maximum **64 characters**.
+- Optional — roles with a single statement do not need an `id` (the base role name is used directly).
+- The value is **not shown** in notifications or user-facing messages; it is an internal identifier only.
+
+---
+
+## 8. Provider-Specific Behavior: GCP Targets
+
+### GCP-Specific Note: Targets Are Metadata-Only
+
+For GCP roles, the `targets` field within permission statements is **preserved in the role definition but not enforced**. Only the `operations` field is used when building custom IAM roles.
+
+This means:
+- **`targets` are metadata**: You can include targets for documentation or reference, but GCP's role creation system (IAM API) ignores them entirely.
+- **`operations` are enforced**: Only the operations you list in `operations` are included in the generated custom role.
+- **Use `binding` to scope IAM bindings**: To explicitly control which project or resource a custom role is assigned to a user, use the `binding` field. `binding` determines the IAM assignment scope, not `targets`.
+
+### Example: GCP Role with Targets (Targets Ignored)
+
+```yaml
+permissions:
+  allow:
+    - binding: "projects/my-project"
+      operations:
+        - secretmanager.secrets.get
+        - secretmanager.secrets.list
+      targets:
+        - "projects/my-project/secrets/*"    # This line is metadata only; GCP ignores it
+```
+
+The custom role created in GCP will only include `secretmanager.secrets.get` and `secretmanager.secrets.list`. The `targets` line provides documentation to users or tools about which resources these operations apply to, but it does not limit the role itself.
+
+### Avoid Relying on Targets for GCP Resource Scoping
+
+**Incorrect approach** (targets won't enforce scope):
+```yaml
+# DON'T do this—targets alone won't restrict scope
+permissions:
+  allow:
+    - operations:
+        - storage.buckets.get
+      targets:
+        - "projects/my-project/buckets/my-bucket"   # This is ignored!
+```
+
+**Correct approach** (use binding for scope control):
+```yaml
+# DO this—binding controls both role creation scope and IAM binding scope
+permissions:
+  allow:
+    - binding: "projects/my-project"   # Role created here; binding applied here
+      operations:
+        - storage.buckets.get
+      targets:
+        - "projects/my-project/buckets/my-bucket"   # Optional: documentation
+```
+
+---
+
 ## Summary
 
 | Feature | Manual Action Required | Notes |
@@ -248,6 +393,8 @@ See the [Conditions documentation](./index#conditions) for full details and AWS 
 | Deny scopes | Optional | New feature, add when ready |
 | Conditions | Optional | New feature, AWS-only currently |
 | Composite field | No | System-managed, do not set |
+| Binding field | Recommended | Silences deprecation warning when tenant ≠ role creation scope |
+| Statement ID | Optional | Stable per-statement custom role names for multi-statement roles |
 
 {: .note}
 While auto-migration ensures your existing configurations continue to work, we recommend updating your YAML files to the new format when convenient. The new format is more expressive, supports conditions and domain scopes, and makes the relationship between operations and their target resources explicit.

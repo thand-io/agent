@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -40,7 +41,12 @@ func gcpRoleID(name string) string {
 
 	// Truncate to GCP maximum of 64 characters
 	if len(id) > 64 {
-		id = strings.TrimRight(id[:64], "_")
+		trimmed := strings.TrimRight(id[:64], "_")
+		if len(trimmed) > 0 {
+			id = trimmed
+		} else {
+			id = id[:3] // degenerate case: first 64 chars were all underscores
+		}
 	}
 
 	// Pad if too short (minimum 3 characters)
@@ -49,6 +55,31 @@ func gcpRoleID(name string) string {
 	}
 
 	return id
+}
+
+// statementRoleID derives the GCP custom role ID for a single permission statement.
+//
+// When a role has exactly one allow statement, the base role name is used directly
+// (backwards-compatible with existing single-role behaviour).
+//
+// When a role has multiple allow statements, each statement produces a distinct
+// role. The suffix is the statement's ID field if set, otherwise "s{index}".
+func statementRoleID(baseName string, stmt models.Statement, index, count int) string {
+	if count <= 1 {
+		return gcpRoleID(baseName)
+	}
+	if stmt.ID != "" {
+		return gcpRoleID(baseName + "_" + stmt.ID)
+	}
+	return gcpRoleID(baseName + "_s" + strconv.Itoa(index))
+}
+
+// stmtLabel returns a human-readable label for a statement in error/log messages.
+func stmtLabel(stmt models.Statement, index int) string {
+	if stmt.ID != "" {
+		return stmt.ID
+	}
+	return "s" + strconv.Itoa(index)
 }
 
 // primitiveRoles are GCP basic/primitive roles that do not support IAM conditions.
@@ -119,24 +150,16 @@ func (p *gcpProvider) AuthorizeRole(
 	}
 	stage := config.GetStringWithDefault("stage", "GA")
 
-	// Folder resources cannot host custom roles; custom roles are created at
-	// project scope (default) or organization scope when organization_id is set.
-	if isFolderResource(tenant) && len(role.Permissions.Allow) > 0 {
-		return nil, fmt.Errorf("custom roles (permissions.allow) are not supported for folder-level resources (%s); custom roles are created at project or organization scope", projectId)
-	}
-
 	var assignedRoles []string
 
 	// If inherits is specified, validate and bind predefined GCP roles
 	if len(role.Inherits) > 0 {
 		for _, inheritedRole := range role.Inherits {
-			// Validate that the role is a valid GCP predefined role
 			predefinedRole, err := p.GetRole(localCtx, inheritedRole)
 			if err != nil {
 				return nil, fmt.Errorf("invalid GCP role '%s': %w", inheritedRole, err)
 			}
 
-			// Bind the user to the predefined role via IAM policy
 			err = p.bindUserToPredefinedRole(localCtx, projectId, user, predefinedRole.Name, tenant)
 			if err != nil {
 				return nil, temporal.NewApplicationErrorWithOptions(
@@ -159,15 +182,25 @@ func (p *gcpProvider) AuthorizeRole(
 		}
 	}
 
-	// If permissions are specified, create a custom role with those permissions.
-	// Composite roles get a unique name; non-composite roles share a base identifier.
-	if len(role.Permissions.Allow) > 0 {
-		customRoleName := gcpRoleID(role.GetName())
-		roleParent := p.getCustomRoleParent(projectId)
+	// Create a custom role per allow statement. Each statement independently
+	// resolves its binding tenant and gets its own role ID.
+	stmtCount := len(role.Permissions.Allow)
+	for stmtIdx, stmt := range role.Permissions.Allow {
+		stmtTenant, err := resolveStatementBindingTenant(stmt, tenant, projectId)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve binding for statement %s (index %d): %w", stmtLabel(stmt, stmtIdx), stmtIdx, err)
+		}
+		stmtResourceID := stmtTenant.ID
+
+		customRoleName := statementRoleID(role.GetName(), stmt, stmtIdx, stmtCount)
+		roleParent := p.getCustomRoleParent(stmtResourceID)
+
+		stmtPermissions := models.RolePermissions{
+			Allow: models.RoleStatements{stmt},
+		}
 
 		existingRole, err := p.getRole(localCtx, roleParent, customRoleName)
 		if err != nil {
-			// If role doesn't exist, create it
 			existingRole, err = p.createRole(
 				localCtx,
 				roleParent,
@@ -175,7 +208,7 @@ func (p *gcpProvider) AuthorizeRole(
 				role.Role.GetName(),
 				role.GetDescription(),
 				stage,
-				role.Permissions,
+				stmtPermissions,
 			)
 			if err != nil {
 				return nil, temporal.NewApplicationErrorWithOptions(
@@ -188,22 +221,26 @@ func (p *gcpProvider) AuthorizeRole(
 				)
 			}
 
-			// For project-scoped non-composite roles, record version in project labels.
 			if !isComposite && !isOrganizationRoleParent(roleParent) {
-				p.setRoleVersionLabel(localCtx, projectId, customRoleName, role.GetVersionString())
+				p.setRoleVersionLabel(localCtx, stmtResourceID, customRoleName, role.GetVersionString())
 			}
 
 			logrus.WithFields(logrus.Fields{
 				"role_name":    customRoleName,
 				"role_parent":  roleParent,
 				"is_composite": isComposite,
-				"permissions":  role.Permissions.Allow,
-			}).Info("Created custom GCP role")
+				"stmt_index":   stmtIdx,
+				"stmt_id":      stmt.ID,
+			}).Info("Created custom GCP role for statement")
+			logrus.WithFields(logrus.Fields{
+				"role_name":  customRoleName,
+				"binding":    stmt.Binding,
+				"operations": stmt.Operations,
+			}).Debug("Custom GCP role statement details")
 		} else {
-			// Role already exists — for non-composite roles, check version first.
 			needsUpdate := true
 			if !isComposite && !isOrganizationRoleParent(roleParent) {
-				storedVersion := p.getRoleVersionLabel(localCtx, projectId, customRoleName)
+				storedVersion := p.getRoleVersionLabel(localCtx, stmtResourceID, customRoleName)
 				requestedVersion := role.GetVersionString()
 				if storedVersion == requestedVersion {
 					needsUpdate = false
@@ -215,19 +252,17 @@ func (p *gcpProvider) AuthorizeRole(
 			}
 
 			if needsUpdate {
-				existingRole, err = p.patchRoleIfStale(localCtx, existingRole, role.Permissions)
+				existingRole, err = p.patchRoleIfStale(localCtx, existingRole, stmtPermissions)
 				if err != nil {
 					return nil, fmt.Errorf("failed to update custom role %s: %w", customRoleName, err)
 				}
-				// Update version label after patching (non-composite only).
 				if !isComposite && !isOrganizationRoleParent(roleParent) {
-					p.setRoleVersionLabel(localCtx, projectId, customRoleName, role.GetVersionString())
+					p.setRoleVersionLabel(localCtx, stmtResourceID, customRoleName, role.GetVersionString())
 				}
 			}
 		}
 
-		// Bind the user to the custom role via IAM policy
-		err = p.bindUserToRole(localCtx, projectId, user, existingRole, tenant)
+		err = p.bindUserToRole(localCtx, stmtResourceID, user, existingRole, stmtTenant)
 		if err != nil {
 			return nil, temporal.NewApplicationErrorWithOptions(
 				fmt.Sprintf("failed to bind user to custom role %s: %v", existingRole.Name, err),
@@ -242,7 +277,8 @@ func (p *gcpProvider) AuthorizeRole(
 		logrus.WithFields(logrus.Fields{
 			"user_email": user.Email,
 			"role":       existingRole.Name,
-			"project_id": projectId,
+			"project_id": stmtResourceID,
+			"stmt_index": stmtIdx,
 		}).Info("Successfully bound user to custom GCP role")
 
 		assignedRoles = append(assignedRoles, existingRole.Name)
@@ -344,7 +380,20 @@ func (p *gcpProvider) RevokeRole(
 				)
 			}
 
-			err = p.unbindUserFromRole(localCtx, projectId, user, existingRole, tenant)
+			// Derive tenant from the role's resource path — each per-statement
+			// role encodes its binding project (e.g. projects/{project}/roles/{name}).
+			customTenantForRole := tenant
+			customResourceForRole := projectId
+			if roleProjectID, ok := projectIDFromRoleParent(roleParent); ok {
+				customTenantForRole = &models.ProviderTenant{
+					ID:   roleProjectID,
+					Type: "project",
+					Name: roleProjectID,
+				}
+				customResourceForRole = roleProjectID
+			}
+
+			err = p.unbindUserFromRole(localCtx, customResourceForRole, user, existingRole, customTenantForRole)
 			if err != nil {
 				return nil, temporal.NewApplicationErrorWithOptions(
 					fmt.Sprintf("failed to unbind user from custom role %s: %v", roleName, err),
@@ -359,7 +408,7 @@ func (p *gcpProvider) RevokeRole(
 			logrus.WithFields(logrus.Fields{
 				"user_email": user.Email,
 				"role":       roleName,
-				"project_id": projectId,
+				"project_id": customResourceForRole,
 			}).Info("Successfully unbound user from custom GCP role")
 
 			// Composite: delete the custom role after unbinding.
@@ -461,12 +510,6 @@ func (p *gcpProvider) authorizeRoleTemporal(
 		return nil, fmt.Errorf("role %s has no inherits or permissions defined", role.Name)
 	}
 
-	// Folder resources cannot host custom roles; custom roles are created at
-	// project scope (default) or organization scope when organization_id is set.
-	if isFolderResource(tenant) && len(role.Permissions.Allow) > 0 {
-		return nil, fmt.Errorf("custom roles (permissions.allow) are not supported for folder-level resources (%s); custom roles are created at project or organization scope", projectID)
-	}
-
 	var assignedRoles []string
 
 	for _, inheritedRole := range role.Inherits {
@@ -485,9 +528,18 @@ func (p *gcpProvider) authorizeRoleTemporal(
 		assignedRoles = append(assignedRoles, resp.RoleName)
 	}
 
-	if len(role.Permissions.Allow) > 0 {
-		// Composite roles get a unique name; non-composite roles share a base identifier.
-		customRoleName := gcpRoleID(role.GetName())
+	// Create a custom role per allow statement via separate activities.
+	stmtCount := len(role.Permissions.Allow)
+	for stmtIdx, stmt := range role.Permissions.Allow {
+		stmtTenant, err := resolveStatementBindingTenant(stmt, tenant, projectID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve binding for statement %s (index %d): %w", stmtLabel(stmt, stmtIdx), stmtIdx, err)
+		}
+
+		customRoleName := statementRoleID(role.GetName(), stmt, stmtIdx, stmtCount)
+		stmtPermissions := models.RolePermissions{
+			Allow: models.RoleStatements{stmt},
+		}
 
 		var resp GetOrCreateAndBindCustomRoleResponse
 		if err := workflow.ExecuteActivity(
@@ -499,13 +551,13 @@ func (p *gcpProvider) authorizeRoleTemporal(
 				Title:       role.Role.GetName(),
 				Description: role.GetDescription(),
 				Stage:       stage,
-				Permissions: role.Permissions,
+				Permissions: stmtPermissions,
 				IsComposite: isComposite,
 				Version:     role.GetVersionString(),
-				Tenant:      tenant,
+				Tenant:      stmtTenant,
 			},
 		).Get(wfCtx, &resp); err != nil {
-			return nil, fmt.Errorf("GetOrCreateAndBindCustomRole activity failed: %w", err)
+			return nil, fmt.Errorf("GetOrCreateAndBindCustomRole activity failed for statement %s (index %d): %w", stmtLabel(stmt, stmtIdx), stmtIdx, err)
 		}
 		assignedRoles = append(assignedRoles, resp.RoleName)
 	}
@@ -567,6 +619,13 @@ func (p *gcpProvider) revokeRoleTemporal(
 				return nil, fmt.Errorf("UnbindUserFromPredefinedRole activity failed for %s: %w", roleName, err)
 			}
 		} else if isComposite {
+			tenantForRole := tenant
+			if roleParent, _, err := parseCustomRolePath(roleName); err == nil {
+				if roleProjectID, ok := projectIDFromRoleParent(roleParent); ok {
+					tenantForRole = &models.ProviderTenant{ID: roleProjectID, Type: "project", Name: roleProjectID}
+				}
+			}
+
 			// Composite: unbind + delete the custom role.
 			if err := workflow.ExecuteActivity(
 				wfCtx,
@@ -574,12 +633,19 @@ func (p *gcpProvider) revokeRoleTemporal(
 				&UnbindAndDeleteCustomRoleRequest{
 					User:     user,
 					RoleName: roleName,
-					Tenant:   tenant,
+					Tenant:   tenantForRole,
 				},
 			).Get(wfCtx, nil); err != nil {
 				return nil, fmt.Errorf("UnbindAndDeleteCustomRole activity failed for %s: %w", roleName, err)
 			}
 		} else {
+			tenantForRole := tenant
+			if roleParent, _, err := parseCustomRolePath(roleName); err == nil {
+				if roleProjectID, ok := projectIDFromRoleParent(roleParent); ok {
+					tenantForRole = &models.ProviderTenant{ID: roleProjectID, Type: "project", Name: roleProjectID}
+				}
+			}
+
 			// Non-composite: unbind only; retain the custom role.
 			if err := workflow.ExecuteActivity(
 				wfCtx,
@@ -587,7 +653,7 @@ func (p *gcpProvider) revokeRoleTemporal(
 				&UnbindUserFromCustomRoleRequest{
 					User:     user,
 					RoleName: roleName,
-					Tenant:   tenant,
+					Tenant:   tenantForRole,
 				},
 			).Get(wfCtx, nil); err != nil {
 				return nil, fmt.Errorf("UnbindUserFromCustomRole activity failed for %s: %w", roleName, err)
@@ -796,6 +862,129 @@ func parseCustomRolePath(fullPath string) (string, string, error) {
 		return "", "", fmt.Errorf("invalid custom role parent in %q: expected projects or organizations", fullPath)
 	}
 	return parts[0] + "/" + parts[1], parts[3], nil
+}
+
+func projectIDFromRoleParent(roleParent string) (string, bool) {
+	if !strings.HasPrefix(roleParent, "projects/") {
+		return "", false
+	}
+	projectID := strings.TrimPrefix(roleParent, "projects/")
+	if len(projectID) == 0 {
+		return "", false
+	}
+	return projectID, true
+}
+
+// resolveStatementBindingTenant determines the project tenant for a single permission
+// statement. Used by the per-statement authorization loop.
+//
+// Resolution order:
+//  1. If the statement has an explicit Binding, parse the project from it.
+//  2. If the request tenant is not a folder, use it directly.
+//  3. Fall back to inferring the project from the statement's Targets (legacy, deprecated).
+func resolveStatementBindingTenant(stmt models.Statement, requestTenant *models.ProviderTenant, fallbackProjectID string) (*models.ProviderTenant, error) {
+	if stmt.Binding != "" {
+		binding := strings.TrimSpace(stmt.Binding)
+		if strings.HasPrefix(binding, "folders/") {
+			return nil, fmt.Errorf("binding %q targets a folder; GCP custom roles must be created at project or organization scope", binding)
+		}
+		if strings.HasPrefix(binding, "organizations/") {
+			return nil, fmt.Errorf(
+				"binding %q targets an organization; organization-level role creation via the 'binding' field is not currently supported — "+
+					"set 'organization_id' in the provider configuration to create custom roles at organization scope",
+				binding,
+			)
+		}
+		projectID := strings.TrimPrefix(binding, "projects/")
+		if len(projectID) == 0 {
+			return nil, fmt.Errorf("binding %q does not resolve to a project", binding)
+		}
+		return &models.ProviderTenant{ID: projectID, Type: "project", Name: projectID}, nil
+	}
+
+	if !isFolderResource(requestTenant) {
+		return requestTenant, nil
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"operations":       stmt.Operations,
+		"fallback_project": fallbackProjectID,
+	}).Warn(
+		"permission statement is missing 'binding' and request tenant is a folder; " +
+			"inferring project from targets. Set an explicit 'binding' to remove this warning.",
+	)
+	singleStmt := models.RoleStatements{stmt}
+	projectID, err := inferProjectIDFromPermissionTargets(singleStmt)
+	if err != nil {
+		return nil, fmt.Errorf("cannot resolve binding for statement with operations %v: %w", stmt.Operations, err)
+	}
+	return &models.ProviderTenant{ID: projectID, Type: "project", Name: projectID}, nil
+}
+
+func inferProjectIDFromPermissionTargets(statements models.RoleStatements) (string, error) {
+	projectIDs := make(map[string]struct{})
+
+	for _, statement := range statements {
+		if len(statement.Targets) == 0 {
+			return "", fmt.Errorf("permission statement with operations %v is missing targets", statement.Operations)
+		}
+
+		for _, target := range statement.Targets {
+			projectID, ok := projectIDFromTarget(target)
+			if !ok {
+				return "", fmt.Errorf("target %q does not include a specific project path (expected projects/{project}/...)", target)
+			}
+			projectIDs[projectID] = struct{}{}
+		}
+	}
+
+	if len(projectIDs) == 0 {
+		return "", fmt.Errorf("no project targets found")
+	}
+	if len(projectIDs) > 1 {
+		projects := make([]string, 0, len(projectIDs))
+		for projectID := range projectIDs {
+			projects = append(projects, projectID)
+		}
+		sort.Strings(projects)
+		return "", fmt.Errorf("targets span multiple projects %v; split permissions into separate roles", projects)
+	}
+
+	for projectID := range projectIDs {
+		return projectID, nil
+	}
+
+	return "", fmt.Errorf("no project targets found")
+}
+
+func projectIDFromTarget(target string) (string, bool) {
+	target = strings.TrimSpace(target)
+	if len(target) == 0 {
+		return "", false
+	}
+
+	projectMarker := "projects/"
+	_, after, ok := strings.Cut(target, projectMarker)
+	if !ok {
+		return "", false
+	}
+
+	remaining := after
+	if len(remaining) == 0 {
+		return "", false
+	}
+
+	nextSeparator := strings.Index(remaining, "/")
+	if nextSeparator == -1 {
+		nextSeparator = len(remaining)
+	}
+
+	projectID := remaining[:nextSeparator]
+	if len(projectID) == 0 || projectID == "*" {
+		return "", false
+	}
+
+	return projectID, true
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1177,6 +1366,11 @@ func permissionsToGcpPermissions(permissions models.RolePermissions) []string {
 	// Process Allow statements
 	for _, stmt := range permissions.Allow {
 		gcpPermissions = append(gcpPermissions, stmt.Operations...)
+
+		// Warn if targets are present (GCP ignores targets in custom role definitions)
+		if len(stmt.Targets) > 0 {
+			logrus.Warnf("GCP custom roles do not enforce statement targets; targets are metadata only. Use binding field to control IAM assignment scope. Targets: %v", stmt.Targets)
+		}
 	}
 
 	// Log warning for Deny statements (GCP doesn't support deny in custom roles)

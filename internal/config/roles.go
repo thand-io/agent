@@ -78,6 +78,31 @@ func validateRoleLimits(roleKey string, role *models.Role) error {
 	return nil
 }
 
+// isGcpRole checks if a role is configured for the GCP provider
+func isGcpRole(role *models.Role) bool {
+	for _, provider := range role.Providers {
+		if strings.HasPrefix(provider, "gcp") {
+			return true
+		}
+	}
+	return false
+}
+
+// hasTargetsInStatements checks if a role's permission statements contain targets
+func hasTargetsInStatements(role *models.Role) bool {
+	for _, stmt := range role.Permissions.Allow {
+		if len(stmt.Targets) > 0 {
+			return true
+		}
+	}
+	for _, stmt := range role.Permissions.Deny {
+		if len(stmt.Targets) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // LoadRoles loads roles from a file or URL
 func (c *Config) LoadRoles() (map[string]models.Role, error) {
 	vaultData, err := c.loadRolesVaultData()
@@ -171,6 +196,12 @@ func (c *Config) ApplyRoles(foundRoles []*models.RoleDefinitions) (map[string]mo
 				logrus.WithError(err).Warnln("Role exceeds limits, skipping:", roleKey)
 				continue
 			}
+
+			// Warn if GCP role has targets (targets are ignored by GCP provider)
+			if isGcpRole(&r) && hasTargetsInStatements(&r) {
+				logrus.Warnf("Role '%s' is configured for GCP provider but contains statement targets. GCP ignores targets in role definitions; use binding field to control IAM assignment scope.", roleKey)
+			}
+
 			defs[roleKey] = r
 		}
 	}
@@ -980,16 +1011,18 @@ func (c *Config) mergeRolePermissions(composite *models.Role, inherited *models.
 // normalizeStatements expands all statement operations and creates a map by operation.
 // Returns a map where key is operation and value is the set of targets associated with that operation.
 // normalizeStatements separates statements into two groups:
-// 1. Normalized map (for statements WITHOUT conditions) - can be merged and deduplicated
-// 2. Preserved statements (for statements WITH conditions) - kept as complete units
-// This ensures conditions are not lost during merge operations.
+// 1. Normalized map (for plain statements) - can be merged and deduplicated
+// 2. Preserved statements (those with conditions, ID, or binding) - kept as complete units
+// This ensures metadata that cannot survive the normalize/rebuild cycle is not lost.
 func normalizeStatements(stmts models.RoleStatements) (map[string]map[string]bool, models.RoleStatements) {
 	result := make(map[string]map[string]bool)
 	preservedStmts := make(models.RoleStatements, 0)
 
 	for _, stmt := range stmts {
-		// Statements WITH conditions are preserved as-is
-		if len(stmt.Conditions) > 0 {
+		// Statements with conditions, ID, or binding are preserved as complete
+		// units — they carry metadata that cannot survive the normalize/rebuild
+		// cycle (which reduces statements to operation→targets maps).
+		if len(stmt.Conditions) > 0 || stmt.ID != "" || stmt.Binding != "" {
 			preservedStmts = append(preservedStmts, stmt)
 			continue
 		}
@@ -1048,6 +1081,11 @@ func deduplicatePreservedStatements(allow, deny models.RoleStatements) (models.R
 // statementsEqual checks if two statements are equal by comparing their operations, targets, and conditions.
 // String slices are compared in sorted order to ensure consistent comparison.
 func statementsEqual(a, b models.Statement) bool {
+	// Compare ID and Binding
+	if a.ID != b.ID || a.Binding != b.Binding {
+		return false
+	}
+
 	// Compare operations (sorted)
 	if !stringSlicesEqual(a.Operations, b.Operations) {
 		return false
@@ -1298,9 +1336,11 @@ func (c *Config) filterStatementsListByProvider(stmts models.RoleStatements, all
 		filteredTargets := c.filterByProvider(stmt.Targets, allowedProviders)
 
 		result = append(result, models.Statement{
+			ID:         stmt.ID,
 			Operations: filteredOps,
 			Targets:    filteredTargets,
 			Conditions: stmt.Conditions,
+			Binding:    stmt.Binding,
 		})
 	}
 	return result

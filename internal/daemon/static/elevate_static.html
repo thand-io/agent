@@ -240,6 +240,13 @@
                                                         </ul>
                                                     </div>
                                                 </template>
+                                                <!-- Binding -->
+                                                <template x-if="stmt.binding">
+                                                    <div style="margin-top: 0.5rem;">
+                                                        <span style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted, #666);">Binding:</span>
+                                                        <code x-text="stmt.binding" style="background: var(--code-bg-dark, #e8e8e8); padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.75rem; margin-left: 0.25rem;"></code>
+                                                    </div>
+                                                </template>
                                             </div>
                                         </template>
                                     </div>

@@ -61,6 +61,38 @@ func GetValidator() *validator.Validate {
 			// Log error but don't panic
 		}
 
+		// Register custom validator for strict snake_case identifiers
+		// Used by Statement.Name field — must start with a lowercase letter,
+		// followed by lowercase alphanumeric characters and underscores only.
+		if err := validatorInstance.RegisterValidation("snake_case", func(fl validator.FieldLevel) bool {
+			value := fl.Field().String()
+			matched, _ := regexp.MatchString(`^[a-z][a-z0-9_]*$`, value)
+			return matched
+		}); err != nil {
+			// Log error but don't panic
+		}
+
+		// Register custom validator for CSP binding resource identifiers.
+		// Ensures the value starts with a known cloud provider resource prefix
+		// so typos are caught at config-load time rather than at authorization time.
+		if err := validatorInstance.RegisterValidation("csp_binding", func(fl validator.FieldLevel) bool {
+			value := fl.Field().String()
+			for _, prefix := range []string{
+				"projects/",       // GCP
+				"organizations/",  // GCP
+				"folders/",        // GCP
+				"/subscriptions/", // Azure
+				"arn:aws:",        // AWS
+			} {
+				if strings.HasPrefix(value, prefix) {
+					return true
+				}
+			}
+			return false
+		}); err != nil {
+			// Log error but don't panic
+		}
+
 		// Call all registered custom validator functions
 		validatorRegistrationsMu.Lock()
 		registrations := validatorRegistrations

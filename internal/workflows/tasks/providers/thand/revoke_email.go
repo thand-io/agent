@@ -31,6 +31,21 @@ func (r *revokeNotifier) createRevokeEmailBody() (string, string) {
 		fmt.Fprintf(&plainText, "Duration: %s\n", elevationReq.Duration)
 	}
 
+	if elevationReq.Role != nil && len(elevationReq.Role.Permissions.Allow) > 0 {
+		plainText.WriteString("\nRevoked Permissions:\n")
+		for _, stmt := range sortedStatementsWithSortedFields(elevationReq.Role.Permissions.Allow) {
+			if len(stmt.Operations) > 0 {
+				fmt.Fprintf(&plainText, "- Operations: %s\n", strings.Join(stmt.Operations, ", "))
+			}
+			if len(stmt.Binding) > 0 {
+				fmt.Fprintf(&plainText, "  Binding: %s\n", stmt.Binding)
+			}
+			if len(stmt.Targets) > 0 {
+				fmt.Fprintf(&plainText, "  Targets: %s\n", strings.Join(stmt.Targets, ", "))
+			}
+		}
+	}
+
 	plainText.WriteString("\nYour access has been successfully revoked. If you need access again, please submit a new request.")
 
 	// Build data map for template
